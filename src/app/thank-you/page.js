@@ -6,7 +6,7 @@ import { useCart } from "@/context/CartContext";
 import { usePageReady, useGlobalLoader } from "@/context/GlobalLoaderContext";
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { CheckCircle2, ShoppingBag, Phone, Truck, Shield, Package, CreditCard, Banknote, Smartphone } from 'lucide-react';
+import { CheckCircle2, ShoppingBag, Phone, Truck, Shield, Package, CreditCard, Banknote, Smartphone } from '@/components/icons-extra';
 
 const PAYMENT_LABELS = {
   card:         { label: 'كارت / محفظة إلكترونية', icon: <CreditCard size={14} className="text-[#F5C518]" /> },

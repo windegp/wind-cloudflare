@@ -2,9 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { db } from "@/lib/firebase";
-import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
-import { ArrowRight, Package, User, MapPin, Printer } from "lucide-react";
+import { getDb } from "@/lib/firebase";
+import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore/lite";
+import { ArrowRight, Package, User, MapPin, Printer } from '@/components/icons-extra';
+
+export const dynamic = 'force-dynamic';
 
 export default function OrderDetailsPage() {
   const { id } = useParams();
@@ -16,6 +18,7 @@ export default function OrderDetailsPage() {
 
   const fetchOrderDetails = async () => {
     try {
+      const db = getDb();
       const decodedId = decodeURIComponent(id).trim();
       
       // 🔥 الحل السحري: لو الأوردر WIND أو سلة متروكة مش هنحط شباك، لو شوبيفاي هنحط الشباك

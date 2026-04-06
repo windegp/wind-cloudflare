@@ -3,8 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, usePathname } from 'next/navigation';
 import { usePageReady, useGlobalLoader } from "@/context/GlobalLoaderContext";
-import { db } from "@/lib/firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { getDb } from "@/lib/firebase";
+import { doc, getDoc } from "firebase/firestore/lite";
 
 export default function DynamicPolicyPage() {
   const { slug } = useParams();
@@ -17,17 +17,23 @@ export default function DynamicPolicyPage() {
   useEffect(() => {
     const fetchPolicy = async () => {
       try {
-        const docRef = doc(db, "Policies", slug);
+        const docRef = doc(getDb(), "Policies", slug);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           setData(docSnap.data());
-          document.title = `${docSnap.data().title} | WIND Shopping`;
         }
       } catch (err) { console.error(err); }
       finally { setLoading(false); }
     };
     if (slug) fetchPolicy();
   }, [slug]);
+
+  // Update document title safely when data loads
+  useEffect(() => {
+    if (data && data.title) {
+      document.title = `${data.title} | WIND Shopping`;
+    }
+  }, [data]);
 
   // Signal readiness when policy data loads (FIX: add pathname to ensure re-trigger on navigation)
   useEffect(() => {

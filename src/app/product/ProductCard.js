@@ -38,7 +38,7 @@ export default function ProductCard({ image, title, price, rating, category }) {
         <p className="text-xs text-gray-500 mb-4">{category}</p>
 
         {/* السعر وزر الإضافة */}
-        <div class="mt-auto">
+        <div className="mt-auto">
           <div className="text-[#F5C518] font-black text-xl mb-3 tracking-tighter">
             {price} <span className="text-xs font-normal">ر.س</span>
           </div>

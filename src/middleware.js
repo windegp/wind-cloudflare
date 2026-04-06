@@ -29,13 +29,7 @@ export function middleware(request) {
   // 4. التحقق مما إذا كان المتصفح الحالي يمتلك تصريح الدخول (للمتجر كزائر VIP)
   const hasAccess = request.cookies.get('wind_admin_access')?.value === 'granted';
 
-  // 5. إذا لم يكن يمتلك تصريح (زائر عادي للمتجر)، وهو ليس في صفحة "قريباً"، قم بتحويله إليها بصمت
-  if (!hasAccess && url.pathname !== '/coming-soon') {
-    url.pathname = '/coming-soon';
-    return NextResponse.rewrite(url);
-  }
-
-  // 6. السماح بالمرور وعرض الموقع بالكامل (إذا كان يمتلك التصريح)
+  // 5. السماح بالمرور وعرض الموقع بالكامل (إذا كان يمتلك التصريح)
   return NextResponse.next();
 }
 

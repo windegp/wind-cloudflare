@@ -6,7 +6,7 @@ export async function initiateKashierPayment(amount) {
     const orderId = `ORD-${Date.now()}`; // يمكنك ربطه بـ order_count.txt لاحقاً
     const currency = "EGP";
     
-    const hash = generatePaymentHash(orderId, amount, currency);
+    const hash = await generatePaymentHash(orderId, amount, currency);
     
     const params = new URLSearchParams({
         merchantId: process.env.KASHIER_MERCHANT_ID,

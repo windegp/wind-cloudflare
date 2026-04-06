@@ -1,12 +1,12 @@
 "use client";
+// Final Production Icon Fix - v2.1
 import { useEffect, useState } from 'react';
-import { db } from "@/lib/firebase";
-import { collection, getDocs, deleteDoc, doc } from "firebase/firestore";
+import { getDb } from "@/lib/firebase";
+import { collection, getDocs, deleteDoc, doc } from "firebase/firestore/lite";
 import Link from 'next/link';
-import { 
-  Plus, Edit, Trash2, PackageSearch, 
-  Image as ImageIcon, Box, Tag, AlertCircle 
-} from "lucide-react";
+import { Plus, Edit, Trash2, Package, Search, Filter, Monitor, Archive, Layers, ChevronLeft, ChevronRight, AlertTriangle, X, Download, Eye, Calendar, Users, Activity, TrendingUp, ShoppingCart, ArrowRight, ArrowLeft, MapPin, Phone, ShoppingBag, ChevronDown, ChevronUp, Menu, Settings, Target, Mail, Crown, UserMinus, Database, Layout, MonitorSmartphone, LinkIcon, FolderTree, CheckSquare, Square, ExternalLink, Save, Loader2, ImageIcon, PackageSearch, Box, AlertCircle, Tag } from '@/components/icons-extra';
+
+export const dynamic = 'force-dynamic';
 
 export default function ProductsList() {
   const [products, setProducts] = useState([]);
@@ -14,6 +14,7 @@ export default function ProductsList() {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
+        const db = getDb();
         const querySnapshot = await getDocs(collection(db, "products"));
         const list = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setProducts(list);
@@ -27,6 +28,7 @@ export default function ProductsList() {
   const handleDelete = async (id) => {
     if(!confirm("هل أنت متأكد من حذف هذا المنتج بشكل نهائي؟")) return;
     try {
+      const db = getDb();
       await deleteDoc(doc(db, "products", id));
       setProducts(products.filter(p => p.id !== id));
       // تم الحذف بنجاح (ممكن تستخدم Toast مستقبلاً بدل Alert)

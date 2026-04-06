@@ -1,40 +1,117 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { doc, getDoc, setDoc, collection, getDocs } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { getDb } from "@/lib/firebase";
+import { doc, getDoc, setDoc, collection, getDocs } from "firebase/firestore/lite";
 
-// --- خريطة الأقسام الأساسية فقط ---
+export const dynamic = 'force-dynamic';
+
+// ============================================================================
+// خريطة الأقسام 
+// ============================================================================
 const SECTION_TYPES = {
   HERO_SECTION: { label: "الهيرو الرئيسي", designId: "MODERN_SLIDER" },
-  FEATURED_SECTION: { label: "المميز (Featured Today)", designId: "IMDB_STYLE", hasTitle: true, hasSubTitle: true, hasFeaturedCards: true },
-  TOP_TEN_SECTION: { label: "أفضل 10 منتجات", designId: "TOP_TEN_LIST", hasTitle: true, hasFeaturedCards: true, hasViewAllLink: true },
-  MARQUEE_SECTION: { label: "شريط المنتجات المتحرك", designId: "PRODUCTS_SLIDER", hasTitle: true, hasSubTitle: true, hasProducts: true },
   
-  // ✅ القسم الجديد: الأكثر مبيعاً
+  FEATURED_SECTION: { 
+    label: "المميز (Featured Today)", designId: "IMDB_STYLE", 
+    hasTitle: true, hasSubTitle: true, hasViewAllLink: true,
+    hasProducts: true, hasCollections: true, 
+    outputArray: 'cards' 
+  },
+  
+  TOP_TEN_SECTION: { 
+    label: "أفضل 10 منتجات", designId: "TOP_TEN_LIST", 
+    hasTitle: true, hasViewAllLink: true,
+    hasProducts: true, hasCollections: false, 
+    outputArray: 'cards'
+  },
+  
+  MARQUEE_SECTION: { 
+    label: "شريط المنتجات المتحرك", designId: "PRODUCTS_SLIDER", 
+    hasTitle: true, hasSubTitle: true,
+    hasProducts: true, hasCollections: true, 
+    outputArray: 'products' 
+  },
+  
   BEST_SELLERS_SECTION: { 
-    label: "الأكثر مبيعاً (شبكة منتجات)", 
-    designId: "BEST_SELLERS_GRID", 
-    hasTitle: true, 
-    hasSubTitle: true, 
-    hasProducts: true 
+    label: "الأكثر مبيعاً (شبكة منتجات)", designId: "BEST_SELLERS_GRID", 
+    hasTitle: true, hasSubTitle: true, hasViewAllLink: true,
+    hasProducts: true, hasCollections: true, 
+    outputArray: 'products'
   },
 
-  // 🔥 القسم الجديد المبتكر: العروض الحصرية
   EXCLUSIVE_OFFERS_SECTION: { 
-    label: "العروض الحصرية (كروت فاخرة)", 
-    designId: "PREMIUM_CARDS", 
-    hasTitle: true, 
-    hasSubTitle: true, 
-    hasProducts: true 
+    label: "العروض الحصرية (كروت فاخرة)", designId: "PREMIUM_CARDS", 
+    hasTitle: true, hasSubTitle: true, hasViewAllLink: true,
+    hasProducts: true, hasCollections: true, 
+    outputArray: 'products'
   },
 
- // 📽️ القسم الجديد: تصنيفات النخبة
   COLLECTIONS_SPOTLIGHT: { 
-    label: "أبرز المجموعات (بوسترات تصنيف)", 
-    designId: "POSTER_COLLECTIONS", 
+    label: "أبرز المجموعات (بوسترات تصنيف)", designId: "POSTER_COLLECTIONS", 
+    hasTitle: true, hasSubTitle: true, hasViewAllLink: true,
+    hasProducts: false, hasCollections: true, 
+    outputArray: 'collections'
+  },
+
+  CIRCULAR_COLLECTIONS: { 
+    label: "المجموعات الدائرية (Season Collection)", designId: "CIRCULAR_COLLECTIONS_DESIGN", 
+    hasTitle: true, hasSubTitle: true, hasViewAllLink: true,
+    hasProducts: false, hasCollections: true, 
+    outputArray: 'collections' 
+  },
+
+  TABBED_HIGHLIGHTS_SECTION: { 
+    label: "المنتجات المبوبة (3 تبويبات)", 
+    designId: "TABBED_TABS_DESIGN", 
+    hasTitle: true, hasSubTitle: false, hasViewAllLink: true,
+    hasProducts: true, hasCollections: false, 
+    isTabbed: true, 
+    tabsConfig: ["Hot items", "Best sellers", "New arrivals"],
+    outputArray: 'tabbedProducts' 
+  },
+  
+  BANNER_PRODUCT_GRID_SECTION: { 
+    label: "قسم المجلات (غلاف + منتجات)", 
+    designId: "BANNER_EDITORIAL_DESIGN", 
+    hasTitle: false, hasSubTitle: false, hasViewAllLink: false,
+    hasProducts: true, hasCollections: false, 
+    hasBannerConfig: true, 
+    outputArray: 'products' 
+  },
+
+  VISUAL_BREAK_SECTION: { 
+    label: "الفاصل المرئي (خلفية داكنة + صورة)", 
+    designId: "DARK_PROMO_DESIGN", 
+    hasTitle: false, hasSubTitle: false, hasViewAllLink: false,
+    hasProducts: false, hasCollections: false, 
+    hasVisualBreakConfig: true, 
+    outputArray: 'none' 
+  },
+
+  TOP_RATED_WEEKLY_SECTION: { label: "الأعلى تقييماً هذا الأسبوع", designId: "DYNAMIC_RATING_GRID", hasTitle: true, hasSubTitle: true, hasViewAllLink: true, isDynamicAuto: true },
+  MOST_LIKED_WEEKLY_SECTION: { label: "الأكثر إعجاباً هذا الأسبوع", designId: "DYNAMIC_LIKES_GRID", hasTitle: true, hasSubTitle: true, hasViewAllLink: true, isDynamicAuto: true },
+  TOP_RATED_ALL_TIME_SECTION: { label: "أساطير التقييمات (العموم)", designId: "DYNAMIC_RATING_GRID_ALL_TIME", hasTitle: true, hasSubTitle: true, hasViewAllLink: true, isDynamicAuto: true },
+  MOST_LIKED_ALL_TIME_SECTION: { label: "القطع الأكثر طلباً وحباً (العموم)", designId: "PREMIUM_GRID_ALL_TIME", hasTitle: true, hasSubTitle: true, hasViewAllLink: true, isDynamicAuto: true },
+  
+  CUSTOMER_REVIEWS_SECTION: { 
+    label: "تقييمات العملاء (ديناميكي)", 
+    designId: "CUSTOMER_REVIEWS_DESIGN", 
     hasTitle: true, 
-    hasSubTitle: true, 
-    hasProducts: true 
+    hasBottomText: true, 
+    hasSubTitle: false, 
+    hasViewAllLink: false, 
+    isDynamicAuto: true 
+  },
+
+  // 🔥 القسم الجديد: الفكرة العائمة + كروت المجموعات
+  FLOATING_COLLECTIONS_SECTION: {
+    label: "الفكرة العائمة + كروت المجموعات (الجديد)",
+    designId: "FLOATING_COLLECTIONS_DESIGN",
+    hasTitle: false, 
+    hasFloatingConfig: true, // تفعيل إعدادات القسم الجديد
+    hasProducts: true,
+    hasCollections: true,
+    outputArray: 'cards' // يستخدم نظام الكروت لدعم تخصيص كل شيء
   }
 };
 
@@ -43,7 +120,11 @@ export default function HomeManagerPage() {
   const [slides, setSlides] = useState([]);
   const [categories, setCategories] = useState([]);
   const [layoutSections, setLayoutSections] = useState([]);
+  
   const [expandedSections, setExpandedSections] = useState({});
+  const [expandedPickers, setExpandedPickers] = useState({});
+  const [expandedOverrides, setExpandedOverrides] = useState({});
+  
   const [allStoreProducts, setAllStoreProducts] = useState([]); 
   const [allStoreCollections, setAllStoreCollections] = useState([]); 
   const [loading, setLoading] = useState(true);
@@ -52,6 +133,7 @@ export default function HomeManagerPage() {
   useEffect(() => {
     const fetchCurrentData = async () => {
       try {
+        const db = getDb();
         const layoutRef = doc(db, "homepage", "layout_config");
         try {
           const productsRef = collection(db, "products"); 
@@ -61,15 +143,49 @@ export default function HomeManagerPage() {
           const collectionsRef = collection(db, "collections"); 
           const collectionsSnap = await getDocs(collectionsRef);
           setAllStoreCollections(collectionsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        } catch (err) {
-          console.error("خطأ في جلب المنتجات أو الأقسام:", err);
-        }
+        } catch (err) { console.error("Error fetching store data:", err); }
         
         const layoutSnap = await getDoc(layoutRef);
-        let currentLayout = [];
         if (layoutSnap.exists()) {
-          currentLayout = layoutSnap.data().sections || [];
-          setLayoutSections(currentLayout);
+          const loadedSections = layoutSnap.data().sections || [];
+          
+          const parsedSections = loadedSections.map(sec => {
+            let adminItems = sec.data._adminItems;
+            if (!adminItems) {
+               adminItems = [];
+               if (sec.data.cards) {
+                  adminItems = sec.data.cards.map((c, i) => ({
+                     itemId: c.productId || `legacy-p-${Math.random()}`, itemType: 'product',
+                     originalName: c.mainTitle || "", originalImage: c.image || "",
+                     customName: c.mainTitle || "", customImage: c.image || "",
+                     originalPrice: c.price || "", customPrice: c.price || "",
+                     compareAtPrice: c.compareAtPrice || "",
+                     linkUrl: c.linkUrl || "", badge: c.badge || "", badgeType: c.badgeType || "none",
+                     linkText: c.linkText || "", subCards: c.subCards || [],
+                     customRating: c.rating || "", customReviews: c.reviewsCount || "", customCategory: c.category || ""
+                  }));
+               } else if (sec.data.products) {
+                  adminItems = sec.data.products.map(p => ({
+                     itemId: p.productId || `legacy-p-${Math.random()}`, itemType: 'product',
+                     originalName: p.name || "", originalImage: p.image || "",
+                     customName: p.name || "", customImage: p.image || "",
+                     originalPrice: p.price || "", customPrice: p.price || "",
+                     compareAtPrice: p.compareAtPrice || "",
+                     linkUrl: p.linkUrl || "", badge: p.badge || ""
+                  }));
+               } else if (sec.data.collections || sec.data.linkedCollections) {
+                  const cols = sec.data.linkedCollections || sec.data.collections;
+                  adminItems = cols.map(c => ({
+                     itemId: c.collectionId || c.id || c.slug || `legacy-c-${Math.random()}`, itemType: 'collection',
+                     originalName: c.name || c.customName || "", originalImage: c.image || "",
+                     customName: c.customName || c.name || "", customImage: c.image || "",
+                     linkUrl: c.linkUrl || "", customDescription: c.description || ""
+                  }));
+               }
+            }
+            return { ...sec, data: { ...sec.data, _adminItems: adminItems } };
+          });
+          setLayoutSections(parsedSections);
         }
 
         const heroRef = doc(db, "homepage", "main-hero");
@@ -81,903 +197,630 @@ export default function HomeManagerPage() {
           setSlides([{ image: "", tag: "", title: "", desc: "", thumbnail: "", productLink: "", buttonText: "" }]);
           setCategories([{ title: "", link: "" }]);
         }
-
-        const featRef = doc(db, "homepage", "featured-section");
-        const featSnap = await getDoc(featRef);
-        if (featSnap.exists() && currentLayout.length === 0) {
-          const oldFeatData = featSnap.data();
-          setLayoutSections([
-            { category: "FEATURED_SECTION", designId: "IMDB_STYLE", data: { title: oldFeatData.title, cards: oldFeatData.cards } }
-          ]);
-        }
-
-      } catch (error) {
-        console.error("خطأ في جلب البيانات:", error);
-      } finally {
-        setLoading(false);
-      }
+      } catch (error) { console.error(error); } finally { setLoading(false); }
     };
     fetchCurrentData();
   }, []);
 
   const handleLayoutCategoryChange = (index, newCategory) => {
     const updated = [...layoutSections];
-    updated[index].category = newCategory;
-    updated[index].designId = SECTION_TYPES[newCategory]?.designId || "";
-
     const config = SECTION_TYPES[newCategory];
-    let initialData = {};
+    updated[index].category = newCategory;
+    updated[index].designId = config?.designId || "";
+    
+    updated[index].data = { 
+      title: config?.hasTitle ? config.label : "", 
+      subTitle: "", 
+      viewAllLink: "", 
+      tabs: config?.isTabbed ? [...config.tabsConfig] : [],
+      
+      topDescription: config?.hasBannerConfig ? "خطوط نظيفة تلتقي بالتفاصيل الدقيقة في هذه المجموعة، تتميز بتصميم عصري وأنيق." : "",
+      bannerImage: "",
+      bannerSubTitle: config?.hasBannerConfig ? "وصل حديثاً" : "",
+      bannerTitle: config?.hasBannerConfig ? "تشكيلة الموسم" : "",
+      buttonText: (config?.hasBannerConfig || config?.hasVisualBreakConfig) ? "تسوق الآن" : "",
+      buttonLink: (config?.hasBannerConfig || config?.hasVisualBreakConfig) ? "/collections/all" : "",
+      
+      promoTitle: config?.hasVisualBreakConfig ? "تصميمات تخطف الأنظار" : "",
+      promoSubTitle: config?.hasVisualBreakConfig ? "اكتشفي الجديد" : "",
+      promoDescription: config?.hasVisualBreakConfig ? "نسقي قطعك المفضلة للحصول على إطلالة عصرية ومريحة تناسب كل أوقاتك." : "",
+      promoImage: "",
+      
+      bottomText: config?.hasBottomText ? "تقييم حقيقي" : "",
 
-    if (config.hasTitle) initialData.title = config.label || "";
-    if (config.hasSubTitle) initialData.subTitle = "";
-    if (config.hasFeaturedCards) initialData.cards = [];
-    if (config.hasViewAllLink) initialData.viewAllLink = "";
-    if (config.hasProducts) initialData.products = [];
+      // 🔥 إعدادات القسم العائم الجديد
+      floatingTitle: config?.hasFloatingConfig ? "Fashion with a focus on green materials, ethical manufacturing and less-waste." : "",
+      floatingSubTitle: config?.hasFloatingConfig ? "The product idea" : "",
+      floatingBtnText: config?.hasFloatingConfig ? "View All Collection" : "",
+      floatingBtnLink: config?.hasFloatingConfig ? "/collections/all" : "",
+      floatImg1: config?.hasFloatingConfig ? "" : "",
+      floatImg2: config?.hasFloatingConfig ? "" : "",
+      floatImg3: config?.hasFloatingConfig ? "" : "",
 
-    updated[index].data = initialData;
+      _adminItems: [] 
+    };
     setLayoutSections(updated);
   };
 
   const handleLayoutDataChange = (index, field, value) => {
     const updated = [...layoutSections];
-    if (!updated[index].data) updated[index].data = {};
     updated[index].data[field] = value;
     setLayoutSections(updated);
   };
 
+  const toggleItemSelection = (sectionIndex, item, type, tabIndex = null) => {
+    const updated = [...layoutSections];
+    let items = updated[sectionIndex].data._adminItems || [];
+    
+    const isTabbed = SECTION_TYPES[updated[sectionIndex].category]?.isTabbed;
+    const existsIndex = items.findIndex(i => i.itemId === item.id && (!isTabbed || i.tabIndex === tabIndex));
+    
+    if (existsIndex >= 0) {
+      items.splice(existsIndex, 1);
+    } else {
+      items.push({
+        itemId: item.id,
+        itemType: type,
+        originalName: item.title || item.name || "",
+        originalImage: (item.images && item.images[0]) || item.image || "",
+        originalPrice: item.price || "",
+        originalCategory: item.category || "",
+        customName: "", customImage: "", badge: "",
+        linkUrl: type === 'product' ? `/product/${item.id}` : `/collections/${item.slug || item.id}`,
+        badgeType: "none", linkText: "", subCards: [],
+        customPrice: "", compareAtPrice: item.compareAtPrice || "", customRating: "", customReviews: "", customCategory: "",
+        customDescription: "",
+        tabIndex: isTabbed ? tabIndex : null
+      });
+    }
+    updated[sectionIndex].data._adminItems = items;
+    setLayoutSections(updated);
+  };
+
+  const handleOverrideChange = (sectionIndex, itemIndex, field, value) => {
+    const updated = [...layoutSections];
+    updated[sectionIndex].data._adminItems[itemIndex][field] = value;
+    setLayoutSections(updated);
+  };
+
   const addNewSection = () => {
-    const defaultCategory = "FEATURED_SECTION";
-    setLayoutSections([...layoutSections, {
-      category: defaultCategory,
-      designId: SECTION_TYPES[defaultCategory].designId,
-      data: { title: "المميز اليوم", subTitle: "", cards: [] }
-    }]);
+    setLayoutSections([...layoutSections, { category: "FEATURED_SECTION", designId: "IMDB_STYLE", data: { title: "المميز اليوم", subTitle: "", _adminItems: [] } }]);
     setExpandedSections(prev => ({ ...prev, [layoutSections.length]: true }));
   };
 
-  const removeSection = (index) => {
-    setLayoutSections(layoutSections.filter((_, i) => i !== index));
+  const removeSection = (index) => setLayoutSections(layoutSections.filter((_, i) => i !== index));
+  const moveSection = (index, dir) => {
+    const u = [...layoutSections];
+    const n = dir === 'up' ? index - 1 : index + 1;
+    if (n >= 0 && n < u.length) { [u[index], u[n]] = [u[n], u[index]]; setLayoutSections(u); }
   };
 
-  const moveSection = (index, direction) => {
-    const updated = [...layoutSections];
-    const newIndex = direction === 'up' ? index - 1 : index + 1;
-    if (newIndex >= 0 && newIndex < updated.length) {
-      [updated[index], updated[newIndex]] = [updated[newIndex], updated[index]];
-      setLayoutSections(updated);
+  const toggleAccordion = (index) => setExpandedSections(p => ({ ...p, [index]: !p[index] }));
+  const togglePicker = (idx, type) => setExpandedPickers(p => ({ ...p, [`${idx}-${type}`]: !p[`${idx}-${type}`] }));
+  const toggleOverride = (sIdx, iIdx) => setExpandedOverrides(p => ({ ...p, [`${sIdx}-${iIdx}`]: !p[`${sIdx}-${iIdx}`] }));
 
-      const newExpanded = { ...expandedSections };
-      const temp = newExpanded[index];
-      newExpanded[index] = newExpanded[newIndex];
-      newExpanded[newIndex] = temp;
-      setExpandedSections(newExpanded);
-    }
-  };
-
-  const addArrayItem = (sectionIndex, arrayName, emptyTemplate) => {
-    const updated = [...layoutSections];
-    if (!updated[sectionIndex].data[arrayName]) updated[sectionIndex].data[arrayName] = [];
-    updated[sectionIndex].data[arrayName].push(emptyTemplate);
-    setLayoutSections(updated);
-  };
-
-  const updateArrayItem = (sectionIndex, arrayName, itemIndex, field, value) => {
-    const updated = [...layoutSections];
-    updated[sectionIndex].data[arrayName][itemIndex][field] = value;
-    setLayoutSections(updated);
-  };
-
-  const removeArrayItem = (sectionIndex, arrayName, itemIndex) => {
-    const updated = [...layoutSections];
-    updated[sectionIndex].data[arrayName].splice(itemIndex, 1);
-    setLayoutSections(updated);
-  };
-
-  const addSubCard = (sectionIndex, cardIndex) => {
-    const updated = [...layoutSections];
-    if (!updated[sectionIndex].data.cards[cardIndex].subCards) {
-      updated[sectionIndex].data.cards[cardIndex].subCards = [];
-    }
-    updated[sectionIndex].data.cards[cardIndex].subCards.push({ image: "", mainTitle: "", linkText: "", linkUrl: "" });
-    setLayoutSections(updated);
-  };
-
-  const updateSubCard = (sectionIndex, cardIndex, subIndex, field, value) => {
-    const updated = [...layoutSections];
-    updated[sectionIndex].data.cards[cardIndex].subCards[subIndex][field] = value;
-    setLayoutSections(updated);
-  };
-
-  const removeSubCard = (sectionIndex, cardIndex, subIndex) => {
-    const updated = [...layoutSections];
-    updated[sectionIndex].data.cards[cardIndex].subCards.splice(subIndex, 1);
-    setLayoutSections(updated);
-  };
-
-  const toggleAccordion = (index) => {
-    setExpandedSections(prev => ({ ...prev, [index]: !prev[index] }));
-  };
-
-  const handleSlideChange = (index, field, value) => {
-    const updatedSlides = [...slides];
-    updatedSlides[index][field] = value;
-    setSlides(updatedSlides);
-  };
-
-  const addNewSlide = () => {
-    setSlides([...slides, { image: "", tag: "", title: "", desc: "", thumbnail: "", productLink: "", buttonText: "" }]);
-  };
-
-  const removeSlide = (index) => {
-    const updatedSlides = slides.filter((_, i) => i !== index);
-    setSlides(updatedSlides);
-  };
-
-  const handleCategoryChange = (index, field, value) => {
-    const updatedCategories = [...categories];
-    updatedCategories[index][field] = value;
-    setCategories(updatedCategories);
-  };
-
-  const addNewCategory = () => {
-    setCategories([...categories, { title: "", link: "" }]);
-  };
-
-  const removeCategory = (index) => {
-    const updatedCategories = categories.filter((_, i) => i !== index);
-    setCategories(updatedCategories);
-  };
+  const handleSlideChange = (i, f, v) => { const u = [...slides]; u[i][f] = v; setSlides(u); };
+  const addNewSlide = () => setSlides([...slides, { image: "", tag: "", title: "", desc: "", thumbnail: "", productLink: "", buttonText: "" }]);
+  const removeSlide = (i) => setSlides(slides.filter((_, idx) => idx !== i));
+  const handleCategoryChange = (i, f, v) => { const u = [...categories]; u[i][f] = v; setCategories(u); };
+  const addNewCategory = () => setCategories([...categories, { title: "", link: "" }]);
+  const removeCategory = (i) => setCategories(categories.filter((_, idx) => idx !== i));
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await setDoc(doc(db, "homepage", "layout_config"), { sections: layoutSections });
-      const dataToSaveHero = { slides: slides, categories: categories };
-      await setDoc(doc(db, "homepage", "main-hero"), dataToSaveHero);
+      const db = getDb();
+      const payloadSections = layoutSections.map(sec => {
+        const config = SECTION_TYPES[sec.category];
+        const items = sec.data._adminItems || [];
+        
+        const payloadData = { 
+          title: sec.data.title || "", 
+          subTitle: sec.data.subTitle || "", 
+          viewAllLink: sec.data.viewAllLink || "",
+          tabs: sec.data.tabs || [],
+          
+          topDescription: sec.data.topDescription || "",
+          bannerImage: sec.data.bannerImage || "",
+          bannerSubTitle: sec.data.bannerSubTitle || "",
+          bannerTitle: sec.data.bannerTitle || "",
+          buttonText: sec.data.buttonText || "",
+          buttonLink: sec.data.buttonLink || "",
 
-      alert("تم حفظ التحديثات بنجاح! الموقع سيعرض الأقسام والتعديلات فوراً.");
+          promoTitle: sec.data.promoTitle || "",
+          promoSubTitle: sec.data.promoSubTitle || "",
+          promoDescription: sec.data.promoDescription || "",
+          promoImage: sec.data.promoImage || "",
+
+          bottomText: sec.data.bottomText || "",
+
+          // 🔥 حفظ الإعدادات العائمة
+          floatingTitle: sec.data.floatingTitle || "",
+          floatingSubTitle: sec.data.floatingSubTitle || "",
+          floatingBtnText: sec.data.floatingBtnText || "",
+          floatingBtnLink: sec.data.floatingBtnLink || "",
+          floatImg1: sec.data.floatImg1 || "",
+          floatImg2: sec.data.floatImg2 || "",
+          floatImg3: sec.data.floatImg3 || "",
+
+          _adminItems: items
+        };
+
+        if (!config.isDynamicAuto) {
+          if (config.outputArray === 'cards') {
+            payloadData.cards = items.map(item => ({
+              image: item.customImage || item.originalImage || "",
+              mainTitle: item.customName || item.originalName || "",
+              linkUrl: item.linkUrl || "",
+              badge: item.badge || "",
+              badgeType: item.badgeType || "none",
+              linkText: item.linkText || "",
+              subCards: item.subCards || [],
+              price: item.customPrice || item.originalPrice || "",
+              compareAtPrice: item.compareAtPrice || "", 
+              rating: item.customRating || "",
+              reviewsCount: item.customReviews || "",
+              category: item.customCategory || item.originalCategory || ""
+            }));
+          } else if (config.outputArray === 'products') {
+            payloadData.products = items.map(item => ({
+              productId: item.itemId,
+              name: item.customName || item.originalName || "",
+              image: item.customImage || item.originalImage || "",
+              price: item.customPrice || item.originalPrice || "",
+              compareAtPrice: item.compareAtPrice || "", 
+              linkUrl: item.linkUrl || "",
+              badge: item.badge || ""
+            }));
+          } else if (config.outputArray === 'tabbedProducts') {
+            const tab0 = items.filter(i => i.tabIndex === 0);
+            const tab1 = items.filter(i => i.tabIndex === 1);
+            const tab2 = items.filter(i => i.tabIndex === 2);
+            const orderedItems = [...tab0, ...tab1, ...tab2];
+            
+            payloadData.products = orderedItems.map(item => ({
+              productId: item.itemId,
+              name: item.customName || item.originalName || "",
+              image: item.customImage || item.originalImage || "",
+              price: item.customPrice || item.originalPrice || "",
+              compareAtPrice: item.compareAtPrice || "",
+              linkUrl: item.linkUrl || "",
+              category: item.customCategory || item.originalCategory || "",
+              tabIndex: item.tabIndex 
+            }));
+            payloadData.chunkSizes = [tab0.length, tab1.length, tab2.length];
+          } else if (config.outputArray === 'collections') {
+            payloadData.linkedCollections = items.map(item => ({
+              id: item.itemId,
+              slug: item.itemId,
+              name: item.originalName || "",
+              customName: item.customName || "",
+              image: item.customImage || item.originalImage || "",
+              linkUrl: item.linkUrl || "",
+              description: item.customDescription || "",
+              badge: item.badge || ""
+            }));
+          }
+        }
+        
+        return { category: sec.category, designId: sec.designId, data: payloadData };
+      });
+
+      await setDoc(doc(db, "homepage", "layout_config"), { sections: payloadSections });
+      await setDoc(doc(db, "homepage", "main-hero"), { slides, categories });
+      alert("تم حفظ التحديثات بنجاح! راجع الصفحة الرئيسية الآن.");
     } catch (error) {
-      console.error("حدث خطأ أثناء الحفظ: ", error);
-      alert("عذراً، حدث خطأ أثناء الحفظ.");
-    } finally {
-      setSaving(false);
-    }
+      console.error(error); alert("حدث خطأ أثناء الحفظ.");
+    } finally { setSaving(false); }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#f4f6f8] flex flex-col items-center justify-center text-[#202223]">
-        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-[#202223] mb-4"></div>
-        <p className="font-bold text-sm text-gray-500">جاري تحميل الإعدادات...</p>
-      </div>
-    );
-  }
+  if (loading) return ( <div className="min-h-screen bg-[#f4f6f8] flex items-center justify-center"><div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-[#202223]"></div></div> );
+
+  const heroSectionIndex = layoutSections.findIndex(s => s.category === 'HERO_SECTION');
+  const currentHeroDesignId = heroSectionIndex >= 0 ? layoutSections[heroSectionIndex].designId : 'MODERN_SLIDER';
 
   return (
     <div className="min-h-screen bg-[#f4f6f8] text-[#202223] font-sans pb-24" dir="rtl">
-      
-      {/* Header الثابت */}
       <div className="sticky top-0 z-40 bg-white border-b border-gray-200 shadow-sm px-4 lg:px-8 py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-xl lg:text-2xl font-bold text-[#202223]">إدارة الصفحة الرئيسية</h1>
-          <p className="text-gray-500 text-xs lg:text-sm mt-1">تخصيص الهيكل والمحتوى لواجهة المتجر</p>
-        </div>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className={`w-full sm:w-auto px-6 py-2.5 rounded-xl font-bold text-sm transition-all shadow-sm flex items-center justify-center gap-2 ${
-            saving 
-            ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200' 
-            : 'bg-[#1a1a1a] hover:bg-black text-white'
-          }`}
-        >
-          {saving && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>}
+        <div><h1 className="text-xl lg:text-2xl font-bold">إدارة الصفحة الرئيسية</h1><p className="text-gray-500 text-xs mt-1">النظام الموحد الذكي (متوافق مع التصميمات القديمة 100%)</p></div>
+        <button onClick={handleSave} disabled={saving} className={`px-6 py-2.5 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 ${saving ? 'bg-gray-100 text-gray-400' : 'bg-[#1a1a1a] hover:bg-black text-white'}`}>
           {saving ? 'جاري الحفظ...' : 'حفظ ونشر التعديلات'}
         </button>
       </div>
 
       <div className="max-w-5xl mx-auto mt-6 px-4">
-        
-        {/* أزرار التبويبات (Tabs) */}
         <div className="flex overflow-x-auto scrollbar-hide bg-white border border-gray-200 rounded-xl shadow-sm mb-6 p-1">
-          <button onClick={() => setActiveTab('layout')} className={`flex-1 min-w-[140px] whitespace-nowrap py-2.5 px-4 text-sm font-bold rounded-lg transition-all ${activeTab === 'layout' ? 'bg-gray-100 text-[#202223] shadow-sm' : 'text-gray-500 hover:text-[#202223] hover:bg-gray-50'}`}>1. هيكلة وترتيب الصفحة</button>
-          <button onClick={() => setActiveTab('hero')} className={`flex-1 min-w-[140px] whitespace-nowrap py-2.5 px-4 text-sm font-bold rounded-lg transition-all ${activeTab === 'hero' ? 'bg-gray-100 text-[#202223] shadow-sm' : 'text-gray-500 hover:text-[#202223] hover:bg-gray-50'}`}>2. محتوى الهيرو</button>
-          <button onClick={() => setActiveTab('featured')} className={`flex-1 min-w-[140px] whitespace-nowrap py-2.5 px-4 text-sm font-bold rounded-lg transition-all ${activeTab === 'featured' ? 'bg-gray-100 text-[#202223] shadow-sm' : 'text-gray-500 hover:text-[#202223] hover:bg-gray-50'}`}>3. محتوى الأقسام المُضافة</button>
+          <button onClick={() => setActiveTab('layout')} className={`flex-1 min-w-[140px] py-2.5 px-4 text-sm font-bold rounded-lg ${activeTab === 'layout' ? 'bg-gray-100' : 'text-gray-500'}`}>1. هيكلة وترتيب الصفحة</button>
+          <button onClick={() => setActiveTab('hero')} className={`flex-1 min-w-[140px] py-2.5 px-4 text-sm font-bold rounded-lg ${activeTab === 'hero' ? 'bg-gray-100' : 'text-gray-500'}`}>2. محتوى الهيرو</button>
+          <button onClick={() => setActiveTab('featured')} className={`flex-1 min-w-[140px] py-2.5 px-4 text-sm font-bold rounded-lg ${activeTab === 'featured' ? 'bg-gray-100' : 'text-gray-500'}`}>3. محتوى الأقسام والكروت</button>
         </div>
 
-        {/* ========================================= */}
-        {/* === التبويب الأول: محرك الترتيب الذكي === */}
-        {/* ========================================= */}
         {activeTab === 'layout' && (
           <div className="space-y-4 animate-[fadeIn_0.2s_ease-out]">
-            <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm mb-6 flex items-center gap-3">
-              <div className="w-1.5 h-6 bg-[#008060] rounded-full"></div>
-              <div>
-                <h2 className="text-base font-bold text-[#202223]">هيكلة وترتيب الصفحة (Layout)</h2>
-                <p className="text-gray-500 text-xs mt-0.5">أضف الأقسام ورتبها. التصميم (Design ID) سيتم ضبطه تلقائياً.</p>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              {layoutSections.map((section, index) => (
-                <div key={index} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 p-4 bg-white border border-gray-200 rounded-xl shadow-sm hover:border-[#008060]/50 transition-colors">
-                  
-                  <div className="flex sm:flex-col gap-1 w-full sm:w-auto justify-center order-2 sm:order-1 border-t sm:border-t-0 sm:border-l border-gray-100 pt-3 sm:pt-0 sm:pl-3">
-                    <button onClick={() => moveSection(index, 'up')} className="bg-gray-50 p-2 rounded-lg text-gray-500 hover:text-[#202223] hover:bg-gray-100 transition-colors flex-1 sm:flex-none flex justify-center">▲</button>
-                    <button onClick={() => moveSection(index, 'down')} className="bg-gray-50 p-2 rounded-lg text-gray-500 hover:text-[#202223] hover:bg-gray-100 transition-colors flex-1 sm:flex-none flex justify-center">▼</button>
-                  </div>
-
-                  <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4 w-full order-1 sm:order-2">
-                    <div>
-                      <label className="block text-[11px] font-bold text-gray-600 mb-1.5">نوع القسم</label>
-                      <select
-                        value={section.category}
-                        onChange={(e) => handleLayoutCategoryChange(index, e.target.value)}
-                        className="w-full bg-white border border-gray-300 p-2.5 rounded-lg text-sm text-[#202223] focus:border-[#008060] focus:ring-1 focus:ring-[#008060] outline-none transition-all"
-                      >
-                        {Object.keys(SECTION_TYPES).map(key => (
-                          <option key={key} value={key}>{SECTION_TYPES[key].label}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-bold text-gray-400 mb-1.5">التصميم المرتبط (تلقائي)</label>
-                      <input
-                        type="text" value={section.designId} readOnly
-                        className="w-full bg-gray-50 border border-gray-200 p-2.5 rounded-lg text-sm text-gray-500 cursor-not-allowed font-mono" dir="ltr"
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => removeSection(index)}
-                    className="sm:ml-auto order-3 bg-red-50 text-red-600 hover:bg-red-100 px-4 py-2.5 rounded-lg border border-red-100 transition-colors w-full sm:w-auto text-sm font-bold"
-                  >
-                    حذف
-                  </button>
+            {layoutSections.map((section, index) => (
+              <div key={index} className="flex gap-3 p-4 bg-white border border-gray-200 rounded-xl shadow-sm">
+                <div className="flex flex-col gap-1 border-l border-gray-100 pl-3">
+                  <button onClick={() => moveSection(index, 'up')} className="bg-gray-50 p-2 rounded-lg text-gray-500 hover:bg-gray-100">▲</button>
+                  <button onClick={() => moveSection(index, 'down')} className="bg-gray-50 p-2 rounded-lg text-gray-500 hover:bg-gray-100">▼</button>
                 </div>
-              ))}
-            </div>
-
-            <button
-              onClick={addNewSection}
-              className="w-full mt-4 py-3.5 border-2 border-dashed border-gray-300 text-gray-500 hover:border-gray-400 hover:text-[#202223] rounded-xl transition-all font-bold bg-white text-sm shadow-sm"
-            >
-              + إضافة قسم جديد للصفحة
-            </button>
+                <div className="flex-1 grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-600 mb-1.5">نوع القسم</label>
+                    <select value={section.category} onChange={(e) => handleLayoutCategoryChange(index, e.target.value)} className="w-full p-2.5 border rounded-lg text-sm outline-none">
+                      {Object.keys(SECTION_TYPES).map(key => <option key={key} value={key}>{SECTION_TYPES[key].label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 mb-1.5">التصميم المرتبط</label>
+                    <input type="text" value={section.designId} readOnly className="w-full p-2.5 border bg-gray-50 rounded-lg text-sm text-gray-500 font-mono" dir="ltr" />
+                  </div>
+                </div>
+                <button onClick={() => removeSection(index)} className="bg-red-50 text-red-600 px-4 rounded-lg font-bold text-sm">حذف</button>
+              </div>
+            ))}
+            <button onClick={addNewSection} className="w-full py-3.5 border-2 border-dashed border-gray-300 text-gray-500 rounded-xl font-bold bg-white text-sm">+ إضافة قسم جديد</button>
           </div>
         )}
 
-        {/* ========================================= */}
-        {/* === التبويب الثاني: الهيرو === */}
-        {/* ========================================= */}
         {activeTab === 'hero' && (
           <div className="space-y-8 animate-[fadeIn_0.2s_ease-out]">
             
-            <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm mb-6 flex items-center gap-3">
-              <div className="w-1.5 h-6 bg-[#008060] rounded-full"></div>
-              <h2 className="text-base font-bold text-[#202223]">إدارة شرائح العرض (Hero Slides)</h2>
-            </div>
+            {heroSectionIndex >= 0 && (
+              <div className="bg-white border rounded-xl p-5 shadow-sm border-[#1A1A1A]/20">
+                <h2 className="text-base font-bold mb-4 text-[#1A1A1A]">اختيار تصميم الهيرو</h2>
+                <select 
+                  value={currentHeroDesignId} 
+                  onChange={(e) => {
+                    const u = [...layoutSections];
+                    u[heroSectionIndex].designId = e.target.value;
+                    setLayoutSections(u);
+                  }} 
+                  className="w-full md:w-1/2 p-3 border border-gray-300 rounded-lg text-sm outline-none focus:border-[#C2A581] font-bold"
+                >
+                  <option value="MODERN_SLIDER">الهيرو الكلاسيكي (سلايدر كامل الشاشة)</option>
+                  <option value="EDITORIAL_CENTERED">الهيرو المينيماليست المتمركز (المطابق للمرجع)</option>
+                </select>
+              </div>
+            )}
 
             <div className="space-y-6">
               {slides.map((slide, index) => (
-                <div key={index} className="p-4 sm:p-5 border border-gray-200 rounded-xl bg-white shadow-sm relative">
+                <div key={index} className="p-5 border border-gray-200 rounded-xl bg-white shadow-sm hover:border-[#1A1A1A]/30 transition-colors">
                   <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
                     <h3 className="font-bold text-sm text-[#202223]">الشريحة رقم {index + 1}</h3>
-                    <button onClick={() => removeSlide(index)} className="text-red-500 hover:text-red-700 text-xs font-bold transition-colors">حذف الشريحة</button>
+                    <button onClick={() => removeSlide(index)} className="text-red-500 text-xs font-bold bg-red-50 px-3 py-1.5 rounded-md hover:bg-red-100">حذف الشريحة</button>
                   </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="col-span-1 sm:col-span-2">
-                      <label className="block text-xs font-medium text-gray-600 mb-1.5">رابط الصورة الخلفية الرئيسية</label>
-                      <input type="text" value={slide.image} onChange={(e) => handleSlideChange(index, 'image', e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg outline-none bg-white text-sm text-[#202223] focus:border-[#008060] focus:ring-1 focus:ring-[#008060] font-mono" dir="ltr" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1.5">الوسم المميّز (شريط أصفر)</label>
-                      <input type="text" value={slide.tag} onChange={(e) => handleSlideChange(index, 'tag', e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg outline-none bg-white text-sm text-[#202223] focus:border-[#008060] focus:ring-1 focus:ring-[#008060]" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1.5">العنوان الرئيسي</label>
-                      <input type="text" value={slide.title} onChange={(e) => handleSlideChange(index, 'title', e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg outline-none bg-white text-sm text-[#202223] focus:border-[#008060] focus:ring-1 focus:ring-[#008060]" />
-                    </div>
-                    <div className="col-span-1 sm:col-span-2">
-                      <label className="block text-xs font-medium text-gray-600 mb-1.5">وصف التصميم</label>
-                      <textarea value={slide.desc} onChange={(e) => handleSlideChange(index, 'desc', e.target.value)} rows="2" className="w-full p-2.5 border border-gray-300 rounded-lg outline-none bg-white text-sm text-[#202223] resize-none focus:border-[#008060] focus:ring-1 focus:ring-[#008060]" />
-                    </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="col-span-2"><label className="block text-xs font-bold mb-1.5">رابط الصورة (الرئيسية)</label><input type="text" value={slide.image} onChange={(e) => handleSlideChange(index, 'image', e.target.value)} className="w-full p-2.5 border rounded-lg font-mono text-sm outline-none focus:border-[#1A1A1A]" dir="ltr" /></div>
                     
-                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 col-span-1 sm:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4 mt-2">
-                      <div>
-                        <label className="block text-[11px] font-bold text-gray-600 mb-1.5">رابط البوستر المصغر</label>
-                        <input type="text" value={slide.thumbnail} onChange={(e) => handleSlideChange(index, 'thumbnail', e.target.value)} className="w-full p-2 bg-white border border-gray-300 rounded-md text-xs text-[#202223] focus:border-[#008060] outline-none font-mono" dir="ltr" />
+                    <div><label className="block text-xs font-bold mb-1.5 text-gray-600">العنوان الصغير (Tag)</label><input type="text" value={slide.tag} onChange={(e) => handleSlideChange(index, 'tag', e.target.value)} className="w-full p-2.5 border rounded-lg text-sm outline-none focus:border-[#1A1A1A]" placeholder="LIMITED EDITION" /></div>
+                    <div><label className="block text-xs font-bold mb-1.5 text-gray-600">النص الرئيسي العريض</label><input type="text" value={slide.title} onChange={(e) => handleSlideChange(index, 'title', e.target.value)} className="w-full p-2.5 border rounded-lg text-sm outline-none focus:border-[#1A1A1A]" placeholder="WINTER COLLECTION" /></div>
+                    <div><label className="block text-xs font-bold mb-1.5 text-gray-600">نص الزر</label><input type="text" value={slide.buttonText} onChange={(e) => handleSlideChange(index, 'buttonText', e.target.value)} className="w-full p-2.5 border rounded-lg text-sm outline-none focus:border-[#1A1A1A]" placeholder="SHOP NOW" /></div>
+                    <div><label className="block text-xs font-bold mb-1.5 text-blue-600">رابط الزر (URL)</label><input type="text" value={slide.productLink} onChange={(e) => handleSlideChange(index, 'productLink', e.target.value)} className="w-full p-2.5 border border-blue-200 rounded-lg font-mono text-sm outline-none focus:border-blue-400" dir="ltr" /></div>
+
+                    {currentHeroDesignId === 'MODERN_SLIDER' && (
+                      <div className="col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg border">
+                        <div className="col-span-2"><label className="block text-xs font-bold mb-1.5 text-gray-600">الوصف الطويل (يظهر في الهيرو القديم فقط)</label><textarea value={slide.desc} onChange={(e) => handleSlideChange(index, 'desc', e.target.value)} className="w-full p-2.5 border rounded-lg text-sm outline-none focus:border-[#1A1A1A]" rows="2" /></div>
+                        <div><label className="block text-[11px] font-bold mb-1.5">رابط البوستر المصغر (للهيرو القديم)</label><input type="text" value={slide.thumbnail} onChange={(e) => handleSlideChange(index, 'thumbnail', e.target.value)} className="w-full p-2 border rounded font-mono text-xs outline-none focus:border-gray-400" dir="ltr" /></div>
                       </div>
-                      <div>
-                        <label className="block text-[11px] font-bold text-gray-600 mb-1.5">رابط المنتج المخصص</label>
-                        <input type="text" value={slide.productLink} onChange={(e) => handleSlideChange(index, 'productLink', e.target.value)} className="w-full p-2 bg-white border border-gray-300 rounded-md text-xs text-[#202223] focus:border-[#008060] outline-none font-mono" dir="ltr" />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-bold text-gray-600 mb-1.5">نص الزر</label>
-                        <input type="text" value={slide.buttonText || ""} onChange={(e) => handleSlideChange(index, 'buttonText', e.target.value)} className="w-full p-2 bg-white border border-gray-300 rounded-md text-xs text-[#202223] focus:border-[#008060] outline-none" />
-                      </div>
-                    </div>
+                    )}
                   </div>
                 </div>
               ))}
-              <button onClick={addNewSlide} className="w-full py-3.5 border border-dashed border-gray-300 text-gray-600 text-sm font-bold rounded-xl hover:border-gray-400 hover:bg-gray-50 bg-white transition-all shadow-sm">+ إضافة شريحة عرض جديدة</button>
+              <button onClick={addNewSlide} className="w-full py-3.5 border-dashed border-2 border-gray-300 text-gray-500 font-bold rounded-xl hover:bg-white transition-colors">+ إضافة شريحة</button>
             </div>
-
-            {/* شريط الأقسام السفلية */}
-            <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm mt-8">
-              <h2 className="text-base font-bold text-[#202223] mb-4 flex items-center gap-2">
-                <div className="w-1 h-4 bg-[#008060] rounded-sm"></div>
-                إدارة أزرار تصفح الأقسام
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {categories.map((category, index) => (
-                  <div key={index} className="flex gap-2 items-center p-2.5 border border-gray-200 rounded-lg bg-gray-50">
-                    <input type="text" value={category.title} onChange={(e) => handleCategoryChange(index, 'title', e.target.value)} placeholder="اسم القسم" className="w-1/3 p-2 bg-white border border-gray-300 rounded text-xs text-[#202223] focus:border-[#008060] outline-none" />
-                    <input type="text" value={category.link} onChange={(e) => handleCategoryChange(index, 'link', e.target.value)} placeholder="الرابط" className="flex-1 p-2 bg-white border border-gray-300 rounded text-xs text-[#202223] focus:border-[#008060] outline-none font-mono" dir="ltr" />
-                    <button onClick={() => removeCategory(index)} className="text-red-500 hover:text-red-700 p-1.5 font-bold text-sm">✕</button>
+            
+            <div className="bg-white border rounded-xl p-5 shadow-sm mt-8">
+              <h2 className="text-base font-bold mb-4">إدارة أزرار تصفح الأقسام (أسفل الهيرو)</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {categories.map((cat, index) => (
+                  <div key={index} className="flex gap-2 p-2.5 border rounded-lg bg-gray-50">
+                    <input type="text" value={cat.title} onChange={(e) => handleCategoryChange(index, 'title', e.target.value)} placeholder="الاسم" className="w-1/3 p-2 border rounded text-xs outline-none focus:border-[#1A1A1A]" />
+                    <input type="text" value={cat.link} onChange={(e) => handleCategoryChange(index, 'link', e.target.value)} placeholder="الرابط" className="flex-1 p-2 border rounded font-mono text-xs outline-none focus:border-[#1A1A1A]" dir="ltr" />
+                    <button onClick={() => removeCategory(index)} className="text-red-500 font-bold px-2 hover:bg-red-50 rounded">✕</button>
                   </div>
                 ))}
               </div>
-              <button onClick={addNewCategory} className="mt-4 px-4 py-2 bg-white border border-gray-300 text-[#202223] text-xs font-bold rounded-lg hover:bg-gray-50 transition-all shadow-sm">+ إضافة قسم جديد</button>
+              <button onClick={addNewCategory} className="mt-4 px-4 py-2 border rounded-lg text-xs font-bold bg-white hover:bg-gray-50">+ إضافة قسم</button>
             </div>
           </div>
         )}
 
-        {/* ========================================= */}
-        {/* === التبويب الثالث: محرر الأقسام === */}
-        {/* ========================================= */}
         {activeTab === 'featured' && (
           <div className="space-y-4 animate-[fadeIn_0.2s_ease-out]">
-            <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm mb-6 flex items-center gap-3">
-              <div className="w-1.5 h-6 bg-[#008060] rounded-full"></div>
-              <div>
-                <h2 className="text-base font-bold text-[#202223]">محتوى الأقسام الإضافية</h2>
-                <p className="text-gray-500 text-xs mt-0.5">اضغط على أي قسم لفتحه وتعديل محتواه.</p>
-              </div>
-            </div>
-
             {layoutSections.map((section, sectionIndex) => {
               const config = SECTION_TYPES[section.category];
               if (section.category === 'HERO_SECTION') return null;
-
               const isExpanded = expandedSections[sectionIndex];
+              const items = section.data._adminItems || [];
 
               return (
-                <div key={sectionIndex} className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mb-3">
-
-                  {/* رأس الأكورديون */}
-                  <div
-                    onClick={() => toggleAccordion(sectionIndex)}
-                    className="p-4 flex justify-between items-center cursor-pointer hover:bg-gray-50 transition-colors border-b border-transparent data-[expanded=true]:border-gray-200"
-                    data-expanded={isExpanded}
-                  >
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-                      <span className="bg-gray-100 text-[#202223] font-bold text-[10px] sm:text-xs px-2.5 py-1 rounded border border-gray-200 w-fit tracking-wide">
-                        {config?.label}
-                      </span>
-                      <span className="font-bold text-[#202223] text-sm sm:text-base">
-                        {section.data?.title || "بدون عنوان"}
+                <div key={sectionIndex} className="bg-white border border-gray-200 rounded-xl shadow-sm mb-3">
+                  <div onClick={() => toggleAccordion(sectionIndex)} className="p-4 flex justify-between items-center cursor-pointer hover:bg-gray-50 border-b border-transparent data-[expanded=true]:border-gray-200" data-expanded={isExpanded}>
+                    <div className="flex items-center gap-3">
+                      <span className="bg-gray-100 font-bold text-[10px] px-2.5 py-1 rounded border">{config?.label}</span>
+                      <span className="font-bold text-sm">
+                        {section.category === 'VISUAL_BREAK_SECTION' ? "الفاصل المرئي" : section.data?.title || (config?.hasBannerConfig ? "قسم الغلاف" : (config?.hasFloatingConfig ? "القسم العائم" : "بدون عنوان"))}
                       </span>
                     </div>
-                    <div className={`text-gray-400 font-bold text-sm transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}>
-                      ▼
-                    </div>
+                    <div className={`text-gray-400 font-bold transition-transform ${isExpanded ? 'rotate-180' : ''}`}>▼</div>
                   </div>
 
-                  {/* المحتوى عند فتح الأكورديون */}
                   {isExpanded && (
-                    <div className="p-4 sm:p-5 bg-gray-50 animate-[fadeIn_0.2s_ease-out]">
-
-                      {/* 1. العنوان الرئيسي والفرعي */}
-                      {config?.hasTitle && (
-                        <div className="mb-5 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-                          <div className="mb-4">
-                            <label className="block text-xs font-bold text-gray-600 mb-1.5">العنوان الرئيسي للقسم</label>
-                            <input
-                              type="text" value={section.data?.title || ""}
-                              onChange={(e) => handleLayoutDataChange(sectionIndex, 'title', e.target.value)}
-                              className="w-full p-2.5 border border-gray-300 rounded-lg bg-white text-[#202223] text-sm focus:border-[#008060] focus:ring-1 focus:ring-[#008060] outline-none"
-                            />
-                          </div>
-                          {config?.hasSubTitle && (
+                    <div className="p-5 bg-gray-50">
+                      
+                      {/* 🔥 إعدادات القسم العائم الجديد */}
+                      {config?.hasFloatingConfig && (
+                        <div className="bg-white p-4 rounded-xl border border-gray-200 mb-5 space-y-4 shadow-sm">
+                          <h4 className="text-sm font-bold border-b border-gray-100 pb-2 text-[#1A1A1A]">إعدادات العناوين وصور الجرافيتي (القسم العلوي)</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                              <label className="block text-xs font-bold text-gray-500 mb-1.5">العنوان الفرعي (اختياري)</label>
-                              <input
-                                type="text" value={section.data?.subTitle || ""}
-                                onChange={(e) => handleLayoutDataChange(sectionIndex, 'subTitle', e.target.value)}
-                                className="w-full p-2.5 border border-gray-300 rounded-lg bg-white text-[#202223] text-sm focus:border-[#008060] outline-none"
-                              />
+                              <label className="block text-xs font-bold mb-1.5 text-gray-700">العنوان الصغير (أعلى)</label>
+                              <input type="text" value={section.data.floatingSubTitle || ""} onChange={(e) => handleLayoutDataChange(sectionIndex, 'floatingSubTitle', e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:border-[#1A1A1A]" placeholder="مثال: The product idea" />
                             </div>
-                          )}
-
-                        {/* إضافة رابط عرض الكل للقسم بالكامل */}
-                          <div className="mt-4 pt-4 border-t border-gray-100">
-                            <label className="block text-xs font-bold text-gray-600 mb-1.5">رابط زر "عرض الكل" (صفحة المجموعة)</label>
-                            <input 
-                              type="text" 
-                              value={section.data?.linkUrl || ""} 
-                              onChange={(e) => handleLayoutDataChange(sectionIndex, 'linkUrl', e.target.value)} 
-                              placeholder="مثال: /collections/shoes"
-                              className={`w-full p-2.5 border rounded-lg bg-white text-sm focus:outline-none font-mono transition-colors ${
-                                ((section.data?.linkedCollections || []).length > 1 && !(section.data?.linkUrl)) 
-                                ? 'border-red-500 focus:border-red-600 bg-red-50 text-red-700' 
-                                : 'border-gray-300 text-[#202223] focus:border-[#008060]'
-                              }`}
-                              dir="ltr"
-                            />
-                            {((section.data?.linkedCollections || []).length > 1 && !(section.data?.linkUrl)) && (
-                              <p className="text-[10px] text-red-500 mt-1 font-bold">⚠️ تم اختيار أكثر من قسم، يرجى كتابة رابط مخصص لزر عرض الكل، وإلا لن يظهر الزر في الموقع.</p>
-                            )}
+                            <div>
+                              <label className="block text-xs font-bold mb-1.5 text-gray-700">العنوان الرئيسي العريض</label>
+                              <input type="text" value={section.data.floatingTitle || ""} onChange={(e) => handleLayoutDataChange(sectionIndex, 'floatingTitle', e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:border-[#1A1A1A]" placeholder="مثال: Fashion with a focus..." />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold mb-1.5 text-gray-700">نص الرابط الرئيسي</label>
+                              <input type="text" value={section.data.floatingBtnText || ""} onChange={(e) => handleLayoutDataChange(sectionIndex, 'floatingBtnText', e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:border-[#1A1A1A]" placeholder="View All Collection" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold mb-1.5 text-gray-700">عنوان الرابط (URL)</label>
+                              <input type="text" value={section.data.floatingBtnLink || ""} onChange={(e) => handleLayoutDataChange(sectionIndex, 'floatingBtnLink', e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:border-[#1A1A1A] font-mono" dir="ltr" />
+                            </div>
                           </div>
-
-                          {/* رابط "عرض الكل" - خاص بـ TOP_TEN_SECTION فقط */}
-                          {section.category === 'TOP_TEN_SECTION' && (
-                            <div className="mt-4">
-                              <label className="block text-xs font-bold text-gray-600 mb-1.5">رابط زرار "عرض الكل" (TOP 10)</label>
-                              <input
-                                type="text"
-                                value={section.data?.viewAllLink || ""}
-                                onChange={(e) => handleLayoutDataChange(sectionIndex, 'viewAllLink', e.target.value)}
-                                className={`w-full p-2.5 border rounded-lg bg-white text-sm focus:outline-none font-mono transition-colors ${
-                                  ((section.data?.linkedCollections || []).length > 1 && !(section.data?.viewAllLink)) 
-                                  ? 'border-red-500 focus:border-red-600 bg-red-50 text-red-700' 
-                                  : 'border-gray-300 text-[#202223] focus:border-[#008060]'
-                                }`}
-                                dir="ltr"
-                                placeholder="مثال: /collections/top-ten"
-                              />
-                               {((section.data?.linkedCollections || []).length > 1 && !(section.data?.viewAllLink)) && (
-                                <p className="text-[10px] text-red-500 mt-1 font-bold">⚠️ تم اختيار أكثر من قسم، يرجى كتابة رابط مخصص لزر عرض الكل.</p>
-                              )}
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-gray-100 pt-4 mt-2">
+                            <div>
+                              <label className="block text-xs font-bold mb-1.5 text-gray-500">صورة كارت الجرافيتي 1 (منتصف اليسار)</label>
+                              <input type="text" value={section.data.floatImg1 || ""} onChange={(e) => handleLayoutDataChange(sectionIndex, 'floatImg1', e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg text-xs outline-none focus:border-[#1A1A1A] font-mono" dir="ltr" placeholder="https://..." />
                             </div>
-                          )}
+                            <div>
+                              <label className="block text-xs font-bold mb-1.5 text-gray-500">صورة كارت الجرافيتي 2 (أعلى اليمين)</label>
+                              <input type="text" value={section.data.floatImg2 || ""} onChange={(e) => handleLayoutDataChange(sectionIndex, 'floatImg2', e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg text-xs outline-none focus:border-[#1A1A1A] font-mono" dir="ltr" placeholder="https://..." />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold mb-1.5 text-gray-500">صورة كارت الجرافيتي 3 (أسفل اليمين)</label>
+                              <input type="text" value={section.data.floatImg3 || ""} onChange={(e) => handleLayoutDataChange(sectionIndex, 'floatImg3', e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg text-xs outline-none focus:border-[#1A1A1A] font-mono" dir="ltr" placeholder="https://..." />
+                            </div>
+                          </div>
                         </div>
                       )}
 
-                      {/* 2. محرر البطاقات */}
-                      {config?.hasFeaturedCards && (
-                        <div>
-                          <h4 className="text-sm font-bold text-[#202223] mb-3">البطاقات المخصصة (Cards):</h4>
-                          <div className="space-y-4">
-                            {(section.data?.cards || []).map((card, cardIndex) => (
-                              <div key={cardIndex} className="p-4 sm:p-5 border border-gray-200 rounded-xl bg-white shadow-sm relative">
-                                <div className="flex justify-between items-center mb-4 pb-2 border-b border-gray-100">
-                                  <span className="font-bold text-[#202223] text-sm">البطاقة الرئيسية #{cardIndex + 1}</span>
-                                  <button onClick={() => removeArrayItem(sectionIndex, 'cards', cardIndex)} className="text-red-500 hover:text-red-700 font-bold text-xs bg-red-50 px-2 py-1 rounded">حذف البطاقة بالكامل</button>
-                                </div>
+                      {config?.hasVisualBreakConfig && (
+                        <div className="bg-white p-4 rounded-xl border border-gray-200 mb-5 space-y-4 shadow-sm">
+                          <h4 className="text-sm font-bold border-b border-gray-100 pb-2 text-[#1A1A1A]">إعدادات الفاصل المرئي (الخلفية الداكنة)</h4>
+                          <div className="grid grid-cols-1 gap-4">
+                            <div>
+                              <label className="block text-xs font-bold mb-1.5 text-gray-700">العنوان الصغير (أعلى)</label>
+                              <input type="text" value={section.data.promoSubTitle || ""} onChange={(e) => handleLayoutDataChange(sectionIndex, 'promoSubTitle', e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:border-[#1A1A1A]" placeholder="مثال: Mix & Match" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold mb-1.5 text-gray-700">العنوان الرئيسي العريض</label>
+                              <input type="text" value={section.data.promoTitle || ""} onChange={(e) => handleLayoutDataChange(sectionIndex, 'promoTitle', e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:border-[#1A1A1A]" placeholder="مثال: Who says fashion has to be boring?" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold mb-1.5 text-gray-700">وصف القسم</label>
+                              <textarea value={section.data.promoDescription || ""} onChange={(e) => handleLayoutDataChange(sectionIndex, 'promoDescription', e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:border-[#1A1A1A]" rows="2" placeholder="مثال: We love it with super long pants..." />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold mb-1.5 text-gray-700">الصورة الرئيسية للقسم</label>
+                              <input type="text" value={section.data.promoImage || ""} onChange={(e) => handleLayoutDataChange(sectionIndex, 'promoImage', e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:border-[#1A1A1A] font-mono" dir="ltr" placeholder="https://..." />
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                              <div><label className="block text-xs font-bold mb-1.5 text-gray-700">نص الزر</label><input type="text" value={section.data.buttonText || ""} onChange={(e) => handleLayoutDataChange(sectionIndex, 'buttonText', e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:border-[#1A1A1A]" /></div>
+                              <div><label className="block text-xs font-bold mb-1.5 text-gray-700">رابط الزر</label><input type="text" value={section.data.buttonLink || ""} onChange={(e) => handleLayoutDataChange(sectionIndex, 'buttonLink', e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:border-[#1A1A1A] font-mono" dir="ltr" /></div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {config?.hasBannerConfig && (
+                        <div className="bg-white p-4 rounded-xl border border-gray-200 mb-5 space-y-4 shadow-sm">
+                          <h4 className="text-sm font-bold border-b border-gray-100 pb-2 text-[#1A1A1A]">إعدادات صورة الغلاف والمحتوى</h4>
+                          <div><label className="block text-xs font-bold mb-1.5 text-gray-700">النص الوصفي أعلى الغلاف (اختياري)</label><textarea value={section.data.topDescription || ""} onChange={(e) => handleLayoutDataChange(sectionIndex, 'topDescription', e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:border-[#1A1A1A]" rows="2" /></div>
+                          <div><label className="block text-xs font-bold mb-1.5 text-gray-700">رابط صورة الغلاف (Banner Image)</label><input type="text" value={section.data.bannerImage || ""} onChange={(e) => handleLayoutDataChange(sectionIndex, 'bannerImage', e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:border-[#1A1A1A] font-mono" dir="ltr" /></div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div><label className="block text-xs font-bold mb-1.5 text-gray-700">العنوان الفرعي للغلاف</label><input type="text" value={section.data.bannerSubTitle || ""} onChange={(e) => handleLayoutDataChange(sectionIndex, 'bannerSubTitle', e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:border-[#1A1A1A]" /></div>
+                            <div><label className="block text-xs font-bold mb-1.5 text-gray-700">العنوان الرئيسي للغلاف</label><input type="text" value={section.data.bannerTitle || ""} onChange={(e) => handleLayoutDataChange(sectionIndex, 'bannerTitle', e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:border-[#1A1A1A]" /></div>
+                            <div><label className="block text-xs font-bold mb-1.5 text-gray-700">نص الزر</label><input type="text" value={section.data.buttonText || ""} onChange={(e) => handleLayoutDataChange(sectionIndex, 'buttonText', e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:border-[#1A1A1A]" /></div>
+                            <div><label className="block text-xs font-bold mb-1.5 text-gray-700">رابط الزر</label><input type="text" value={section.data.buttonLink || ""} onChange={(e) => handleLayoutDataChange(sectionIndex, 'buttonLink', e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:border-[#1A1A1A] font-mono" dir="ltr" /></div>
+                          </div>
+                        </div>
+                      )}
 
-                                  {/* رابط الصورة - مشترك */}
-                                  <div className="col-span-1 md:col-span-2">
-                                    <label className="block text-[11px] font-bold text-gray-600 mb-1.5">رابط الصورة (Image URL)</label>
-                                    <input type="text" value={card.image} onChange={(e) => updateArrayItem(sectionIndex, 'cards', cardIndex, 'image', e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg bg-white text-[#202223] text-sm focus:border-[#008060] outline-none font-mono" dir="ltr" />
-                                  </div>
+                      {(config?.hasTitle || config?.hasSubTitle || config?.hasViewAllLink || config?.hasBottomText) && !config?.hasFloatingConfig && (
+                        <div className="mb-5 bg-white p-4 rounded-xl border border-gray-200">
+                          <div className="grid grid-cols-2 gap-4">
+                            {config?.hasTitle && (
+                              <div>
+                                <label className="block text-xs font-bold mb-1.5">العنوان الرئيسي للقسم</label>
+                                <input type="text" value={section.data?.title || ""} onChange={(e) => handleLayoutDataChange(sectionIndex, 'title', e.target.value)} className="w-full p-2.5 border rounded-lg text-sm outline-none" />
+                              </div>
+                            )}
+                            {config?.hasBottomText && (
+                              <div>
+                                <label className="block text-xs font-bold mb-1.5">النص السفلي</label>
+                                <input type="text" value={section.data?.bottomText || ""} onChange={(e) => handleLayoutDataChange(sectionIndex, 'bottomText', e.target.value)} className="w-full p-2.5 border rounded-lg text-sm outline-none" />
+                              </div>
+                            )}
+                            {config?.hasSubTitle && (<div><label className="block text-xs font-bold mb-1.5">العنوان الفرعي (اختياري)</label><input type="text" value={section.data?.subTitle || ""} onChange={(e) => handleLayoutDataChange(sectionIndex, 'subTitle', e.target.value)} className="w-full p-2.5 border rounded-lg text-sm outline-none" /></div>)}
+                            {config?.hasViewAllLink && (<div className="col-span-2 pt-2 border-t border-gray-100"><label className="block text-xs font-bold mb-1.5">رابط زر "عرض الكل"</label><input type="text" value={section.data?.viewAllLink || ""} onChange={(e) => handleLayoutDataChange(sectionIndex, 'viewAllLink', e.target.value)} placeholder="مثال: /collections/all" className="w-full p-2.5 border rounded-lg text-sm font-mono outline-none" dir="ltr" /></div>)}
+                          </div>
+                        </div>
+                      )}
 
-                                  {/* Badge Type - خاص بـ FEATURED فقط */}
-                                  {section.category !== 'TOP_TEN_SECTION' && (
-                                    <div>
-                                      <label className="block text-[11px] font-bold text-gray-600 mb-1.5">نوع الشارة (Badge Type)</label>
-                                      <select value={card.badgeType} onChange={(e) => updateArrayItem(sectionIndex, 'cards', cardIndex, 'badgeType', e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg bg-white text-[#202223] text-sm focus:border-[#008060] outline-none">
-                                        <option value="none">بدون شارة</option>
-                                        <option value="list">قائمة (List)</option>
-                                        <option value="photos">صور (Photos)</option>
-                                      </select>
-                                    </div>
-                                  )}
+                      {config?.isDynamicAuto && (
+                        <div className="bg-[#f4fae5] border border-[#008060]/30 p-4 rounded-xl text-center">
+                          <h4 className="font-bold text-[#008060] text-sm mb-1">قسم ديناميكي بالكامل 🤖</h4>
+                          <p className="text-xs text-gray-600">يسحب البيانات أوتوماتيكياً من قاعدة البيانات.</p>
+                        </div>
+                      )}
 
-                                  {/* العنوان - مشترك */}
-                                  <div>
-                                    <label className="block text-[11px] font-bold text-gray-600 mb-1.5">العنوان أسفل الصورة</label>
-                                    <input type="text" value={card.mainTitle} onChange={(e) => updateArrayItem(sectionIndex, 'cards', cardIndex, 'mainTitle', e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg bg-white text-[#202223] text-sm focus:border-[#008060] outline-none" />
-                                  </div>
-
-                                  <div>
-                                    <label className="block text-[11px] font-bold text-gray-600 mb-1.5">رابط تفاصيل المنتج (داخل الكارت)</label>
-                                    <input 
-                                      type="text" 
-                                      value={card.linkUrl || ""} 
-                                      onChange={(e) => updateArrayItem(sectionIndex, 'cards', cardIndex, 'linkUrl', e.target.value)} 
-                                      placeholder="ألصق رابط المنتج هنا"
-                                      className="w-full p-2.5 border border-gray-300 rounded-lg bg-white text-[#202223] text-sm focus:border-[#008060] outline-none font-mono" 
-                                      dir="ltr" 
-                                    />
-                                  </div>
-
-                                  {/* نص الرابط الملوّن - خاص بـ FEATURED فقط */}
-                                  {section.category !== 'TOP_TEN_SECTION' && (
-                                    <div>
-                                      <label className="block text-[11px] font-bold text-gray-600 mb-1.5">نص الرابط الملوّن</label>
-                                      <input type="text" value={card.linkText} onChange={(e) => updateArrayItem(sectionIndex, 'cards', cardIndex, 'linkText', e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg bg-white text-[#202223] text-sm focus:border-[#008060] outline-none" />
-                                    </div>
-                                  )}
-
-                                  {/* رابط التوجيه - مشترك (هو رابط المنتج لزرار "عرض التفاصيل" في TOP_TEN) */}
-                                  <div>
-                                    <label className="block text-[11px] font-bold text-gray-600 mb-1.5">
-                                      {section.category === 'TOP_TEN_SECTION' ? 'رابط المنتج (زرار "عرض التفاصيل")' : 'رابط التوجيه (URL)'}
-                                    </label>
-                                    <input type="text" value={card.linkUrl} onChange={(e) => updateArrayItem(sectionIndex, 'cards', cardIndex, 'linkUrl', e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg bg-white text-[#202223] text-sm focus:border-[#008060] outline-none font-mono" dir="ltr" placeholder="اكتب الرابط أو ألصقه هنا" />
-                                  </div>
-
-                                  {/* ✅ خانات خاصة بـ TOP_TEN_SECTION */}
-                                  {section.category === 'TOP_TEN_SECTION' && (
-                                    <>
-                                      <div>
-                                        <label className="block text-[11px] font-bold text-gray-600 mb-1.5">السعر</label>
-                                        <input type="text" value={card.price || ""} onChange={(e) => updateArrayItem(sectionIndex, 'cards', cardIndex, 'price', e.target.value)} placeholder="مثال: 1500 ج.م" className="w-full p-2.5 border border-gray-300 rounded-lg bg-white text-[#202223] text-sm focus:border-[#008060] outline-none" />
-                                      </div>
-                                      <div>
-                                        <label className="block text-[11px] font-bold text-gray-600 mb-1.5">التقييم</label>
-                                        <input type="text" value={card.rating || ""} onChange={(e) => updateArrayItem(sectionIndex, 'cards', cardIndex, 'rating', e.target.value)} placeholder="مثال: 4.8" className="w-full p-2.5 border border-gray-300 rounded-lg bg-white text-[#202223] text-sm focus:border-[#008060] outline-none" />
-                                      </div>
-                                      <div>
-                                        <label className="block text-[11px] font-bold text-gray-600 mb-1.5">عدد المراجعات</label>
-                                        <input type="text" value={card.reviewsCount || ""} onChange={(e) => updateArrayItem(sectionIndex, 'cards', cardIndex, 'reviewsCount', e.target.value)} placeholder="مثال: 120 مراجعة" className="w-full p-2.5 border border-gray-300 rounded-lg bg-white text-[#202223] text-sm focus:border-[#008060] outline-none" />
-                                      </div>
-                                      <div>
-                                        <label className="block text-[11px] font-bold text-gray-600 mb-1.5">تصنيف المنتج (الفئة)</label>
-                                        <input type="text" value={card.category || ""} onChange={(e) => updateArrayItem(sectionIndex, 'cards', cardIndex, 'category', e.target.value)} placeholder="مثال: أجهزة منزلية" className="w-full p-2.5 border border-gray-300 rounded-lg bg-white text-[#202223] text-sm focus:border-[#008060] outline-none" />
-                                      </div>
-                                    </>
-                                  )}
-                                </div>
-
-                                {/* البطاقات الفرعية - خاصة بـ FEATURED فقط */}
-                                {section.category !== 'TOP_TEN_SECTION' && (
-                                  <div className="mt-5 border-t border-gray-100 pt-4">
-                                    <h5 className="text-xs font-bold text-gray-600 mb-3">البطاقات الفرعية المرتبطة بهذه البطاقة:</h5>
-                                    <div className="space-y-3">
-                                      {(card.subCards || []).map((subCard, subIndex) => (
-                                        <div key={subIndex} className="p-4 border border-gray-200 rounded-lg bg-gray-50 relative">
-                                          <div className="flex justify-between items-center mb-3">
-                                            <span className="font-bold text-gray-500 text-[11px]">بطاقة فرعية #{subIndex + 1}</span>
-                                            <button onClick={() => removeSubCard(sectionIndex, cardIndex, subIndex)} className="text-red-500 hover:text-red-700 text-[10px] font-bold bg-white px-2 py-1 rounded border border-gray-200">حذف البطاقة الفرعية</button>
-                                          </div>
-                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                            <div className="col-span-1 md:col-span-2">
-                                              <label className="block text-[10px] font-bold text-gray-500 mb-1">رابط الصورة</label>
-                                              <input type="text" value={subCard.image} onChange={(e) => updateSubCard(sectionIndex, cardIndex, subIndex, 'image', e.target.value)} className="w-full p-2 border border-gray-300 rounded bg-white text-xs text-[#202223] focus:border-[#008060] outline-none font-mono" dir="ltr" />
-                                            </div>
-                                            <div>
-                                              <label className="block text-[10px] font-bold text-gray-500 mb-1">العنوان أسفل الصورة</label>
-                                              <input type="text" value={subCard.mainTitle} onChange={(e) => updateSubCard(sectionIndex, cardIndex, subIndex, 'mainTitle', e.target.value)} className="w-full p-2 border border-gray-300 rounded bg-white text-xs text-[#202223] focus:border-[#008060] outline-none" />
-                                            </div>
-                                            <div>
-                                              <label className="block text-[10px] font-bold text-gray-500 mb-1">نص الرابط الملوّن</label>
-                                              <input type="text" value={subCard.linkText} onChange={(e) => updateSubCard(sectionIndex, cardIndex, subIndex, 'linkText', e.target.value)} className="w-full p-2 border border-gray-300 rounded bg-white text-xs text-[#202223] focus:border-[#008060] outline-none" />
-                                            </div>
-                                            <div className="col-span-1 md:col-span-2">
-                                              <label className="block text-[10px] font-bold text-gray-500 mb-1">رابط التوجيه (URL)</label>
-                                              <input type="text" value={subCard.linkUrl} onChange={(e) => updateSubCard(sectionIndex, cardIndex, subIndex, 'linkUrl', e.target.value)} className="w-full p-2 border border-gray-300 rounded bg-white text-xs text-[#202223] focus:border-[#008060] outline-none font-mono" dir="ltr" />
-                                            </div>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                    <button onClick={() => addSubCard(sectionIndex, cardIndex)} className="mt-3 w-full py-2 border border-dashed border-gray-300 text-gray-500 font-bold text-xs rounded-lg hover:border-gray-400 hover:bg-white bg-transparent transition-all shadow-sm">+ إضافة بطاقة فرعية</button>
+                      {!config?.isDynamicAuto && !config?.hasVisualBreakConfig && (
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {config?.hasProducts && !config?.isTabbed && (
+                              <div className="relative">
+                                <button onClick={() => togglePicker(sectionIndex, 'products')} className="w-full p-3 bg-white border border-[#008060]/30 rounded-lg font-bold text-sm flex justify-between items-center text-[#008060] hover:bg-[#008060]/5 transition-colors">
+                                  <span>📦 تحديد منتجات جديدة</span><span>{expandedPickers[`${sectionIndex}-products`] ? '▼' : '◀'}</span>
+                                </button>
+                                {expandedPickers[`${sectionIndex}-products`] && (
+                                  <div className="absolute z-10 w-full mt-1 max-h-[250px] overflow-y-auto border border-gray-200 rounded-lg bg-white divide-y divide-gray-100 shadow-xl">
+                                    {allStoreProducts.map(prod => {
+                                      const isSelected = items.some(i => i.itemId === prod.id);
+                                      return (
+                                        <label key={prod.id} className="flex items-center gap-3 p-3 cursor-pointer hover:bg-gray-50">
+                                          <input type="checkbox" checked={isSelected} onChange={() => toggleItemSelection(sectionIndex, prod, 'product')} className="w-4 h-4 text-[#008060] rounded focus:ring-0" />
+                                          <img src={(prod.images && prod.images[0]) || prod.image || "/placeholder.jpg"} className="w-8 h-8 rounded border object-cover" />
+                                          <p className="text-xs font-bold truncate">{prod.title || prod.name}</p>
+                                        </label>
+                                      )
+                                    })}
                                   </div>
                                 )}
                               </div>
-                            ))}
-                          </div>
+                            )}
 
-                          {/* ✅ زرار إضافة بطاقة جديدة بتنسيق ذكي حسب نوع القسم */}
-                          <button
-                            onClick={() => {
-                              let template = { image: "", mainTitle: "", linkUrl: "" };
-
-                              if (section.category === 'TOP_TEN_SECTION') {
-                                template = { image: "", mainTitle: "", linkUrl: "", price: "", rating: "", reviewsCount: "", category: "" };
-                              } else if (section.category === 'FEATURED_SECTION') {
-                                template = { image: "", badgeType: "none", mainTitle: "", linkText: "", linkUrl: "", subCards: [] };
-                              } else if (section.category === 'COLLECTIONS_SPOTLIGHT') {
-                                template = { image: "", mainTitle: "", linkUrl: "" };
-                              }
-
-                              addArrayItem(sectionIndex, 'cards', template);
-                            }}
-                            className="mt-4 w-full py-3 border border-dashed border-gray-300 text-[#202223] text-sm font-bold rounded-xl hover:bg-white hover:border-gray-400 bg-gray-50 transition-all shadow-sm"
-                          >
-                            + إضافة بطاقة جديدة (بوستر/منتج)
-                          </button>
-                        </div>
-                      )}
-
-                      {/* 3. محرر المنتجات (دعم اختيار أقسام متعددة بـ Checkboxes) */}
-                      {config?.hasProducts && (
-                        <div className="mt-6 border-t border-gray-100 pt-5">
-                          <div className="flex flex-col gap-3 mb-4">
-                            <div className="flex items-center justify-between">
-                              <h4 className="text-sm font-bold text-[#202223]">تحديد الأقسام / المنتجات:</h4>
-                              {section.category !== 'COLLECTIONS_SPOTLIGHT' && (
-                                <span className="bg-[#008060] text-white px-2.5 py-1 rounded text-xs font-bold shadow-sm whitespace-nowrap">
-                                  {(section.data?.products || []).length} منتج محدد
-                                </span>
-                              )}
-                            </div>
-
-                            {/* عرض الأقسام المربوطة كـ Checkboxes للحذف السريع */}
-                            {(section.data?.linkedCollections || []).length > 0 && (
-                              <div className="flex flex-col gap-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
-                                <span className="text-[12px] font-bold text-gray-700">🔗 الأقسام المربوطة بهذا القسم:</span>
-                                <div className="flex flex-wrap items-start gap-3">
-                                  {(section.data.linkedCollections).map((c, i) => (
-                                    <div key={i} className={`flex flex-col gap-2 bg-white p-3 border ${section.category === 'COLLECTIONS_SPOTLIGHT' ? 'border-[#008060]/40 shadow-sm w-full sm:w-[300px]' : 'border-[#0066cc]/30 w-auto'} rounded-lg`}>
-                                      <label className="flex items-center gap-1.5 text-[#0066cc] text-[12px] font-bold cursor-pointer hover:text-red-600 transition-colors">
-                                        <input 
-                                          type="checkbox" 
-                                          checked={true}
-                                          onChange={() => {
-                                              const updated = [...layoutSections];
-                                              let currentLinked = updated[sectionIndex].data.linkedCollections || [];
-                                              let currentProds = updated[sectionIndex].data.products || [];
-                                              
-                                              currentLinked = currentLinked.filter(item => item.id !== c.id);
-                                              
-                                              const normalizeText = (text) => text ? text.toString().toLowerCase().replace(/[أإآا]/g, 'ا').replace(/ة/g, 'ه').replace(/[\u064B-\u065F]/g, '').trim() : "";
-                                              const normColId = normalizeText(c.id);
-                                              const normColName = normalizeText(c.name);
-                                              const normColSlug = normalizeText(c.slug);
-
-                                              const idsToRemove = allStoreProducts.filter(p => {
-                                                let pCats = [];
-                                                if (p.category) pCats.push(p.category);
-                                                if (p.categoryId) pCats.push(p.categoryId);
-                                                if (p.collection) pCats.push(p.collection);
-                                                if (p.collectionId) pCats.push(p.collectionId);
-                                                if (p.productType) pCats.push(p.productType);
-                                                if (p.type) pCats.push(p.type);
-                                                if (p.organization) {
-                                                  if (p.organization.productType) pCats.push(p.organization.productType);
-                                                  if (p.organization.type) pCats.push(p.organization.type);
-                                                  if (p.organization.category) pCats.push(p.organization.category);
-                                                }
-                                                if (Array.isArray(p.categories)) pCats = pCats.concat(p.categories);
-                                                if (Array.isArray(p.collections)) pCats = pCats.concat(p.collections);
-                                                if (Array.isArray(p.tags)) pCats = pCats.concat(p.tags);
-                                                const normalizedPCats = pCats.map(normalizeText);
-                                                
-                                                return normalizedPCats.includes(normColId) || normalizedPCats.includes(normColName) || normalizedPCats.includes(normColSlug);
-                                              }).map(p => p.id);
-
-                                              currentProds = currentProds.filter(p => !idsToRemove.includes(p.productId));
-
-                                              updated[sectionIndex].data.linkedCollections = currentLinked;
-                                              updated[sectionIndex].data.products = currentProds;
-
-                                              if (currentLinked.length === 1) {
-                                                  const autoLink = `/collections/${currentLinked[0].slug}`;
-                                                  updated[sectionIndex].data.linkUrl = autoLink;
-                                                  if(updated[sectionIndex].data.viewAllLink !== undefined) updated[sectionIndex].data.viewAllLink = autoLink;
-                                              } else {
-                                                  updated[sectionIndex].data.linkUrl = "";
-                                                  if(updated[sectionIndex].data.viewAllLink !== undefined) updated[sectionIndex].data.viewAllLink = "";
-                                              }
-
-                                              setLayoutSections(updated);
-                                          }}
-                                          className="w-4 h-4 text-red-500 rounded border-gray-300 focus:ring-0 cursor-pointer"
-                                        />
-                                        <span className="truncate">🗑️ إزالة: {c.name}</span>
-                                      </label>
-                                      
-                                      {/* ✅ حقول التعديل المتقدمة تظهر فقط في قسم النخبة */}
-                                      {section.category === 'COLLECTIONS_SPOTLIGHT' && (
-                                        <div className="flex flex-col gap-2 mt-2 border-t border-gray-100 pt-2">
-                                          <input 
-                                            type="text" 
-                                            placeholder="اسم العرض (بدل الاسم الأصلي)" 
-                                            value={c.customName || ""}
-                                            onChange={(e) => {
-                                              const updated = [...layoutSections];
-                                              updated[sectionIndex].data.linkedCollections[i].customName = e.target.value;
-                                              setLayoutSections(updated);
-                                            }}
-                                            className="w-full p-2 border border-gray-200 rounded text-xs bg-gray-50 focus:bg-white focus:border-[#008060] outline-none"
-                                          />
-                                          <input 
-                                            type="text" 
-                                            placeholder="وصف مختصر للقسم (اختياري)" 
-                                            value={c.description || ""}
-                                            onChange={(e) => {
-                                              const updated = [...layoutSections];
-                                              updated[sectionIndex].data.linkedCollections[i].description = e.target.value;
-                                              setLayoutSections(updated);
-                                            }}
-                                            className="w-full p-2 border border-gray-200 rounded text-xs bg-gray-50 focus:bg-white focus:border-[#008060] outline-none"
-                                          />
-                                          <input 
-                                            type="text" 
-                                            placeholder="رابط بوستر القسم (اختياري)" 
-                                            value={c.image || ""}
-                                            onChange={(e) => {
-                                              const updated = [...layoutSections];
-                                              updated[sectionIndex].data.linkedCollections[i].image = e.target.value;
-                                              setLayoutSections(updated);
-                                            }}
-                                            className="w-full p-2 border border-gray-200 rounded text-xs bg-gray-50 focus:bg-white focus:border-[#008060] outline-none font-mono"
-                                            dir="ltr"
-                                          />
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))}
+                            {config?.hasProducts && config?.isTabbed && (
+                              <div className="col-span-1 md:col-span-2 space-y-4">
+                                <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                                  <h4 className="text-xs font-bold text-gray-700 mb-3">تعديل أسماء التبويبات الثلاثة:</h4>
+                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    {[0, 1, 2].map(tIdx => (
+                                      <input
+                                        key={tIdx}
+                                        type="text"
+                                        value={section.data?.tabs?.[tIdx] || ''}
+                                        onChange={(e) => {
+                                          const u = [...layoutSections];
+                                          if (!u[sectionIndex].data.tabs) u[sectionIndex].data.tabs = ["", "", ""];
+                                          u[sectionIndex].data.tabs[tIdx] = e.target.value;
+                                          setLayoutSections(u);
+                                        }}
+                                        className="p-2 border border-gray-300 rounded outline-none focus:border-[#008060] text-xs font-bold text-center"
+                                        placeholder={`اسم التبويب ${tIdx + 1}`}
+                                      />
+                                    ))}
+                                  </div>
                                 </div>
+
+                                <div className="space-y-3 mt-4">
+                                  {config.tabsConfig.map((defaultTabName, tIdx) => {
+                                    const currentTabName = section.data?.tabs?.[tIdx] || defaultTabName;
+                                    return (
+                                      <div key={tIdx} className="relative">
+                                        <button onClick={() => togglePicker(sectionIndex, `products-tab-${tIdx}`)} className="w-full p-3 bg-white border border-[#008060]/30 rounded-lg font-bold text-sm flex justify-between items-center text-[#008060] hover:bg-[#008060]/5 transition-colors">
+                                          <span>📦 تحديد منتجات: ({currentTabName})</span><span>{expandedPickers[`${sectionIndex}-products-tab-${tIdx}`] ? '▼' : '◀'}</span>
+                                        </button>
+                                        {expandedPickers[`${sectionIndex}-products-tab-${tIdx}`] && (
+                                          <div className="absolute z-10 w-full mt-1 max-h-[250px] overflow-y-auto border border-gray-200 rounded-lg bg-white divide-y divide-gray-100 shadow-xl">
+                                            {allStoreProducts.map(prod => {
+                                              const isSelected = items.some(i => i.itemId === prod.id && i.tabIndex === tIdx);
+                                              return (
+                                                <label key={prod.id} className="flex items-center gap-3 p-3 cursor-pointer hover:bg-gray-50">
+                                                  <input type="checkbox" checked={isSelected} onChange={() => toggleItemSelection(sectionIndex, prod, 'product', tIdx)} className="w-4 h-4 text-[#008060] rounded focus:ring-0" />
+                                                  <img src={(prod.images && prod.images[0]) || prod.image || "/placeholder.jpg"} className="w-8 h-8 rounded border object-cover" />
+                                                  <p className="text-xs font-bold truncate">{prod.title || prod.name}</p>
+                                                </label>
+                                              )
+                                            })}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
+                            {config?.hasCollections && (
+                              <div className="relative">
+                                <button onClick={() => togglePicker(sectionIndex, 'collections')} className="w-full p-3 bg-white border border-blue-600/30 rounded-lg font-bold text-sm flex justify-between items-center text-blue-600 hover:bg-blue-50 transition-colors">
+                                  <span>📁 تحديد أقسام / كروت جديدة</span><span>{expandedPickers[`${sectionIndex}-collections`] ? '▼' : '◀'}</span>
+                                </button>
+                                {expandedPickers[`${sectionIndex}-collections`] && (
+                                  <div className="absolute z-10 w-full mt-1 max-h-[250px] overflow-y-auto border border-gray-200 rounded-lg bg-white divide-y divide-gray-100 shadow-xl">
+                                    {allStoreCollections.map(col => {
+                                      const isSelected = items.some(i => i.itemId === col.id);
+                                      return (
+                                        <label key={col.id} className="flex items-center gap-3 p-3 cursor-pointer hover:bg-gray-50">
+                                          <input type="checkbox" checked={isSelected} onChange={() => toggleItemSelection(sectionIndex, col, 'collection')} className="w-4 h-4 text-blue-600 rounded focus:ring-0" />
+                                          <p className="text-xs font-bold truncate">{col.title || col.name}</p>
+                                        </label>
+                                      )
+                                    })}
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
 
-                          {/* خيار 1: القائمة المنسدلة لإضافة قسم جديد */}
-                          <div className="mb-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
-                            <label className="block text-[11px] font-bold text-gray-600 mb-2">إضافة قسم (Collection) بالكامل:</label>
-                            <select 
-                              onChange={(e) => {
-                                const colId = e.target.value;
-                                if (!colId) return;
-                                
-                                const selectedCol = allStoreCollections.find(c => c.id === colId);
-                                const colName = selectedCol?.name || selectedCol?.title || colId;
-                                const colSlug = selectedCol?.slug || colId; 
-                                
-                                const updated = [...layoutSections];
-                                let currentLinked = updated[sectionIndex].data.linkedCollections || [];
-                                
-                                if (currentLinked.some(c => c.id === colId)) {
-                                    alert("تم إضافة هذا القسم مسبقاً!");
-                                    e.target.value = "";
-                                    return;
-                                }
-
-                                let currentProds = updated[sectionIndex].data.products || [];
-                                
-                                const normalizeText = (text) => {
-                                  if (!text) return "";
-                                  return text.toString().toLowerCase().replace(/[أإآا]/g, 'ا').replace(/ة/g, 'ه').replace(/[\u064B-\u065F]/g, '').trim();
-                                };
-                                
-                                const normColId = normalizeText(colId);
-                                const normColName = normalizeText(colName);
-                                const normColSlug = normalizeText(colSlug);
-                                
-                                const categoryProducts = allStoreProducts.filter(p => {
-                                  let pCats = [];
-                                  if (p.category) pCats.push(p.category);
-                                  if (p.categoryId) pCats.push(p.categoryId);
-                                  if (p.collection) pCats.push(p.collection);
-                                  if (p.collectionId) pCats.push(p.collectionId);
-                                  if (p.productType) pCats.push(p.productType);
-                                  if (p.type) pCats.push(p.type);
-                                  if (p.organization) {
-                                    if (p.organization.productType) pCats.push(p.organization.productType);
-                                    if (p.organization.type) pCats.push(p.organization.type);
-                                    if (p.organization.category) pCats.push(p.organization.category);
-                                  }
-                                  if (Array.isArray(p.categories)) pCats = pCats.concat(p.categories);
-                                  if (Array.isArray(p.collections)) pCats = pCats.concat(p.collections);
-                                  if (Array.isArray(p.tags)) pCats = pCats.concat(p.tags);
+                          {items.length > 0 && (
+                            <div className="mt-6 border-t border-gray-200 pt-5">
+                              <h4 className="text-sm font-bold text-[#202223] mb-3">التعديلات اليدوية ({items.length}):</h4>
+                              <div className="space-y-2">
+                                {items.map((item, itemIndex) => {
+                                  const isCardOpen = expandedOverrides[`${sectionIndex}-${itemIndex}`];
+                                  const isProduct = item.itemType === 'product';
                                   
-                                  const normalizedPCats = pCats.map(normalizeText);
-                                  return normalizedPCats.includes(normColId) || normalizedPCats.includes(normColName) || normalizedPCats.includes(normColSlug);
-                                });
+                                  return (
+                                    <div key={itemIndex} className="border border-gray-200 bg-white rounded-lg shadow-sm">
+                                      <button onClick={() => toggleOverride(sectionIndex, itemIndex)} className={`w-full p-3 flex justify-between items-center text-sm font-bold ${isCardOpen ? 'bg-gray-100 border-b border-gray-200' : 'hover:bg-gray-50'}`}>
+                                        <span className="flex items-center gap-2">
+                                          <span className={`${isProduct ? 'bg-[#1A1A1A]' : 'bg-blue-600'} text-white px-2 py-0.5 rounded text-[10px]`}>
+                                            {isProduct ? '👕 منتج' : '📁 قسم'} (بطاقة {itemIndex + 1})
+                                          </span> 
+                                          {item.customName || item.originalName}
+                                        </span>
+                                        <span className="text-gray-400">{isCardOpen ? '▼' : '◀'}</span>
+                                      </button>
+                                      
+                                      {isCardOpen && (
+                                        <div className="p-4 bg-gray-50 animate-[fadeIn_0.2s_ease-out]">
+                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                                            <div>
+                                              <label className="block text-[10px] font-bold text-gray-500 mb-1">اسم العرض المخصص (العنوان الرئيسي للكارت)</label>
+                                              <input type="text" value={item.customName || ''} onChange={(e) => handleOverrideChange(sectionIndex, itemIndex, 'customName', e.target.value)} className="w-full p-2 text-xs border rounded outline-none" placeholder={item.originalName} />
+                                            </div>
+                                            <div>
+                                              <label className="block text-[10px] font-bold text-gray-500 mb-1">تعديل الصورة الأساسية للكارت</label>
+                                              <input type="text" value={item.customImage || ''} onChange={(e) => handleOverrideChange(sectionIndex, itemIndex, 'customImage', e.target.value)} className="w-full p-2 text-xs border rounded outline-none font-mono" dir="ltr" placeholder="رابط صورة جديدة" />
+                                            </div>
+                                            <div>
+                                              <label className="block text-[10px] font-bold text-gray-500 mb-1">العنوان الصغير للكارت (Badge/Subtitle)</label>
+                                              <input type="text" value={item.badge || ''} onChange={(e) => handleOverrideChange(sectionIndex, itemIndex, 'badge', e.target.value)} className="w-full p-2 text-xs border rounded outline-none" placeholder="مثال: NEW ARRIVAL" />
+                                            </div>
+                                            <div>
+                                              <label className="block text-[10px] font-bold text-gray-500 mb-1">اسم زر الكارت (linkText)</label>
+                                              <input type="text" value={item.linkText || ''} onChange={(e) => handleOverrideChange(sectionIndex, itemIndex, 'linkText', e.target.value)} className="w-full p-2 text-xs border rounded outline-none" placeholder="مثال: Shop Collection" />
+                                            </div>
+                                            <div className="col-span-2">
+                                              <label className="block text-[10px] font-bold text-gray-500 mb-1">رابط التوجيه (URL - أوتوماتيك إذا لم يكتب شيء)</label>
+                                              <input type="text" value={item.linkUrl || ''} onChange={(e) => handleOverrideChange(sectionIndex, itemIndex, 'linkUrl', e.target.value)} className="w-full p-2 text-xs border rounded outline-none font-mono" dir="ltr" />
+                                            </div>
+                                          </div>
 
-                                if(categoryProducts.length === 0 && section.category !== 'COLLECTIONS_SPOTLIGHT') {
-                                  alert(`تنبيه: لم يتم العثور على أي منتجات مرتبطة بقسم "${colName}".`);
-                                  e.target.value = "";
-                                  return;
-                                }
-                                
-                                categoryProducts.forEach(prod => {
-                                  if (!currentProds.some(p => p.productId === prod.id)) {
-                                    currentProds.push({
-                                      productId: prod.id,
-                                      name: prod.title || prod.name || "بدون اسم",
-                                      image: (prod.images && prod.images[0]) || prod.image || "",
-                                      price: prod.price || "",
-                                      compareAtPrice: prod.compareAtPrice || prod.oldPrice || "",
-                                      linkUrl: `/product/${prod.id}`,
-                                      badge: ""
-                                    });
-                                  }
-                                });
-
-                                currentLinked.push({ id: colId, name: colName, slug: colSlug });
-                                updated[sectionIndex].data.linkedCollections = currentLinked;
-                                updated[sectionIndex].data.products = currentProds;
-
-                                if (currentLinked.length === 1) {
-                                    const autoLink = `/collections/${colSlug}`;
-                                    updated[sectionIndex].data.linkUrl = autoLink;
-                                    if(updated[sectionIndex].data.viewAllLink !== undefined) updated[sectionIndex].data.viewAllLink = autoLink;
-                                } else {
-                                    updated[sectionIndex].data.linkUrl = "";
-                                    if(updated[sectionIndex].data.viewAllLink !== undefined) updated[sectionIndex].data.viewAllLink = "";
-                                }
-
-                                setLayoutSections(updated);
-                                e.target.value = ""; 
-                              }}
-                              className="w-full p-2.5 border border-gray-300 rounded-lg bg-white text-[#202223] text-sm focus:border-[#008060] outline-none"
-                            >
-                              <option value="">-- اختر القسم للإضافة السريعة --</option>
-                              {allStoreCollections.map(col => (
-                                <option key={col.id} value={col.id}>{col.name || col.title || col.id}</option>
-                              ))}
-                            </select>
-                            {section.category !== 'COLLECTIONS_SPOTLIGHT' && (
-                              <p className="text-[10px] text-gray-500 mt-2 font-medium leading-relaxed">
-                                ملاحظة: عند اختيار <strong className="text-black">قسم واحد</strong> سيتم وضع الرابط تلقائياً. عند اختيار <strong className="text-red-500">أكثر من قسم</strong> سيتم مسح الرابط ويجب كتابته يدوياً بالأعلى (وإلا سيختفي زر عرض الكل).
-                              </p>
-                            )}
-                          </div>
-
-                          {/* خيار 2: قائمة كل المنتجات مع Checkbox (تختفي في قسم مجموعات النخبة) */}
-                          {section.category !== 'COLLECTIONS_SPOTLIGHT' && (
-                            <div className="max-h-[400px] overflow-y-auto border border-gray-200 rounded-lg bg-white divide-y divide-gray-100">
-                              {allStoreProducts.map((product) => {
-                                const isSelected = (section.data?.products || []).some(p => p.productId === product.id);
-                                const selectedProductData = (section.data?.products || []).find(p => p.productId === product.id);
-
-                                return (
-                                  <div key={product.id} className={`p-3 flex flex-col sm:flex-row sm:items-center gap-3 transition-colors ${isSelected ? 'bg-[#f4fae5]' : 'hover:bg-gray-50'}`}>
-                                    <div className="flex items-center gap-3 flex-1">
-                                      <input 
-                                        type="checkbox" 
-                                        checked={isSelected}
-                                        onChange={(e) => {
-                                          const isChecked = e.target.checked;
-                                          const updated = [...layoutSections];
-                                          let currentProds = updated[sectionIndex].data.products || [];
+                                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 border-t border-gray-200 pt-3">
+                                            {['TOP_TEN_SECTION', 'EXCLUSIVE_OFFERS_SECTION', 'MARQUEE_SECTION', 'BEST_SELLERS_SECTION', 'BANNER_PRODUCT_GRID_SECTION'].includes(section.category) && (
+                                              <>
+                                                <div><label className="block text-[10px] font-bold text-green-600 mb-1">السعر المخصص (الحالي)</label><input type="text" value={item.customPrice || ''} onChange={(e) => handleOverrideChange(sectionIndex, itemIndex, 'customPrice', e.target.value)} className="w-full p-2 text-xs border border-green-200 bg-green-50 rounded outline-none" placeholder={item.originalPrice} /></div>
+                                                <div><label className="block text-[10px] font-bold text-red-500 mb-1">السعر قبل الخصم (لإظهار شارة التخفيض)</label><input type="text" value={item.compareAtPrice || ''} onChange={(e) => handleOverrideChange(sectionIndex, itemIndex, 'compareAtPrice', e.target.value)} className="w-full p-2 text-xs border border-red-200 bg-red-50 text-red-700 rounded outline-none" placeholder="مثال: 1500" /></div>
+                                              </>
+                                            )}
+                                          </div>
                                           
-                                          if (isChecked) {
-                                            currentProds.push({
-                                              productId: product.id,
-                                              name: product.title || product.name || "بدون اسم",
-                                              image: (product.images && product.images[0]) || product.image || "",
-                                              price: product.price || "",
-                                              compareAtPrice: product.compareAtPrice || product.oldPrice || "",
-                                              linkUrl: `/product/${product.id}`,
-                                              badge: ""
-                                            });
-                                          } else {
-                                            currentProds = currentProds.filter(p => p.productId !== product.id);
-                                          }
-                                          
-                                          updated[sectionIndex].data.products = currentProds;
-                                          setLayoutSections(updated);
-                                        }}
-                                        className="w-4 h-4 text-[#008060] rounded border-gray-300 focus:ring-[#008060] cursor-pointer"
-                                      />
-                                      <img src={(product.images && product.images[0]) || product.image || "/placeholder.jpg"} className="w-10 h-10 rounded border border-gray-200 object-cover" />
-                                      <div>
-                                        <p className="text-sm font-bold text-[#202223] line-clamp-1">{product.title || product.name}</p>
-                                        <p className="text-[11px] text-gray-500">{product.price} LE {product.category && `- ${product.category}`}</p>
-                                      </div>
+                                          <div className="mt-4 flex justify-end">
+                                            <button onClick={() => toggleOverride(sectionIndex, itemIndex)} className="bg-[#1A1A1A] text-white px-4 py-1.5 rounded text-xs font-bold">إغلاق التعديل</button>
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
-
-                                    {isSelected && (
-                                      <div className="sm:w-1/3 mt-2 sm:mt-0">
-                                        <input 
-                                          type="text" 
-                                          placeholder="شارة (مثال: جديد)" 
-                                          value={selectedProductData?.badge || ""}
-                                          onChange={(e) => {
-                                            const updated = [...layoutSections];
-                                            const pIndex = updated[sectionIndex].data.products.findIndex(p => p.productId === product.id);
-                                            if(pIndex > -1) {
-                                              updated[sectionIndex].data.products[pIndex].badge = e.target.value;
-                                              setLayoutSections(updated);
-                                            }
-                                          }}
-                                          className="w-full p-2 text-xs border border-[#008060]/30 rounded bg-white focus:border-[#008060] outline-none"
-                                        />
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
+                                  );
+                                })}
+                              </div>
                             </div>
                           )}
 
@@ -989,22 +832,12 @@ export default function HomeManagerPage() {
                 </div>
               );
             })}
-
-            {/* رسالة توضيحية */}
-            {layoutSections.length <= 1 && (
-              <div className="p-8 border border-dashed border-gray-300 rounded-xl text-center text-gray-500 bg-white text-sm shadow-sm">
-                لا توجد أقسام حالياً. أضف قسم (المميز اليوم) من التبويب الأول للبدء في تعديله.
-              </div>
-            )}
           </div>
         )}
       </div>
 
       <style jsx global>{`
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(5px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>

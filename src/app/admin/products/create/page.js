@@ -1,15 +1,14 @@
 "use client";
+// Final Production Icon Fix - v2.1
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { db } from "@/lib/firebase";
-import { doc, getDoc, setDoc, serverTimestamp, collection, getDocs } from "firebase/firestore";
+import { getDb } from "@/lib/firebase";
+import { doc, getDoc, setDoc, serverTimestamp, collection, getDocs } from "firebase/firestore/lite";
 import ImageUploader from "@/components/ImageUploader";
-import { 
-  Save, Loader2, ArrowRight, Image as ImageIcon, 
-  CheckCircle2, Globe, Box, Settings, Tag, 
-  Truck, Info, ListFilter, AlertCircle, Database, Layout, Trash2, X, ChevronRight, ChevronLeft
-} from "lucide-react";
+import { Loader2, Save, Plus, Minus, Star, Info, Share2, Heart, ImageIcon, X, Truck, Eye, ShieldCheck, ChevronLeft, Search, ChevronRight, ShoppingBag, CreditCard, Banknote, Smartphone, Lock, Edit2, ExternalLink, CheckSquare, Square, FolderTree, CheckCircle2, Globe, Box, Settings, Tag, AlertCircle, Database, Layout, Trash2, Monitor, Archive, Layers, ChevronDown, ChevronUp, Menu, Target, Mail, Crown, UserMinus, MonitorSmartphone, LinkIcon, Paintbrush, ListFilter, PackageSearch, ArrowRight } from '@/components/icons-extra';
+
+export const dynamic = 'force-dynamic';
 
 // ==========================================
 // مكون الفورم الأساسي (كامل بـ 800 سطر منطقي)
@@ -20,7 +19,14 @@ function CreateProductForm() {
   const productId = searchParams.get('id');
   const isEditing = !!productId;
 
+  // 🔥 نظام التبويبات (Tabs)
+  const [activeTab, setActiveTab] = useState('basic'); 
+
   const [availableCollections, setAvailableCollections] = useState([]);
+  // جلب كل المنتجات لعملية الكروس سيل الديناميكية
+  const [availableProducts, setAvailableProducts] = useState([]);
+  const [crossSellFilter, setCrossSellFilter] = useState('all');
+
   const [isLoadingData, setIsLoadingData] = useState(isEditing);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -44,20 +50,19 @@ function CreateProductForm() {
     'Apparel & Accessories > Clothing > Pants > Trousers'
   ];
 
-  // --- إدارة الحالة (States) - كاملة بدون اختصار ---
+  // --- إدارة الحالة (States) ---
   const [images, setImages] = useState([]);
   const [imageUrlInput, setImageUrlInput] = useState("");
   const [chargeTax, setChargeTax] = useState(false);
   const [inventoryTracked, setInventoryTracked] = useState(true);
   const [physicalProduct, setPhysicalProduct] = useState(true);
   
-  // 🔥 تعديل جوهري: لو منتج جديد، هنبدأ بخياري اللون والمقاس افتراضياً
   const [options, setOptions] = useState(isEditing ? [] : [
     { name: 'Color', values: '' },
     { name: 'Size', values: '' }
   ]);
   
-  const [colorSwatches, setColorSwatches] = useState({}); // لحفظ الصور المرتبطة بالألوان
+  const [colorSwatches, setColorSwatches] = useState({}); 
   const [seoTitle, setSeoTitle] = useState("");
   const [seoDesc, setSeoDesc] = useState("");
   const [urlHandle, setUrlHandle] = useState("");
@@ -79,7 +84,7 @@ function CreateProductForm() {
     status: "Active",
     type: "",
     vendor: "WIND",
-    selectedCollections: [], // حقل الربط الجديد
+    selectedCollections: [], 
     tags: "",
     themeTemplate: "Default product"
   });
@@ -91,56 +96,69 @@ function CreateProductForm() {
     colorsBundle: "",
     suggested: "",
     fabric: "",
-    fit: ""
+    fit: "",
+    customLikesCount: "",
+    cartCrossSellHandles: "",
+    pageCrossSellHandles: "",
+    customHtmlSnippet: "",
+    customHtmlPosition: "below_cart",
+    hideRelatedSection: "No"
   });
+
   // ==========================================
-  // 2. جلب الأقسام (Collections) المتاحة من Firestore
+  // 2. جلب الأقسام (Collections) والمنتجات (Products)
   // ==========================================
   useEffect(() => {
-    const fetchCats = async () => {
+    const fetchCatsAndProds = async () => {
       try {
-        const querySnapshot = await getDocs(collection(db, "collections"));
-        const cols = querySnapshot.docs.map(doc => ({
+        const db = getDb();
+        const querySnapshotCols = await getDocs(collection(db, "collections"));
+        const cols = querySnapshotCols.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         }));
         setAvailableCollections(cols);
+
+        const querySnapshotProds = await getDocs(collection(db, "products"));
+        const prods = querySnapshotProds.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setAvailableProducts(prods);
+
       } catch (err) {
-        console.error("Error fetching collections:", err);
+        console.error("Error fetching data:", err);
       }
     };
-    fetchCats();
+    fetchCatsAndProds();
   }, []);
 
-// ==========================================
-  // 3. جلب بيانات المنتج والربط الذكي (WIND Master Sync)
+  // ==========================================
+  // 3. جلب بيانات المنتج والربط الذكي
   // ==========================================
   useEffect(() => {
     if (productId && availableCollections.length > 0) {
       const fetchProduct = async () => {
         try {
+          const db = getDb();
           const docRef = doc(db, "products", productId);
           const docSnap = await getDoc(docRef);
           
           if (docSnap.exists()) {
             const data = docSnap.data();
             
-            // --- [بداية خوارزمية الربط الذكي] ---
             let combinedSlugs = [];
 
-            // أ) قراءة الروابط الموجودة فعلياً في المنتج (سواء في categories أو collections)
             const existingEntries = data.categories || data.collections || [];
             const entriesArray = Array.isArray(existingEntries) ? existingEntries : [existingEntries];
 
             entriesArray.forEach(entry => {
               if (typeof entry === 'string') {
-                // 1. هل الكلمة دي slug موجود فعلاً عندنا في صفحة الكولكشن؟ (بنشيل السلاش للمطابقة)
                 const cleanEntry = entry.replace(/^\/+/, '');
                 const isDirectSlug = availableCollections.find(c => c.slug === cleanEntry);
                 if (isDirectSlug) {
                   combinedSlugs.push(cleanEntry);
                 }
-                // 2. لو هي "جملة شوبيفاي الطويلة"، هندور جوه الجملة على أي اسم كولكشن من بتاعنا
                 else {
                   const matchInString = availableCollections.find(c => 
                     entry.toLowerCase().includes(c.name.toLowerCase()) || 
@@ -151,7 +169,6 @@ function CreateProductForm() {
               }
             });
 
-            // ب) الربط بناءً على الـ Type (الموجود في شيت شوبيفاي)
             if (data.type) {
               const typeToSearch = data.type.toLowerCase().trim();
               const matchedByType = availableCollections.find(c => 
@@ -163,15 +180,12 @@ function CreateProductForm() {
               }
             }
 
-            // تصفية المصفوفة من أي تكرار
             const finalSelected = [...new Set(combinedSlugs)];
-            // --- [نهاية خوارزمية الربط] ---
 
-            // تعبئة الـ States (نفس الهيكل بتاعك بالظبط بدون حذف)
             setProductData({
               title: data.title || "",
               description: data.description || "",
-              category: data.category || "", // بنسيب حقل شوبيفاي زي ما هو للمطابقة
+              category: data.category || "",
               price: data.price || (data.variants?.[0]?.price) || "",
               compareAtPrice: data.compareAtPrice || (data.variants?.[0]?.compareAtPrice) || "",
               costPerItem: data.costPerItem || "",
@@ -185,7 +199,7 @@ function CreateProductForm() {
               status: data.status || "Active",
               type: data.type || "",
               vendor: data.vendor || "WIND",
-              selectedCollections: finalSelected, // هنا المربعات هتنور لوحدها
+              selectedCollections: finalSelected,
               tags: data.tags || "",
               themeTemplate: data.themeTemplate || "Default product"
             });
@@ -194,7 +208,7 @@ function CreateProductForm() {
             setSeoTitle(data.seo?.title || "");
             setSeoDesc(data.seo?.description || "");
             setUrlHandle(data.seo?.handle || productId);
-            setColorSwatches(data.colorSwatches || {}); // الإضافة لجلب الروابط المرتبطة بالألوان
+            setColorSwatches(data.colorSwatches || {});
 
             setMetafields({
               youMayAlsoLike: data.metafields?.youMayAlsoLike || "",
@@ -203,7 +217,13 @@ function CreateProductForm() {
               colorsBundle: data.metafields?.colorsBundle || "",
               suggested: data.metafields?.suggested || "",
               fabric: data.metafields?.fabric || "",
-              fit: data.metafields?.fit || ""
+              fit: data.metafields?.fit || "",
+              customLikesCount: data.metafields?.customLikesCount || "",
+              cartCrossSellHandles: data.metafields?.cartCrossSellHandles || "",
+              pageCrossSellHandles: data.metafields?.pageCrossSellHandles || "",
+              customHtmlSnippet: data.metafields?.customHtmlSnippet || "",
+              customHtmlPosition: data.metafields?.customHtmlPosition || "below_cart",
+              hideRelatedSection: data.metafields?.hideRelatedSection || "No"
             });
 
             if (data.options && data.options.length > 0) {
@@ -229,7 +249,7 @@ function CreateProductForm() {
   }, [productId, availableCollections]);
 
   // ==========================================
-  // 4. دوال التحكم (Handlers) - كاملة من الكود الأصلي
+  // 4. دوال التحكم (Handlers)
   // ==========================================
   const handleProductChange = (e) => {
     const { name, value } = e.target;
@@ -250,7 +270,16 @@ function CreateProductForm() {
     }
   };
 
-  // دعم الرفع المتعدد (يقبل رابط واحد أو مصفوفة روابط من ImageUploader)
+  const handleDynamicCrossSellToggle = (handle, targetMetafield) => {
+    let currentHandles = metafields[targetMetafield] ? metafields[targetMetafield].split(',').map(s => s.trim()).filter(Boolean) : [];
+    if (currentHandles.includes(handle)) {
+      currentHandles = currentHandles.filter(h => h !== handle);
+    } else {
+      currentHandles.push(handle);
+    }
+    setMetafields(prev => ({ ...prev, [targetMetafield]: currentHandles.join(', ') }));
+  };
+
   const handleImageKitSuccess = (urls) => {
     if (Array.isArray(urls)) {
       setImages((prev) => [...prev, ...urls]);
@@ -270,19 +299,16 @@ function CreateProductForm() {
     setImages(images.filter((_, index) => index !== indexToRemove));
   };
 
-  // دوال تحريك الصور (يمين ويسار) لترتيبها
   const moveImageLeft = (index) => {
-    if (index === 0) return; // لو دي أول صورة، مفيش تحريك
+    if (index === 0) return; 
     const newImages = [...images];
-    // تبديل مكان الصورة مع الصورة اللي قبلها
     [newImages[index - 1], newImages[index]] = [newImages[index], newImages[index - 1]];
     setImages(newImages);
   };
 
   const moveImageRight = (index) => {
-    if (index === images.length - 1) return; // لو دي آخر صورة، مفيش تحريك
+    if (index === images.length - 1) return; 
     const newImages = [...images];
-    // تبديل مكان الصورة مع الصورة اللي بعدها
     [newImages[index + 1], newImages[index]] = [newImages[index], newImages[index + 1]];
     setImages(newImages);
   };
@@ -295,7 +321,6 @@ function CreateProductForm() {
     setOptions(newOptions);
   };
 
-  // 🔥 إضافة جديدة: التعرف الذكي على حقول الألوان والمقاسات
   const isColorOption = (name) => {
     if (!name) return false;
     const n = name.toLowerCase().trim();
@@ -308,33 +333,28 @@ function CreateProductForm() {
     return n.includes('size') || n.includes('مقاس') || n.includes('حجم');
   };
 
-  // 🔥 إضافة جديدة: دالة لإضافة القيمة بسرعة من الأزرار الجاهزة (Chips)
   const appendOptionValue = (index, val) => {
     const currentValues = options[index].values;
     const currentArr = currentValues.split(',').map(s => s.trim()).filter(Boolean);
     if (!currentArr.includes(val)) {
       currentArr.push(val);
-      // بنجمعهم ونحط مسافة بعد الفاصلة عشان الشكل، وممكن اليوزر يكمل كتابة
       updateOption(index, 'values', currentArr.join(', '));
     }
   };
 
   // ==========================================
-  // 5. الحفظ الفعلي في قاعدة البيانات (Firebase)
+  // 5. الحفظ الفعلي
   // ==========================================
   const handleSaveProduct = async () => {
     if (!productData.title) return alert("يرجى إدخال عنوان المنتج على الأقل!");
     
     setIsSaving(true);
     try {
-      // تجهيز الرابط المخصص (Handle)
       const handleToUse = urlHandle || productData.title.toLowerCase().trim().replace(/\s+/g, '-');
       const documentId = isEditing ? productId : handleToUse;
 
- // --- الربط المصيري بين الأقسام والمنتج ---
-      // السحر هنا: بنحفظ الـ slug مرتين (مرة عادي ومرة بسلاش / ) عشان يشتغل مع صفحة الكولكشن وشوبيفاي 100%
       const finalCategories = (productData.selectedCollections || []).flatMap(slug => [slug, `/${slug}`]);
-      const { selectedCollections, ...cleanProductData } = productData; // عشان منخزنش الداتا المؤقتة في الفايربيس
+      const { selectedCollections, ...cleanProductData } = productData; 
       
       const finalProduct = {
         ...cleanProductData,
@@ -345,7 +365,7 @@ function CreateProductForm() {
         inventoryTracked,
         physicalProduct,
         options,
-        colorSwatches, // حفظ الصور المرتبطة بالألوان
+        colorSwatches,
         seo: { 
           title: seoTitle || productData.title, 
           description: seoDesc || productData.description.substring(0, 160), 
@@ -359,7 +379,7 @@ function CreateProductForm() {
         finalProduct.createdAt = serverTimestamp();
       }
 
-      // الحفظ مع خاصية merge لضمان عدم ضياع أي بيانات مخفية
+      const db = getDb();
       await setDoc(doc(db, "products", documentId), finalProduct, { merge: true });
       
       alert(isEditing ? "تم تحديث بيانات WIND بنجاح! ✨" : "تم إضافة المنتج بنجاح! 🚀");
@@ -374,7 +394,7 @@ function CreateProductForm() {
   };
 
   // ==========================================
-  // 6. واجهة المستخدم (The UI) - العمود الرئيسي
+  // 6. واجهة المستخدم 
   // ==========================================
   if (isLoadingData) {
     return (
@@ -389,7 +409,6 @@ function CreateProductForm() {
     <div className="min-h-screen bg-[#f4f6f8] font-sans pb-24 text-[#202223]" dir="rtl">
       <div className="max-w-6xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
       
-        {/* هيدر الصفحة - الأزرار والتحكم السريع */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
           <div className="flex items-center gap-4">
             <button onClick={() => router.back()} className="p-2 border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors text-gray-600 bg-white">
@@ -413,12 +432,25 @@ function CreateProductForm() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 relative items-start">
+        <div className="flex gap-2 mb-6 border-b border-gray-200">
+          <button 
+            onClick={() => setActiveTab('basic')}
+            className={`px-6 py-3 font-bold text-sm rounded-t-lg transition-colors flex items-center gap-2 ${activeTab === 'basic' ? 'bg-white text-[#008060] border-t border-r border-l border-gray-200 -mb-px' : 'text-gray-500 hover:bg-gray-100'}`}
+          >
+            <Box size={16} /> البيانات الأساسية
+          </button>
+          <button 
+            onClick={() => setActiveTab('advanced')}
+            className={`px-6 py-3 font-bold text-sm rounded-t-lg transition-colors flex items-center gap-2 ${activeTab === 'advanced' ? 'bg-white text-[#008060] border-t border-r border-l border-gray-200 -mb-px' : 'text-gray-500 hover:bg-gray-100'}`}
+          >
+            <Paintbrush size={16} /> مدخلات المنتج المخصص
+          </button>
+        </div>
+
+        <div className={`grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 relative items-start ${activeTab === 'basic' ? 'grid' : 'hidden'}`}>
           
-          {/* العمود الأيمن (المحتوى والبيانات - 2/3) */}
           <div className="lg:col-span-2 space-y-6">
             
-            {/* صندوق العنوان والوصف */}
             <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm">
               <div className="mb-6">
                 <label className="block text-sm font-bold text-[#202223] mb-2">
@@ -455,7 +487,6 @@ function CreateProductForm() {
               </div>
             </div>
 
-            {/* صندوق الوسائط والصور */}
             <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm">
               <div className="flex justify-between items-center mb-4">
                  <h3 className="text-sm font-bold text-[#202223]">الوسائط (Media)</h3>
@@ -482,20 +513,17 @@ function CreateProductForm() {
                 </div>
               </div>
 
-       {images.length > 0 && (
+              {images.length > 0 && (
                 <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4 mt-6">
                   {images.map((src, i) => (
                     <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-gray-200 group bg-gray-50">
                       <img src={src} className="w-full h-full object-cover" alt="product media"/>
                       
-                      {/* علامة الغلاف للصورة الأولى */}
                       <div className="absolute top-1.5 right-1.5 bg-black/70 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow">
                         {i === 0 ? "الغلاف" : i + 1}
                       </div>
 
-                      {/* طبقة التحكم عند الوقوف بالماوس */}
                       <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5">
-                        {/* سهم يمين (يخليها تروح للأول عشان عربي RTL) */}
                         {i > 0 && (
                           <button 
                             type="button"
@@ -507,7 +535,6 @@ function CreateProductForm() {
                           </button>
                         )}
 
-                        {/* زر الحذف */}
                         <button 
                           type="button"
                           onClick={() => removeImage(i)} 
@@ -517,7 +544,6 @@ function CreateProductForm() {
                           <Trash2 size={15} />
                         </button>
 
-                        {/* سهم يسار (يخليها تروح للآخر) */}
                         {i < images.length - 1 && (
                           <button 
                             type="button"
@@ -535,7 +561,6 @@ function CreateProductForm() {
               )}
             </div>
 
-            {/* صندوق التصنيف (Shopify Category Sync) */}
             <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm">
               <label className="block text-sm font-bold text-[#202223] mb-2">
                  التصنيف الأساسي (Category)
@@ -552,7 +577,6 @@ function CreateProductForm() {
               <p className="text-xs text-gray-500 mt-2">يحدد الفئة الضريبية ويساعد في تحسين محركات البحث.</p>
             </div>
 
-            {/* 4. التسعير (Pricing) */}
             <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm">
               <h3 className="text-sm font-bold text-[#202223] mb-4">التسعير (Pricing)</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
@@ -614,7 +638,6 @@ function CreateProductForm() {
               </div>
             </div>
 
-            {/* 5. المخزون (Inventory) */}
             <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm">
               <h3 className="text-sm font-bold text-[#202223] mb-4">المخزون (Inventory)</h3>
               
@@ -676,7 +699,6 @@ function CreateProductForm() {
               </div>
             </div>
 
-            {/* 6. البدائل (Variants) */}
             <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm">
               <div className="flex justify-between items-center mb-6">
                  <h3 className="text-sm font-bold text-[#202223]">البدائل (Variants)</h3>
@@ -716,7 +738,6 @@ function CreateProductForm() {
                         />
                       </div>
                       
-                      {/* 🔥 الأزرار السريعة (Chips) للألوان 🔥 */}
                       {isColorOption(option.name) && (
                         <div className="col-span-1 sm:col-span-2 mt-1">
                           <span className="text-[10px] text-gray-500 font-bold mb-2 block">ألوان مقترحة (اضغط للإضافة السريعة):</span>
@@ -735,7 +756,6 @@ function CreateProductForm() {
                         </div>
                       )}
 
-                      {/* 🔥 الأزرار السريعة (Chips) للمقاسات 🔥 */}
                       {isSizeOption(option.name) && (
                         <div className="col-span-1 sm:col-span-2 mt-1">
                           <span className="text-[10px] text-gray-500 font-bold mb-2 block">مقاسات مقترحة (اضغط للإضافة السريعة):</span>
@@ -755,7 +775,6 @@ function CreateProductForm() {
                       )}
                     </div>
 
-                    {/* 🔥 اختيار صورة المنتج لكل لون 🔥 */}
                     {isColorOption(option.name) && option.values.trim() !== '' && (
                       <div className="mt-4 bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
                         <label className="block text-xs font-bold text-[#202223] mb-3">ربط الألوان بصور المنتج</label>
@@ -789,11 +808,14 @@ function CreateProductForm() {
               </div>
             </div>
 
-            {/* 7. الـ Metafields والبيانات المخصصة */}
             <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm">
               <h3 className="text-sm font-bold text-[#202223] mb-4">بيانات مخصصة (Metafields)</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                 {Object.keys(metafields).map((key) => (
+                 {Object.keys(metafields).map((key) => {
+                   if (['customLikesCount', 'cartCrossSellHandles', 'pageCrossSellHandles', 'customHtmlSnippet', 'customHtmlPosition', 'hideRelatedSection'].includes(key)) {
+                     return null;
+                   }
+                   return (
                    <div key={key}>
                       <label className="block text-xs text-gray-600 mb-1.5 capitalize">{key.replace(/([A-Z])/g, ' $1')}</label>
                       <input 
@@ -804,11 +826,10 @@ function CreateProductForm() {
                         className="w-full bg-white border border-gray-300 px-3 py-2 rounded-lg text-sm outline-none focus:border-[#008060] focus:ring-1 focus:ring-[#008060] text-[#202223]" 
                       />
                    </div>
-                 ))}
+                 )})}
               </div>
             </div>
 
-            {/* 8. محركات البحث (SEO) */}
             <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm">
               <h3 className="text-sm font-bold text-[#202223] mb-1">محركات البحث (SEO)</h3>
               <p className="text-xs text-gray-500 mb-5">كيف سيظهر منتجك في نتائج بحث جوجل.</p>
@@ -852,10 +873,8 @@ function CreateProductForm() {
 
           </div>
 
-          {/* العمود الأيسر (الجانبي - 33%) */}
           <div className="space-y-6 lg:sticky lg:top-6">
             
-            {/* صندوق الحالة */}
             <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
               <label className="block text-sm font-bold text-[#202223] mb-3">حالة المنتج (Status)</label>
               <select 
@@ -869,7 +888,6 @@ function CreateProductForm() {
               </select>
             </div>
 
-            {/* 🔥 قائمة الأقسام (Collections) - تم تحسينها جداً للموبايل 🔥 */}
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col max-h-[500px]">
               <div className="p-4 border-b border-gray-200 bg-gray-50">
                 <h3 className="text-sm font-bold text-[#202223]">أقسام المتجر (Collections)</h3>
@@ -908,7 +926,6 @@ function CreateProductForm() {
               </div>
             </div>
 
-            {/* التنظيم (Organization) */}
             <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm space-y-4">
               <h3 className="text-sm font-bold text-[#202223] mb-1">التنظيم (Organization)</h3>
               <div>
@@ -948,9 +965,170 @@ function CreateProductForm() {
 
           </div>
         </div>
+
+        <div className={`grid-cols-1 lg:grid-cols-2 gap-6 relative items-start ${activeTab === 'advanced' ? 'grid' : 'hidden'}`}>
+          
+          <div className="space-y-6">
+            
+            <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+              <h3 className="text-base font-black text-[#1A1A1A] mb-4 flex items-center gap-2">
+                <div className="w-1 h-4 bg-[#F5C518] rounded-full"></div> التفاعل وإثبات الثقة (Social Proof)
+              </h3>
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-2">رقم الإعجابات الوهمي (تجاوز الرقم التلقائي)</label>
+                <input 
+                  type="text" 
+                  name="customLikesCount"
+                  value={metafields.customLikesCount}
+                  onChange={handleMetafieldChange}
+                  placeholder="مثال: 4.5K أو 1200" 
+                  className="w-full bg-white border border-gray-300 px-4 py-2.5 rounded-lg text-sm focus:border-[#008060] focus:ring-1 focus:ring-[#008060] outline-none text-[#1A1A1A]" 
+                />
+                <p className="text-[10px] text-gray-400 mt-1">إذا تركته فارغاً سيتم حساب الرقم عشوائياً كالمعتاد.</p>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+              <h3 className="text-base font-black text-[#1A1A1A] mb-4 flex items-center gap-2">
+                <div className="w-1 h-4 bg-[#F5C518] rounded-full"></div> منتجات مقترحة داخل السلة (Cart Cross-sell)
+              </h3>
+              <div className="mb-4">
+                <label className="block text-xs font-bold text-gray-600 mb-2">اختر القسم لفلترة المنتجات:</label>
+                <select 
+                  value={crossSellFilter}
+                  onChange={(e) => setCrossSellFilter(e.target.value)}
+                  className="w-full bg-gray-50 border border-gray-300 px-3 py-2 rounded-lg text-sm outline-none focus:border-[#008060] mb-3"
+                >
+                  <option value="all">كل المنتجات</option>
+                  {availableCollections.map(c => <option key={c.id} value={c.slug}>{c.name}</option>)}
+                </select>
+                
+                <div className="max-h-52 overflow-y-auto custom-scrollbar border border-gray-200 rounded-lg p-2 bg-gray-50 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {availableProducts
+                    .filter(p => p.id !== productId) // 🔥 استبعاد المنتج الحالي (تعديل الخطأ هنا)
+                    .filter(p => crossSellFilter === 'all' || (p.collections || []).some(c => c === crossSellFilter || c === `/${crossSellFilter}`))
+                    .map(prod => {
+                      const handle = prod.seo?.handle || prod.id;
+                      const isSelected = (metafields.cartCrossSellHandles || "").split(',').map(s=>s.trim()).includes(handle);
+                      return (
+                        <label key={prod.id} className={`flex items-center gap-2 p-2 rounded border cursor-pointer transition-all ${isSelected ? 'bg-green-50 border-green-500 shadow-sm' : 'bg-white border-gray-200 hover:bg-gray-100'}`}>
+                           <input type="checkbox" checked={isSelected} onChange={() => handleDynamicCrossSellToggle(handle, 'cartCrossSellHandles')} className="w-4 h-4 text-[#008060] rounded cursor-pointer" />
+                           {prod.images && prod.images[0] ? <img src={prod.images[0]} className="w-8 h-8 rounded object-cover border border-gray-200" alt=""/> : <div className="w-8 h-8 bg-gray-200 rounded"></div>}
+                           <span className="text-xs font-bold line-clamp-1 flex-1 text-[#1a1a1a]">{prod.title}</span>
+                        </label>
+                      )
+                  })}
+                </div>
+                <p className="text-[10px] text-gray-400 mt-2">الروابط المحددة حالياً (يمكنك التعديل اليدوي):</p>
+                <textarea 
+                  name="cartCrossSellHandles"
+                  value={metafields.cartCrossSellHandles}
+                  onChange={handleMetafieldChange}
+                  rows="2"
+                  className="w-full mt-1 bg-white border border-gray-300 px-3 py-2 rounded-lg text-xs focus:border-[#008060] outline-none text-[#1A1A1A] resize-none" 
+                ></textarea>
+              </div>
+            </div>
+
+          </div>
+
+          <div className="space-y-6">
+            
+            <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+              <div className="flex justify-between items-center mb-4">
+                 <h3 className="text-base font-black text-[#1A1A1A] flex items-center gap-2">
+                   <div className="w-1 h-4 bg-[#F5C518] rounded-full"></div> منتجات "قد يعجبك" المخصصة
+                 </h3>
+                 <div className="flex items-center gap-2">
+                  <input 
+                    type="checkbox" id="hideRelatedSection"
+                    checked={metafields.hideRelatedSection === "Yes"}
+                    onChange={(e) => handleMetafieldChange({ target: { name: 'hideRelatedSection', value: e.target.checked ? "Yes" : "No" }})}
+                    className="w-4 h-4 text-red-600 rounded cursor-pointer"
+                  />
+                  <label htmlFor="hideRelatedSection" className="text-[10px] font-bold text-red-600 cursor-pointer">إخفاء القسم تماماً</label>
+                </div>
+              </div>
+              
+              <div className="mb-4 opacity-100 transition-opacity" style={{ opacity: metafields.hideRelatedSection === "Yes" ? 0.5 : 1 }}>
+                <label className="block text-xs font-bold text-gray-600 mb-2">اختر القسم لفلترة المنتجات:</label>
+                <select 
+                  value={crossSellFilter}
+                  onChange={(e) => setCrossSellFilter(e.target.value)}
+                  className="w-full bg-gray-50 border border-gray-300 px-3 py-2 rounded-lg text-sm outline-none focus:border-[#008060] mb-3"
+                  disabled={metafields.hideRelatedSection === "Yes"}
+                >
+                  <option value="all">كل المنتجات</option>
+                  {availableCollections.map(c => <option key={c.id} value={c.slug}>{c.name}</option>)}
+                </select>
+                
+                <div className="max-h-52 overflow-y-auto custom-scrollbar border border-gray-200 rounded-lg p-2 bg-gray-50 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {availableProducts
+                    .filter(p => p.id !== productId) // 🔥 استبعاد المنتج الحالي (تعديل الخطأ هنا)
+                    .filter(p => crossSellFilter === 'all' || (p.collections || []).some(c => c === crossSellFilter || c === `/${crossSellFilter}`))
+                    .map(prod => {
+                      const handle = prod.seo?.handle || prod.id;
+                      const isSelected = (metafields.pageCrossSellHandles || "").split(',').map(s=>s.trim()).includes(handle);
+                      return (
+                        <label key={prod.id} className={`flex items-center gap-2 p-2 rounded border cursor-pointer transition-all ${isSelected ? 'bg-green-50 border-green-500 shadow-sm' : 'bg-white border-gray-200 hover:bg-gray-100'}`}>
+                           <input disabled={metafields.hideRelatedSection === "Yes"} type="checkbox" checked={isSelected} onChange={() => handleDynamicCrossSellToggle(handle, 'pageCrossSellHandles')} className="w-4 h-4 text-[#008060] rounded cursor-pointer" />
+                           {prod.images && prod.images[0] ? <img src={prod.images[0]} className="w-8 h-8 rounded object-cover border border-gray-200" alt=""/> : <div className="w-8 h-8 bg-gray-200 rounded"></div>}
+                           <span className="text-xs font-bold line-clamp-1 flex-1 text-[#1a1a1a]">{prod.title}</span>
+                        </label>
+                      )
+                  })}
+                </div>
+                <p className="text-[10px] text-gray-400 mt-2">الروابط المحددة حالياً (يمكنك التعديل اليدوي):</p>
+                <textarea 
+                  name="pageCrossSellHandles"
+                  value={metafields.pageCrossSellHandles}
+                  onChange={handleMetafieldChange}
+                  rows="2"
+                  disabled={metafields.hideRelatedSection === "Yes"}
+                  className="w-full mt-1 bg-white border border-gray-300 px-3 py-2 rounded-lg text-xs focus:border-[#008060] outline-none text-[#1A1A1A] resize-none" 
+                ></textarea>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+              <h3 className="text-base font-black text-[#1A1A1A] mb-4 flex items-center gap-2">
+                <div className="w-1 h-4 bg-[#F5C518] rounded-full"></div> بلوك HTML مخصص (Custom Block)
+              </h3>
+              
+              <div className="mb-4">
+                <label className="block text-xs font-bold text-gray-600 mb-2">أين تريد عرض هذا الكود؟</label>
+                <select 
+                  name="customHtmlPosition"
+                  value={metafields.customHtmlPosition}
+                  onChange={handleMetafieldChange}
+                  className="w-full bg-gray-50 border border-gray-300 px-4 py-2.5 rounded-lg text-sm focus:border-[#008060] focus:ring-1 focus:ring-[#008060] outline-none text-[#1A1A1A] cursor-pointer"
+                >
+                  <option value="below_cart">أسفل زر "أضف للسلة" مباشرة</option>
+                  <option value="above_title">أعلى عنوان المنتج</option>
+                  <option value="below_description">أسفل وصف المنتج</option>
+                  <option value="bottom_page">في أسفل الصفحة (قبل الفوتر)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-2">الكود البرمجي (للفيديوهات، بنرات الثقة... الخ)</label>
+                <textarea 
+                  name="customHtmlSnippet"
+                  value={metafields.customHtmlSnippet}
+                  onChange={handleMetafieldChange}
+                  rows="6"
+                  placeholder="<div class='custom-banner'><img src='...' /></div>" 
+                  className="w-full bg-[#1A1A1A] text-green-400 font-mono border border-gray-300 px-4 py-4 rounded-lg text-xs focus:border-[#008060] focus:ring-1 focus:ring-[#008060] outline-none resize-y"
+                  dir="ltr"
+                ></textarea>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
       </div>
 
-      {/* Datalists الكاملة لضمان التوافق مع شيت Shopify */}
       <datalist id="csv-collections">
         {csvCollections.map(c => <option key={c} value={c} />)}
       </datalist>
@@ -980,7 +1158,6 @@ function CreateProductForm() {
   );
 }
 
-// التصدير النهائي المغلف بـ Suspense لضمان الاستقرار على Vercel
 export default function CreateProductPage() {
   return (
     <Suspense fallback={

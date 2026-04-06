@@ -7,9 +7,24 @@ import { usePageReady, useGlobalLoader } from "../../context/GlobalLoaderContext
 import { useRouter } from 'next/navigation';
 import Link from "next/link";
 // 🔥 استدعاء الفايربيس
-import { db } from "@/lib/firebase";
-import { doc, setDoc, getDoc, deleteDoc } from "firebase/firestore";
-import { ChevronDown, Info, CheckCircle2, Phone, ShoppingBag, Shield, Tag, ChevronLeft, Truck, CreditCard, Banknote, Smartphone, X, Lock } from 'lucide-react';
+import { getDb } from "@/lib/firebase";
+import { doc, setDoc, getDoc, deleteDoc } from "firebase/firestore/lite";
+import { ChevronDown, Info, CheckCircle2, Phone, ShoppingBag, Shield, Tag, ChevronLeft, Truck, CreditCard, Banknote, Smartphone, X, Lock } from '@/components/icons-extra';
+
+// Helper function to handle Firebase errors
+function handleFirebaseError(error, operation) {
+  console.error(`Firebase ${operation} error:`, error);
+  
+  if (error.code === 'permission-denied') {
+    return 'Error: Permission denied. Please check your access rights.';
+  } else if (error.code === 'unavailable') {
+    return 'Error: Service temporarily unavailable. Please try again.';
+  } else if (error.code === 'deadline-exceeded') {
+    return 'Error: Request timeout. Please check your connection and try again.';
+  }
+  
+  return `Error: ${error.message || 'Unknown error occurred'}`;
+}
 
 const governorates = [
   "القاهرة", "الجيزة", "الإسكندرية", "الدقهلية", "القليوبية", "الشرقية", "المنوفية", "الغربية", "البحيرة", "دمياط", "بورسعيد", "السويس", "الإسماعيلية", "كفر الشيخ", "الفيوم", "بني سويف", "المنيا", "أسيوط", "سوهاج", "قنا", "الأقصر", "أسوان", "البحر الأحمر", "الوادي الجديد", "مطروح", "شمال سيناء", "جنوب سيناء"
@@ -151,6 +166,7 @@ export default function CheckoutPage() {
   });
 
   const [errors, setErrors] = useState({});
+  const [submitError, setSubmitError] = useState('');
 
   // Signal readiness for GlobalLoader (FIX: add pathname to ensure re-trigger on navigation)
   useEffect(() => {
@@ -180,7 +196,7 @@ export default function CheckoutPage() {
           // 🔥 العبقرية هنا: لو العميل داس تأكيد وولدنا رقم WIND، الرادار هيحدث ملف الـ WIND ومش هيكريت DRAFT جديد أبداً
           const targetOrderId = activeOrderIdRef.current ? activeOrderIdRef.current : `DRAFT-${sessionId}`; 
 
-          const draftRef = doc(db, "Orders", targetOrderId);
+          const draftRef = doc(getDb(), "Orders", targetOrderId);
           const draftData = {
             Name: targetOrderId,
             "Billing Name": `${formData.firstName} ${formData.lastName}`.trim() || 'عميل محتمل',
@@ -207,14 +223,19 @@ export default function CheckoutPage() {
 
           if (appliedPromo) draftData['Discount Code'] = appliedPromo;
 
+          try {
           await setDoc(draftRef, draftData, { merge: true });
+        } catch (error) {
+          console.error('Error saving draft order:', error);
+          // Continue with form submission even if draft fails
+        }
 
           // تحديث أو إنشاء ملف العميل
           const cleanPhone = formData.phone.replace(/[^0-9]/g, '');
           const uniqueId = isValidEmail ? formData.email.toLowerCase().trim() : cleanPhone;
           
           if (uniqueId) {
-            const customerRef = doc(db, "Customers", uniqueId);
+            const customerRef = doc(getDb(), "Customers", uniqueId);
             const customerSnap = await getDoc(customerRef);
             
             if (!customerSnap.exists() || (customerSnap.exists() && !customerSnap.data()['Total Orders'])) {
@@ -319,12 +340,19 @@ export default function CheckoutPage() {
       if (appliedPromo) orderData['Discount Code'] = appliedPromo;
 
       // 1. إنشاء الأوردر أو تحديثه لو موجود
-      await setDoc(doc(db, "Orders", orderId), orderData, { merge: true });
+      try {
+        await setDoc(doc(getDb(), "Orders", orderId), orderData, { merge: true });
+      } catch (error) {
+        const errorMessage = handleFirebaseError(error, 'creating order');
+        setSubmitError(errorMessage);
+        setIsSubmitting(false);
+        return;
+      }
 
       // 2. تحديث أو إنشاء ملف العميل (بجمع الأرقام صح)
       const cleanPhone = formData.phone.replace(/[^0-9]/g, '');
       const customerId = formData.email ? formData.email.toLowerCase().trim() : cleanPhone;
-      const customerRef = doc(db, "Customers", customerId);
+      const customerRef = doc(getDb(), "Customers", customerId);
       const customerSnap = await getDoc(customerRef);
 
       if (customerSnap.exists()) {
@@ -334,17 +362,41 @@ export default function CheckoutPage() {
         const currentSpent = Number(existingData['Total Spent'] || 0);
         const newSegment = currentOrders >= 1 ? "VIP_Customer" : "Purchased_Once";
 
-        await setDoc(customerRef, {
-          "Total Orders": currentOrders + 1,
-          "Total Spent": currentSpent + Number(finalTotal),
-          Last_Order_Status: "New",
-          data_source: "WIND_Web",
-          Phone: formData.phone,
-          "Default Address City": formData.city,
-          "Default Address Province": formData.governorate,
-          segments: [newSegment]
-        }, { merge: true });
+        try {
+          await setDoc(customerRef, {
+            "Total Orders": currentOrders + 1,
+            "Total Spent": currentSpent + Number(finalTotal),
+            Last_Order_Status: "New",
+            data_source: "WIND_Web",
+            Phone: formData.phone,
+            "Default Address City": formData.city,
+            "Default Address Province": formData.governorate,
+            segments: [newSegment]
+          }, { merge: true });
+        } catch (error) {
+          console.error('Error updating customer:', error);
+          // Continue even if customer update fails
+        }
       } else {
+        try {
+          await setDoc(customerRef, {
+            "First Name": formData.firstName,
+            "Last Name": formData.lastName,
+            Email: formData.email ? formData.email.toLowerCase().trim() : '',
+            Phone: formData.phone,
+            "Default Address City": formData.city,
+            "Default Address Province": formData.governorate,
+            "Default Address Address1": formData.address,
+            "Total Orders": 1,
+            "Total Spent": Number(finalTotal), // تأكيد إنها رقم
+            Last_Order_Status: "New",
+            data_source: "WIND_Web",
+            segments: ["Purchased_Once"] 
+          });
+        } catch (error) {
+          console.error('Error creating customer:', error);
+          // Continue even if customer creation fails
+        }
         await setDoc(customerRef, {
           "First Name": formData.firstName,
           "Last Name": formData.lastName,
@@ -363,7 +415,7 @@ export default function CheckoutPage() {
       // ============================================================
       // 🔥 مسح السلة المتروكة نهائياً من قاعدة البيانات لأن العميل أكد الطلب بنجاح
       const draftOrderIdToDelete = `DRAFT-${sessionId}`;
-      await deleteDoc(doc(db, "Orders", draftOrderIdToDelete));
+      await deleteDoc(doc(getDb(), "Orders", draftOrderIdToDelete));
 
       if (paymentMethod === 'card') {
         // حفظ الطلب في المتصفح قبل فتح بوابة كاشير
@@ -758,6 +810,9 @@ export default function CheckoutPage() {
 
               {(errors.firstName || errors.address || errors.city || errors.phone) && (
                 <p className="text-red-500 text-xs mt-2 pr-1 flex items-center gap-1"><span>⚠</span> يرجى تعبئة جميع الحقول المطلوبة</p>
+              )}
+              {submitError && (
+                <p className="text-red-500 text-xs mt-2 pr-1 flex items-center gap-1"><span>⚠</span> {submitError}</p>
               )}
             </div>
 

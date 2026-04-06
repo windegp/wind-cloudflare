@@ -2,7 +2,7 @@
 
 import React, { useEffect } from 'react';
 import Link from 'next/link';
-import { Truck, RefreshCcw, ShieldCheck, Scale, ArrowLeft } from "lucide-react";
+import { Truck, RefreshCcw, ShieldCheck, Scale, ArrowLeft } from '@/components/icons-extra';
 
 const policies = [
   {

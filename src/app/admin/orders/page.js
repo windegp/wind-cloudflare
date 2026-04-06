@@ -1,13 +1,12 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { db } from "@/lib/firebase";
-import { collection, query, getDocs, deleteDoc, doc } from "firebase/firestore";
+import { getDb } from "@/lib/firebase";
+import { collection, query, getDocs, deleteDoc, doc } from "firebase/firestore/lite";
 import { useRouter } from 'next/navigation';
-import { 
-  ShoppingBag, Search, Filter, Monitor, Archive, Layers,
-  ChevronLeft, ChevronRight, Trash2, AlertTriangle, X, Download
-} from "lucide-react";
+import { ShoppingBag, Search, Filter, Monitor, Archive, Layers, ChevronLeft, ChevronRight, Trash2, AlertTriangle, X, Download } from '@/components/icons-extra';
+
+export const dynamic = 'force-dynamic';
 
 export default function OrdersListPage() {
   const [orders, setOrders] = useState([]);
@@ -32,6 +31,7 @@ export default function OrdersListPage() {
   const handleDeleteSelected = async () => {
     setIsDeleting(true);
     try {
+      const db = getDb();
       for (const id of selectedOrders) {
         await deleteDoc(doc(db, "Orders", id));
       }
@@ -87,6 +87,7 @@ export default function OrdersListPage() {
   const fetchOrders = async () => {
     try {
       // 🔥 تم إزالة الـ limit(300) بناءً على طلبك، لجلب كل الأرشيف (600+ طلب)
+      const db = getDb();
       const q = query(collection(db, "Orders"));
       const querySnapshot = await getDocs(q);
       const docs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));

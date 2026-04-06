@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { db } from "@/lib/firebase";
-import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
-import { ArrowRight, Mail, Phone, MapPin, Package, ShoppingBag, Users } from "lucide-react";
+import { getDb } from "@/lib/firebase";
+import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore/lite";
+import { ArrowRight, Mail, Phone, MapPin, Package, ShoppingBag, Users } from '@/components/icons-extra';
 
 export default function CustomerDetailsPage() {
   const { email } = useParams(); 
@@ -19,6 +19,7 @@ export default function CustomerDetailsPage() {
   const fetchAllData = async () => {
     setLoading(true); // الآن ستعمل بدون أخطاء
     try {
+      const db = getDb();
       const decodedParam = decodeURIComponent(email).trim();
       let cData = null;
 

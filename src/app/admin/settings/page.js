@@ -2,15 +2,14 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { Settings, ShieldCheck, Store, Truck } from '@/components/icons-extra';
 import { 
-  Settings, 
-  ShieldCheck, 
-  Store, 
-  Truck, 
   CreditCard, 
   Share2, 
   ChevronLeft 
-} from "lucide-react";
+} from '@/components/icons-extra';
+
+export const dynamic = 'force-dynamic';
 
 const settingsOptions = [
   {

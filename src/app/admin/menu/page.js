@@ -1,17 +1,25 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { db } from "@/lib/firebase"; 
-import { collection, getDocs, doc, getDoc, setDoc } from "firebase/firestore";
+import { getDb } from "@/lib/firebase";
+import { collection, getDocs, doc, getDoc, setDoc } from "firebase/firestore/lite";
 import { 
-  Plus, Save, Loader2, Trash2, 
-  Link as LinkIcon, Layers, Database, 
-  Layout, MonitorSmartphone, Menu,
-  ChevronDown, ChevronRight, Info, X, ChevronUp, CornerDownLeft
-} from "lucide-react";
+  Plus, Save, Loader2, Trash2, Edit2, ExternalLink, CheckSquare, Square, 
+  FolderTree, Database, Layout, MonitorSmartphone, Menu, ChevronDown, 
+  ChevronRight, Info, X, ChevronUp, CornerDownLeft, LinkIcon, Layers, 
+  Paintbrush, ListFilter, PackageSearch, Package, Settings, Target, 
+  Mail, Crown, UserMinus, Monitor, Archive, ArrowRight, ArrowLeft, 
+  Search, Filter, AlertTriangle, Download, ShoppingCart, Users, Eye, 
+  Calendar, Activity, TrendingUp, ShieldCheck, Store, Truck, RefreshCw, 
+  Scale, Code2, Share2, CreditCard, Banknote, Smartphone, Lock, Globe, 
+  Box, Tag, CheckCircle, CheckCircle2, Home, FileText, DollarSign, 
+  BarChart, MessageSquare, ZoomIn, Minus, Star, Heart, ImageIcon, 
+  ChevronLeft, MapPin, Phone, ShoppingBag, User 
+} from '@/components/icons-extra';
+
+export const dynamic = 'force-dynamic';
 
 // --- مكون الشجرة (الأكورديون) ---
-// تم نقله "خارج" المكون الرئيسي لمنع إعادة الرسم (Re-render) وفقدان التركيز (Focus Loss) أثناء الكتابة
 const RenderMenuTree = ({ list, path = [], depth = 0, availableCollections, expandedItems, toggleAccordion, updateItem, addItem, deleteItem }) => {
   if (!list || list.length === 0) return null;
 
@@ -21,8 +29,6 @@ const RenderMenuTree = ({ list, path = [], depth = 0, availableCollections, expa
         const currentPath = [...path, index];
         const isExpanded = expandedItems.has(item.id);
         const hasChildren = item.children && item.children.length > 0;
-
-        // تدرج لوني ذكي حسب العمق
         const isDark = depth >= 2; 
         
         const cardStyle = 
@@ -38,8 +44,6 @@ const RenderMenuTree = ({ list, path = [], depth = 0, availableCollections, expa
 
         return (
           <div key={item.id} className="relative animate-[fadeIn_0.2s_ease-out]">
-            
-            {/* خط التوصيل الأفقي (الفرع اللي بيمسك الكارت في العمود الرئيسي) */}
             {depth > 0 && (
               <div className="absolute top-10 -right-4 sm:-right-8 w-4 sm:w-8 h-[2px] bg-gray-300 z-0"></div>
             )}
@@ -50,7 +54,6 @@ const RenderMenuTree = ({ list, path = [], depth = 0, availableCollections, expa
               ${isExpanded && depth === 0 ? 'ring-1 ring-[#008060]/30 shadow-md' : ''}
             `}>
               
-              {/* 1. رأس الكارت */}
               <div className={`flex justify-between items-center mb-4 pb-3 border-b ${isDark ? 'border-[#444]' : 'border-gray-200/60'}`}>
                 <div className="flex items-center gap-3">
                   {hasChildren ? (
@@ -63,9 +66,7 @@ const RenderMenuTree = ({ list, path = [], depth = 0, availableCollections, expa
                             ? 'bg-[#444] border-[#555] text-[#F5C518] hover:bg-[#555]' 
                             : 'bg-[#e8f4f0] border-[#008060]/30 text-[#008060] hover:bg-[#d1e9e2]'
                       }`}
-                      title={isExpanded ? "طي القائمة" : "إظهار القوائم الفرعية"}
                     >
-                      {/* السهم هنا بقى سميك ومميز جداً */}
                       {isExpanded ? <ChevronUp size={16} strokeWidth={3}/> : <ChevronDown size={16} strokeWidth={3}/>}
                     </button>
                   ) : (
@@ -87,7 +88,6 @@ const RenderMenuTree = ({ list, path = [], depth = 0, availableCollections, expa
                 </button>
               </div>
 
-              {/* 2. منطقة الإدخال */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className={`block text-[10px] font-bold mb-1.5 uppercase ${labelColor}`}>ربط بقسم موجود (اختياري)</label>
@@ -119,7 +119,6 @@ const RenderMenuTree = ({ list, path = [], depth = 0, availableCollections, expa
                 </div>
               </div>
 
-              {/* 3. الإجراءات السفلية (زر التفريع) */}
               <div className={`mt-4 pt-4 border-t flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isDark ? 'border-[#444]' : 'border-gray-200/60'}`}>
                 <div className={`flex-1 w-full sm:w-auto flex items-center gap-2 px-3 py-2 rounded-lg border ${linkBg}`}>
                   <LinkIcon size={14} className="shrink-0" />
@@ -135,7 +134,6 @@ const RenderMenuTree = ({ list, path = [], depth = 0, availableCollections, expa
                 </button>
               </div>
 
-              {/* منطقة الأبناء */}
               {hasChildren && isExpanded && (
                 <div className="mt-2 animate-[slideDown_0.3s_ease-out]">
                   <RenderMenuTree 
@@ -162,13 +160,14 @@ const RenderMenuTree = ({ list, path = [], depth = 0, availableCollections, expa
 export default function ProfessionalMenuManager() {
   const [items, setItems] = useState([]);
   const [availableCollections, setAvailableCollections] = useState([]);
+  const [loading, setLoading] = useState(true); // تم التصحيح: إضافة حالة التحميل
   const [saving, setSaving] = useState(false);
   const [expandedItems, setExpandedItems] = useState(new Set()); 
 
-  // --- جلب البيانات ---
   useEffect(() => {
     const fetchData = async () => {
       try {
+        const db = getDb();
         const colsSnap = await getDocs(collection(db, "collections"));
         setAvailableCollections(colsSnap.docs.map(d => ({
           id: d.id,
@@ -182,7 +181,11 @@ export default function ProfessionalMenuManager() {
           const data = menuSnap.data().menuItems || [];
           setItems(sanitizeData(data));
         }
-      } catch (err) { console.error(err); }
+      } catch (err) { 
+        console.error(err); 
+      } finally {
+        setLoading(false); // إيقاف التحميل
+      }
     };
     fetchData();
   }, []);
@@ -197,7 +200,6 @@ export default function ProfessionalMenuManager() {
     }));
   };
 
-  // --- وظائف التحكم ---
   const toggleAccordion = (id) => {
     const newExpanded = new Set(expandedItems);
     if (newExpanded.has(id)) newExpanded.delete(id);
@@ -218,7 +220,6 @@ export default function ProfessionalMenuManager() {
     const newItems = JSON.parse(JSON.stringify(items));
     
     if (path === null) {
-      // تعديل هنا: unshift بدلاً من push لتنزيل القسم الجديد في الأعلى
       newItems.unshift(newItem);
     } else {
       let current = { children: newItems };
@@ -260,9 +261,7 @@ export default function ProfessionalMenuManager() {
     <div className="p-4 sm:p-6 lg:p-8 bg-[#f4f6f8] min-h-screen text-[#202223] font-sans" dir="rtl">
       <div className="max-w-4xl mx-auto pb-24">
         
-        {/* الهيدر العلوي */}
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 bg-white p-5 md:p-6 rounded-2xl border border-gray-200 shadow-sm relative overflow-hidden">
-          
           <div className="flex items-center gap-4 relative z-10">
             <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-[#008060]">
               <Layers size={28}/>
@@ -274,7 +273,6 @@ export default function ProfessionalMenuManager() {
           </div>
           
           <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto relative z-10">
-            {/* الزر ده مخصص للقسم الرئيسي فقط */}
             <button 
               onClick={() => addItem()} 
               className="w-full sm:w-auto bg-white border border-gray-300 text-[#202223] px-6 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-gray-50 transition-all shadow-sm"
@@ -284,9 +282,10 @@ export default function ProfessionalMenuManager() {
             <button 
               onClick={async () => {
                 setSaving(true);
+                const db = getDb();
                 await setDoc(doc(db, "settings", "navigation"), { menuItems: items });
                 setSaving(false);
-                alert("تم حفظ الهيكل بنجاح! سيتم تحديث قائمة المتجر للمستخدمين.");
+                alert("تم حفظ الهيكل بنجاح!");
               }} 
               disabled={saving}
               className={`w-full sm:w-auto px-8 py-2.5 rounded-xl font-bold text-sm shadow-sm flex items-center justify-center gap-2 transition-all ${
@@ -299,13 +298,12 @@ export default function ProfessionalMenuManager() {
           </div>
         </header>
 
-        {/* مساحة عرض الشجرة */}
         <div className="bg-white p-4 sm:p-8 rounded-2xl border border-gray-200 shadow-sm min-h-[50vh]">
           {items.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center py-20 opacity-80">
               <Menu size={56} className="text-gray-300 mb-4" />
               <h3 className="text-lg font-bold text-[#202223]">لا توجد أقسام حالياً</h3>
-              <p className="text-sm text-gray-500 mt-2 max-w-sm">ابدأ بإضافة قسم رئيسي (مثل: نساء، رجال) ثم قم بتفريعه من الداخل.</p>
+              <p className="text-sm text-gray-500 mt-2 max-w-sm">ابدأ بإضافة قسم رئيسي ثم قم بتفريعه من الداخل.</p>
               <button onClick={() => addItem()} className="mt-6 bg-gray-50 border border-gray-200 text-[#202223] font-bold text-sm px-6 py-2.5 rounded-xl hover:bg-gray-100 transition-colors flex items-center gap-2 shadow-sm">
                 <Plus size={16}/> إضافة أول قسم رئيسي
               </button>
@@ -322,7 +320,6 @@ export default function ProfessionalMenuManager() {
             />
           )}
         </div>
-
       </div>
     </div>
   );

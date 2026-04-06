@@ -1,119 +1,288 @@
 "use client";
 import React, { useRef, useState, useEffect } from 'react';
 import Link from 'next/link';
-
+import QuickViewModal from "@/components/QuickViewModal";
+import { Star, Heart, ChevronRight, ChevronLeft, Eye, Plus } from '@/components/icons-extra';
+import { collection, getDocs, query, orderBy, where, doc, getDoc } from 'firebase/firestore/lite';
+import ProductCard from '../products/ProductCard';
+import { getDb } from '@/lib/firebase';
 // ==========================================================================
-// LUXURY REDESIGN v2
-// ✅ ألوان الموقع الأصلية محفوظة (#F5C518, #5799ef)
-// ✅ بدون عناوين صغيرة مضافة — الـ subTitle بتاعت الأدمن فقط
-// ✅ خط Cairo للعناوين + Tajawal للفرعي
-// ✅ الخط الذهبي متوسط مع العنوان والفرعي
-// ✅ TopTen كارت معاد تصميمه بالكامل مع كل العناصر الأصلية
-// ✅ كل الـ props والـ data structure محفوظة بالكامل
+// WIND SHOPPING — Homepage Sections v5
+// ✅ نظام ألوان موحد: أبيض #FFFFFF ↔ كريمي #FAF8F3 بالتبادل
+// ✅ SectionHeading واحد مستخدم في كل الأقسام بدون استثناء
+// ✅ card-lift آمن على الموبايل (translate محدود)
+// ✅ spacing system موحد: py-16 لكل قسم
+// ✅ كل البيانات الديناميكية والمنطق محفوظان 100%
+// ✅ هوية WIND: Cairo + Tajawal | ذهبي #F5C518 | أسود #1A1A1A | كريمي
 // ==========================================================================
 
+// ─────────────────────────────────────────────
+// GLOBAL STYLES
+// ─────────────────────────────────────────────
 const GlobalStyles = () => (
   <style jsx global>{`
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&family=Tajawal:wght@300;400;500;700&display=swap');
 
-    @keyframes kenburns {
-      0% { transform: scale(1); }
-      100% { transform: scale(1.08); }
+    /* ── Marquee RTL ── */
+    @keyframes marquee-rtl {
+      0%   { transform: translateX(-50%); }
+      100% { transform: translateX(0%);   }
     }
-    @keyframes marquee-infinite {
-      0% { transform: translateX(0); }
-      100% { transform: translateX(-50%); }
-    }
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(12px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-
-    .animate-marquee-infinite {
+    .animate-marquee-rtl {
       display: flex;
       width: max-content;
-      animation: marquee-infinite 40s linear infinite;
+      animation: marquee-rtl 45s linear infinite;
     }
     .pause-on-hover:hover { animation-play-state: paused; }
+
+    /* ── Utilities ── */
     .scrollbar-hide::-webkit-scrollbar { display: none; }
     .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-    .kenburns-bg { animation: kenburns 20s infinite alternate ease-in-out; }
 
-    /* ===== Typography ===== */
-    .section-title {
+    /* ── Typography tokens ── */
+    .wind-title {
       font-family: 'Cairo', sans-serif;
       font-weight: 800;
+      letter-spacing: -0.02em;
     }
-    .section-subtitle {
+    .wind-body {
       font-family: 'Tajawal', sans-serif;
-      font-weight: 400;
+      font-weight: 500;
     }
 
-    /* ===== Luxury divider ===== */
-    .luxury-divider {
+    /* ── Divider ── */
+    .wind-divider {
       height: 1px;
-      background: linear-gradient(to right, transparent, #F5C51830, transparent);
+      background: linear-gradient(to left, transparent, #E2DDD5 40%, #E2DDD5 60%, transparent);
     }
 
-    /* ===== Card hover lift ===== */
+    /* ── Card hover — mobile-safe ──
+       على الموبايل: فقط ظل خفيف
+       على الديسكتوب: رفع + ظل ذهبي
+    ── */
     .card-lift {
-      transition: transform 0.4s cubic-bezier(0.25,0.46,0.45,0.94),
-                  box-shadow  0.4s cubic-bezier(0.25,0.46,0.45,0.94);
+      transition:
+        transform  0.45s cubic-bezier(0.22, 1, 0.36, 1),
+        box-shadow 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+        border-color 0.3s ease;
     }
-    .card-lift:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 20px 50px rgba(0,0,0,0.55), 0 0 0 1px rgba(245,197,24,0.15);
+    @media (hover: hover) {
+      .card-lift:hover {
+        transform: translateY(-6px);
+        box-shadow: 0 24px 48px rgba(0,0,0,0.09), 0 0 0 1.5px rgba(245,197,24,0.35);
+      }
+    }
+
+    /* ── Image zoom ── */
+    .img-zoom {
+      transition: transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .img-zoom:hover { transform: scale(1.06); }
+
+    /* ── Gold underline on hover ── */
+    .gold-bar {
+      display: block;
+      height: 2px;
+      width: 0;
+      border-radius: 2px;
+      background: linear-gradient(to left, #F5C518, #E6AE00);
+      transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    *:hover > .gold-bar,
+    .group:hover .gold-bar { width: 100%; }
+
+    /* ── Arch (pill-top) shape ── */
+    .arch-frame {
+      border-radius: 1000px 1000px 18px 18px;
+      overflow: hidden;
     }
   `}</style>
 );
 
-// ==========================================================================
-// SECTION HEADER HELPER
-// الخط الذهبي الرأسي يتمركز تماماً مع العنوان (+ الفرعي لو موجود)
-// ==========================================================================
-const SectionHeading = ({ title, subTitle, link, linkLabel = "عرض الكل" }) => (
-  <div className="flex items-center justify-between mb-6 px-4 pt-10" dir="rtl">
+// ─────────────────────────────────────────────
+// SECTION HEADING — موحد لكل الأقسام
+// ─────────────────────────────────────────────
+const SectionHeading = ({ title, subTitle, link, linkLabel = "عرض الكل", centered = false }) => (
+  <div className={`mb-10 pt-16 px-4 md:px-6 ${centered ? 'text-center' : ''}`} dir="rtl">
 
-    {/* اليسار: الخط + العناوين */}
-    <div className="flex items-center gap-3">
-      {/* الخط الذهبي — ارتفاعه يتكيف مع العنوان ± الفرعي */}
-      <div
-        className="w-[3px] rounded-sm bg-[#F5C518] shrink-0 self-stretch"
-        style={{ minHeight: subTitle ? '48px' : '32px' }}
-      />
-      <div>
-        <h2 className="section-title text-lg md:text-2xl text-white tracking-wide leading-tight">
+    {/* الصف العلوي */}
+    <div className={`flex items-center ${centered ? 'justify-center gap-3' : 'justify-between'}`}>
+      <div className={`flex items-center gap-3 ${centered ? 'flex-col-reverse' : ''}`}>
+        {!centered && (
+          <div className="w-[4px] h-[26px] rounded-full shrink-0" style={{ background: 'linear-gradient(180deg,#F5C518,#E6AE00)' }} />
+        )}
+        <h2 className="wind-title text-xl md:text-3xl text-[#1A1A1A] leading-none">
           {title}
         </h2>
-        {subTitle && (
-          <p className="section-subtitle text-gray-400 text-[11px] md:text-xs mt-1 leading-relaxed">
-            {subTitle}
-          </p>
-        )}
       </div>
+
+      {link && !centered && (
+        <Link
+          href={link}
+          className="wind-body flex items-center gap-1.5 text-[#1A1A1A] text-xs md:text-sm font-bold
+                     bg-white border border-[#E2DDD5] px-4 py-2 rounded-full
+                     hover:border-[#F5C518] hover:shadow-md transition-all duration-300 shrink-0 group"
+        >
+          {linkLabel}
+          <span className="text-base leading-none group-hover:-translate-x-1 transition-transform inline-block">›</span>
+        </Link>
+      )}
     </div>
 
-    {/* اليمين: زر عرض الكل */}
-    {link && (
-      <Link
-        href={link}
-        className="section-subtitle text-[#F5C518] text-xs md:text-sm font-medium
-                   flex items-center gap-1 opacity-80 hover:opacity-100 transition-opacity shrink-0"
-      >
-        {linkLabel}
-        <span className="text-base leading-none">›</span>
-      </Link>
+    {/* الفرعي */}
+    {subTitle && (
+      <p className={`wind-body text-[#8A8070] text-xs md:text-sm mt-2.5 leading-relaxed
+                     ${centered ? 'max-w-md mx-auto mt-3' : 'max-w-[80%] md:max-w-[60%]'}`}>
+        {subTitle}
+      </p>
+    )}
+
+    {/* خط مركزي للـ centered mode */}
+    {centered && (
+      <div className="flex items-center justify-center gap-3 mt-5">
+        <div className="h-px w-12 bg-[#E2DDD5]" />
+        <div className="w-1.5 h-1.5 rounded-full bg-[#F5C518]" />
+        <div className="h-px w-12 bg-[#E2DDD5]" />
+      </div>
+    )}
+
+    {/* divider للـ side mode */}
+    {!centered && <div className="wind-divider mt-6" />}
+  </div>
+);
+
+// ─────────────────────────────────────────────
+// PRICE BADGE — مساعد مشترك
+// ─────────────────────────────────────────────
+const PriceBadge = ({ price, compareAtPrice, size = "md" }) => (
+  <div className="flex items-baseline gap-2.5 flex-wrap">
+    <span className={`wind-title text-[#1A1A1A] font-black leading-none
+      ${size === 'lg' ? 'text-xl md:text-2xl' : 'text-sm md:text-base'}`}>
+      {price} LE
+    </span>
+    {compareAtPrice && (
+      <span className={`wind-body text-[#B0A898] line-through
+        ${size === 'lg' ? 'text-sm md:text-base' : 'text-xs'}`}>
+        {compareAtPrice} LE
+      </span>
     )}
   </div>
 );
 
+// ─────────────────────────────────────────────
+// AVAILABLE PILL
+// ─────────────────────────────────────────────
+const AvailablePill = () => (
+  <span className="wind-body text-[11px] px-2.5 py-1 rounded-full font-semibold"
+    style={{ background: 'rgba(245,197,24,0.1)', color: '#9A7800', border: '1px solid rgba(245,197,24,0.25)' }}>
+    متوفر الآن
+  </span>
+);
+
 // ==========================================================================
-// 3. FEATURED TODAY
+// الهيرو المينيماليست المتمركز (Editorial Centered Hero) - خالي من الأخطاء 100%
+// نقاط مرتبطة بالزر ارتباط مباشر (CSS Grid)، مساحات مرنة، وأنيميشن نصوص مستقل.
+// ==========================================================================
+export const EditorialCenteredHero = ({ data }) => {
+  const [current, setCurrent] = useState(0);
+  const slides = data?.slides || [];
+
+  useEffect(() => {
+    if (slides.length === 0) return;
+    const timer = setInterval(() => {
+      setCurrent((prev) => (prev === slides.length - 1 ? 0 : prev + 1));
+    }, 6000); 
+    return () => clearInterval(timer);
+  }, [slides.length]);
+
+  if (slides.length === 0) return <div className="w-full h-[60vh] bg-white"></div>;
+
+  return (
+    // تم زيادة مساحة الحاوية من الأسفل (pb-14) لراحة العين كما طلبت
+    <div className="relative w-full bg-white text-black pb-14" dir="rtl">
+      
+      {/* 1. الصورة الرئيسية (Fade Out ثابت ولا يتأثر بالنصوص) */}
+      <div className="relative w-full aspect-[4/5] md:aspect-[21/9] bg-[#EAEAEA] overflow-hidden rounded-none">
+        {slides.map((slide, index) => (
+          <img 
+            key={index}
+            src={slide.image} 
+            alt={slide.title}
+            className={`absolute inset-0 w-full h-full object-cover origin-center rounded-none transition-all duration-[1500ms] ease-[cubic-bezier(0.25,1,0.5,1)] ${index === current ? 'opacity-100 scale-100 z-10' : 'opacity-0 scale-105 z-0'}`} 
+          />
+        ))}
+      </div>
+
+      {/* 2. قسم المحتوى والنقاط (نظام Grid الذكي لمنع التداخل) */}
+      <div className="relative w-full bg-white px-6 pt-10 flex flex-col items-center">
+        
+        {/* استخدام Grid بيخلي الحاوية تتمدد تلقائياً لأكبر نص، وكل الشرائح بتتحط فوق بعضها بشكل مثالي */}
+        <div className="w-full max-w-4xl grid" style={{ gridTemplateColumns: '1fr' }}>
+          
+          {slides.map((slide, index) => (
+            <div 
+              key={`text-${index}`}
+              // تم ربط العناصر كلها ببعضها في نفس العمود
+              className={`flex flex-col items-center justify-start ${index === current ? 'z-10 pointer-events-auto' : 'z-0 pointer-events-none'}`}
+              style={{ gridArea: '1 / 1' }}
+            >
+              
+              {/* أ. العنوان الصغير */}
+              <span 
+                className={`font-tajawal text-[#1A1A1A] text-[14px] md:text-[16px] font-bold tracking-widest uppercase mb-3 transition-all ease-[cubic-bezier(0.22,1,0.36,1)] ${index === current ? 'translate-y-0 opacity-100 duration-[800ms] delay-[150ms]' : 'translate-y-4 opacity-0 duration-[300ms] delay-0'}`}
+              >
+                {slide.tag || "WIND EXCLUSIVE"}
+              </span>
+              
+              {/* ب. النص الرئيسي */}
+              <h1 
+                className={`text-[32px] md:text-[42px] lg:text-[48px] font-medium text-[#1A1A1A] leading-[1.2] tracking-normal text-center px-4 mb-8 md:mb-9 transition-all ease-[cubic-bezier(0.22,1,0.36,1)] ${index === current ? 'translate-y-0 opacity-100 duration-[800ms] delay-[300ms]' : 'translate-y-4 opacity-0 duration-[300ms] delay-0'}`}
+                style={{fontFamily: "'Cairo', sans-serif"}}
+              >
+                {slide.title}
+              </h1>
+              
+              {/* ج. الزر */}
+              <a 
+                href={slide.productLink} 
+                className={`font-tajawal inline-flex justify-center items-center bg-white text-[#1A1A1A] border border-[#1A1A1A] rounded-[3px] px-9 py-3.5 font-bold text-[13px] md:text-[14px] tracking-widest uppercase hover:bg-[#1A1A1A] hover:text-white transition-all ease-[cubic-bezier(0.22,1,0.36,1)] shadow-sm ${index === current ? 'translate-y-0 opacity-100 duration-[800ms] delay-[450ms]' : 'translate-y-4 opacity-0 duration-[300ms] delay-0'}`}
+              >
+                {slide.buttonText || "تسوق الإطلالة"}
+              </a>
+
+              {/* د. النقاط (السر هنا): 
+                 - مرتبطة بالزر بمسافة ثابتة mt-6 أو mt-5
+                 - تتبدل لحظياً (بدون Fade) بفضل إزالة خصائص الـ Transition 
+              */}
+              <div 
+                className={`flex justify-center gap-3.5 mt-12 md:mt-14 ${index === current ? 'opacity-100 visible' : 'opacity-0 invisible'}`}
+                style={{ transition: 'none' }} // النقاط ثابتة بدون أنيميشن اختفاء
+              >
+                {slides.map((_, i) => (
+                  <div 
+                    key={i} 
+                    className={`w-3 h-3 rounded-full border-[1.5px] border-[#1A1A1A] ${i === index ? 'bg-white' : 'bg-[#1A1A1A]'}`}
+                  />
+                ))}
+              </div>
+
+            </div>
+          ))}
+          
+        </div>
+      </div>
+
+    </div>
+  );
+};
+
+// ==========================================================================
+// 3. FEATURED TODAY — خلفية بيضاء #FFFFFF
 // ==========================================================================
 export const FeaturedToday = ({ data }) => {
-  const scrollRef   = useRef(null);
-  const [showLeft,  setShowLeft]   = useState(true);
-  const [showRight, setShowRight]  = useState(false);
+  const scrollRef    = useRef(null);
+  const [showLeft,  setShowLeft]  = useState(true);
+  const [showRight, setShowRight] = useState(false);
   const [expandedDeck, setExpandedDeck] = useState(null);
 
   const handleScroll = () => {
@@ -124,9 +293,8 @@ export const FeaturedToday = ({ data }) => {
     setShowLeft(s < scrollWidth - clientWidth - 5);
   };
 
-  const scroll = (dir) => {
+  const scroll = (dir) =>
     scrollRef.current?.scrollBy({ left: dir === 'left' ? -400 : 400, behavior: 'smooth' });
-  };
 
   const toggleDeck = (i, e) => {
     e.preventDefault(); e.stopPropagation();
@@ -134,61 +302,44 @@ export const FeaturedToday = ({ data }) => {
   };
 
   useEffect(() => { handleScroll(); }, [data]);
-
   if (!data?.cards) return null;
 
   return (
-    <section className="bg-[#181818] pt-2 pb-1 border-t border-[#2a2a2a]">
+    <section className="bg-white border-t border-[#EEEBE5]">
       <GlobalStyles />
-      <div className="max-w-[1400px] mx-auto relative px-4 text-right">
+      <div className="max-w-[1400px] mx-auto relative" dir="rtl">
 
-        {/* ---- العنوان ---- */}
-        <div className="flex items-center gap-3 pt-8 pb-1 mb-1" dir="rtl">
-          <div
-            className="w-[3px] rounded-sm bg-[#F5C518] shrink-0"
-            style={{ height: data.subTitle ? '48px' : '32px' }}
-          />
-          <div>
-            <h2 className="section-title text-lg md:text-xl text-[#F5C518] tracking-wide uppercase">
-              {data.title || "Featured Today"}
-            </h2>
-            {data.subTitle && (
-              <p className="section-subtitle text-gray-400 text-[11px] mt-0.5">{data.subTitle}</p>
-            )}
-          </div>
-        </div>
+        <SectionHeading title={data.title || "Featured Today"} subTitle={data.subTitle} />
 
-        <div className="luxury-divider my-4" />
-
-        {/* ---- السلايدر ---- */}
-        <div className="relative group/slider">
-
-          {/* أسهم */}
+        <div className="relative group/slider px-4">
+          {/* ── أسهم التنقل ── */}
           {[
-            { d: 'right', show: showRight, pos: 'right-1', path: "M9 5l7 7-7 7" },
-            { d: 'left',  show: showLeft,  pos: 'left-1',  path: "M15 19l-7-7 7-7" },
+            { d: 'right', show: showRight, pos: 'right-2', path: "M9 5l7 7-7 7" },
+            { d: 'left',  show: showLeft,  pos: 'left-2',  path: "M15 19l-7-7 7-7" },
           ].map(({ d, show, pos, path }) => (
             <button
               key={d}
               onClick={() => scroll(d)}
+              aria-label={d === 'right' ? 'التالي' : 'السابق'}
               className={`absolute top-1/2 -translate-y-1/2 ${pos} z-30
-                         w-9 h-12 flex items-center justify-center
-                         bg-black/50 backdrop-blur-sm
-                         border border-white/10 hover:border-[#F5C518]/40
-                         text-white/70 hover:text-[#F5C518]
-                         rounded transition-all duration-300
+                         w-11 h-11 flex items-center justify-center
+                         bg-white/95 backdrop-blur-sm shadow-lg
+                         border border-[#EEEBE5] hover:border-[#F5C518]
+                         text-[#1A1A1A] hover:text-[#E6AE00]
+                         rounded-full transition-all duration-300
                          ${show ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={path} />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d={path} />
               </svg>
             </button>
           ))}
 
+          {/* ── السلايدر ── */}
           <div
             ref={scrollRef}
             onScroll={handleScroll}
-            className="flex overflow-x-auto gap-4 md:gap-5 scrollbar-hide snap-x relative z-10 py-4"
+            className="flex overflow-x-auto gap-5 md:gap-7 scrollbar-hide snap-x py-4 pb-8"
             dir="rtl"
           >
             {data.cards.map((mainCard, mIndex) => {
@@ -198,34 +349,39 @@ export const FeaturedToday = ({ data }) => {
               return (
                 <div key={mIndex} className="flex items-stretch snap-start">
 
-                  {/* ---- الكارت الرئيسي ---- */}
-                  <div className="relative z-50 flex flex-col gap-2 pb-2">
-                    <Link href={mainCard.linkUrl || "#"} className="min-w-[150px] md:min-w-[185px] block relative card-lift">
-                      <div className={`relative aspect-[2/3] overflow-hidden bg-[#222]
-                                      ring-1 ring-white/5 hover:ring-[#F5C518]/20
-                                      transition-all duration-500
-                                      ${isExpanded && hasSubCards ? 'rounded-none' : 'rounded-xl'}`}>
-                        <img src={mainCard.image} alt={mainCard.mainTitle} className="w-full h-full object-cover" />
-                        <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-[#121212]/90 to-transparent pointer-events-none" />
+                  {/* ── الكارت الرئيسي ── */}
+                  <div className="relative z-50 flex flex-col gap-0">
+                    <Link
+                      href={mainCard.linkUrl || "#"}
+                      className={`min-w-[200px] md:min-w-[260px] block card-lift
+                                 ${isExpanded && hasSubCards ? 'rounded-r-2xl rounded-l-none' : 'rounded-2xl'}`}
+                    >
+                      <div className={`relative aspect-[3/4] overflow-hidden bg-[#FAF8F3]
+                                      border border-[#EEEBE5] transition-all duration-500
+                                      ${isExpanded && hasSubCards ? 'rounded-r-2xl rounded-l-none' : 'rounded-2xl'}`}>
+                        <img src={mainCard.image} alt={mainCard.mainTitle}
+                          className="w-full h-full object-cover img-zoom" />
+                        <div className="absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-black/65 to-transparent pointer-events-none" />
 
+                        {/* Badge النوع */}
                         {mainCard.badgeType && mainCard.badgeType !== 'none' && (
-                          <div className="absolute bottom-3 right-3 flex flex-row-reverse items-center gap-1
-                                         text-white font-medium text-[9px] z-10
-                                         bg-black/60 backdrop-blur-sm px-2 py-1
-                                         border border-white/10 uppercase tracking-wider">
+                          <div className="absolute top-3 right-3 flex items-center gap-1.5
+                                         bg-white/95 backdrop-blur-sm px-3 py-1.5 rounded-full
+                                         shadow-sm text-[#1A1A1A] text-[10px] md:text-xs font-bold wind-body
+                                         uppercase tracking-wide z-10">
                             {mainCard.badgeType === 'list' ? (
                               <>
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 6h16M4 12h16M4 18h16" />
                                 </svg>
-                                قائمة
+                                مجموعة
                               </>
                             ) : (
                               <>
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                 </svg>
-                                صور
+                                ألبوم
                               </>
                             )}
                           </div>
@@ -233,63 +389,75 @@ export const FeaturedToday = ({ data }) => {
                       </div>
                     </Link>
 
-                    <div className="px-1 text-right mt-1 flex justify-between items-start gap-2">
+                    {/* ── Info row ── */}
+                    <div className="px-1 mt-3.5 flex justify-between items-start gap-2">
                       <div>
-                        <h3 className="section-title text-white text-[13px] font-bold line-clamp-2 leading-snug">
+                        <h3 className="wind-title text-[#1A1A1A] text-sm md:text-base line-clamp-2 leading-snug">
                           {mainCard.mainTitle}
                         </h3>
-                        <span className="section-subtitle text-[#5799ef] text-[10px]">{mainCard.linkText}</span>
+                        <span className="wind-body text-[#8A8070] text-[11px] md:text-xs mt-1 block">
+                          {mainCard.linkText}
+                        </span>
+                        <span className="gold-bar mt-2" />
                       </div>
                       {hasSubCards && !isExpanded && (
                         <button
                           onClick={(e) => toggleDeck(mIndex, e)}
-                          className="bg-[#222] hover:bg-[#2a2a2a] border border-[#3a3a3a]
-                                     hover:border-[#F5C518]/30 text-white hover:text-[#F5C518]
-                                     p-1.5 rounded-full transition-all duration-300 ml-1 shrink-0"
+                          aria-label="فتح المزيد"
+                          className="mt-0.5 w-8 h-8 flex items-center justify-center
+                                     bg-white border border-[#EEEBE5] rounded-full shadow-sm
+                                     hover:border-[#F5C518] hover:bg-[#FFFBF0] transition-all shrink-0"
                         >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-[#1A1A1A]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
                           </svg>
                         </button>
                       )}
                     </div>
                   </div>
 
-                  {/* ---- الكروت الفرعية ---- */}
+                  {/* ── الكروت الفرعية ── */}
                   {hasSubCards && mainCard.subCards.map((subCard, sIndex) => {
                     const isLast = sIndex === mainCard.subCards.length - 1;
                     return (
                       <Link
                         key={`${mIndex}-${sIndex}`}
                         href={subCard.linkUrl || "#"}
-                        className={`min-w-[150px] md:min-w-[185px] flex flex-col gap-2 cursor-pointer pb-2
-                                   transition-all duration-700 ease-[cubic-bezier(0.25,1,0.5,1)] origin-right
-                                   ${isExpanded ? 'mr-0 opacity-100 scale-100' : '-mr-[150px] md:-mr-[185px] opacity-0 scale-95 pointer-events-none'}`}
+                        className={`min-w-[200px] md:min-w-[260px] flex flex-col gap-0 cursor-pointer
+                                   transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] origin-right
+                                   ${isExpanded ? 'mr-0 opacity-100 scale-100' : '-mr-[200px] md:-mr-[260px] opacity-0 scale-95 pointer-events-none'}`}
                         style={{ zIndex: 40 - sIndex }}
                       >
-                        <div className="relative aspect-[2/3] rounded-none overflow-hidden bg-[#222]
-                                       shadow-[-5px_0_20px_rgba(0,0,0,0.6)] ring-1 ring-white/5">
-                          <img src={subCard.image} alt={subCard.mainTitle} className="w-full h-full object-cover" />
-                          <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-[#121212]/90 to-transparent pointer-events-none" />
+                        <div className={`relative aspect-[3/4] overflow-hidden bg-[#FAF8F3]
+                                       border border-[#EEEBE5] border-r-0
+                                       shadow-[-8px_0_24px_rgba(0,0,0,0.07)]
+                                       ${isLast ? 'rounded-l-2xl' : 'rounded-none'}`}>
+                          <img src={subCard.image} alt={subCard.mainTitle}
+                            className="w-full h-full object-cover img-zoom" />
+                          <div className="absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-black/65 to-transparent pointer-events-none" />
                         </div>
 
-                        <div className={`px-1 text-right mt-1 flex justify-between items-start gap-2
+                        <div className={`px-1 mt-3.5 flex justify-between items-start gap-2
                                         transition-opacity duration-500 ${isExpanded ? 'opacity-100' : 'opacity-0'}`}>
                           <div>
-                            <h3 className="section-title text-white text-[13px] font-bold line-clamp-2 leading-snug">
+                            <h3 className="wind-title text-[#1A1A1A] text-sm md:text-base line-clamp-2 leading-snug">
                               {subCard.mainTitle}
                             </h3>
-                            <span className="section-subtitle text-[#5799ef] text-[10px]">{subCard.linkText}</span>
+                            <span className="wind-body text-[#8A8070] text-[11px] md:text-xs mt-1 block">
+                              {subCard.linkText}
+                            </span>
+                            <span className="gold-bar mt-2" />
                           </div>
                           {isExpanded && isLast && (
                             <button
-                              onClick={(e) => toggleDeck(mIndex, e)}
-                              className="bg-[#222] hover:bg-[#2a2a2a] border border-[#3a3a3a]
-                                         hover:border-[#F5C518]/30 text-[#F5C518]
-                                         p-1.5 rounded-full transition-all duration-300 ml-1 shrink-0"
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleDeck(mIndex, e); }}
+                              aria-label="إغلاق"
+                              className="mt-0.5 w-8 h-8 flex items-center justify-center
+                                         bg-white border border-[#EEEBE5] rounded-full shadow-sm
+                                         hover:border-[#F5C518] hover:bg-[#FFFBF0] transition-all shrink-0"
                             >
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-[#1A1A1A] rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
                               </svg>
                             </button>
                           )}
@@ -309,145 +477,126 @@ export const FeaturedToday = ({ data }) => {
 };
 
 // ==========================================================================
-// 4. TOP TEN PRODUCTS — كارت معاد تصميمه بالكامل مع كل العناصر الأصلية
+// 4. TOP TEN PRODUCTS — خلفية كريمية #FAF8F3
 // ==========================================================================
 export const TopTenProducts = ({ data }) => {
   if (!data?.cards?.length) return null;
 
   return (
-    <section className="bg-[#0f0f0f] pt-2 pb-10 border-t border-[#2a2a2a]">
-      <div className="max-w-[800px] mx-auto relative px-4" dir="rtl">
+    <section className="bg-[#FAF8F3] border-t border-[#EEEBE5]">
+      <div className="max-w-[960px] mx-auto" dir="rtl">
 
-        {/* ---- العنوان ---- */}
-        <SectionHeading title={data.title || "أفضل 10 منتجات"} subTitle={data.subTitle} />
-        <div className="luxury-divider mb-6 mx-4" />
+        <SectionHeading
+          title={data.title || "أفضل 10 منتجات"}
+          subTitle={data.subTitle}
+          link={data.linkUrl?.trim() || data.viewAllLink?.trim() || null}
+        />
 
-        {/* ---- القائمة ---- */}
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-4 px-4 md:px-6 pb-16">
           {data.cards.slice(0, 10).map((card, index) => (
-
-            /* الكارت الكامل */
             <div
               key={index}
-              className="flex bg-[#1a1a1a] border border-[#2a2a2a]
-                         hover:border-[#F5C518]/25 transition-all duration-300
-                         rounded-xl overflow-hidden group shadow-lg"
+              className="flex bg-white border border-[#EEEBE5] rounded-2xl overflow-hidden
+                         card-lift group"
             >
-
-              {/* ======= العمود الأيمن: الصورة ======= */}
-              <div className="relative w-[100px] md:w-[120px] shrink-0 bg-[#222]">
+              {/* ── الصورة ── */}
+              <div className="relative w-[120px] md:w-[150px] shrink-0 bg-[#FAF8F3] overflow-hidden">
                 <img
                   src={card.image}
                   alt={card.mainTitle}
-                  className="w-full h-full object-cover aspect-[2/3]
-                             group-hover:scale-105 transition-transform duration-500"
+                  className="w-full h-full object-cover aspect-[2/3] img-zoom"
                 />
-                {/* Bookmark علامة + */}
+                {/* Bookmark */}
                 <div
-                  className="absolute top-0 right-0 w-8 h-10
-                             bg-black/70 backdrop-blur-sm
-                             flex items-start justify-center pt-1.5"
-                  style={{ clipPath: 'polygon(0 0, 100% 0, 100% 100%, 50% 82%, 0 100%)' }}
+                  className="absolute top-0 right-0 w-9 flex items-start justify-center pt-2"
+                  style={{
+                    height: 52,
+                    clipPath: 'polygon(0 0, 100% 0, 100% 100%, 50% 82%, 0 100%)',
+                    background: 'linear-gradient(180deg,#1A1A1A 0%,#2E2E2E 100%)',
+                    boxShadow: '0 4px 10px rgba(0,0,0,0.25)',
+                  }}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-                  </svg>
+                  <Plus size={18} className="text-[#F5C518]" />
                 </div>
               </div>
 
-              {/* ======= العمود الأيسر: التفاصيل ======= */}
-              <div className="flex-1 p-3 md:p-4 flex flex-col justify-between min-h-[140px]">
-
-                {/* --- الجزء العلوي: الرانك + الاسم + التصنيف --- */}
-                <div>
-                  {/* شارة الترتيب الزرقاء (الشكل الأصلي) */}
-                  <div className="mb-2">
-                    <span
-                      className="inline-block bg-[#1f75d9] text-white
-                                 text-xs md:text-sm font-black px-3 py-0.5
-                                 rounded-sm"
-                      style={{ clipPath: 'polygon(0 0, 100% 0, 88% 100%, 0% 100%)' }}
-                    >
+              {/* ── التفاصيل ── */}
+              <div className="flex-1 p-4 md:p-5 flex flex-col justify-between min-h-[150px]">
+                {/* Rank badge */}
+                <div className="mb-2.5 w-fit">
+                  <div
+                    className="px-3 pt-1.5 pb-3"
+                    style={{
+                      background: '#1A1A1A',
+                      clipPath: 'polygon(0 0, 100% 0, 100% 100%, 50% 85%, 0 100%)',
+                      borderRadius: '2px 2px 0 0',
+                    }}
+                  >
+                    <span className="wind-title text-[#F5C518] text-xs md:text-sm leading-none block">
                       #{index + 1}
                     </span>
                   </div>
-
-                  {/* اسم المنتج */}
-                  <h3 className="section-title text-white font-bold text-sm md:text-base
-                                 line-clamp-2 leading-snug mb-1">
-                    {card.mainTitle}
-                  </h3>
-
-                  {/* السعر + التصنيف */}
-                  <div className="flex items-center gap-3 text-[11px] md:text-xs text-gray-400 mb-2">
-                    <span className="text-white font-semibold section-subtitle">
-                      {card.price || "متوفر الآن"}
-                    </span>
-                    {card.category && <span className="section-subtitle">{card.category}</span>}
-                  </div>
                 </div>
 
-                {/* --- الجزء السفلي: التقييم + الأزرار --- */}
-                <div className="flex items-center justify-between flex-wrap gap-2 mt-1">
+                <h3 className="wind-title text-[#1A1A1A] font-bold text-sm md:text-lg
+                               line-clamp-2 leading-snug mb-2
+                               group-hover:text-[#1A1A1A] transition-colors">
+                  {card.mainTitle}
+                </h3>
+                <span className="gold-bar mb-3" />
 
-                  {/* التقييم + زر قيّم */}
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-[#F5C518]" viewBox="0 0 20 20" fill="currentColor">
-                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                      </svg>
-                      <span className="text-white text-[12px] font-bold section-subtitle">
-                        {card.rating || "5.0"}
-                      </span>
-                      <span className="text-gray-500 text-[10px] section-subtitle">
-                        ({card.reviewsCount || "—"})
-                      </span>
-                    </div>
+                <div className="flex items-center gap-3 flex-wrap mb-3">
+                  <PriceBadge price={card.price || "—"} compareAtPrice={card.compareAtPrice} />
+                  {card.category && (
+                    <span className="wind-body text-[#8A8070] bg-[#FAF8F3] border border-[#EEEBE5]
+                                     text-[10px] md:text-xs px-2.5 py-1 rounded-full">
+                      {card.category}
+                    </span>
+                  )}
+                </div>
 
-                    <button className="flex items-center gap-1 text-[#5799ef] hover:bg-[#1f3a5f]/40
-                                      px-2 py-0.5 rounded transition-colors text-[11px] font-medium section-subtitle">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                              d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                      </svg>
+                <div className="flex items-center justify-between flex-wrap gap-3 mt-auto">
+                  {/* التقييم */}
+                  <div className="flex items-center gap-2 bg-[#FAF8F3] border border-[#EEEBE5] px-3 py-1.5 rounded-full">
+                    <Star size={14} className="text-[#F5C518] fill-[#F5C518]" />
+                    <span className="wind-title text-[#1A1A1A] text-xs font-bold">{card.rating || "5.0"}</span>
+                    <span className="wind-body text-[#B0A898] text-[10px]">({card.reviewsCount || "—"})</span>
+                    <div className="w-px h-3.5 bg-[#EEEBE5]" />
+                    <button className="wind-body text-[#1A1A1A] hover:text-[#E6AE00] text-xs font-bold transition-colors">
                       قيّم
                     </button>
                   </div>
 
-                  {/* زر عرض التفاصيل */}
+                  {/* زر العرض */}
                   <Link
                     href={card.linkUrl || "/"}
-                    className="flex items-center gap-1 text-[#5799ef] hover:text-white
-                               transition-colors text-[11px] md:text-xs font-bold section-subtitle"
+                    className="wind-body flex items-center gap-1.5
+                               bg-[#1A1A1A] hover:bg-[#F5C518]
+                               text-white hover:text-[#1A1A1A]
+                               text-xs md:text-sm font-bold
+                               px-4 py-2 rounded-full
+                               transition-all duration-300 shadow-sm"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                            d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                    </svg>
                     عرض التفاصيل
+                    <ChevronLeft size={15} />
                   </Link>
-
                 </div>
               </div>
             </div>
-
           ))}
         </div>
 
-        {/* زر عرض الكل */}
         {(data.linkUrl?.trim() || data.viewAllLink?.trim()) && (
-          <div className="mt-8 flex justify-center">
+          <div className="pb-16 flex justify-center px-4">
             <Link
               href={data.linkUrl || data.viewAllLink}
-              className="section-title w-full text-center
-                         bg-[#1e1e1e] hover:bg-[#252525]
-                         text-[#5799ef] font-bold py-3 px-8
-                         rounded-full transition-colors text-sm border border-[#333]
-                         hover:border-[#F5C518]/20"
+              className="wind-body text-[#1A1A1A] font-bold text-sm
+                         border border-[#EEEBE5] bg-white
+                         px-10 py-3.5 rounded-full
+                         hover:border-[#F5C518] hover:shadow-md
+                         transition-all duration-300"
             >
-              عرض الكل
+              عرض القائمة كاملة
             </Link>
           </div>
         )}
@@ -457,90 +606,82 @@ export const TopTenProducts = ({ data }) => {
 };
 
 // ==========================================================================
-// 5. MARQUEE PRODUCTS
+// 5. MARQUEE PRODUCTS — خلفية بيضاء #FFFFFF
 // ==========================================================================
 export const MarqueeProducts = ({ data }) => {
   if (!data?.products?.length) return null;
   const dup = [...data.products, ...data.products, ...data.products];
 
   return (
-    <section className="bg-[#161616] pt-2 pb-2 border-y border-[#2a2a2a] overflow-hidden">
-      <div className="max-w-[1400px] mx-auto relative px-4 text-right" dir="rtl">
+    <section className="bg-white border-t border-[#EEEBE5]">
+      <div className="max-w-[1400px] mx-auto" dir="rtl">
 
         <SectionHeading
           title={data.title || "تسوق التشكيلة الجديدة"}
           subTitle={data.subTitle}
           link={data.linkUrl?.trim() || data.viewAllLink?.trim() || null}
         />
-        <div className="luxury-divider mb-6 mx-4" />
 
-        <div className="relative overflow-hidden" dir="ltr">
+        <div className="overflow-hidden pb-16" dir="ltr">
           <div
-            className="flex animate-marquee-infinite pause-on-hover items-start"
-            style={{ animationDuration: '40s', width: 'max-content', gap: '18px' }}
+            className="flex animate-marquee-rtl pause-on-hover items-start"
+            style={{ gap: '20px', animationDuration: '50s' }}
           >
             {dup.map((product, index) => (
               <Link
                 key={index}
                 href={product.linkUrl || "#"}
-                className="w-[155px] md:w-[200px] flex-none group block"
+                className="w-[165px] md:w-[230px] flex-none group block"
               >
-                <div className="relative aspect-[3/4] w-full bg-[#222]
-                               overflow-hidden mb-3
-                               ring-1 ring-white/5
-                               group-hover:ring-[#F5C518]/20
+                {/* صورة */}
+                <div className="relative aspect-[3/4] w-full overflow-hidden bg-[#FAF8F3]
+                               rounded-2xl border border-[#EEEBE5] mb-3.5
+                               group-hover:border-[#F5C518]/50 group-hover:shadow-lg
                                transition-all duration-400">
                   <img
                     src={product.image}
                     alt={product.name}
-                    className="w-full h-full object-cover
-                               group-hover:scale-105 transition-transform duration-500"
+                    className="w-full h-full object-cover img-zoom"
                   />
                   {product.badge && (
-                    <span className="absolute top-2.5 right-2.5
-                                    bg-[#F5C518] text-black
-                                    text-[9px] font-black px-2 py-0.5
-                                    uppercase tracking-wider shadow-md z-10">
+                    <span className="absolute top-3 right-3 z-10
+                                    bg-[#F5C518] text-[#1A1A1A]
+                                    wind-body text-[9px] md:text-[10px] font-black
+                                    px-2.5 py-1 rounded-sm uppercase tracking-wider shadow-sm">
                       {product.badge}
                     </span>
                   )}
                   {product.compareAtPrice && (
-                    <span className="absolute top-2.5 left-2.5
-                                    bg-red-600 text-white
-                                    text-[9px] font-black px-2 py-0.5
-                                    uppercase tracking-wider shadow-md z-10">
+                    <span className="absolute top-3 left-3 z-10
+                                    bg-white text-red-500 border border-red-100
+                                    wind-body text-[9px] font-black px-2 py-1 rounded-sm shadow-sm">
                       تخفيض
                     </span>
                   )}
                 </div>
 
+                {/* النص */}
                 <div className="text-right px-0.5" dir="rtl">
-                  <h3 className="section-title text-white font-semibold text-[12px] md:text-sm line-clamp-1">
+                  <h3 className="wind-title text-[#1A1A1A] text-sm md:text-base line-clamp-2
+                                 group-hover:opacity-70 transition-opacity leading-snug">
                     {product.name}
                   </h3>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="section-subtitle text-[#5799ef] font-bold text-[12px] md:text-[13px]">
-                      {product.price} LE
-                    </span>
-                    {product.compareAtPrice && (
-                      <span className="section-subtitle text-gray-500 line-through text-[10px]">
-                        {product.compareAtPrice} LE
-                      </span>
-                    )}
+                  <span className="gold-bar mt-1.5" />
+                  <div className="mt-2">
+                    <PriceBadge price={product.price} compareAtPrice={product.compareAtPrice} />
                   </div>
                 </div>
               </Link>
             ))}
           </div>
         </div>
-
       </div>
     </section>
   );
 };
 
 // ==========================================================================
-// 6. BEST SELLERS
+// 6. BEST SELLERS — خلفية كريمية #FAF8F3
 // ==========================================================================
 export const BestSellersSection = ({ data }) => {
   if (!data?.products?.length) return null;
@@ -549,77 +690,50 @@ export const BestSellersSection = ({ data }) => {
   const gridProducts = data.products.slice(1, 5);
 
   return (
-    <section className="bg-[#181818] py-2 border-y border-[#2a2a2a]">
+    <section className="bg-[#FAF8F3] border-t border-[#EEEBE5]">
+      <div className="max-w-[1400px] mx-auto" dir="rtl">
 
-      <SectionHeading
-        title={data.title || "الأكثر مبيعاً"}
-        subTitle={data.subTitle}
-        link={data.linkUrl?.trim() || data.viewAllLink?.trim() || null}
-      />
-      <div className="luxury-divider mb-8 mx-4" />
+        <SectionHeading
+          title={data.title || "الأكثر مبيعاً"}
+          subTitle={data.subTitle}
+          link={data.linkUrl?.trim() || data.viewAllLink?.trim() || null}
+        />
 
-      <div className="flex flex-col md:flex-row gap-4 px-4 max-w-[1400px] mx-auto" dir="rtl">
+        <div className="flex flex-col md:flex-row gap-5 md:gap-7 px-4 md:px-6 pb-16">
 
-        {/* المنتج البطل */}
-        {heroProduct && (
-          <div className="md:w-1/3 w-full relative group card-lift">
-            <div className="absolute top-4 right-4 z-10">
-              <span className="bg-[#F5C518] text-black
-                               text-[9px] font-black px-2.5 py-1
-                               uppercase tracking-wider shadow-md">
-                الأكثر طلباً #1
-              </span>
-            </div>
-            <Link href={heroProduct.linkUrl || "#"} className="block h-full">
-              <div className="relative aspect-[3/4] w-full overflow-hidden bg-[#222]
-                             ring-1 ring-white/5 group-hover:ring-[#F5C518]/20
-                             transition-all duration-500">
-                <img src={heroProduct.image} alt={heroProduct.name}
-                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#101010]/80 to-transparent" />
-                <div className="absolute bottom-5 right-4 left-4">
-                  <h3 className="section-title text-white font-bold text-base md:text-lg
-                                 line-clamp-2 leading-snug mb-2">
-                    {heroProduct.name}
-                  </h3>
-                  <div className="flex items-center gap-2">
-                    <span className="section-subtitle text-[#5799ef] font-black text-lg">
-                      {heroProduct.price} LE
-                    </span>
-                    {heroProduct.compareAtPrice && (
-                      <span className="section-subtitle text-gray-500 line-through text-sm">
-                        {heroProduct.compareAtPrice} LE
-                      </span>
-                    )}
-                  </div>
-                </div>
+          {/* ── المنتج البطل ── */}
+          {heroProduct && (
+            <div className="md:w-5/12 w-full relative group card-lift">
+              {/* Badge */}
+              <div className="absolute top-4 right-4 z-20">
+                <span className="wind-title bg-[#1A1A1A] text-[#F5C518]
+                                 text-[10px] md:text-xs font-black px-4 py-1.5
+                                 rounded-sm shadow-lg uppercase tracking-wider">
+                  الأكثر طلباً #1
+                </span>
               </div>
-            </Link>
-          </div>
-        )}
 
-        {/* باقي المنتجات */}
-        <div className="md:w-2/3 w-full grid grid-cols-2 gap-3 md:gap-4">
-          {gridProducts.map((p, index) => (
-            <div key={index} className="group card-lift">
-              <Link href={p.linkUrl || "#"} className="block">
-                <div className="relative aspect-[3/4] w-full overflow-hidden bg-[#222]
-                               ring-1 ring-white/5 group-hover:ring-[#F5C518]/15
+              <Link href={heroProduct.linkUrl || "#"} className="block h-full">
+                <div className="relative aspect-[3/4] w-full overflow-hidden bg-white rounded-2xl
+                               border border-[#EEEBE5] shadow-sm
+                               group-hover:border-[#F5C518]/40 group-hover:shadow-xl
                                transition-all duration-500">
-                  <img src={p.image} alt={p.name}
-                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#101010]/80 to-transparent" />
-                  <div className="absolute bottom-3 right-3 left-3">
-                    <h3 className="section-title text-white font-semibold text-[12px] line-clamp-2 leading-snug">
-                      {p.name}
+                  <img
+                    src={heroProduct.image} alt={heroProduct.name}
+                    className="w-full h-full object-cover img-zoom"
+                  />
+                  <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/85 to-transparent pointer-events-none" />
+                  <div className="absolute bottom-6 right-5 left-5 text-right z-10">
+                    <h3 className="wind-title text-white text-xl md:text-2xl line-clamp-2 leading-tight mb-3 drop-shadow">
+                      {heroProduct.name}
                     </h3>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="section-subtitle text-[#5799ef] font-bold text-[13px]">
-                        {p.price} LE
+                    <div className="flex items-baseline gap-3">
+                      <span className="wind-title text-[#F5C518] font-black text-xl md:text-2xl drop-shadow">
+                        {heroProduct.price} LE
                       </span>
-                      {p.compareAtPrice && (
-                        <span className="section-subtitle text-gray-500 line-through text-[10px]">
-                          {p.compareAtPrice} LE
+                      {heroProduct.compareAtPrice && (
+                        <span className="wind-body text-white/60 line-through text-sm">
+                          {heroProduct.compareAtPrice} LE
                         </span>
                       )}
                     </div>
@@ -627,121 +741,108 @@ export const BestSellersSection = ({ data }) => {
                 </div>
               </Link>
             </div>
-          ))}
-        </div>
+          )}
 
+          {/* ── شبكة المنتجات ── */}
+          <div className="md:w-7/12 w-full grid grid-cols-2 gap-4 md:gap-5">
+            {gridProducts.map((p, index) => (
+              <div key={index} className="group card-lift">
+                <Link href={p.linkUrl || "#"} className="block h-full">
+                  <div className="relative aspect-[3/4] w-full overflow-hidden bg-white rounded-2xl
+                                 border border-[#EEEBE5]
+                                 group-hover:border-[#F5C518]/40 group-hover:shadow-lg
+                                 transition-all duration-500">
+                    <img src={p.image} alt={p.name}
+                      className="w-full h-full object-cover img-zoom" />
+
+                    {/* Info overlay */}
+                    <div className="absolute inset-x-0 bottom-0 bg-white/97 backdrop-blur-sm
+                                   p-3.5 md:p-4 border-t border-[#EEEBE5]
+                                   group-hover:bg-[#FAF8F3] transition-colors duration-300">
+                      <h3 className="wind-title text-[#1A1A1A] text-sm md:text-base line-clamp-2 leading-snug mb-2
+                                     group-hover:opacity-70 transition-opacity">
+                        {p.name}
+                      </h3>
+                      <PriceBadge price={p.price} compareAtPrice={p.compareAtPrice} />
+                    </div>
+                  </div>
+                </Link>
+              </div>
+            ))}
+          </div>
+
+        </div>
       </div>
     </section>
   );
 };
 
 // ==========================================================================
-// 7. EXCLUSIVE OFFERS
+// 7. EXCLUSIVE OFFERS — خلفية بيضاء #FFFFFF
 // ==========================================================================
 export const ExclusiveOffers = ({ data }) => {
   if (!data?.products?.length) return null;
   const premiumProducts = data.products.slice(0, 4);
 
   return (
-    <section className="bg-[#0f0f0f] py-4 border-y border-[#2a2a2a] relative overflow-hidden">
-      {/* إضاءة خلفية خفيفة */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px]
-                     bg-[#F5C518] opacity-[0.025] blur-[100px] pointer-events-none" />
-
-      <div className="max-w-[1400px] mx-auto px-4 relative z-10" dir="rtl">
+    <section className="bg-white border-t border-[#EEEBE5]">
+      <div className="max-w-[1400px] mx-auto" dir="rtl">
 
         <SectionHeading
           title={data.title || "عروض حصرية"}
           subTitle={data.subTitle}
           link={data.linkUrl?.trim() || data.viewAllLink?.trim() || null}
         />
-        <div className="luxury-divider mb-8 mx-4" />
 
-        {/* شبكة الكروت */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 px-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-6 px-4 md:px-6 pb-16">
           {premiumProducts.map((p, index) => (
             <Link
               key={index}
               href={p.linkUrl || "#"}
-              className="group relative block aspect-[4/5] overflow-hidden bg-[#1a1a1a]
-                        ring-1 ring-white/5
-                        hover:ring-[#F5C518]/30
-                        hover:shadow-[0_0_30px_rgba(245,197,24,0.08)]
-                        transition-all duration-500 card-lift"
+              className="group relative block aspect-[4/5] overflow-hidden bg-[#FAF8F3] rounded-2xl
+                        border border-[#EEEBE5]
+                        card-lift"
             >
               <img
                 src={p.image} alt={p.name}
-                className="w-full h-full object-cover
-                           group-hover:scale-110 transition-transform duration-700 ease-out"
+                className="w-full h-full object-cover img-zoom"
               />
+              {/* Overlay */}
               <div className="absolute inset-0 bg-gradient-to-t
-                             from-black via-black/45 to-transparent
-                             opacity-80 group-hover:opacity-90 transition-opacity duration-300" />
+                             from-black/90 via-black/15 to-transparent
+                             opacity-60 group-hover:opacity-85 transition-opacity duration-500" />
 
+              {/* تخفيض badge */}
               {p.compareAtPrice && (
-                <div className="absolute top-4 left-4
-                               bg-red-600/90 backdrop-blur-sm
-                               text-white text-[9px] font-black
-                               px-3 py-1.5 border border-red-400/20
-                               uppercase tracking-wider">
+                <div className="absolute top-4 left-4 z-20
+                               bg-white text-[#1A1A1A] wind-body text-[10px] md:text-xs font-black
+                               px-3.5 py-1.5 rounded-full shadow-md uppercase tracking-wide">
                   عرض خاص
                 </div>
               )}
 
-              <div className="absolute bottom-0 inset-x-0 p-5
-                             translate-y-3 group-hover:translate-y-0
-                             transition-transform duration-400">
-                <h3 className="section-title text-white font-bold text-base
-                               leading-snug line-clamp-2 mb-2">
+              {/* النص في الأسفل */}
+              <div className="absolute bottom-0 inset-x-0 p-5 text-right z-20
+                             translate-y-2 group-hover:translate-y-0 transition-transform duration-400">
+                <h3 className="wind-title text-white text-base md:text-lg leading-snug line-clamp-2 mb-2.5 drop-shadow">
                   {p.name}
                 </h3>
-                <div className="flex items-center gap-3 mb-3">
-                  <span className="section-subtitle text-[#F5C518] font-black text-xl">
-                    {p.price} LE
-                  </span>
-                  {p.compareAtPrice && (
-                    <span className="section-subtitle text-gray-400 line-through text-sm">
-                      {p.compareAtPrice} LE
-                    </span>
-                  )}
-                </div>
-                <div className="h-px bg-gradient-to-r from-[#F5C518]/40 to-transparent
-                               opacity-0 group-hover:opacity-100
-                               transition-opacity duration-400 mb-3" />
-                <span className="section-subtitle inline-flex items-center gap-2
-                               text-white text-[11px] font-medium tracking-wider uppercase
-                               opacity-0 group-hover:opacity-100
-                               transition-opacity duration-400 delay-75">
+                <PriceBadge price={p.price} compareAtPrice={p.compareAtPrice} size="lg" />
+
+                {/* خط ذهبي */}
+                <div className="h-px w-0 bg-gradient-to-l from-[#F5C518] to-transparent
+                               group-hover:w-full transition-all duration-500 ease-out my-3.5" />
+
+                <span className="wind-body flex items-center justify-end gap-1.5
+                               text-[#F5C518] text-xs font-bold tracking-wider
+                               opacity-0 group-hover:opacity-100 transition-opacity duration-400 delay-75">
                   تسوق الآن
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                  </svg>
+                  <ChevronLeft size={14} />
                 </span>
               </div>
             </Link>
           ))}
         </div>
-
-        {/* زر عرض الكل */}
-        {(data.linkUrl?.trim() || data.viewAllLink?.trim()) && (
-          <div className="mt-10 flex justify-center px-4">
-            <Link
-              href={data.linkUrl || data.viewAllLink}
-              className="group inline-flex items-center gap-2
-                         bg-transparent text-white section-title font-bold
-                         py-3 px-10 transition-all duration-300
-                         border border-[#F5C518]/30 hover:border-[#F5C518]
-                         hover:bg-[#F5C518]/8 text-sm md:text-base"
-            >
-              عرض الكل
-              <svg xmlns="http://www.w3.org/2000/svg"
-                   className="h-4 w-4 group-hover:-translate-x-1 transition-transform"
-                   fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </Link>
-          </div>
-        )}
 
       </div>
     </section>
@@ -749,40 +850,37 @@ export const ExclusiveOffers = ({ data }) => {
 };
 
 // ==========================================================================
-// 8. MASTERPIECE COLLECTIONS
+// 8. MASTERPIECE COLLECTIONS — خلفية كريمية #FAF8F3
 // ==========================================================================
 export const MasterpieceCollections = ({ data }) => {
   const collections = data?.linkedCollections || [];
   if (!collections.length) return null;
 
   return (
-    <section className="bg-[#0a0a0a] py-4" dir="rtl">
-      <div className="max-w-[1400px] mx-auto px-4">
+    <section className="bg-[#FAF8F3] border-t border-[#EEEBE5]">
+      <div className="max-w-[1400px] mx-auto" dir="rtl">
 
         <SectionHeading
           title={data.title || "استكشف المجموعات"}
           subTitle={data.subTitle}
         />
-        <div className="luxury-divider mb-10 mx-4" />
 
-        {/* شبكة المجموعات */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 px-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-7 px-4 md:px-6 pb-16">
           {collections.map((col, index) => (
             <Link
               key={index}
               href={`/collections/${col.slug || col.id}`}
-              className="group relative overflow-hidden
-                        ring-1 ring-white/5 hover:ring-[#F5C518]/20
-                        transition-all duration-700"
-              style={{ height: index === 0 ? '500px' : '440px' }}
+              className="group relative overflow-hidden rounded-2xl
+                        border border-[#EEEBE5] bg-white shadow-sm
+                        hover:shadow-xl hover:border-[#F5C518]/40
+                        transition-all duration-500"
+              style={{ height: index === 0 ? '540px' : '470px' }}
             >
-              {/* رقم شفاف */}
-              <span className="absolute top-4 left-5
-                              text-[80px] md:text-[100px] font-black
-                              text-white/[0.04] leading-none select-none
-                              group-hover:text-[#F5C518]/[0.07]
-                              transition-colors duration-700 z-10
-                              section-title">
+              {/* رقم الخلفية */}
+              <span className="absolute top-5 left-5 z-10
+                              wind-title text-[70px] md:text-[100px] font-black leading-none
+                              text-white/25 select-none drop-shadow
+                              group-hover:text-[#F5C518]/50 transition-colors duration-600">
                 {String(index + 1).padStart(2, '0')}
               </span>
 
@@ -791,32 +889,1398 @@ export const MasterpieceCollections = ({ data }) => {
                 src={col.image || "/placeholder.jpg"}
                 alt={col.customName || col.name}
                 className="w-full h-full object-cover
-                           grayscale-[20%] group-hover:grayscale-0
+                           grayscale-[10%] group-hover:grayscale-0
                            group-hover:scale-105
-                           transition-all duration-1000"
+                           transition-all duration-800 ease-out"
               />
-              {/* Overlay */}
-              <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/35 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/88 via-black/25 to-transparent pointer-events-none" />
 
               {/* النصوص */}
-              <div className="absolute bottom-8 right-8 left-8 text-right z-20">
-                <h3 className="section-title text-white text-xl md:text-2xl font-black mb-3
-                              transform group-hover:-translate-y-2 transition-transform duration-500">
+              <div className="absolute bottom-7 right-6 left-6 text-right z-20">
+                <h3 className="wind-title text-white text-2xl md:text-3xl font-black mb-2.5 drop-shadow
+                              group-hover:-translate-y-1 transition-transform duration-400">
                   {col.customName || col.name}
                 </h3>
-                {/* خط ذهبي */}
-                <div className="h-px w-0 bg-gradient-to-r from-[#F5C518] to-transparent
-                               group-hover:w-full transition-all duration-600" />
-                <p className="section-subtitle text-gray-400 text-xs mt-3
-                             opacity-0 group-hover:opacity-100
-                             transition-opacity duration-600 delay-100 line-clamp-2">
-                  {col.description || "تصفح المجموعة كاملة الآن ›"}
+                {/* الخط الذهبي المتحرك */}
+                <div className="h-[2px] w-0 rounded-full bg-gradient-to-l from-[#F5C518] to-transparent
+                               group-hover:w-full transition-all duration-600 ease-out" />
+                <p className="wind-body text-white/75 text-sm mt-3 flex items-center gap-1.5
+                             opacity-0 group-hover:opacity-100 group-hover:translate-x-1
+                             transition-all duration-500 delay-75">
+                  {col.description || "تصفح المجموعة كاملة"}
+                  <span className="text-[#F5C518] text-base leading-none">›</span>
                 </p>
               </div>
-
             </Link>
           ))}
         </div>
+      </div>
+    </section>
+  );
+};
+
+// ==========================================================================
+// 9. TOP RATED THIS WEEK — خلفية بيضاء #FFFFFF
+// Firebase logic محفوظ 100%
+// ==========================================================================
+export const TopRatedWeekly = ({ data }) => {
+  const [products, setProducts]       = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [quickViewProduct, setQuickViewProduct] = useState(null);
+
+  useEffect(() => {
+    const fetchTopRated = async () => {
+      try {
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        const isoDate = sevenDaysAgo.toISOString();
+
+        const q = query(collection(getDb(), "Reviews"), where("date", ">=", isoDate));
+        const snap = await getDocs(q);
+
+        const productRatings = {};
+        snap.forEach(d => {
+          const rev = d.data();
+          if (!rev.productHandle) return;
+          if (!productRatings[rev.productHandle]) productRatings[rev.productHandle] = { sum: 0, count: 0 };
+          productRatings[rev.productHandle].sum   += Number(rev.rating || 5);
+          productRatings[rev.productHandle].count += 1;
+        });
+
+        const topHandles = Object.keys(productRatings)
+          .map(handle => ({
+            handle,
+            avg:   productRatings[handle].sum / productRatings[handle].count,
+            count: productRatings[handle].count,
+          }))
+          .sort((a, b) => b.avg - a.avg || b.count - a.count)
+          .slice(0, 5);
+
+        const fetchedProducts = [];
+        for (const item of topHandles) {
+          const pRef  = doc(db, "products", item.handle);
+          const pSnap = await getDoc(pRef);
+          if (pSnap.exists()) {
+            fetchedProducts.push({
+              id: pSnap.id,
+              ...pSnap.data(),
+              weeklyAvg:   item.avg.toFixed(1),
+              weeklyCount: item.count,
+            });
+          }
+        }
+        setProducts(fetchedProducts);
+      } catch (err) {
+        console.error("Error fetching top rated:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchTopRated();
+  }, []);
+
+  if (loading || products.length === 0) return null;
+
+  return (
+    <section className="bg-white border-t border-[#EEEBE5]" dir="rtl">
+      <div className="max-w-3xl mx-auto">
+
+        <SectionHeading
+          title={data.title || "الأعلى تقييماً هذا الأسبوع"}
+          subTitle={data.subTitle}
+          link={data.viewAllLink || data.linkUrl || null}
+        />
+
+        <div className="flex flex-col gap-4 px-4 md:px-6 pb-16">
+          {products.map((p, idx) => {
+            const isFirst = idx === 0;
+            return (
+              <div
+                key={idx}
+                className="flex gap-4 p-4 rounded-2xl overflow-hidden transition-all duration-300 card-lift"
+                style={{
+                  background:  isFirst ? 'linear-gradient(135deg,#FFFDF5 0%,#FFFAEB 100%)' : '#FFFFFF',
+                  border:      isFirst ? '1.5px solid rgba(245,197,24,0.5)' : '1.5px solid #EEEBE5',
+                  boxShadow:   isFirst ? '0 4px 20px rgba(245,197,24,0.10)' : '0 2px 8px rgba(0,0,0,0.04)',
+                }}
+              >
+                {/* ── صورة + bookmark ── */}
+                <Link
+                  href={`/product/${p.id}`}
+                  className="relative shrink-0 rounded-xl overflow-hidden block group"
+                  style={{ width: 110, height: 160 }}
+                >
+                  <img
+                    src={p.images?.[0] || p.mainImage}
+                    alt={p.title}
+                    className="w-full h-full object-cover img-zoom"
+                  />
+                  <div
+                    className="absolute top-0 right-0 w-7 flex items-start justify-center pt-1.5 z-10"
+                    style={{
+                      height: 48,
+                      clipPath: 'polygon(0 0, 100% 0, 100% 100%, 50% 80%, 0 100%)',
+                      background: 'linear-gradient(180deg,#1A1A1A 0%,#2E2E2E 100%)',
+                      boxShadow: '0 3px 8px rgba(0,0,0,0.25)',
+                    }}
+                  >
+                    <Plus size={18} className="text-[#F5C518]" />
+                  </div>
+                </Link>
+
+                {/* ── تفاصيل ── */}
+                <div className="flex flex-col justify-start flex-1 py-0.5 text-right">
+
+                  {/* Rank badge */}
+                  <div className="w-fit mb-3">
+                    <div
+                      className="px-3 pt-1.5 pb-3"
+                      style={{
+                        background: '#1A1A1A',
+                        clipPath: 'polygon(0 0, 100% 0, 100% 100%, 50% 85%, 0 100%)',
+                        borderRadius: '2px 2px 0 0',
+                      }}
+                    >
+                      <span className="wind-title text-[#F5C518] text-sm leading-none block">
+                        #{idx + 1}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* العنوان */}
+                  <Link href={`/product/${p.id}`}>
+                    <h3 className="wind-title text-[#1A1A1A] text-base md:text-lg line-clamp-2 leading-snug mb-1.5
+                                   hover:opacity-70 transition-opacity">
+                      {p.title}
+                    </h3>
+                  </Link>
+                  <span className="gold-bar mb-3" />
+
+                  {/* السعر */}
+                  <div className="flex items-center gap-2.5 mb-3 flex-wrap">
+                    <span className="wind-title text-[#1A1A1A] text-base md:text-lg font-black">{p.price} LE</span>
+                    <AvailablePill />
+                  </div>
+
+                  {/* التقييم */}
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="flex items-center gap-1.5">
+                      <Star size={14} className="text-[#F5C518] fill-[#F5C518]" />
+                      <span className="wind-title text-[#1A1A1A] text-sm font-bold">{p.weeklyAvg}</span>
+                      <span className="wind-body text-[#B0A898] text-xs">({p.weeklyCount})</span>
+                    </div>
+                    <button
+                      className="wind-body flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full transition-all"
+                      style={{
+                        color: '#9A7800',
+                        background: 'rgba(245,197,24,0.08)',
+                        border: '1px solid rgba(245,197,24,0.2)',
+                      }}
+                    >
+                      <Star size={11} strokeWidth={2} className="text-[#F5C518]" />
+                      قيّم
+                    </button>
+                  </div>
+
+                  {/* نظرة سريعة */}
+                  <button
+                    onClick={() => setQuickViewProduct(p)}
+                    className="wind-body flex items-center gap-1.5 text-sm font-bold w-fit
+                               px-3 py-1.5 rounded-lg transition-all mt-auto
+                               text-[#1A1A1A] bg-[#FAF8F3] hover:bg-[#F5F0E8]
+                               border border-[#EEEBE5]"
+                  >
+                    <Eye size={15} />
+                    نظرة سريعة
+                  </button>
+                </div>
+
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {quickViewProduct && (
+        <QuickViewModal product={quickViewProduct} isOpen={!!quickViewProduct} onClose={() => setQuickViewProduct(null)} />
+      )}
+    </section>
+  );
+};
+
+// ==========================================================================
+// 10. MOST LIKED THIS WEEK — خلفية كريمية #FAF8F3
+// Firebase logic محفوظ 100% | Arch design محفوظ
+// ==========================================================================
+export const MostLikedWeekly = ({ data }) => {
+  const [products, setProducts]       = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [quickViewProduct, setQuickViewProduct] = useState(null);
+
+  const getCurrentWeekString = () => {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const weekNo    = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+    return `${d.getUTCFullYear()}-W${weekNo}`;
+  };
+
+  useEffect(() => {
+    const fetchMostLiked = async () => {
+      try {
+        const q    = query(collection(getDb(), "products"), where("currentWeekId", "==", getCurrentWeekString()));
+        const snap = await getDocs(q);
+        const fetchedProducts = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        fetchedProducts.sort((a, b) => (b.weeklyLikesCount || 0) - (a.weeklyLikesCount || 0));
+        setProducts(fetchedProducts.slice(0, 5));
+      } catch (err) {
+        console.error("Error fetching most liked:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchMostLiked();
+  }, []);
+
+  if (loading || products.length === 0) return null;
+
+  return (
+    <section className="bg-[#FAF8F3] border-t border-[#EEEBE5]" dir="rtl">
+      <div className="max-w-[1400px] mx-auto">
+
+        <SectionHeading
+          title={data.title || "القطع المفضلة"}
+          subTitle={data.subTitle}
+          link={data.viewAllLink || data.linkUrl || null}
+          linkLabel="اكتشف المجموعة"
+          centered
+        />
+
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-5 md:gap-7 px-4 md:px-6 pb-16">
+          {products.map((p, idx) => (
+            <div key={idx} className="group relative flex flex-col items-center text-center">
+
+              {/* ── Arch frame ── */}
+              <div className="relative aspect-[3/4] w-full arch-frame bg-[#EDEAE3]
+                             shadow-sm group-hover:shadow-xl
+                             transition-all duration-500 border border-[#E2DDD5] group-hover:border-[#F5C518]/40">
+                <Link href={`/product/${p.id}`} className="block w-full h-full">
+                  <img
+                    src={p.images?.[0] || p.mainImage}
+                    alt={p.title}
+                    className="w-full h-full object-cover img-zoom"
+                  />
+                </Link>
+
+                {/* Quick view button */}
+                <button
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setQuickViewProduct(p); }}
+                  aria-label="نظرة سريعة"
+                  className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20
+                             bg-white/92 backdrop-blur-sm text-[#1A1A1A] p-2.5 rounded-full shadow-md
+                             hover:bg-[#1A1A1A] hover:text-[#F5C518]
+                             transition-all duration-300
+                             opacity-100 md:opacity-0 md:translate-y-2
+                             md:group-hover:opacity-100 md:group-hover:translate-y-0"
+                >
+                  <Eye size={15} strokeWidth={2} />
+                </button>
+              </div>
+
+              {/* النص */}
+              <Link href={`/product/${p.id}`} className="pt-4 flex flex-col items-center w-full px-1">
+                <h3 className="wind-title text-[#1A1A1A] text-sm md:text-base line-clamp-1
+                               group-hover:opacity-70 transition-opacity">
+                  {p.title}
+                </h3>
+                <span className="gold-bar mt-1.5 max-w-[60%]" />
+                <p className="wind-body text-[#1A1A1A] text-sm mt-2 font-semibold">{p.price} ج.م</p>
+              </Link>
+
+            </div>
+          ))}
+        </div>
+
+      </div>
+
+      {quickViewProduct && (
+        <QuickViewModal product={quickViewProduct} isOpen={!!quickViewProduct} onClose={() => setQuickViewProduct(null)} />
+      )}
+    </section>
+  );
+};
+// ==========================================================================
+// 11. TOP RATED ALL-TIME (العموم) - IMDb Style 
+// يجلب أعلى المنتجات تقييماً على الإطلاق (بدون فلتر تاريخ)
+// ==========================================================================
+export const TopRatedAllTime = ({ data }) => {
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [quickViewProduct, setQuickViewProduct] = useState(null);
+
+  useEffect(() => {
+    const fetchTopRatedAllTime = async () => {
+      try {
+        // سحب كل التقييمات بدون فلتر تاريخ
+        const snap = await getDocs(collection(getDb(), "Reviews"));
+        
+        const productRatings = {};
+        snap.forEach(d => {
+          const rev = d.data();
+          if (!rev.productHandle) return;
+          // تجاهل التقييمات غير المنشورة لو عندك حقل status
+          if (rev.status && rev.status !== "published") return; 
+
+          if (!productRatings[rev.productHandle]) {
+            productRatings[rev.productHandle] = { sum: 0, count: 0 };
+          }
+          productRatings[rev.productHandle].sum += Number(rev.rating || 5);
+          productRatings[rev.productHandle].count += 1;
+        });
+
+        const topHandles = Object.keys(productRatings)
+          .map(handle => ({
+            handle,
+            avg: productRatings[handle].sum / productRatings[handle].count,
+            count: productRatings[handle].count
+          }))
+          .sort((a, b) => b.avg - a.avg || b.count - a.count)
+          .slice(0, 5);
+
+        const fetchedProducts = [];
+        for (const item of topHandles) {
+          const pRef = doc(db, "products", item.handle);
+          const pSnap = await getDoc(pRef);
+          if (pSnap.exists()) {
+            fetchedProducts.push({ id: pSnap.id, ...pSnap.data(), allTimeAvg: item.avg.toFixed(1), allTimeCount: item.count });
+          }
+        }
+        setProducts(fetchedProducts);
+      } catch (error) {
+        console.error("Error fetching top rated all-time:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchTopRatedAllTime();
+  }, []);
+
+  if (loading || products.length === 0) return null;
+
+  return (
+    <section className="bg-black py-10 font-sans border-y border-gray-800" dir="rtl">
+      <div className="max-w-3xl mx-auto flex flex-col gap-5 px-4">
+        
+        <div className="mb-2">
+          {(data.viewAllLink || data.linkUrl) ? (
+            <Link href={data.viewAllLink || data.linkUrl} className="flex items-center gap-2 group w-fit">
+              <div className="w-[4px] h-[24px] bg-[#F5C518] rounded-full shrink-0"></div>
+              <h2 className="text-white text-xl md:text-2xl font-bold flex items-center gap-1 group-hover:text-gray-300 transition-colors">
+                {data.title || "أساطير التقييمات"}
+                <ChevronLeft size={22} className="text-white group-hover:text-gray-300 transition-colors mt-0.5" />
+              </h2>
+            </Link>
+          ) : (
+            <div className="flex items-center gap-2 w-fit">
+              <div className="w-[4px] h-[24px] bg-[#F5C518] rounded-full shrink-0"></div>
+              <h2 className="text-white text-xl md:text-2xl font-bold flex items-center gap-1">
+                {data.title || "أساطير التقييمات"}
+              </h2>
+            </div>
+          )}
+          {data.subTitle && <p className="text-[#A3A3A3] text-xs font-medium mt-1 pr-6">{data.subTitle}</p>}
+        </div>
+
+        <div className="flex flex-col gap-5">
+          {products.map((p, idx) => {
+            const isFirstCard = idx === 0;
+            const cardBgStyle = isFirstCard 
+              ? "bg-gradient-to-l from-[#1A1A1A] to-[#2c230b] border border-[#F5C518]/30 shadow-[0_0_30px_rgba(245,197,24,0.15)]" 
+              : "bg-[#1A1A1A] border border-gray-800 shadow-sm";
+
+            return (
+              <div key={idx} className={`flex gap-3 md:gap-4 p-5 rounded-2xl overflow-hidden transition-all duration-300 ${cardBgStyle}`}>
+                
+                <Link href={`/product/${p.id}`} className="relative w-[110px] h-[160px] md:w-[130px] md:h-[180px] shrink-0 bg-gray-800 rounded-lg overflow-hidden block shadow-md group z-0">
+                  <img src={p.images?.[0] || p.mainImage} alt={p.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                  
+                  <div className="absolute top-0 right-0 w-7 h-[50px] flex items-start justify-center pt-2 z-10 transition-transform group-hover:translate-y-px"
+                    style={{ 
+                      clipPath: 'polygon(0 0, 100% 0, 100% 100%, 50% 80%, 0 100%)',
+                      background: 'linear-gradient(180deg, #1d3557 0%, #457b9d 100%)',
+                      boxShadow: '0 6px 10px rgba(0,0,0,0.6)',
+                      borderTop: '1px solid rgba(255,255,255,0.1)'
+                    }}>
+                    <Plus size={22} className="text-white drop-shadow-sm" />
+                  </div>
+                </Link>
+
+                <div className="flex flex-col justify-start flex-1 py-0.5 w-full text-right">
+                  <div className="w-fit mb-2">
+                    <div className="bg-[#5799EF] px-3 pt-1.5 pb-2.5 rounded-t-sm" style={{ clipPath: 'polygon(0 0, 100% 0, 100% 100%, 50% 85%, 0 100%)' }}>
+                        <span className="text-white font-extrabold text-sm md:text-base leading-none block pt-0.5">#{idx + 1}</span>
+                    </div>
+                  </div>
+
+                  <Link href={`/product/${p.id}`}><h3 className="text-white font-bold text-base md:text-xl leading-tight line-clamp-2 mb-2 hover:underline">{p.title}</h3></Link>
+                  <div className="text-[#A3A3A3] text-sm md:text-base mb-3 flex items-center gap-3 font-medium">
+                    <span className="font-black text-base md:text-lg text-white">{p.price} LE</span>
+                    <span className="bg-gray-900/80 px-2.5 py-1 rounded text-[11px] md:text-xs border border-gray-800">متوفر الآن</span>
+                  </div>
+
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="flex items-center gap-1.5">
+                      <Star size={16} className="text-[#F5C518] fill-[#F5C518]" />
+                      <span className="text-white text-base font-medium pt-0.5">{p.allTimeAvg}</span>
+                      <span className="text-[#A3A3A3] text-xs pt-0.5">({p.allTimeCount})</span>
+                    </div>
+                    <button className="flex items-center gap-1.5 text-[#5799EF] hover:bg-white/5 px-2.5 py-1 rounded transition-colors text-xs font-medium"><Star size={15} strokeWidth={2} className="text-[#5799EF]" /> قيّم</button>
+                  </div>
+                  <button onClick={() => setQuickViewProduct(p)} className="flex items-center gap-2 text-[#5799EF] text-sm font-bold w-fit hover:bg-white/5 px-3 py-2 -ml-3 rounded-lg transition-colors mt-auto"><Eye size={18} /> نظرة سريعة</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      {quickViewProduct && <QuickViewModal product={quickViewProduct} isOpen={!!quickViewProduct} onClose={() => setQuickViewProduct(null)} />}
+    </section>
+  );
+};
+// ==========================================================================
+// 12. MOST LIKED ALL-TIME (العموم) - Premium Grid Style
+// يجلب أكثر المنتجات التي حصلت على إعجابات (قلوب) في تاريخ المتجر
+// ==========================================================================
+export const MostLikedAllTime = ({ data }) => {
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [quickViewProduct, setQuickViewProduct] = useState(null);
+
+  useEffect(() => {
+    const fetchMostLikedAllTime = async () => {
+      try {
+        // لنجنب مشاكل الـ Indexes في فايربيز، بنجيب المنتجات ونرتبها في الواجهة
+        const snap = await getDocs(collection(getDb(), "products"));
+        const fetchedProducts = [];
+        
+        snap.forEach(doc => {
+          const p = doc.data();
+          // بنجيب المنتجات اللي ليها إعجابات فقط
+          if (p.likesCount && p.likesCount > 0) {
+            fetchedProducts.push({ id: doc.id, ...p });
+          }
+        });
+
+        // ترتيب تنازلي حسب الإعجابات الكلية
+        fetchedProducts.sort((a, b) => b.likesCount - a.likesCount);
+        setProducts(fetchedProducts.slice(0, 5)); // أعلى 5 منتجات
+      } catch (error) {
+        console.error("Error fetching most liked all-time:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchMostLikedAllTime();
+  }, []);
+
+  if (loading || products.length === 0) return null;
+
+  return (
+    <section className="bg-[#FAF9F6] py-12 border-y border-[#EAEAEA]" dir="rtl">
+      <div className="max-w-[1400px] mx-auto px-4">
+        
+        {/* Header فخم وبسيط */}
+        <div className="mb-10 text-center flex flex-col items-center">
+          <h2 className="text-[#1A1A1A] text-2xl md:text-4xl font-black tracking-tight" style={{fontFamily:"Cairo,sans-serif"}}>
+            {data.title || "القطع الأكثر طلباً وحباً"}
+          </h2>
+          {data.subTitle && <p className="text-gray-500 text-sm md:text-base mt-2 max-w-lg">{data.subTitle}</p>}
+          <div className="w-12 h-1 bg-[#1A1A1A] mt-5 rounded-full"></div>
+        </div>
+
+        {/* كروت المنتجات (Grid Style) */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 md:gap-6 px-2 md:px-4">
+          {products.map((p, idx) => (
+            <div key={idx} className="group relative rounded-2xl bg-white border border-[#EAEAEA] shadow-sm hover:shadow-xl transition-all duration-500 flex flex-col overflow-hidden">
+              
+              {/* عداد الإعجابات الكلي */}
+              <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5 bg-white/95 backdrop-blur-sm text-red-500 px-3 py-1.5 rounded-full text-xs font-bold shadow-sm border border-red-50">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 fill-current" viewBox="0 0 24 24">
+                  <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                </svg>
+                {p.likesCount}
+              </div>
+
+              {/* زر النظرة السريعة (يظهر في الهوفر للديسكتوب، وموجود للموبايل) */}
+              <button 
+                onClick={(e) => { e.preventDefault(); setQuickViewProduct(p); }} 
+                className="absolute bottom-[95px] left-3 z-20 bg-white/90 backdrop-blur-sm text-[#1A1A1A] border border-[#EAEAEA] p-2.5 rounded-full shadow-md opacity-100 md:opacity-0 md:-translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 hover:bg-[#1A1A1A] hover:text-white"
+                aria-label="نظرة سريعة"
+              >
+                <Eye size={18} />
+              </button>
+
+              <Link href={`/product/${p.id}`} className="block relative w-full aspect-[3/4] overflow-hidden bg-[#F0EEE6]">
+                <img src={p.images?.[0] || p.mainImage} alt={p.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+              </Link>
+              
+              <Link href={`/product/${p.id}`} className="flex flex-col justify-between flex-1 p-4 text-right">
+                <h3 className="text-[#1A1A1A] text-sm md:text-base font-bold line-clamp-2 group-hover:text-gray-500 transition-colors leading-snug" style={{fontFamily:"Cairo,sans-serif"}}>
+                  {p.title}
+                </h3>
+                <p className="text-[#1A1A1A] text-base md:text-lg font-black mt-3" style={{fontFamily:"Impact, sans-serif"}}>
+                  {p.price} <span className="text-xs font-bold text-gray-500 font-sans">ج.م</span>
+                </p>
+              </Link>
+            </div>
+          ))}
+        </div>
+
+        {/* زر عرض الكل */}
+        {(data.viewAllLink || data.linkUrl) && (
+          <div className="mt-12 flex justify-center">
+            <Link 
+              href={data.viewAllLink || data.linkUrl} 
+              className="text-center bg-white text-[#1A1A1A] hover:bg-[#1A1A1A] hover:text-white font-bold py-3.5 px-10 rounded-full transition-all duration-300 text-sm md:text-base border border-[#EAEAEA] shadow-sm"
+              style={{fontFamily:"Cairo,sans-serif"}}
+            >
+              استكشف المجموعة بالكامل
+            </Link>
+          </div>
+        )}
+      </div>
+
+      {quickViewProduct && (
+        <QuickViewModal product={quickViewProduct} isOpen={!!quickViewProduct} onClose={() => setQuickViewProduct(null)} />
+      )}
+    </section>
+  );
+};
+
+// ==========================================================================
+// 13. CIRCULAR COLLECTIONS (Season Collection)
+// ==========================================================================
+export const CircularCollections = ({ data }) => {
+  const collections = data?.linkedCollections || [];
+  const sectionRef = useRef(null);
+  const [isTitleVisible, setIsTitleVisible] = useState(false);
+  const [productCounts, setProductCounts] = useState({});
+
+  useEffect(() => {
+    const titleObserver = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsTitleVisible(true);
+          titleObserver.unobserve(entry.target);
+        }
+      },
+      { threshold: 0.15 }
+    );
+    if (sectionRef.current) titleObserver.observe(sectionRef.current);
+    return () => titleObserver.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const cardObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('opacity-100', 'translate-y-0');
+            entry.target.classList.remove('opacity-0', 'translate-y-4');
+            cardObserver.unobserve(entry.target); 
+          }
+        });
+      },
+      { threshold: 0.15 }
+    );
+
+    const cards = document.querySelectorAll('.circular-card-item');
+    cards.forEach(card => cardObserver.observe(card));
+
+    return () => cardObserver.disconnect();
+  }, [collections]);
+
+  useEffect(() => {
+    const fetchCounts = async () => {
+      try {
+        const counts = {};
+        
+        await Promise.all(collections.map(async (col) => {
+          const slug = col.slug || col.id;
+          if (!slug) return;
+          
+          const q = query(collection(getDb(), "products"), where("categories", "array-contains-any", [slug, `/${slug}`]));
+          const snapshot = await getDocs(q);
+          counts[slug] = snapshot.size;
+        }));
+        
+        setProductCounts(counts);
+      } catch (err) {
+        console.error("Error fetching collection counts:", err);
+      }
+    };
+
+    if (collections.length > 0) fetchCounts();
+  }, [collections]);
+
+  if (!collections.length) return null;
+
+  return (
+    // تم إزالة الخط الفاصل (border-t border-[#EEEBE5])
+    <section ref={sectionRef} className="bg-[#FFFFFF] overflow-hidden">
+      <div className="max-w-[1400px] mx-auto pb-12 pt-10" dir="rtl">
+        <div className="text-center mb-10 px-4">
+          <div className={`transition-all duration-[800ms] ease-out ${isTitleVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+            <h2 className="text-[#1A1A1A] text-2xl md:text-[28px] font-medium tracking-wide" style={{fontFamily: "'Cairo', sans-serif"}}>
+              {data.title || "Season Collection"}
+            </h2>
+          </div>
+          <div className={`mt-3.5 transition-all duration-[800ms] delay-200 ease-out ${isTitleVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+            {data.subTitle && (
+              <p className="text-[#757575] text-base md:text-lg max-w-2xl mx-auto font-medium font-tajawal">
+                {data.subTitle}
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="flex overflow-x-auto scrollbar-hide snap-x px-4 md:px-6 pb-6 pt-2 gap-4 md:gap-10">
+          {collections.map((col, index) => {
+            const slug = col.slug || col.id;
+            const displayCount = (col.badge && col.badge.trim() !== "") ? col.badge : (productCounts[slug] > 0 ? productCounts[slug] : null);
+
+            return (
+              <Link
+                key={index}
+                href={col.linkUrl || `/collections/${slug}`}
+                className="circular-card-item group flex flex-col items-center flex-none snap-center opacity-0 translate-y-4 transition-all duration-[800ms] ease-out"
+              >
+                <div className="relative w-[140px] h-[140px] md:w-[240px] md:h-[240px] rounded-full bg-[#F5F5F5] transition-transform duration-700 ease-out flex items-center justify-center overflow-hidden group-hover:scale-[1.03] shadow-sm">
+                  <img
+                    src={col.image || "/placeholder.jpg"}
+                    alt={col.customName || col.name}
+                    className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
+                  />
+                </div>
+                <div className="mt-5 flex items-center justify-center w-full relative">
+                  <div className="relative inline-block">
+                    <h3 className="text-[#1A1A1A] text-base md:text-xl font-bold group-hover:text-[#666] transition-colors line-clamp-1 text-center" style={{fontFamily: "'Cairo', sans-serif"}}>
+                      {col.customName || col.name}
+                    </h3>
+                    {displayCount && (
+                      <span className="absolute top-0 -left-1 -translate-x-full -translate-y-1 text-[#1A1A1A] text-[11px] md:text-xs font-bold" style={{fontFamily: "'Cairo', sans-serif"}} dir="ltr">
+                        {displayCount}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+};
+
+// ==========================================================================
+// 14. TABBED HIGHLIGHTS (المنتجات المبوبة)
+// ==========================================================================
+export const TabbedHighlights = ({ data }) => {
+  const products = data?.products || data?.cards || [];
+  const [activeTab, setActiveTab] = useState(0);
+
+  const tabs = data?.tabs && data.tabs.length === 3 ? data.tabs : ["Hot items", "Best sellers", "New arrivals"];
+
+  const chunkSizes = data?.chunkSizes || [
+    Math.ceil(products.length / 3), 
+    Math.ceil(products.length / 3), 
+    Math.ceil(products.length / 3)
+  ];
+
+  let currentIdx = 0;
+  const tabProducts = [
+    products.slice(currentIdx, currentIdx += chunkSizes[0]),
+    products.slice(currentIdx, currentIdx += chunkSizes[1]),
+    products.slice(currentIdx, currentIdx += chunkSizes[2])
+  ];
+
+  const sectionRef = useRef(null);
+  const carouselRef = useRef(null); 
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.unobserve(entry.target);
+        }
+      },
+      { threshold: 0.15 }
+    );
+    if (sectionRef.current) observer.observe(sectionRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const cardObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('opacity-100', 'translate-y-0');
+            entry.target.classList.remove('opacity-0', 'translate-y-6');
+            cardObserver.unobserve(entry.target); 
+          }
+        });
+      },
+      { threshold: 0.15 }
+    );
+
+    if (sectionRef.current) {
+      const cards = sectionRef.current.querySelectorAll('.highlight-card-item');
+      cards.forEach(card => {
+        card.classList.add('opacity-0', 'translate-y-6');
+        card.classList.remove('opacity-100', 'translate-y-0');
+        cardObserver.observe(card);
+      });
+    }
+
+    return () => cardObserver.disconnect();
+  }, [activeTab]); 
+
+  useEffect(() => {
+    if (carouselRef.current) {
+      carouselRef.current.scrollLeft = 0; 
+    }
+  }, [activeTab]); 
+
+  if (!products.length) return null;
+
+  return (
+    <section ref={sectionRef} className="bg-white overflow-hidden pt-8 pb-16" dir="rtl">
+      <div className="max-w-[1400px] mx-auto">
+        <div className={`text-center mb-10 px-4 transition-all duration-700 ease-out ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+          <h2 className="text-[#1A1A1A] text-2xl md:text-[28px] font-medium tracking-wide" style={{fontFamily: "'Cairo', sans-serif"}}>
+            {data.title || "This Week's Highlights"}
+          </h2>
+        </div>
+        <div className={`flex justify-center gap-6 md:gap-10 mb-8 px-4 transition-all duration-700 delay-150 ease-out ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+          {tabs.map((tab, idx) => (
+            <button
+              key={idx}
+              onClick={() => setActiveTab(idx)}
+              className={`pb-2 text-[17px] md:text-lg relative transition-colors duration-300 font-tajawal ${
+                activeTab === idx ? 'text-[#1A1A1A] font-bold' : 'text-[#888888] font-medium hover:text-[#1A1A1A]'
+              }`}
+            >
+              {tab}
+              <span className={`absolute bottom-0 left-0 w-full h-[1.5px] bg-[#1A1A1A] transition-all duration-300 ${activeTab === idx ? 'opacity-100 scale-x-100' : 'opacity-0 scale-x-0'}`} />
+            </button>
+          ))}
+        </div>
+        <div className={`transition-all duration-700 delay-300 ease-out ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
+          <div 
+            ref={carouselRef} 
+            className="flex md:grid md:grid-cols-4 overflow-x-auto snap-x snap-mandatory gap-4 md:gap-8 px-4 md:px-10 lg:px-14 pb-6 hide-scrollbar"
+          >
+            {(tabProducts[activeTab] || []).map((p, idx) => (
+              <div
+                key={`${activeTab}-${idx}`}
+                className="highlight-card-item min-w-[75vw] sm:min-w-[40vw] md:min-w-0 snap-center opacity-0 translate-y-6 transition-all duration-[800ms] ease-out"
+              >
+                <ProductCard 
+                  {...p} 
+                  id={p.productId || p.id} 
+                  title={p.name || p.mainTitle || p.title} 
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+        {(data.viewAllLink || data.linkUrl) && (
+          <div className={`mt-6 flex justify-center px-4 transition-all duration-700 delay-500 ease-out ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+            {/* تم توحيد شكل الزر ليتطابق مع زر الهيرو */}
+            <Link
+              href={data.viewAllLink || data.linkUrl}
+              className="font-tajawal inline-flex justify-center items-center bg-white text-[#1A1A1A] border border-[#1A1A1A] rounded-[3px] px-9 py-3.5 font-bold text-[13px] md:text-[14px] tracking-widest uppercase hover:bg-[#1A1A1A] hover:text-white transition-all duration-300 shadow-sm"
+            >
+              تصفح كل المنتجات
+            </Link>
+          </div>
+        )}
+      </div>
+      <style jsx global>{`
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      `}</style>
+    </section>
+  );
+};
+
+// ==========================================================================
+// 15. BANNER PRODUCT GRID (قسم الغلاف والمنتجات - أسلوب المجلات)
+// تم التحديث: محاذاة الكروت مع الغلاف 100%، نظام الشبكة (2x2)، تكبير الخطوط
+// ==========================================================================
+export const BannerProductGrid = ({ data }) => {
+  const products = data?.products || data?.cards || [];
+  const sectionRef = useRef(null);
+  const [isVisible, setIsVisible] = useState(false);
+
+  // تأثير ظهور القسم والنص العلوي
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.unobserve(entry.target);
+        }
+      },
+      { threshold: 0.1 }
+    );
+    if (sectionRef.current) observer.observe(sectionRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  // تأثير Fade-up للكروت بشكل فردي
+  useEffect(() => {
+    const cardObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('opacity-100', 'translate-y-0');
+            entry.target.classList.remove('opacity-0', 'translate-y-6');
+            cardObserver.unobserve(entry.target); 
+          }
+        });
+      },
+      { threshold: 0.15 }
+    );
+
+    if (sectionRef.current) {
+      const cards = sectionRef.current.querySelectorAll('.banner-card-item');
+      cards.forEach((card, index) => {
+        // إضافة تأخير بسيط متدرج لجمال الحركة في الشبكة
+        card.style.transitionDelay = `${(index % 4) * 100}ms`;
+        cardObserver.observe(card);
+      });
+    }
+
+    return () => cardObserver.disconnect();
+  }, [products]);
+
+  if (!products.length && !data.bannerImage) return null;
+
+  return (
+    // تم إزالة الخط الفاصل (border-t border-[#EEEBE5])
+    <section ref={sectionRef} className="bg-white overflow-hidden pt-12 pb-16" dir="rtl">
+      
+      {/* 🌟 الحاوية الأم: تم توحيد الـ px هنا لضمان محاذاة الغلاف مع الكروت 100% */}
+      <div className="max-w-[1400px] mx-auto px-4 md:px-10 lg:px-14">
+        
+        {/* ── 1. النص العلوي الوصفي ── */}
+        {data.topDescription && (
+          <div className={`text-center mb-8 px-2 transition-all duration-700 ease-out ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+            {/* 🌟 تم تكبير الخط ليتطابق مع المرفق */}
+            <p className="text-[#1A1A1A] text-[22px] md:text-[28px] leading-[1.5] max-w-4xl mx-auto font-medium font-tajawal">
+              {data.topDescription}
+            </p>
+          </div>
+        )}
+
+        {/* ── 2. صورة الغلاف (Banner) مع المحتوى ── */}
+        {data.bannerImage && (
+          // 🌟 المسافة السفلية mb-4 تطابق الـ gap-4 بتاع المنتجات ليظهروا ككتلة واحدة
+          <div className={`relative w-full overflow-hidden mb-4 md:mb-6 transition-all duration-[1000ms] ease-out ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
+            <div className="relative w-full aspect-[3/4] md:aspect-[21/9] bg-[#F5F5F5] overflow-hidden group">
+              <img 
+                src={data.bannerImage} 
+                alt={data.bannerTitle || "Section Banner"} 
+                className="w-full h-full object-cover transition-transform duration-[2000ms] group-hover:scale-105"
+              />
+              
+              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent"></div>
+
+              <div className="absolute bottom-6 md:bottom-12 right-6 md:right-12 flex flex-col items-start z-10 text-right">
+                {data.bannerSubTitle && (
+                  // 🌟 تم تكبير العنوان الفرعي وزيادة المسافة تحته (mb-3) ليفصل عن الرئيسي
+                  <span className="text-white/90 text-[14px] md:text-[16px] font-bold tracking-widest mb-3 font-tajawal">
+                    {data.bannerSubTitle}
+                  </span>
+                )}
+                {data.bannerTitle && (
+                  <h2 className="text-white text-3xl md:text-5xl font-bold mb-6 leading-tight" style={{fontFamily: "'Cairo', sans-serif"}}>
+                    {data.bannerTitle}
+                  </h2>
+                )}
+                {data.buttonText && (
+                  // تم توحيد شكل الزر ليتطابق مع زر الهيرو
+                  <Link 
+                    href={data.buttonLink || "#"} 
+                    className="font-tajawal inline-flex justify-center items-center bg-white text-[#1A1A1A] border border-[#1A1A1A] rounded-[3px] px-9 py-3.5 font-bold text-[13px] md:text-[14px] tracking-widest uppercase hover:bg-[#1A1A1A] hover:text-white transition-all duration-300 shadow-md"
+                  >
+                    {data.buttonText}
+                  </Link>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── 3. شبكة المنتجات (نظام كارتين وتحتهم كارتين) ── */}
+        <div className={`transition-all duration-700 delay-300 ease-out ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
+          {/* 🌟 تم تحويلها لـ grid ثابت لضمان نظام "2 كارت في الصف" بدون سحب أفقي */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+            {products.map((p, idx) => (
+              <div
+                key={idx}
+                className="banner-card-item opacity-0 translate-y-6 transition-all duration-[800ms] ease-out"
+              >
+                <ProductCard 
+                  {...p} 
+                  id={p.productId || p.id} 
+                  title={p.name || p.mainTitle || p.title} 
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+      </div>
+    </section>
+  );
+};
+// ==========================================================================
+// 16. VISUAL BREAK SECTION (الفاصل المرئي الداكن) - نسخة محدثة ومطابقة للمرجع
+// تم التحديث: تكبير المسافات الكلية، تكبير الخطوط، زيادة تنفس النصوص، وتكبير الزر
+// ==========================================================================
+export const VisualBreakSection = ({ data }) => {
+  const sectionRef = useRef(null);
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.unobserve(entry.target);
+        }
+      },
+      { threshold: 0.15 } // يظهر عند دخول 15% من القسم
+    );
+    if (sectionRef.current) observer.observe(sectionRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  if (!data.promoTitle && !data.promoImage) return null;
+
+  return (
+    // القسم هنا له خلفية داكنة ولا يحتوي أصلاً على خطوط فاصلة
+    // 🌟 ت1: زيادة ضخمة في الـ Padding العلوى لتكبير مساحة البانر الأسود الأساسي (pt-24 md:pt-36)
+    <section ref={sectionRef} className="bg-[#1E1E1E] text-white overflow-hidden pt-24 md:pt-36 pb-0" dir="ltr">
+      
+      {/* ── حاوية النصوص بالمنتصف ── */}
+      <div className="max-w-4xl mx-auto px-6 text-center flex flex-col items-center">
+        
+        {/* ت2: تكبير حجم العنوان الصغير (text-base md:text-lg) */}
+        {/* ت4: زيادة المسافة تحته ليتنفس (mb-6 md:mb-8) */}
+        {data.promoSubTitle && (
+          <span className={`font-bold mb-6 md:mb-8 tracking-wide transition-all duration-700 ease-out ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'} text-base md:text-lg font-tajawal`}>
+            {data.promoSubTitle}
+          </span>
+        )}
+
+        {/* ت4: زيادة المسافة بين أسطر العنوان الرئيسي (leading-[1.2]) ليصبح أكثر تنفساً */}
+        {/* ت4: زيادة المسافة الكبيرة تحته (mb-8 md:mb-12) */}
+        {data.promoTitle && (
+          <h2 className={`text-4xl md:text-[56px] font-bold mb-8 md:mb-12 leading-[1.2] transition-all duration-700 delay-150 ease-out ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'} font-tajawal`}>
+            {data.promoTitle}
+          </h2>
+        )}
+
+        {/* ت4: زيادة المسافة الضخمة قبل الزر ليعطي إحساساً بالفخامة (mb-10 md:mb-16) */}
+        {data.promoDescription && (
+          <p className={`text-[15px] md:text-lg text-gray-300 mb-10 md:mb-16 max-w-xl leading-relaxed transition-all duration-700 delay-300 ease-out ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'} font-tajawal`}>
+            {data.promoDescription}
+          </p>
+        )}
+
+        {/* تم توحيد شكل الزر ليتطابق مع زر الهيرو بدقة (مع الحفاظ على أنيميشن الفاصل المرئي) */}
+        {(data.buttonText && data.buttonLink) && (
+          <Link 
+            href={data.buttonLink} 
+            className={`font-tajawal inline-flex justify-center items-center bg-white text-[#1A1A1A] border border-[#1A1A1A] rounded-[3px] px-9 py-3.5 font-bold text-[13px] md:text-[14px] tracking-widest uppercase hover:bg-[#1A1A1A] hover:text-white transition-all duration-700 delay-[450ms] ease-out shadow-sm ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
+          >
+            {data.buttonText}
+          </Link>
+        )}
+
+      </div>
+
+      {/* ── 5. صورة الفاصل (ممتدة ومرتبطة بأسفل القسم) ── */}
+      {/* ت4: زيادة المسافة العلوية قبل الصورة لتتنفس بعيداً عن الزر (mt-16 md:mt-24) */}
+      {data.promoImage && (
+        <div className={`w-full mt-16 md:mt-24 transition-all duration-1000 delay-[600ms] ease-out ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'}`}>
+          <img 
+            src={data.promoImage} 
+            alt={data.promoTitle || "Promo Visual"} 
+            className="w-full h-auto object-cover max-h-[85vh]"
+          />
+        </div>
+      )}
+
+    </section>
+  );
+};
+// ==========================================================================
+// 17. CUSTOMER REVIEWS (تقييمات العملاء) - النسخة الماستر (النجوم الصفراء الأصلية)
+// ==========================================================================
+export const CustomerReviewsSection = ({ data }) => {
+  const [reviews, setReviews] = useState([]);
+  const [allProducts, setAllProducts] = useState({}); 
+  const [isLoading, setIsLoading] = useState(true);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isHovered, setIsHovered] = useState(false);
+  const sectionRef = useRef(null);
+  
+  // حالة التحكم في قراءة المزيد للتقييمات الطويلة
+  const [expandedReviews, setExpandedReviews] = useState({});
+
+  // حالة التحكم في QuickViewModal
+  const [quickViewProduct, setQuickViewProduct] = useState(null);
+  const [isQuickViewModalOpen, setIsQuickViewModalOpen] = useState(false);
+
+  useEffect(() => {
+    const fetchAllData = async () => {
+      setIsLoading(true);
+      try {
+        const reviewsRef = collection(db, "Reviews");
+        const qReviews = query(reviewsRef, where("status", "==", "published"), orderBy("date", "desc"));
+        const snapReviews = await getDocs(qReviews);
+        const fetchedReviews = snapReviews.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        const productsRef = collection(db, "products");
+        const snapProducts = await getDocs(productsRef);
+        const productsMap = {};
+        snapProducts.docs.forEach(doc => {
+          const pData = doc.data();
+          const handle = pData.handle || pData.seo?.handle || doc.id;
+          productsMap[handle] = { ...pData, id: doc.id, mainImage: pData.images?.[0] || pData.image || "" };
+        });
+
+        setAllProducts(productsMap);
+        setReviews(fetchedReviews);
+      } catch (err) { console.error("Error fetching data:", err); } finally { setIsLoading(false); }
+    };
+    fetchAllData();
+  }, [data?.reviews]);
+
+  useEffect(() => {
+    if (reviews.length <= 1 || isHovered || isQuickViewModalOpen) return; 
+    const timer = setInterval(() => {
+      setCurrentIndex((prev) => (prev === reviews.length - 1 ? 0 : prev + 1));
+      setExpandedReviews({}); 
+    }, 6000); 
+    return () => clearInterval(timer);
+  }, [reviews.length, isHovered, isQuickViewModalOpen]);
+
+  const nextReview = () => { setCurrentIndex((prev) => (prev === reviews.length - 1 ? 0 : prev + 1)); setExpandedReviews({}); };
+  const prevReview = () => { setCurrentIndex((prev) => (prev === 0 ? reviews.length - 1 : prev - 1)); setExpandedReviews({}); };
+  const toggleExpand = (id) => { setExpandedReviews(prev => ({ ...prev, [id]: !prev[id] })); };
+
+  const formatReviewerName = (name, isEnglish) => {
+    if (!name) return isEnglish ? "Wind Customer" : "عميل ويند";
+    const parts = name.trim().split(" ");
+    if (parts.length > 1) return `${parts[0]} ${parts[1].charAt(0)}.`;
+    return name;
+  };
+
+  const handleOpenQuickView = (productData) => {
+    if (productData) {
+      setQuickViewProduct(productData);
+      setIsQuickViewModalOpen(true);
+    }
+  };
+
+  if (isLoading && reviews.length === 0) return null;
+
+  return (
+    <section ref={sectionRef} className="bg-[#F5F5F5] py-12 md:py-16 flex flex-col items-center justify-center" dir="rtl">
+      
+      <div className="mb-6 md:mb-8 px-4 text-center">
+        <h2 className="text-[#1A1A1A] font-bold text-[19px] md:text-[23px] uppercase tracking-[0.15em]" style={{ fontFamily: "'Cairo', sans-serif" }}>
+          {data.title || "Happy Customers"}
+        </h2>
+      </div>
+
+      <div className="max-w-[1400px] w-full mx-auto px-4 flex flex-col items-center">
+        
+        <div className="bg-white rounded-[2px] shadow-sm w-full max-w-2xl px-6 pt-7 pb-8 md:px-12 md:pt-9 md:pb-10 relative h-auto"
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+        >
+          {reviews.map((review, index) => {
+            const productData = allProducts[review.productHandle] || null;
+            const isEnglish = /^[a-zA-Z]/.test(review.text || "");
+            const isExpanded = expandedReviews[review.id];
+            const isLongText = review.text && review.text.length > 160;
+
+            return (
+              <div key={review.id || index}
+                className={`w-full transition-all duration-700 ease-in-out ${
+                  index === currentIndex ? 'opacity-100 relative' : 'opacity-0 absolute inset-x-6 md:inset-x-12 pointer-events-none'
+                }`}
+                style={{ display: index === currentIndex ? 'block' : 'none', textAlign: isEnglish ? 'left' : 'right', dir: isEnglish ? 'ltr' : 'rtl' }}
+              >
+                <h3 className={`text-[#1A1A1A] font-bold mb-0.5 ${isEnglish ? 'text-[14px] md:text-[17px] font-sans' : 'text-[15px] md:text-[18px] font-tajawal'}`}>
+                  <span dir={isEnglish ? "ltr" : "rtl"} className="inline-block">
+                    {formatReviewerName(review.reviewerName, isEnglish)}
+                  </span>
+                </h3>
+
+                {/* 🔥 النجوم رجعت للون الأصفر الأصلي المعتمد في الموقع */}
+                <div className={`flex gap-[1.5px] mb-4 ${isEnglish ? 'justify-start' : 'justify-start'}`}>
+                  {[...Array(5)].map((_, i) => (
+                    <Star 
+                      key={i} 
+                      size={11} 
+                      className={i < (review.rating || 5) ? "fill-[#FFC107] text-[#FFC107]" : "fill-gray-200 text-gray-200"} 
+                    />
+                  ))}
+                </div>
+
+                <div className="min-h-[105px] md:min-h-[115px] flex flex-col justify-start mb-5">
+                  <p className={`text-[#333333] leading-[1.7] ${!isExpanded ? 'line-clamp-4' : ''} ${isEnglish ? 'text-[13px] md:text-[15px] font-sans' : 'text-[14px] md:text-[16px] font-tajawal'}`}>
+                    "{review.text}"
+                  </p>
+                  
+                  {isLongText && (
+                    <button 
+                      onClick={() => toggleExpand(review.id)}
+                      className={`text-[#999999] hover:text-[#1A1A1A] text-[11px] md:text-[12px] font-bold mt-1.5 underline underline-offset-4 transition-colors w-max ${isEnglish ? 'self-start' : 'self-start'}`}
+                    >
+                      {isExpanded ? (isEnglish ? "Show less" : "عرض أقل") : (isEnglish ? "Read more" : "اقرأ المزيد")}
+                    </button>
+                  )}
+                </div>
+
+                <div className="w-[98%] mx-auto h-[1px] bg-[#EEEEEE] mb-5"></div>
+
+                <div className={`flex items-center gap-4 px-1 ${isEnglish ? 'flex-row' : 'flex-row'}`}>
+                  
+                  <button onClick={() => handleOpenQuickView(productData)} className="cursor-pointer w-14 h-18 md:w-16 md:h-20 rounded-[1px] border border-[#EEEEEE] overflow-hidden bg-white flex-none hover:opacity-80 transition-opacity">
+                    {productData?.mainImage ? (
+                      <img src={productData.mainImage} alt="Product" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-[#FAFAFA] flex items-center justify-center text-[8px] text-gray-300 font-bold uppercase">WIND</div>
+                    )}
+                  </button>
+                  
+                  <button 
+                    onClick={() => handleOpenQuickView(productData)} 
+                    className="group border-b border-[#CCCCCC] hover:border-[#1A1A1A] pb-0.5 transition-colors cursor-pointer"
+                  >
+                    <span className={`text-[#1A1A1A] font-bold line-clamp-1 ${isEnglish ? 'text-[12px] md:text-[14px] font-sans' : 'text-[13px] md:text-[15px] font-tajawal'}`}>
+                      {productData?.title || "Wind Exclusive Piece"}
+                    </span>
+                  </button>
+
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="mt-6 flex items-center bg-white/90 backdrop-blur-sm px-6 py-2.5 rounded-full border border-white shadow-sm gap-5">
+          <button onClick={prevReview} className="text-[#1A1A1A] hover:opacity-40 transition-opacity">
+            <ChevronRight size={18} strokeWidth={2} />
+          </button>
+
+          <div className="flex items-center gap-3" dir="ltr">
+             <span className="text-[#1A1A1A] font-bold text-[11px] font-mono opacity-80 w-4 text-center">
+               {currentIndex + 1}
+             </span>
+             
+             <div className="flex gap-1.5 items-center">
+               {[...Array(5)].map((_, i) => {
+                 const isActive = (currentIndex % 5) === i;
+                 return (
+                   <div 
+                     key={i} 
+                     className={`h-[5px] rounded-full transition-all duration-500 ease-out ${isActive ? 'w-4 bg-[#1A1A1A]' : 'w-[5px] bg-[#D4D4D4]'}`}
+                   />
+                 );
+               })}
+             </div>
+          </div>
+
+          <button onClick={nextReview} className="text-[#1A1A1A] hover:opacity-40 transition-opacity">
+            <ChevronLeft size={18} strokeWidth={2} />
+          </button>
+        </div>
+
+      </div>
+
+      <QuickViewModal 
+        product={quickViewProduct} 
+        isOpen={isQuickViewModalOpen} 
+        onClose={() => setIsQuickViewModalOpen(false)} 
+      />
+      
+    </section>
+  );
+};
+// ==========================================================================
+// 18. FLOATING IDEA & COLLECTIONS SECTION (الفكرة العائمة وكروت المجموعات)
+// ==========================================================================
+export const FloatingCollectionsSection = ({ data }) => {
+  const [isVisible, setIsVisible] = useState(false);
+  const sectionRef = useRef(null);
+
+  // جلب صور الجرافيتي من الأدمن
+  const floatImages = [
+    data?.floatImg1 || "https://placehold.co/300x400/F5F5F5/AAAAAA?text=WIND+STYLE",
+    data?.floatImg2 || "https://placehold.co/300x350/F5F5F5/AAAAAA?text=QUALITY",
+    data?.floatImg3 || "https://placehold.co/300x350/F5F5F5/AAAAAA?text=DETAILS"
+  ];
+
+  // الكروت اللي تم اختيارها من الأدمن
+  const cards = data?._adminItems || [];
+
+  // مراقب التمرير (Scroll Observer) للأنيميشن
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.unobserve(entry.target);
+        }
+      },
+      { threshold: 0.1 } 
+    );
+    if (sectionRef.current) observer.observe(sectionRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <section className="w-full bg-white flex flex-col items-center justify-start overflow-hidden pt-16 md:pt-24 pb-16 md:pb-24" dir="ltr">
+      
+      <style>{`
+        @keyframes float-slow {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-18px); }
+        }
+        @keyframes float-medium {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-25px); }
+        }
+        @keyframes float-fast {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-12px); }
+        }
+        .anim-float-1 { animation: float-slow 4.5s ease-in-out infinite; }
+        .anim-float-2 { animation: float-medium 5.5s ease-in-out infinite; }
+        .anim-float-3 { animation: float-fast 3.8s ease-in-out infinite; }
+      `}</style>
+
+      {/* ================= الجزء الأول: الفكرة العائمة ================= */}
+      <div className="relative w-full max-w-[1400px] mx-auto min-h-[45vh] md:min-h-[55vh] flex flex-col items-center justify-center mb-6 md:mb-10">
+        
+        <div className="absolute top-[10%] md:top-[15%] left-[4%] md:left-[6%] w-24 h-32 md:w-36 md:h-48 anim-float-1 z-0 shadow-sm border border-[#EEEEEE]">
+           <img src={floatImages[0]} alt="Style 1" className="w-full h-full object-cover" />
+        </div>
+
+        <div className="absolute top-[0%] md:top-[4%] right-[4%] md:right-[6%] w-20 h-24 md:w-28 md:h-32 anim-float-2 z-0 shadow-sm border border-[#EEEEEE] translate-y-8">
+           <img src={floatImages[1]} alt="Style 2" className="w-full h-full object-cover" />
+        </div>
+
+        <div className="absolute bottom-[5%] md:bottom-[12%] right-[4%] md:right-[6%] w-20 h-24 md:w-28 md:h-32 anim-float-3 z-0 shadow-sm border border-[#EEEEEE]">
+           <img src={floatImages[2]} alt="Style 3" className="w-full h-full object-cover" />
+        </div>
+
+        <div className="relative z-10 max-w-4xl mx-auto px-6 text-center flex flex-col items-center justify-center mt-10 md:mt-0">
+          
+          <h4 
+            ref={sectionRef} 
+            className={`text-[#1A1A1A] text-[14px] md:text-[16px] font-semibold mb-4 uppercase tracking-[0.2em] transition-all ease-[cubic-bezier(0.22,1,0.36,1)] ${isVisible ? 'translate-y-0 opacity-100 duration-[800ms] delay-[150ms]' : 'translate-y-10 opacity-0 duration-[300ms] delay-0'}`} 
+            style={{ fontFamily: "'Cairo', sans-serif" }}
+          >
+            {data?.floatingSubTitle || "The product idea"}
+          </h4>
+
+          {/* تم تصغير الخط درجتين (text-[18px] md:text-[28px]) مع زيادة المسافة السفلية (mb-10) لإنزال الرابط */}
+          <h2 
+            className={`text-[#1A1A1A] text-[18px] md:text-[28px] font-semibold leading-[1.3] md:leading-[1.25] mb-10 max-w-3xl transition-all ease-[cubic-bezier(0.22,1,0.36,1)] ${isVisible ? 'translate-y-0 opacity-100 duration-[800ms] delay-[300ms]' : 'translate-y-10 opacity-0 duration-[300ms] delay-0'}`} 
+            style={{ fontFamily: "'Tajawal', sans-serif" }}
+          >
+            {data?.floatingTitle || "Fashion with a focus on green materials, ethical manufacturing and less-waste."}
+          </h2>
+
+          <a 
+            href={data?.floatingBtnLink || "/collections/all"} 
+            className={`text-[#1A1A1A] text-[15px] md:text-[17px] font-semibold border-b-[1.5px] border-[#1A1A1A] pb-1 hover:opacity-60 transition-all ease-[cubic-bezier(0.22,1,0.36,1)] uppercase tracking-widest ${isVisible ? 'translate-y-0 opacity-100 duration-[800ms] delay-[450ms]' : 'translate-y-10 opacity-0 duration-[300ms] delay-0'}`}
+            style={{ fontFamily: "'Tajawal', sans-serif" }}
+          >
+            {data?.floatingBtnText || "View All Collection"}
+          </a>
+        </div>
+      </div>
+
+      {/* ================= الجزء الثاني: كروت المجموعات (Posters) ================= */}
+      <div className="w-full flex flex-col gap-8 md:gap-14 items-center px-4 md:px-6 max-w-[1400px] mx-auto">
+        
+        {cards.map((card, index) => {
+          const imgUrl = card.customImage || card.originalImage || "https://placehold.co/800x1000/F5F5F5/AAAAAA";
+          const subtitle = card.badge || "WIND COLLECTION";
+          const title = card.customName || card.originalName || "Exclusive Pieces";
+          const btnText = card.linkText || "تسوقي الان";
+          const link = card.linkUrl || "#";
+          
+          return (
+            <div 
+              key={index} 
+              className="w-full relative group overflow-hidden bg-[#F9F9F9] flex flex-col justify-end"
+              style={{ aspectRatio: '3/4', maxHeight: '85vh' }}
+            >
+              <img 
+                src={imgUrl} 
+                alt={title} 
+                className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-[1.5s] ease-out" 
+              />
+              
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent opacity-80" />
+
+              <div className="relative z-10 w-full flex flex-col items-end justify-end pb-10 md:pb-14 text-right px-6 md:px-12">
+                
+                <span 
+                  className="text-white text-[14px] md:text-[16px] font-semibold tracking-[0.2em] uppercase mb-4 drop-shadow-md" 
+                  style={{ fontFamily: "'Cairo', sans-serif" }}
+                >
+                  {subtitle}
+                </span>
+                
+                <h3 
+                  className="text-white text-[20px] md:text-[28px] font-semibold mb-5 drop-shadow-md leading-tight max-w-xl" 
+                  style={{ fontFamily: "'Tajawal', sans-serif" }}
+                >
+                  {title}
+                </h3>
+                
+                {/* تم تصغير النص درجة (text-[14px] md:text-[15px]) 
+                  مع الحفاظ على نفس الحجم الكلي للزر (px-5 py-3.5)
+                */}
+                <a 
+                  href={link} 
+                  className="inline-flex justify-center items-center bg-white text-[#1A1A1A] border border-black/10 rounded-[3px] px-5 py-3.5 font-semibold text-[14px] md:text-[15px] tracking-widest uppercase hover:bg-[#1A1A1A] hover:text-white transition-all duration-300 ease-out shadow-sm"
+                  style={{ fontFamily: "'Tajawal', sans-serif" }}
+                >
+                  {btnText}
+                </a>
+
+              </div>
+            </div>
+          );
+        })}
+
       </div>
     </section>
   );

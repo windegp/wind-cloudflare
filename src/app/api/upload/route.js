@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import crypto from 'crypto';
 import { successResponse, errorResponse } from '@/lib/apiResponse';
 import { IMAGE_UPLOAD_CONFIG } from '@/lib/constants';
 
@@ -22,13 +21,31 @@ export async function GET() {
       return NextResponse.json(response.body, { status: response.status });
     }
 
-    // Generate ImageKit authentication token
-    const token = crypto.randomBytes(20).toString('hex');
+    // Generate ImageKit authentication token using Web Crypto API
+    const tokenArray = new Uint8Array(20);
+    crypto.getRandomValues(tokenArray);
+    const token = Array.from(tokenArray)
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+    
     const expire = Math.floor(Date.now() / 1000) + IMAGE_UPLOAD_CONFIG.TOKEN_EXPIRY_SECONDS;
-    const signature = crypto
-      .createHmac('sha1', privateKey)
-      .update(token + expire.toString())
-      .digest('hex');
+    
+    // Create HMAC signature using Web Crypto API
+    const keyBuffer = new TextEncoder().encode(privateKey);
+    const cryptoKey = await crypto.subtle.importKey(
+      'raw',
+      keyBuffer,
+      { name: 'HMAC', hash: 'SHA-1' },
+      false,
+      ['sign']
+    );
+    
+    const dataBuffer = new TextEncoder().encode(token + expire.toString());
+    const signatureBuffer = await crypto.subtle.sign('HMAC', cryptoKey, dataBuffer);
+    
+    const signature = Array.from(new Uint8Array(signatureBuffer))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
 
     // Return public key and endpoint to frontend for image upload
     const response = successResponse({

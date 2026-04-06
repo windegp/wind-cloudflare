@@ -36,26 +36,30 @@ export function CartProvider({ children }) {
 
   const addToCart = (product) => {
     setCartItems((prev) => {
-      // Important: Match items by id + selectedSize + selectedColor
-      // This allows adding the same product in different sizes/colors as separate items
+      // المهم: مطابقة المنتجات بناءً على الـ id والمقاس واللون
       const exist = prev.find(
         (item) =>
           item.id === product.id &&
           item.selectedSize === product.selectedSize &&
           item.selectedColor === product.selectedColor
       );
+
+      // تحديد الكمية المراد إضافتها (الكمية الجاية من صفحة المنتج أو 1 كافتراضي)
+      const quantityToAdd = product.qty || 1;
+
       if (exist) {
-        // Item exists: increment quantity
+        // المنتج موجود: هنجمع الكمية القديمة + الكمية الجديدة اللي العميل طلبها
         return prev.map((item) =>
           (item.id === product.id &&
            item.selectedSize === product.selectedSize &&
            item.selectedColor === product.selectedColor)
-            ? { ...item, qty: item.qty + 1 }
+            ? { ...item, qty: item.qty + quantityToAdd }
             : item
         );
       }
-      // New item: add to cart with qty=1
-      return [...prev, { ...product, qty: 1 }];
+      
+      // منتج جديد: هنضيفه للسلة بالكمية اللي العميل اختارها
+      return [...prev, { ...product, qty: quantityToAdd }];
     });
     openCart();
   };

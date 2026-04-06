@@ -1,12 +1,11 @@
-export const runtime = 'nodejs';
 import { NextResponse } from 'next/server';
-import crypto from 'crypto';
 
 // ============================================
 // كاشير Callback — التحقق من الـ Signature
 // المسار: /api/kashier-callback
 // كاشير بيبعت GET request هنا بعد الدفع
 // ============================================
+
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -23,10 +22,23 @@ export async function GET(request) {
     // كاشير يوقّع على: orderId.amount.currency.paymentStatus
     if (receivedSig && process.env.KASHIER_API_KEY) {
       const signaturePath = `/?payment=${process.env.KASHIER_MERCHANT_ID}.${orderId}.${amount}.${currency}`;
-      const expectedSig = crypto
-        .createHmac('sha256', process.env.KASHIER_API_KEY)
-        .update(signaturePath)
-        .digest('hex');
+      
+      // Create HMAC signature using Web Crypto API
+      const keyBuffer = new TextEncoder().encode(process.env.KASHIER_API_KEY);
+      const cryptoKey = await crypto.subtle.importKey(
+        'raw',
+        keyBuffer,
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign']
+      );
+      
+      const dataBuffer = new TextEncoder().encode(signaturePath);
+      const signatureBuffer = await crypto.subtle.sign('HMAC', cryptoKey, dataBuffer);
+      
+      const expectedSig = Array.from(new Uint8Array(signatureBuffer))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
 
       if (expectedSig !== receivedSig) {
         console.error('❌ Kashier: Signature mismatch — possible tampering');

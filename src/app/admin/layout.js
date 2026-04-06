@@ -2,16 +2,11 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { auth } from "@/lib/firebase"; 
+import { getAuthInstance } from "@/lib/firebase"; 
 import { ADMIN_UID } from "@/lib/constants";
 
 // 👇 دمجنا كل الأيقونات في استدعاء واحد فقط عشان نمنع أي خطأ
-import { 
-  LayoutDashboard, Package, Users, ShoppingBag, 
-  PlusCircle, FolderTree, Palette, Menu, 
-  FileText, Settings, Star, LogOut, 
-  ChevronLeft, Lock 
-} from "lucide-react";
+import { Search, Menu, X, User, ShoppingCart, ChevronDown, Grid, List, Filter, Edit, Trash2, Copy, Move, Plus, LayoutDashboard, Package, ShoppingBag, PlusCircle, Users, Star, Palette, FolderTree, FileText, Settings, Lock, LogOut, ChevronLeft } from '@/components/icons-extra';
 
 export default function AdminLayout({ children }) {
   const pathname = usePathname();
@@ -19,10 +14,20 @@ export default function AdminLayout({ children }) {
   const [isOpen, setIsOpen] = useState(true);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const auth = getAuthInstance();
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((u) => {
-      setUser(u);
+      // Check if user is the hardcoded admin UID
+      if (u && u.uid === ADMIN_UID) {
+        setUser(u);
+      } else if (u) {
+        // User is authenticated but not admin - sign them out
+        signOut(auth);
+        setUser(null);
+      } else {
+        setUser(null);
+      }
       setLoading(false);
     });
     return () => unsubscribe();

@@ -1,8 +1,11 @@
 "use client";
 import { useState, useEffect } from 'react';
-import { db } from "@/lib/firebase";
-import { collection, doc, query, orderBy, onSnapshot, getDocs, writeBatch, where, arrayUnion, arrayRemove } from "firebase/firestore";
-import { Plus, Edit2, Trash2, ExternalLink, Loader2, X, Save, Image as ImageIcon, Search, ArrowRight, AlertCircle, CheckSquare, Square, FolderTree } from "lucide-react";
+import { getDb } from "@/lib/firebase";
+import { collection, doc, query, orderBy, getDocs, writeBatch, where, arrayUnion, arrayRemove } from "firebase/firestore/lite";
+import { Plus, Trash2, Search, ArrowRight, AlertCircle, X, Star, Heart, Check, RotateCcw, FileText } from '@/components/icons-extra';
+import { Edit2, ExternalLink, Loader2, Save, ImageIcon, CheckSquare, Square, FolderTree } from '@/components/icons-extra';
+
+export const dynamic = 'force-dynamic';
 
 export default function CollectionsPage() {
     const [view, setView] = useState('list');
@@ -34,12 +37,19 @@ export default function CollectionsPage() {
     const [isSearching, setIsSearching] = useState(false);
 
     useEffect(() => {
-        const q = query(collection(db, "collections"), orderBy("name"));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            setCollections(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-            setLoading(false);
-        });
-        return () => unsubscribe();
+        const fetchCollections = async () => {
+            try {
+                const db = getDb();
+                const q = query(collection(db, "collections"), orderBy("name"));
+                const snapshot = await getDocs(q);
+                setCollections(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                setLoading(false);
+            } catch (error) {
+                console.error("Error fetching collections:", error);
+                setLoading(false);
+            }
+        };
+        fetchCollections();
     }, []);
 
     // جلب المنتجات للمودال
@@ -48,6 +58,7 @@ export default function CollectionsPage() {
         const fetchAllProducts = async () => {
             setIsSearching(true);
             try {
+                const db = getDb();
                 const q = query(collection(db, "products")); 
                 const snapshot = await getDocs(q);
                 setAllProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));

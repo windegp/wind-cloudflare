@@ -1,8 +1,13 @@
 // app/product/[id]/page.js
-import { db } from "@/lib/firebase"; 
-import { doc, getDoc } from "firebase/firestore";
+import { getDb } from "@/lib/firebase"; 
+import { getFirebaseEdge, getEdgeDb } from "@/lib/firebase-edge";
+import { doc, getDoc } from "firebase/firestore/lite";
 import { products as staticProducts } from "@/lib/products";
 import ProductView from "./ProductView"; 
+
+// Use edge-compatible Firebase when running on edge runtime
+const isEdgeRuntime = typeof window === 'undefined' && process.env.NEXT_RUNTIME === 'edge';
+const firestoreDb = isEdgeRuntime ? getEdgeDb() : getDb(); 
 
 // دالة جلب البيانات موحدة للسيرفر (مع تأمين ضد كراش الـ Timestamps)
 async function getProductData(id) {
@@ -10,7 +15,7 @@ async function getProductData(id) {
   if (staticProduct) return staticProduct;
 
   try {
-    const docRef = doc(db, "products", id);
+    const docRef = doc(firestoreDb, "products", id);
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
       const data = docSnap.data();
@@ -33,7 +38,7 @@ async function getProductData(id) {
 
 // 1. الجزء الخاص بـ Metadata
 export async function generateMetadata({ params }) {
-  const { id } = params;
+  const { id } = await params;
   const product = await getProductData(id);
 
   if (!product) return { title: "المنتج غير موجود | WIND" };
@@ -66,8 +71,8 @@ export async function generateMetadata({ params }) {
 
 // 2. الصفحة الرئيسية
 export default async function Page({ params, searchParams }) {
-  const { id } = params;
-  const sourceCat = searchParams?.cat;
+  const { id } = await params;
+  const sourceCat = (await searchParams)?.cat;
   const product = await getProductData(id);
 
   if (!product) return null; // Silent fallback

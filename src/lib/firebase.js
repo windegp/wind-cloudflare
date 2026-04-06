@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore } from "firebase/firestore/lite";
 import { getStorage } from "firebase/storage";
 import { getAuth } from "firebase/auth"; // 1. أضفنا استيراد مكتبة الحماية
 
@@ -13,10 +13,36 @@ const firebaseConfig = {
 };
 
 // منع إعادة تشغيل Firebase
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+let app = null;
+let db = null;
+let storage = null;
+let authInstance = null;
 
-const db = getFirestore(app);
-const storage = getStorage(app);
-const auth = getAuth(app); // 2. أضفنا تعريف الحارس هنا
+function getAppInstance() {
+  if (!app) {
+    app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+  }
+  return app;
+}
 
-export { db, storage, auth }; // 3. أضفنا auth في التصدير عشان الملفات التانية تشوفه
+// Export getter functions for Edge I/O compliance
+export const getDb = () => {
+  if (!db) {
+    db = getFirestore(getAppInstance());
+  }
+  return db;
+};
+
+export const getStorageInstance = () => {
+  if (!storage) {
+    storage = getStorage(getAppInstance());
+  }
+  return storage;
+};
+
+export const getAuthInstance = () => {
+  if (!authInstance) {
+    authInstance = getAuth(getAppInstance());
+  }
+  return authInstance;
+};

@@ -1,17 +1,30 @@
 "use client";
-import { auth } from "@/lib/firebase";
+import { getAuthInstance } from "@/lib/firebase";
 import { GoogleAuthProvider, signInWithPopup, signOut } from "firebase/auth";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ADMIN_UID } from "@/lib/constants";
+
+export const dynamic = 'force-dynamic';
 
 export default function AdminLogin() {
   const [user, setUser] = useState(null);
   const router = useRouter();
+  const auth = getAuthInstance();
 
   useEffect(() => {
     // مراقبة حالة المستخدم
     const unsubscribe = auth.onAuthStateChanged((u) => {
-      setUser(u);
+      // Check if user is the hardcoded admin UID
+      if (u && u.uid === ADMIN_UID) {
+        setUser(u);
+      } else if (u) {
+        // User is authenticated but not admin - sign them out
+        signOut(auth);
+        setUser(null);
+      } else {
+        setUser(null);
+      }
     });
     return () => unsubscribe();
   }, []);
@@ -19,11 +32,20 @@ export default function AdminLogin() {
   const loginWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
     try {
-      await signInWithPopup(auth, provider);
-      alert("تم تسجيل الدخول بنجاح! يمكنك الآن الإضافة والحذف.");
-      router.push("/admin"); // توجيهك للوحة التحكم بعد الدخول
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+      
+      // Check if authenticated user is the hardcoded admin
+      if (user.uid === ADMIN_UID) {
+        alert("تم تسجيل الدخول بنجاح! يمكنك الآن الإضافة والحذف.");
+        router.push("/admin"); // توجيهك للوحة التحكم بعد الدخول
+      } else {
+        // User is not admin - sign them out
+        await signOut(auth);
+        alert("غير مصرح لك بالوصول إلى لوحة التحكم.");
+      }
     } catch (error) {
-      console.error("Login Error:", error);
+      console.error("Login error:", error);
       alert("فشل تسجيل الدخول: " + error.message);
     }
   };

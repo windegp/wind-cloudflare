@@ -1,9 +1,10 @@
-import { db } from "@/lib/firebase"; 
-import { collection, getDocs } from "firebase/firestore";
+import { getDb } from "@/lib/firebase"; 
+import { collection, getDocs } from "firebase/firestore/lite";
 import { products as staticProducts } from "@/lib/products";
 
 export default async function sitemap() {
   const baseUrl = "https://www.windeg.com";
+  const db = getDb();
 
   // 1. جلب المنتجات من Firebase
   let fbProducts = [];

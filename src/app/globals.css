@@ -13,6 +13,8 @@ html {
   --wind-gold: #F5C518;    /* الذهبي الرسمي */
   --wind-text: #FFFFFF;
   --wind-sub: #A1A1A1;     /* رمادي النصوص الفرعية */
+  --font-cairo: 'Cairo', system-ui, sans-serif;
+  --font-tajawal: 'Tajawal', system-ui, sans-serif;
 }
 
 /* التعديل هنا لضمان عمل Cairo */

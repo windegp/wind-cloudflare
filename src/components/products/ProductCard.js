@@ -1,108 +1,305 @@
 "use client";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
-// استيراد السلة
-import { useCart } from "../../context/CartContext";
+import { createPortal } from "react-dom";
+import { ShoppingBag, Eye, Heart, Star, X } from '@/components/icons-extra';
+import { getDb } from "../../lib/firebase";
+import { doc, updateDoc, increment, getDoc, collection, query, where, getDocs } from "firebase/firestore/lite";
 
-export default function ProductCard({ id, handle, title, price, oldPrice, compareAtPrice, rating, category, productCategory, type, folderName, mainImage, image, images, variants }) {
+import QuickViewModal from "@/components/QuickViewModal";
+import ProductReviews from "@/components/products/ProductReviews";
+
+export default function ProductCard(props) {
+  const [mergedProduct, setMergedProduct] = useState(props);
+  const [reviewsData, setReviewsData] = useState({ count: 0, rating: 0 });
+  const [isReviewsModalCardOpen, setReviewsModalCardOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   
-  const { addToCart } = useCart() || {};
+  // 🌟 حالة جديدة لمراقبة تحميل الصورة لتشغيل تأثير الرجوع بنجاح
+  const [imgLoaded, setImgLoaded] = useState(false);
 
-  // --- دعم الطريقة الجديدة (Shopify) والطريقة القديمة ---
-  // 1. تحديد السعر (من الـ variants أولاً، ثم المباشر)
+  useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    setMergedProduct(props); 
+    const lacksDetails = (!props.options?.length && !props.variants?.length && !props.colors?.length);
+    if (props.id && lacksDetails) {
+      const fetchDetails = async () => {
+        try {
+          const docRef = doc(getDb(), "products", props.id.toString());
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            setMergedProduct({ ...props, ...docSnap.data() });
+          }
+        } catch (error) {
+          console.error("Error fetching full product details:", error);
+        }
+      };
+      fetchDetails();
+    }
+  }, [props.id, props.options, props.variants, props.colors]);
+
+  useEffect(() => {
+    const fetchRealReviews = async () => {
+      if (!props.id && !props.handle) return;
+      try {
+        const handleToSearch = props.handle || props.seo?.handle || String(props.id);
+        const reviewsRef = collection(getDb(), "Reviews");
+        const q = query(reviewsRef, where("productHandle", "==", handleToSearch), where("status", "==", "published"));
+        const querySnapshot = await getDocs(q);
+
+        if (!querySnapshot.empty) {
+          let totalStars = 0;
+          querySnapshot.forEach((doc) => { totalStars += Number(doc.data().rating || 5); });
+          const totalReviews = querySnapshot.size;
+          const avgRating = (totalStars / totalReviews).toFixed(1);
+          setReviewsData({ count: totalReviews, rating: avgRating });
+        }
+      } catch (error) {
+        console.error("Error fetching reviews:", error);
+      }
+    };
+    fetchRealReviews();
+  }, [props.id, props.handle]);
+
+  const { id, handle, title, price, oldPrice, compareAtPrice, category, productCategory, type, folderName, mainImage, image, images, variants, colorSwatches, options, colors, currentWeekId } = mergedProduct;
+
   const displayPrice = variants && variants.length > 0 && variants[0].price ? variants[0].price : price;
   const displayOldPrice = variants && variants.length > 0 && variants[0].compareAtPrice ? variants[0].compareAtPrice : (compareAtPrice || oldPrice);
+  const discount = displayOldPrice && displayOldPrice > displayPrice ? Math.round(((displayOldPrice - displayPrice) / displayOldPrice) * 100) : null;
+
+  const defaultProductImage = (images && images.length > 0) ? images[0] : (image || `/images/products/${folderName}/${mainImage}`);
   
-  // 2. حساب الخصم
-  const discount = displayOldPrice && displayOldPrice > displayPrice 
-    ? Math.round(((displayOldPrice - displayPrice) / displayOldPrice) * 100) 
-    : null;
+  const [activeCardImage, setActiveCardImage] = useState(null);
+  const [activeColorIdx, setActiveColorIdx] = useState(null);
 
-  // 3. تحديد الصورة (من مصفوفة صور الطريقة الجديدة أولاً)
-  const productImage = (images && images.length > 0) ? images[0] : (image || `/images/products/${folderName}/${mainImage}`);
-
-  // 4. تحديد القسم المعروض
-  const displayCategory = type || productCategory || category || "";
-
-  // 5. رابط المنتج (استخدام الـ handle للـ SEO إذا وجد، وإلا الـ id)
+  const displayCategory = type || productCategory || category || "WIND";
   const productLink = handle ? `/product/${handle}` : `/product/${id}`;
 
-  // دالة الإضافة للسلة
-  const handleAddToCart = (e) => {
-    e.preventDefault(); // منع الانتقال لصفحة المنتج عند الضغط على الزر
-    if (addToCart) {
-      addToCart({
-        id: handle || id, // نستخدم الـ handle كـ id لتسهيل الربط
-        title,
-        price: displayPrice,
-        image: productImage,
-        quantity: 1
-      });
+  let cardColors = [];
+  if (options && Array.isArray(options)) {
+    const colorOpt = options.find(o => o.name?.toLowerCase().includes("color") || o.name === "اللون" || o.name === "لون");
+    if (colorOpt && colorOpt.values) cardColors = colorOpt.values.split(',').map(v => v.trim()).filter(Boolean);
+  } else if (Array.isArray(colors)) {
+    cardColors = colors.map(c => typeof c === 'string' ? c : c.name);
+  } else if (variants && Array.isArray(variants)) {
+    cardColors = [...new Set(variants.map(v => v.color || (v.title && v.title.includes('/') ? v.title.split('/')[0].trim() : null)).filter(Boolean))];
+  }
+
+  const maxDisplayColors = 3;
+  const displayColorsList = cardColors.slice(0, maxDisplayColors);
+  const remainingColorsCount = cardColors.length - maxDisplayColors;
+
+  const [isWishlisted, setIsWishlisted] = useState(false);
+  const [isLikeProcessing, setIsLikeProcessing] = useState(false);
+
+  useEffect(() => {
+    if (id) {
+      const savedWishlist = JSON.parse(localStorage.getItem('wind_wishlist') || '[]');
+      setIsWishlisted(savedWishlist.includes(id.toString()));
+    }
+  }, [id]);
+
+  const handleWishlistToggle = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (isLikeProcessing || !id) return;
+    setIsLikeProcessing(true);
+
+    const savedWishlist = JSON.parse(localStorage.getItem('wind_wishlist') || '[]');
+    const isCurrentlyWishlisted = savedWishlist.includes(id.toString());
+    
+    let newWishlist;
+    if (isCurrentlyWishlisted) {
+      newWishlist = savedWishlist.filter(item => item !== id.toString());
+      setIsWishlisted(false);
+    } else {
+      newWishlist = [...savedWishlist, id.toString()];
+      setIsWishlisted(true);
+    }
+    localStorage.setItem('wind_wishlist', JSON.stringify(newWishlist));
+
+    try {
+      const productRef = doc(getDb(), "products", id.toString());
+      if (isCurrentlyWishlisted) {
+        await updateDoc(productRef, { likesCount: increment(-1) });
+      } else {
+        await updateDoc(productRef, { likesCount: increment(1) });
+      }
+    } catch (error) {
+      console.log("Could not update Firebase likes from card.", error);
+    } finally {
+      setIsLikeProcessing(false);
     }
   };
 
+  const [isQuickViewOpen, setIsQuickViewOpen] = useState(false);
+
+  const getImageUrl = (imgStr) => {
+    let img = imgStr || defaultProductImage;
+    if (!img) return "/placeholder.jpg";
+    if (img.startsWith("http")) return img;
+    if (img.startsWith("//")) return `https:${img}`;
+    if (img.startsWith("/cdn/")) return `https://cdn.shopify.com${img}`;
+    if (folderName) return `/images/products/${folderName}/${img}`;
+    return "/placeholder.jpg";
+  };
+
+  const formatVariable = (val) => {
+    if (!val) return '';
+    let str = val.toString().trim().replace(/\[\s*/g, '[ ').replace(/\s*\]/g, ' ]');
+    return str.charAt(0).toUpperCase() + str.slice(1);
+  };
+
+  const iconContainerSize = 'w-8 h-8';
+  const iconSize = 15;
+
+  // 🌟 حساب عدد النجوم الذهبية التي ستظهر بناءً على التقييم
+  const fullStarsCount = Math.round(Number(reviewsData.rating));
+
   return (
-    <div className="block group h-full relative">
-      <div className="bg-[#1A1A1A] rounded-[4px] overflow-hidden flex flex-col h-full shadow-md hover:shadow-[#F5C518]/10 transition-shadow border border-[#333]">
-        
-        {/* رابط صفحة المنتج يغلف الصورة والعنوان فقط */}
-        <Link href={productLink} className="cursor-pointer">
-          {/* منطقة الصورة */}
-          <div className="relative aspect-[2/3] bg-[#222]">
-            {discount && (
-              <div className="absolute top-0 left-0 bg-[#F5C518] text-black text-[10px] font-black px-2 py-0.5 z-10">
-                %{discount}
-              </div>
-            )}
-            <Image 
-              src={productImage} 
-              alt={title}
-              width={300}
-              height={450}
-              quality={75}
-              className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity"
+    <>
+      <div className="group flex flex-col h-full relative" dir="rtl">
+        <div className="relative aspect-[4/5] bg-[#EFEFEF] overflow-hidden cursor-pointer" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsQuickViewOpen(true); }}>
+          
+          {discount && (
+            <div className="absolute top-2.5 right-2.5 z-20 bg-[#E04040] text-white text-[11px] font-semibold px-2.5 py-1 rounded-full shadow-sm" style={{ fontFamily: "'Cairo', sans-serif" }}>
+              تخفيض
+            </div>
+          )}
+
+          <Link href={productLink} className="block w-full h-full" onClick={(e) => e.stopPropagation()}>
+            <Image
+              src={getImageUrl(activeCardImage || defaultProductImage)}
+              alt={title} fill quality={80}
+              sizes="(max-width: 768px) 50vw, 25vw"
+              // 🌟 تطبيق تأثير الرجوع للخلف بنعومة فور تحميل الصورة
+              onLoad={() => setImgLoaded(true)}
+              className={`object-cover transition-all duration-1000 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] ${imgLoaded ? 'scale-100 opacity-100' : 'scale-[1.15] opacity-0'} group-hover:scale-105`}
               loading="lazy"
             />
-          </div>
-        </Link>
+          </Link>
 
-        {/* تفاصيل الكارت */}
-        <div className="p-3 flex flex-col flex-grow">
-          
-          <div className="flex items-center gap-1.5 mb-1.5">
-            <span className="text-[#F5C518] text-[10px]">★</span>
-            <span className="text-gray-400 text-[10px]">{rating || "4.8"}</span>
-            <span className="text-gray-600 text-[10px] px-1">•</span>
-            <span className="text-gray-500 text-[9px] truncate">{displayCategory}</span>
+          <div className="absolute bottom-3.5 left-1/2 -translate-x-1/2 flex items-center gap-2.5 z-10" dir="ltr">
+            <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsQuickViewOpen(true); }} className={`${iconContainerSize} bg-white rounded-full flex items-center justify-center shadow-md text-[#1A1A1A] hover:bg-[#1A1A1A] hover:text-white transition-colors duration-200`} title="أضف للسلة">
+              <ShoppingBag size={iconSize} strokeWidth={1.5} />
+            </button>
+            <button onClick={handleWishlistToggle} disabled={isLikeProcessing} className={`${iconContainerSize} bg-white rounded-full flex items-center justify-center shadow-md transition-colors duration-200 ${isWishlisted ? 'text-red-500' : 'text-[#1A1A1A] hover:bg-red-500 hover:text-white'} ${isLikeProcessing ? 'opacity-50 cursor-not-allowed' : ''}`} title="إضافة للمفضلة">
+              <Heart size={iconSize} strokeWidth={1.5} fill={isWishlisted ? "currentColor" : "none"} />
+            </button>
+            <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsQuickViewOpen(true); }} className={`${iconContainerSize} bg-white rounded-full flex items-center justify-center shadow-md text-[#1A1A1A] hover:bg-[#1A1A1A] hover:text-white transition-colors duration-200`} title="نظرة سريعة">
+              <Eye size={iconSize} strokeWidth={1.5} />
+            </button>
           </div>
+        </div>
+
+        <div className="flex flex-col text-right px-1 pb-6 mt-4">
+          <span className="text-[#888888] text-[11px] font-bold uppercase tracking-widest mb-2 font-tajawal">
+            {displayCategory}
+          </span>
 
           <Link href={productLink}>
-            <h3 className="text-white text-[13px] font-semibold leading-tight mb-2 line-clamp-2 min-h-[2.2em] hover:text-[#5799ef] transition-colors">
+            {/* جعلنا اسم المنتج bold خفيف (font-semibold) */}
+            <h3 className="text-[#1A1A1A] text-[14px] md:text-[15px] font-semibold line-clamp-1 hover:text-[#E6AE00] transition-colors mb-1.5" style={{ fontFamily: "'Cairo', sans-serif" }}>
               {title}
             </h3>
           </Link>
 
-          <div className="mt-auto pt-2">
-            <div className="flex items-baseline gap-2 mb-3">
-              <span className="text-white font-bold text-sm">{displayPrice} <span className="text-[9px] font-normal text-gray-400">EGP</span></span>
-              {displayOldPrice && (
-                <span className="text-gray-600 text-[10px] line-through">{displayOldPrice}</span>
+          {/* تعديل التقييمات: من الشمال قوس العدد -> التقييم -> 5 نجوم معبأة بناءً على الرقم */}
+          {reviewsData.count > 0 && (
+            <div className="flex items-center justify-end w-full mb-3 mt-[-2px]" dir="ltr">
+              <div className="flex items-center gap-1.5 cursor-pointer group" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setReviewsModalCardOpen(true); }}>
+                <span className="text-[#888888] text-[12px] mt-0.5 underline decoration-gray-300 group-hover:text-[#1A1A1A] group-hover:decoration-[#1A1A1A] underline-offset-4 transition-colors font-medium">
+                  ({reviewsData.count > 999 ? (reviewsData.count/1000).toFixed(1)+'k' : reviewsData.count})
+                </span>
+                <span className="text-[#1A1A1A] text-[13px] font-bold mt-0.5" style={{fontFamily: "'Cairo', sans-serif"}}>{reviewsData.rating}</span>
+                <div className="flex items-center gap-[2px]">
+                  {[...Array(5)].map((_, i) => (
+                    <Star 
+                      key={i} 
+                      className={`w-3.5 h-3.5 group-hover:scale-110 transition-transform ${i < fullStarsCount ? 'text-[#F5C518] fill-[#F5C518]' : 'text-gray-300 fill-gray-300'}`} 
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-baseline gap-2 mb-4">
+            <span className="font-normal text-[14px]" style={{ fontFamily: "'Cairo', sans-serif", color: discount ? '#E04040' : '#1A1A1A' }}>
+              {displayPrice} ج.م
+            </span>
+            {displayOldPrice && discount && (
+              <span className="text-gray-400 text-[14px] line-through font-normal" style={{ fontFamily: "'Cairo', sans-serif" }}>
+                {displayOldPrice} ج.م
+              </span>
+            )}
+          </div>
+
+          {cardColors.length > 0 && (
+            <div className="flex items-center gap-2.5">
+              {displayColorsList.map((colorName, idx) => {
+                const swatchValue = colorSwatches?.[colorName] || colorName;
+                const isImg = swatchValue.includes('/') || swatchValue.includes('http');
+                const isSelected = activeColorIdx === idx;
+
+                return (
+                  <button 
+                    key={idx} 
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setActiveColorIdx(idx); 
+                      if (isImg) setActiveCardImage(swatchValue);
+                      else if (variants && Array.isArray(variants)) {
+                        const matchingVariant = variants.find(v => (v.color && v.color.trim() === colorName.trim()) || (v.title && v.title.includes(colorName)));
+                        if (matchingVariant && matchingVariant.image) setActiveCardImage(matchingVariant.image);
+                      }
+                    }}
+                    className={`w-[34px] h-[34px] md:w-[38px] md:h-[38px] rounded-full border overflow-hidden shadow-sm p-[2px] transition-all hover:scale-110 ${isSelected ? 'border-[#1A1A1A] scale-110' : 'border-gray-300'}`} 
+                    title={formatVariable(colorName)}
+                  >
+                    <div className="w-full h-full rounded-full overflow-hidden" style={!isImg ? { backgroundColor: swatchValue } : {}}>
+                       {isImg && <img src={getImageUrl(swatchValue)} alt={colorName} className="w-full h-full object-cover" />}
+                    </div>
+                  </button>
+                );
+              })}
+              
+              {/* استبدال المربع الكبير برقم صغير وأنيق (+2) */}
+              {remainingColorsCount > 0 && (
+                <div className="ml-1 flex items-center justify-center cursor-pointer transition-colors" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsQuickViewOpen(true); }}>
+                  <span className="text-[13px] md:text-[14px] text-gray-500 font-semibold hover:text-[#1A1A1A] font-tajawal" dir="ltr">
+                    +{remainingColorsCount}
+                  </span>
+                </div>
               )}
             </div>
-
-            {/* زر "أضف إلى السلة" بستايل WIND كما هو */}
-            <button 
-              onClick={handleAddToCart}
-              className="w-full bg-[#2C2C2C] hover:bg-[#F5C518] text-[#5799ef] hover:text-black text-[11px] font-black py-2 rounded-[4px] border-none transition-all duration-300 flex items-center justify-center gap-2 active:scale-95"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              أضف إلى السلة
-            </button>
-          </div>
+          )}
         </div>
       </div>
-    </div>
+
+      <QuickViewModal
+        product={mergedProduct}
+        isOpen={isQuickViewOpen}
+        onClose={() => setIsQuickViewOpen(false)}
+      />
+
+      {mounted && isReviewsModalCardOpen && createPortal(
+        <div className="fixed inset-0 z-[1000000] flex items-end md:items-center justify-center bg-black/50 backdrop-blur-sm p-0 md:p-4" dir="rtl">
+          <div className="bg-white w-full md:max-w-xl rounded-t-2xl md:rounded-2xl border border-[#EAEAEA] shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-[fadeIn_0.2s_ease-out]">
+            <div className="p-4 border-b border-[#EAEAEA] flex justify-between items-center bg-[#FAF9F6] sticky top-0 z-10">
+              <h3 className="font-black text-lg text-[#1A1A1A] flex items-center gap-2"><div className="w-[4px] h-[20px] bg-[#E6AE00] rounded-full"></div> تقييمات العملاء</h3>
+              <button onClick={() => setReviewsModalCardOpen(false)} className="bg-white border border-[#EAEAEA] hover:bg-gray-100 p-1.5 rounded-full text-gray-500 transition-colors shadow-sm"><X size={20} /></button>
+            </div>
+            <div className="p-0 overflow-y-auto" dir="rtl">
+              <ProductReviews productHandle={handle || String(id)} />
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
   );
 }

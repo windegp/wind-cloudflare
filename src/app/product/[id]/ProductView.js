@@ -6,11 +6,11 @@ import Image from "next/image";
 import { products as staticProducts } from "../../../lib/products";
 import { useCart } from "../../../context/CartContext";
 import { usePageReady, useGlobalLoader } from "../../../context/GlobalLoaderContext";
-import { db } from "../../../lib/firebase";
-import { doc, getDoc, collection, query, where, limit, getDocs } from "firebase/firestore"; 
+import { getDb } from "../../../lib/firebase";
+import { doc, getDoc, collection, query, where, limit, getDocs, updateDoc, increment } from "firebase/firestore/lite"; 
 import SizeChartModal from "@/components/SizeChartModal";
 import ProductReviews from "@/components/products/ProductReviews";
-import { Plus, Minus, Star, Info, Share2, Heart, ImageIcon, X, Truck, Eye, ShieldCheck, ChevronLeft, Search, ChevronRight, ShoppingBag, CreditCard, Banknote } from "lucide-react";
+import { Plus, Minus, Star, Info, Share2, Heart, ImageIcon, X, Truck, Eye, ShieldCheck, ChevronLeft, Search, ChevronRight, ShoppingBag, CreditCard, Banknote } from '@/components/icons-extra';
 
 export default function ProductView({ initialProduct, sourceCategory }) {
   const { id } = useParams();
@@ -29,6 +29,11 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   const [quantity, setQuantity]             = useState(1);
   const [isSizeGuideOpen, setSizeGuideOpen] = useState(false);
   const [isWishlisted, setIsWishlisted]     = useState(false);
+  
+  // 🔥 حالة الإعجابات الفعلية المربوطة بالفايربيس 🔥
+  const [realLikesCount, setRealLikesCount] = useState(0);
+  const [isLikeProcessing, setIsLikeProcessing] = useState(false);
+
   const [isGalleryOpen, setGalleryOpen]     = useState(false);
   const [galleryIdx, setGalleryIdx]         = useState(0);
   const [isZoomed, setIsZoomed]             = useState(false); 
@@ -37,7 +42,6 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   
   const [relatedProducts, setRelatedProducts] = useState([]);
   
-  // 🔥 حالات التقييم الحقيقية (ستصلنا من كومبوننت ProductReviews)
   const [realRating, setRealRating] = useState(0);
   const [realReviewsCount, setRealReviewsCount] = useState(0);
 
@@ -48,25 +52,90 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   const touchStartY = useRef(null);
   const colorsRef   = useRef(null);
 
-  // --- تفعيل أوامر المشاركة والإعجاب ---
   useEffect(() => {
     if (product?.id) {
       const savedWishlist = JSON.parse(localStorage.getItem('wind_wishlist') || '[]');
       setIsWishlisted(savedWishlist.includes(product.id));
+      // ضبط عدد الإعجابات من بيانات المنتج الأساسية
+      setRealLikesCount(product.likesCount || 0);
     }
-  }, [product?.id]);
+  }, [product?.id, product?.likesCount]);
 
-  const handleWishlistToggle = (e) => {
+  // 🔥 دالة مساعدة للحصول على رقم الأسبوع الحالي 🔥
+  const getCurrentWeekString = () => {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay()||7));
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+    const weekNo = Math.ceil(( ( (d - yearStart) / 86400000) + 1)/7);
+    return `${d.getUTCFullYear()}-W${weekNo}`;
+  };
+
+  // 🔥 دالة التفاعل مع زر الإعجاب (ربط بالفايربيس مع نظام الأسبوع) 🔥
+  const handleWishlistToggle = async (e) => {
     e.stopPropagation();
+    if (isLikeProcessing || !product?.id) return;
+    setIsLikeProcessing(true);
+
     const savedWishlist = JSON.parse(localStorage.getItem('wind_wishlist') || '[]');
+    const isCurrentlyWishlisted = savedWishlist.includes(product.id);
+    const currentWeekIdStr = getCurrentWeekString();
+    
+    // 1. تحديث الواجهة فوراً (Optimistic Update)
     let newWishlist;
-    if (isWishlisted) {
-      newWishlist = savedWishlist.filter(id => id !== product.id);
+    if (isCurrentlyWishlisted) {
+      newWishlist = savedWishlist.filter(item => item !== product.id);
+      setRealLikesCount(prev => Math.max(0, prev - 1));
+      setIsWishlisted(false);
     } else {
       newWishlist = [...savedWishlist, product.id];
+      setRealLikesCount(prev => prev + 1);
+      setIsWishlisted(true);
     }
     localStorage.setItem('wind_wishlist', JSON.stringify(newWishlist));
-    setIsWishlisted(!isWishlisted);
+
+    // 2. تحديث قاعدة البيانات (الفايربيس) بنظام العداد الأسبوعي
+    try {
+      const productRef = doc(getDb(), "products", product.id.toString());
+      
+      if (isCurrentlyWishlisted) {
+        // حالة إزالة الإعجاب (بينقص التوتال وبينقص الأسبوعي لو كان في نفس الأسبوع)
+        const updateData = {
+          likesCount: increment(-1),
+          likesUpdatedAt: new Date().toISOString()
+        };
+        
+        // لو المنتج متسجل عليه نفس الأسبوع ده، نقص إعجاب الأسبوع كمان
+        if (product.currentWeekId === currentWeekIdStr) {
+          updateData.weeklyLikesCount = increment(-1);
+        }
+        await updateDoc(productRef, updateData);
+
+      } else {
+        // حالة إضافة إعجاب
+        let updateData = {
+          likesCount: increment(1),
+          likesUpdatedAt: new Date().toISOString()
+        };
+
+        // لو الأسبوع بتاع المنتج في الفايربيس مطابق للأسبوع الحالي، بنزود العداد بس
+        if (product.currentWeekId === currentWeekIdStr) {
+          updateData.weeklyLikesCount = increment(1);
+        } else {
+          // لو دخلنا في أسبوع جديد، بنعمل ريست للعداد ونحدث الـ ID بتاع الأسبوع
+          updateData.weeklyLikesCount = 1;
+          updateData.currentWeekId = currentWeekIdStr;
+          
+          // تحديث بيانات المنتج لوكال عشان لو داس تاني في نفس الجلسة
+          setProduct(prev => ({...prev, currentWeekId: currentWeekIdStr, weeklyLikesCount: 1}));
+        }
+
+        await updateDoc(productRef, updateData);
+      }
+    } catch (error) {
+      console.log("Product might not be in Firebase yet or static product.", error);
+    } finally {
+      setIsLikeProcessing(false);
+    }
   };
 
   const handleShare = async (e) => {
@@ -87,7 +156,6 @@ export default function ProductView({ initialProduct, sourceCategory }) {
       console.log('Share canceled or failed');
     }
   };
-  // ------------------------------------
 
   useEffect(() => {
     if (isGalleryOpen || isImageZoomModalOpen || isDescModalOpen) {
@@ -109,21 +177,32 @@ export default function ProductView({ initialProduct, sourceCategory }) {
         if (sp.sizes?.length  > 0) setSelectedSize(sp.sizes[0]);
         if (sp.colors?.length > 0) setSelectedColor(sp.colors[0].name || sp.colors[0]);
         
-        const spRefValue = (Array.isArray(sp.categories) ? sp.categories[0] : sp.categories) || (Array.isArray(sp.collections) ? sp.collections[0] : sp.collections) || sp.type;
-        let related = staticProducts.filter(p => {
-          const matchCat = Array.isArray(p.categories) ? p.categories.includes(spRefValue) : p.categories === spRefValue;
-          const matchCol = Array.isArray(p.collections) ? p.collections.includes(spRefValue) : p.collections === spRefValue;
-          return (matchCat || matchCol || p.type === spRefValue) && p.id.toString() !== id.toString();
-        });
-        if (related.length === 0) related = staticProducts.filter(p => p.id.toString() !== id.toString());
+        let related = [];
+        const pageHandlesStrStatic = sp.metafields?.pageCrossSellHandles;
+        if (pageHandlesStrStatic && pageHandlesStrStatic.trim() !== "") {
+          const handlesArray = pageHandlesStrStatic.split(',').map(h => h.trim()).filter(Boolean);
+          related = staticProducts.filter(p => 
+            handlesArray.includes(p.id.toString()) || 
+            handlesArray.includes(p.seo?.handle) || 
+            handlesArray.includes(p.handle)
+          ).filter(p => p.id.toString() !== id.toString());
+        } else {
+          const spRefValue = (Array.isArray(sp.categories) ? sp.categories[0] : sp.categories) || (Array.isArray(sp.collections) ? sp.collections[0] : sp.collections) || sp.type;
+          related = staticProducts.filter(p => {
+            const matchCat = Array.isArray(p.categories) ? p.categories.includes(spRefValue) : p.categories === spRefValue;
+            const matchCol = Array.isArray(p.collections) ? p.collections.includes(spRefValue) : p.collections === spRefValue;
+            return (matchCat || matchCol || p.type === spRefValue) && p.id.toString() !== id.toString();
+          });
+          if (related.length === 0) related = staticProducts.filter(p => p.id.toString() !== id.toString());
+        }
+
         setRelatedProducts(related.slice(0, 5));
-        
         setLoading(false);
         return;
       }
       
       try {
-        const snap = await getDoc(doc(db, "products", id));
+        const snap = await getDoc(doc(getDb(), "products", id));
         if (snap.exists()) {
           const fb = { id: snap.id, ...snap.data() };
           if (!initialProduct) setProduct(fb);
@@ -142,29 +221,56 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           if (iC) setSelectedColor(iC);
           else { const a = fb.options?.colors; if (Array.isArray(a) && a.length) setSelectedColor(a[0].name || a[0]); }
           
-          const fbRefValue = (Array.isArray(fb.categories) && fb.categories[0]) || (Array.isArray(fb.collections) && fb.collections[0]) || fb.type || fb.category;
-          
           let relatedFbs = [];
-          const productsRef = collection(db, "products");
+          const productsRef = collection(getDb(), "products");
 
-          if (fbRefValue) {
+          const pageHandlesStr = fb.metafields?.pageCrossSellHandles;
+          if (pageHandlesStr && pageHandlesStr.trim() !== "") {
+            const handlesArray = pageHandlesStr.split(',').map(h => h.trim()).filter(Boolean);
+            
             try {
-              const qCat = query(productsRef, where("categories", "array-contains", fbRefValue), limit(6));
-              const snapCat = await getDocs(qCat);
-              snapCat.forEach(d => { if(d.id !== id.toString()) relatedFbs.push({ id: d.id, ...d.data() }) });
+              const docsSnaps = await Promise.all(handlesArray.map(h => getDoc(doc(getDb(), "products", h))));
+              docsSnaps.forEach(ds => {
+                if (ds.exists() && ds.id !== id.toString()) {
+                  relatedFbs.push({ id: ds.id, ...ds.data() });
+                }
+              });
 
-              if (relatedFbs.length === 0) {
-                const qCol = query(productsRef, where("collections", "array-contains", fbRefValue), limit(6));
-                const snapCol = await getDocs(qCol);
-                snapCol.forEach(d => { if(d.id !== id.toString()) relatedFbs.push({ id: d.id, ...d.data() }) });
+              const foundIds = relatedFbs.map(r => r.id);
+              const missingHandles = handlesArray.filter(h => !foundIds.includes(h));
+              
+              if (missingHandles.length > 0) {
+                const qHandles = query(productsRef, where("seo.handle", "in", missingHandles.slice(0, 10)));
+                const snapHandles = await getDocs(qHandles);
+                snapHandles.forEach(ds => {
+                  if (ds.id !== id.toString() && !foundIds.includes(ds.id)) {
+                    relatedFbs.push({ id: ds.id, ...ds.data() });
+                  }
+                });
               }
-            } catch (err) { console.error("Error fetching related:", err); }
-          }
+            } catch (err) { console.error("Error fetching custom cross-sells:", err); }
+          } 
+          else {
+            const fbRefValue = (Array.isArray(fb.categories) && fb.categories[0]) || (Array.isArray(fb.collections) && fb.collections[0]) || fb.type || fb.category;
+            if (fbRefValue) {
+              try {
+                const qCat = query(productsRef, where("categories", "array-contains", fbRefValue), limit(6));
+                const snapCat = await getDocs(qCat);
+                snapCat.forEach(d => { if(d.id !== id.toString()) relatedFbs.push({ id: d.id, ...d.data() }) });
 
-          if (relatedFbs.length === 0) {
-            const qFallback = query(productsRef, limit(6));
-            const snapFallback = await getDocs(qFallback);
-            snapFallback.forEach(d => { if(d.id !== id.toString()) relatedFbs.push({ id: d.id, ...d.data() }) });
+                if (relatedFbs.length === 0) {
+                  const qCol = query(productsRef, where("collections", "array-contains", fbRefValue), limit(6));
+                  const snapCol = await getDocs(qCol);
+                  snapCol.forEach(d => { if(d.id !== id.toString()) relatedFbs.push({ id: d.id, ...d.data() }) });
+                }
+              } catch (err) { console.error("Error fetching related:", err); }
+            }
+
+            if (relatedFbs.length === 0) {
+              const qFallback = query(productsRef, limit(6));
+              const snapFallback = await getDocs(qFallback);
+              snapFallback.forEach(d => { if(d.id !== id.toString()) relatedFbs.push({ id: d.id, ...d.data() }) });
+            }
           }
 
           const uniqueRelated = Array.from(new Map(relatedFbs.map(item => [item.id, item])).values());
@@ -182,6 +288,10 @@ export default function ProductView({ initialProduct, sourceCategory }) {
       signalPageReady();
     }
   }, [loading, product, pathname, signalPageReady]);
+
+  useEffect(() => {
+    setQuantity(1);
+  }, [id, selectedSize, selectedColor]);
 
   const shortDescription = useMemo(() => {
     if (!product?.description) return "";
@@ -288,7 +398,6 @@ export default function ProductView({ initialProduct, sourceCategory }) {
     return gallery[1] || activeImage;
   };
 
-  // 🔥 دالة التمرير لسكشن التقييمات بنعومة
   const scrollToReviews = (e) => {
     e.preventDefault();
     const reviewsElement = document.getElementById("reviews-section");
@@ -297,11 +406,23 @@ export default function ProductView({ initialProduct, sourceCategory }) {
     }
   };
 
+  const renderCustomHtml = (position) => {
+    if (product?.metafields?.customHtmlSnippet && product?.metafields?.customHtmlPosition === position) {
+      return (
+        <div 
+          className={`w-full custom-html-snippet ${position === 'below_cart' ? 'mt-6' : 'mb-6'}`}
+          dangerouslySetInnerHTML={{ __html: product.metafields.customHtmlSnippet }} 
+        />
+      );
+    }
+    return null;
+  };
+
   return (
-    <div className="bg-[#121212] min-h-screen text-white pb-10 selection:bg-[#F5C518] selection:text-black">
+    <div className="bg-[#FAF9F6] min-h-screen text-[#1A1A1A] pb-10 selection:bg-[#1A1A1A] selection:text-white">
 
       <div 
-        className="relative w-full h-[65vh] md:h-[75vh] bg-black group" 
+        className="relative w-full h-[65vh] md:h-[75vh] bg-[#F0EEE6] group" 
         onClick={() => openGallery(activeIdx)}
         onTouchStart={handleHeroTouchStart}
         onTouchMove={handleHeroTouchMove}
@@ -311,18 +432,18 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           key={activeImage}
           src={getImageUrl(activeImage)} 
           alt={product.title} 
-          className="w-full h-full object-cover object-top opacity-80 transition-opacity duration-500 animate-[galleryIn_0.4s_ease-out]"
+          className="w-full h-full object-cover object-top opacity-95 transition-opacity duration-500 animate-[galleryIn_0.4s_ease-out]"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-[#121212]/40 to-transparent pointer-events-none"></div>
+        <div className="absolute inset-0 bg-gradient-to-t from-[#FAF9F6] via-[#FAF9F6]/20 to-transparent pointer-events-none"></div>
 
         <button 
           onClick={(e) => { e.stopPropagation(); openGallery(activeIdx); }} 
-          className="absolute top-4 right-4 z-10 bg-black/40 p-2.5 rounded-full backdrop-blur-md border border-white/20 text-white hover:text-[#F5C518] transition-colors drop-shadow-md cursor-zoom-in"
+          className="absolute top-4 right-4 z-10 bg-white/60 p-2.5 rounded-full backdrop-blur-md border border-[#EAEAEA] text-[#1A1A1A] hover:bg-white transition-colors shadow-sm cursor-zoom-in"
         >
           <Search size={18} />
         </button>
 
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 text-white/50 text-[10px] md:text-xs font-bold font-sans tracking-[0.2em] pointer-events-none z-10">
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 text-[#1A1A1A]/70 text-[10px] md:text-xs font-bold font-sans tracking-[0.2em] pointer-events-none z-10 bg-white/60 px-3 py-1 rounded-full backdrop-blur-sm border border-[#EAEAEA]">
           <span>&lt;</span>
           <span>{activeIdx + 1} / {gallery.length}</span>
           <span>&gt;</span>
@@ -331,55 +452,58 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
       <div className="px-4 py-4 max-w-4xl mx-auto" dir="rtl">
         
+        {/* أزرار الإجراءات العلوية */}
         <div className="mb-4 flex items-center gap-6 pt-1">
-          <button onClick={(e) => { e.stopPropagation(); openGallery(activeIdx); }} className="flex items-center gap-1.5 text-gray-300 hover:text-[#F5C518] transition-colors">
+          <button onClick={(e) => { e.stopPropagation(); openGallery(activeIdx); }} className="flex items-center gap-1.5 text-gray-500 hover:text-[#1A1A1A] transition-colors">
             <ImageIcon size={18} />
             <span className="text-[12px] font-bold" style={{fontFamily:"Cairo,sans-serif"}}>{gallery.length} صور</span>
           </button>
           
-          <button onClick={handleWishlistToggle} className="flex items-center gap-1.5 text-gray-300 hover:text-[#F5C518] transition-colors">
-            <Heart size={18} fill={isWishlisted ? "#F5C518" : "none"} color={isWishlisted ? "#F5C518" : "currentColor"} />
-            <span className="text-[12px] font-bold" style={{fontFamily:"Cairo,sans-serif"}}>{product.likes || "1.2K"}</span>
+          <button 
+            onClick={handleWishlistToggle} 
+            disabled={isLikeProcessing}
+            className={`flex items-center gap-1.5 transition-colors ${isLikeProcessing ? 'opacity-50 cursor-not-allowed' : 'hover:text-[#EF4444] text-gray-500'}`}
+          >
+            <Heart size={18} fill={isWishlisted ? "#EF4444" : "none"} color={isWishlisted ? "#EF4444" : "currentColor"} className="transition-all duration-300" />
+            {/* 🔥 قراءة الإعجابات الحقيقية بدلاً من الوهمية 🔥 */}
+            <span className={`text-[12px] font-bold transition-colors ${isWishlisted ? 'text-[#EF4444]' : 'text-gray-500'}`} style={{fontFamily:"Cairo,sans-serif"}}>
+              {realLikesCount > 0 ? (realLikesCount > 999 ? (realLikesCount/1000).toFixed(1) + 'K' : realLikesCount) : "إعجاب"}
+            </span>
           </button>
 
-          <button onClick={handleShare} className="flex items-center gap-1.5 text-gray-300 hover:text-[#F5C518] transition-colors">
+          <button onClick={handleShare} className="flex items-center gap-1.5 text-gray-500 hover:text-[#1A1A1A] transition-colors">
             <Share2 size={18} />
             <span className="text-[12px] font-bold" style={{fontFamily:"Cairo,sans-serif"}}>مشاركة</span>
           </button>
         </div>
 
         <div className="mb-8">
-          <h1 className="text-[22px] md:text-2xl font-black text-white tracking-tight leading-tight mb-2" style={{fontFamily:"Cairo,sans-serif"}}>{product.title}</h1>
+          {renderCustomHtml('above_title')}
+
+          <h1 className="text-[22px] md:text-2xl font-black text-[#1A1A1A] tracking-tight leading-tight mb-2" style={{fontFamily:"Cairo,sans-serif"}}>{product.title}</h1>
           
-          {/* 🔥 التقييمات الحقيقية قابلة للضغط أسفل العنوان مباشرة */}
           <a href="#reviews-section" onClick={scrollToReviews} className="flex items-center gap-2 group w-fit hover:opacity-80 transition-opacity">
-            <div className="flex gap-0.5 text-[#F5C518]">
+            <div className="flex gap-0.5 text-[#E6AE00]">
               {[...Array(5)].map((_, i) => (
-                <Star key={i} size={14} fill={i < Math.round(realRating) ? "currentColor" : "none"} className={i >= Math.round(realRating) ? "text-gray-500" : ""} />
+                <Star key={i} size={14} fill={i < Math.round(realRating) ? "currentColor" : "none"} className={i >= Math.round(realRating) ? "text-gray-300" : ""} />
               ))}
             </div>
-            <span className="text-xs font-bold text-gray-400 group-hover:text-white transition-colors" style={{fontFamily:"Cairo,sans-serif"}}>
+            <span className="text-xs font-bold text-gray-500 group-hover:text-[#1A1A1A] transition-colors" style={{fontFamily:"Cairo,sans-serif"}}>
               {realReviewsCount > 0 ? `(${realReviewsCount} تقييم)` : "(أضف أول تقييم)"}
             </span>
           </a>
           
-          <div className="flex items-center gap-3 text-[11px] md:text-[13px] font-medium text-gray-400 mt-4 mb-2" style={{fontFamily:"Cairo,sans-serif"}}>
-            
-            <span className="border border-gray-600 rounded-[4px] px-2 py-0.5 text-gray-300">
+          <div className="flex items-center gap-3 text-[11px] md:text-[13px] font-medium text-gray-500 mt-4 mb-2" style={{fontFamily:"Cairo,sans-serif"}}>
+            <span className="border border-gray-300 bg-white rounded-[4px] px-2 py-0.5 text-gray-600 shadow-sm">
               ويند-{new Date().getFullYear().toString().slice(-2)}
             </span>
-            
-            <span className="w-1.5 h-1.5 bg-gray-500 rounded-sm"></span>
-            <span className="text-gray-300">منتجات ويند</span>
+            <span className="w-1.5 h-1.5 bg-gray-300 rounded-full"></span>
+            <span className="text-gray-600">منتجات ويند</span>
             
             {(() => {
               let validPaths = [];
-              if (Array.isArray(product?.collections)) {
-                validPaths = [...validPaths, ...product.collections.filter(c => typeof c === 'string' && c.startsWith('/'))];
-              }
-              if (Array.isArray(product?.categories)) {
-                validPaths = [...validPaths, ...product.categories.filter(c => typeof c === 'string' && c.startsWith('/'))];
-              }
+              if (Array.isArray(product?.collections)) validPaths = [...validPaths, ...product.collections.filter(c => typeof c === 'string' && c.startsWith('/'))];
+              if (Array.isArray(product?.categories)) validPaths = [...validPaths, ...product.categories.filter(c => typeof c === 'string' && c.startsWith('/'))];
               
               let displayCategory = sourceCategory;
               if (!displayCategory && validPaths.length > 0) {
@@ -392,8 +516,8 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                 const cleanName = String(displayCategory).replace(/^\//, '').replace(/-/g, ' ').trim();
                 return (
                   <>
-                    <span className="w-1.5 h-1.5 bg-gray-500 rounded-sm"></span>
-                    <span className="capitalize text-[#F5C518] font-bold">{cleanName}</span>
+                    <span className="w-1.5 h-1.5 bg-gray-300 rounded-full"></span>
+                    <span className="capitalize text-[#1A1A1A] font-bold">{cleanName}</span>
                   </>
                 );
               }
@@ -402,8 +526,8 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           </div>
         </div>
 
-        <div className="flex gap-4 md:gap-5 items-start border-t border-[#333]/50 pt-6">
-          <div className="w-28 h-40 md:w-32 md:h-48 flex-shrink-0 rounded-xl overflow-hidden border border-[#333] shadow-2xl relative group cursor-pointer hover:border-white/20 transition-colors" onClick={() => setImageZoomModalOpen(true)}>
+        <div className="flex gap-4 md:gap-5 items-start border-t border-[#EAEAEA] pt-6">
+          <div className="w-28 h-40 md:w-32 md:h-48 flex-shrink-0 rounded-2xl overflow-hidden border border-[#EAEAEA] shadow-md relative group cursor-pointer hover:border-[#1A1A1A] transition-colors bg-white" onClick={() => setImageZoomModalOpen(true)}>
             {safeColors.map((ci, i) => {
               const name  = typeof ci === "string" ? ci : ci.name;
               const hi    = product.colorSwatches?.[name] || (typeof ci === "object" ? ci.swatch : "#333");
@@ -411,17 +535,17 @@ export default function ProductView({ initialProduct, sourceCategory }) {
               if (!isImg) return null;
               const isSel = selectedColor === name;
               return (
-                <Image key={i} src={getImageUrl(hi)} fill quality={70} sizes="(max-width: 768px) 112px, 128px" priority={true} className={`object-cover transition-opacity duration-150 ${isSel ? 'opacity-100 z-10' : 'opacity-0 z-0'}`} alt={name} />
+                <Image key={i} src={getImageUrl(hi)} fill sizes="(max-width: 768px) 112px, 128px" priority={true} className={`object-cover transition-opacity duration-150 ${isSel ? 'opacity-100 z-10' : 'opacity-0 z-0'}`} alt={name} />
               );
             })}
-            <Image src={getImageUrl(gallery[1] || activeImage)} fill quality={70} sizes="(max-width: 768px) 112px, 128px" priority={true} className={`object-cover transition-opacity duration-150 ${(!selectedColor || !product.colorSwatches?.[selectedColor]) ? 'opacity-100 z-10' : 'opacity-0 z-0'}`} alt="poster default" />
+            <Image src={getImageUrl(gallery[1] || activeImage)} fill sizes="(max-width: 768px) 112px, 128px" priority={true} className={`object-cover transition-opacity duration-150 ${(!selectedColor || !product.colorSwatches?.[selectedColor]) ? 'opacity-100 z-10' : 'opacity-0 z-0'}`} alt="poster default" />
 
-            <div className="absolute top-0 right-0 bg-black/70 px-1.5 py-1 rounded-bl-md z-20 border-b border-l border-[#333]">
-              <Search size={13} className="text-white" />
+            <div className="absolute top-0 right-0 bg-white/80 px-1.5 py-1 rounded-bl-md z-20 border-b border-l border-[#EAEAEA]">
+              <Search size={13} className="text-[#1A1A1A]" />
             </div>
             
-            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm z-30">
-              <div className="bg-black/60 p-2.5 rounded-full border border-white/50 text-white shadow-lg">
+            <div className="absolute inset-0 bg-white/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-[2px] z-30">
+              <div className="bg-white/80 p-2.5 rounded-full border border-[#EAEAEA] text-[#1A1A1A] shadow-lg">
                 <Search size={20} />
               </div>
             </div>
@@ -430,14 +554,14 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           <div className="flex-1 flex flex-col h-40 md:h-48 justify-center gap-3">
             <div>
               <div className="flex items-baseline gap-1.5 mt-1">
-                <span style={{ fontFamily: 'Impact, sans-serif', letterSpacing: '1px' }} className="text-3xl md:text-4xl font-normal text-white">{product.price}</span>
-                <span className="text-sm font-bold text-gray-400">ج.م</span>
+                <span style={{ fontFamily: 'Impact, sans-serif', letterSpacing: '1px' }} className="text-3xl md:text-4xl font-normal text-[#1A1A1A]">{product.price}</span>
+                <span className="text-sm font-bold text-gray-500">ج.م</span>
                 {product.compareAtPrice && (
-                  <span className="text-xs text-gray-600 line-through mr-1">{product.compareAtPrice} ج.م</span>
+                  <span className="text-xs text-gray-400 line-through mr-1">{product.compareAtPrice} ج.م</span>
                 )}
               </div>
 
-              <div className="flex items-center gap-2 mt-2">
+              <div className="flex items-center gap-2 mt-2 bg-white w-fit px-2 py-1 rounded-full border border-[#EAEAEA] shadow-sm">
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#22c55e] opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-[#22c55e]"></span>
@@ -449,14 +573,14 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             {product.description && (
               <div className="relative mt-2 flex flex-col justify-end overflow-hidden flex-1">
                 <div className="relative flex-1 overflow-hidden">
-                  <p className="text-[11px] leading-relaxed text-gray-400 text-right pr-1" style={{fontFamily:"Tajawal,sans-serif"}}>
+                  <p className="text-[11px] leading-relaxed text-gray-500 text-right pr-1 font-tajawal">
                     {shortDescription}
                   </p>
-                  <div className="absolute bottom-0 w-full h-8 bg-gradient-to-t from-[#121212] via-[#121212]/90 to-transparent pointer-events-none"></div>
+                  <div className="absolute bottom-0 w-full h-8 bg-gradient-to-t from-[#FAF9F6] via-[#FAF9F6]/90 to-transparent pointer-events-none"></div>
                 </div>
                 <button 
                   onClick={() => setDescModalOpen(true)}
-                  className="text-[#036EE7] text-[10px] font-bold flex items-center gap-1 hover:underline underline-offset-4 w-fit pt-1 pr-1 transition-opacity hover:opacity-80"
+                  className="text-[#1A1A1A] text-[10px] font-bold flex items-center gap-1 hover:underline underline-offset-4 w-fit pt-1 pr-1 transition-opacity hover:opacity-70"
                 >
                   <Info size={12} />
                   عرض تفاصيل المنتج والخامات
@@ -466,27 +590,27 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           </div>
         </div>
 
-        <div className="mt-10 space-y-10 border-t border-[#333]/50 pt-8">
+        <div className="mt-10 space-y-10 border-t border-[#EAEAEA] pt-8">
           
           {safeColors.length > 0 && (
             <div>
               <div className="flex items-baseline gap-2 mb-5">
-                <div className="w-1 h-4 bg-[#F5C518] rounded-sm self-center shadow-[0_0_8px_rgba(245,197,24,0.4)]" />
-                <span className="text-xs font-bold text-gray-400 tracking-widest uppercase" style={{fontFamily:"Cairo,sans-serif"}}>
+                <div className="w-[4px] h-[16px] bg-[#E6AE00] rounded-full self-center" />
+                <span className="text-xs font-bold text-gray-500 tracking-widest uppercase" style={{fontFamily:"Cairo,sans-serif"}}>
                   {safeColors.length > 1 ? "اختر اللون :" : "اللون :"}
                 </span>
-                {selectedColor && <span className="text-white text-[13px] font-bold capitalize ml-1" style={{fontFamily:"Tajawal,sans-serif"}}>{selectedColor}</span>}
+                {selectedColor && <span className="text-[#1A1A1A] text-[13px] font-bold capitalize ml-1 font-tajawal">{selectedColor}</span>}
               </div>
               <div ref={colorsRef} className="flex flex-wrap gap-4">
                 {safeColors.map((ci, i) => {
                   const name  = typeof ci === "string" ? ci : ci.name;
-                  const hi    = product.colorSwatches?.[name] || (typeof ci === "object" ? ci.swatch : "#333");
+                  const hi    = product.colorSwatches?.[name] || (typeof ci === "object" ? ci.swatch : "#EAEAEA");
                   const isImg = hi.startsWith("http") || hi.includes("/");
                   const isSel = selectedColor === name;
                   return (
                     <button key={i} onClick={() => { setSelectedColor(name); if (isImg) { setActiveImage(hi); setActiveIdx(0); } }} title={name} className="flex flex-col items-center group/c transition-all duration-300 ease-out">
-                      <div className={`w-11 h-11 rounded-[10px] overflow-hidden transition-all duration-300 ease-out ${isSel ? "ring-2 ring-white ring-offset-2 ring-offset-[#121212] shadow-[0_4px_16px_rgba(255,255,255,0.2)] scale-[1.08]" : "ring-1 ring-white/10 hover:ring-white/30 hover:shadow-[0_4px_10px_rgba(255,255,255,0.08)] hover:-translate-y-1"}`}>
-                        {isImg ? <Image src={getImageUrl(hi)} alt={name} width={60} height={80} quality={75} className="w-full h-full object-cover" /> : <div style={{backgroundColor:hi}} className="w-full h-full" />}
+                      <div className={`w-11 h-11 rounded-xl overflow-hidden transition-all duration-300 ease-out bg-white ${isSel ? "ring-2 ring-[#1A1A1A] ring-offset-2 ring-offset-[#FAF9F6] shadow-md scale-[1.08]" : "ring-1 ring-[#EAEAEA] hover:ring-[#1A1A1A]/50 hover:shadow-sm hover:-translate-y-1"}`}>
+                        {isImg ? <Image src={getImageUrl(hi)} alt={name} width={60} height={80} quality={75} className="w-full h-full object-cover" /> : <div style={{backgroundColor:hi}} className="w-full h-full border border-black/5 rounded-xl" />}
                       </div>
                     </button>
                   );
@@ -499,20 +623,20 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             <div>
               <div className="flex items-center justify-between mb-5">
                 <div className="flex items-baseline gap-2">
-                  <div className="w-1 h-4 bg-[#F5C518] rounded-sm self-center shadow-[0_0_8px_rgba(245,197,24,0.4)]" />
-                  <span className="text-xs font-bold text-gray-400 tracking-widest uppercase" style={{fontFamily:"Cairo,sans-serif"}}>
+                  <div className="w-[4px] h-[16px] bg-[#E6AE00] rounded-full self-center" />
+                  <span className="text-xs font-bold text-gray-500 tracking-widest uppercase" style={{fontFamily:"Cairo,sans-serif"}}>
                     {safeSizes.length > 1 ? "اختر المقاس :" : "المقاس :"}
                   </span>
-                  {selectedSize && <span className="text-white text-[13px] font-bold capitalize ml-1" style={{fontFamily:"Tajawal,sans-serif"}}>{selectedSize}</span>}
+                  {selectedSize && <span className="text-[#1A1A1A] text-[13px] font-bold capitalize ml-1 font-tajawal">{selectedSize}</span>}
                 </div>
-                <button onClick={() => setSizeGuideOpen(true)} className="text-[11px] text-white font-bold flex items-center gap-1.5 border border-white/20 hover:border-white/60 hover:bg-white/10 px-3 py-1.5 rounded-full transition-all" style={{fontFamily:"Cairo,sans-serif"}}>
+                <button onClick={() => setSizeGuideOpen(true)} className="text-[11px] text-[#1A1A1A] font-bold flex items-center gap-1.5 border border-[#EAEAEA] bg-white hover:border-[#1A1A1A]/50 hover:bg-[#FAF9F6] px-4 py-1.5 rounded-full transition-all shadow-sm" style={{fontFamily:"Cairo,sans-serif"}}>
                   <Info size={13} /> دليل القياسات
                 </button>
               </div>
               {safeSizes.length > 1 && (
                 <div className="flex flex-wrap gap-2.5">
                   {safeSizes.map(sz => (
-                    <button key={sz} onClick={() => setSelectedSize(sz)} className={`min-w-[58px] h-10 text-sm font-black rounded-xl border transition-all duration-200 capitalize ${selectedSize===sz ? "bg-white text-black border-white shadow-[0_0_20px_rgba(255,255,255,0.15)] scale-105" : "bg-[#1a1a1a] text-gray-400 border-[#333] hover:border-white/40 hover:text-gray-200 hover:shadow-[0_0_10px_rgba(255,255,255,0.05)]"}`} style={{fontFamily:"Cairo,sans-serif"}}>{sz}</button>
+                    <button key={sz} onClick={() => setSelectedSize(sz)} className={`min-w-[58px] h-10 text-sm font-black rounded-xl border transition-all duration-200 capitalize ${selectedSize===sz ? "bg-[#1A1A1A] text-white border-[#1A1A1A] shadow-md scale-105" : "bg-white text-gray-500 border-[#EAEAEA] hover:border-[#1A1A1A]/50 hover:text-[#1A1A1A] hover:shadow-sm"}`} style={{fontFamily:"Cairo,sans-serif"}}>{sz}</button>
                   ))}
                 </div>
               )}
@@ -521,64 +645,72 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
           <div className="pt-6">
             <div className="flex gap-3">
-              <button onClick={() => addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity})} className="pay-btn flex-1 text-black font-black text-base py-4 rounded-[8px] flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(245,197,24,0.15)] transition-all group/cta tracking-wide" style={{fontFamily:"Cairo,sans-serif"}}>
+              <button 
+                onClick={() => {
+                  addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity});
+                  setQuantity(1);
+                }} 
+                className="pay-btn flex-1 font-black text-base py-4 rounded-[8px] flex items-center justify-center gap-2 shadow-[0_4px_20px_rgba(245,197,24,0.3)] transition-all group/cta tracking-wide" 
+                style={{fontFamily:"Cairo,sans-serif"}}
+              >
                 <ShoppingBag size={18} className="transition-transform group-hover/cta:-translate-y-0.5" />
                 أضف إلي السلة — {(product.price * quantity)} ج.م
               </button>
               
-              <div className="flex items-center justify-between bg-[#1a1a1a] border border-[#333] rounded-[8px] px-1 w-[80px] shrink-0 transition-colors hover:border-[#F5C518]/40">
-                <button onClick={() => setQuantity(q => q + 1)} className="text-gray-400 hover:text-[#F5C518] p-1.5 transition-colors"><Plus size={16} /></button>
-                <span className="text-white font-bold text-sm" style={{fontFamily:"Cairo,sans-serif"}}>{quantity}</span>
-                <button onClick={() => setQuantity(q => q > 1 ? q - 1 : 1)} className="text-gray-400 hover:text-[#F5C518] p-1.5 transition-colors"><Minus size={16} /></button>
+              <div className="flex items-center justify-between bg-white border border-[#EAEAEA] rounded-[8px] px-2 w-[100px] shrink-0 transition-colors hover:border-[#1A1A1A]/30 shadow-sm">
+                <button onClick={() => setQuantity(q => q + 1)} className="text-gray-500 hover:text-[#1A1A1A] p-2 transition-colors"><Plus size={16} /></button>
+                <span className="text-[#1A1A1A] font-bold text-sm" style={{fontFamily:"Cairo,sans-serif"}}>{quantity}</span>
+                <button onClick={() => setQuantity(q => q > 1 ? q - 1 : 1)} className="text-gray-500 hover:text-[#1A1A1A] p-2 transition-colors"><Minus size={16} /></button>
               </div>
             </div>
+            {renderCustomHtml('below_cart')}
           </div>
         </div>
 
-        <div className="mt-8 flex justify-between items-center bg-[#1a1a1a]/50 py-3 px-2 md:px-4 rounded-lg border border-[#333] shadow-sm">
-          <div className="flex items-center gap-1.5 text-[10px] md:text-xs text-gray-300 font-bold flex-1 justify-center">
-            <Truck size={14} className="text-[#F5C518]" />
+        <div className="mt-8 flex justify-between items-center bg-white py-3 px-2 md:px-4 rounded-xl border border-[#EAEAEA] shadow-sm">
+          <div className="flex items-center gap-1.5 text-[10px] md:text-xs text-gray-600 font-bold flex-1 justify-center">
+            <Truck size={14} className="text-[#1A1A1A]" />
             <span>شحن سريع</span>
           </div>
-          <div className="w-px h-4 bg-[#333]"></div>
-          <div className="flex items-center gap-1.5 text-[10px] md:text-xs text-gray-300 font-bold flex-1 justify-center">
-            <Eye size={14} className="text-[#F5C518]" />
+          <div className="w-px h-6 bg-[#EAEAEA]"></div>
+          <div className="flex items-center gap-1.5 text-[10px] md:text-xs text-gray-600 font-bold flex-1 justify-center">
+            <Eye size={14} className="text-[#1A1A1A]" />
             <span>معاينة للطلب</span>
           </div>
-          <div className="w-px h-4 bg-[#333]"></div>
-          <div className="flex items-center gap-1.5 text-[10px] md:text-xs text-gray-300 font-bold flex-1 justify-center">
-            <ShieldCheck size={14} className="text-[#F5C518]" />
+          <div className="w-px h-6 bg-[#EAEAEA]"></div>
+          <div className="flex items-center gap-1.5 text-[10px] md:text-xs text-gray-600 font-bold flex-1 justify-center">
+            <ShieldCheck size={14} className="text-[#1A1A1A]" />
             <span>استرجاع سهل</span>
           </div>
         </div>
 
-        <div className="mt-3 flex items-center justify-between bg-[#121212] py-3 px-4 rounded-lg border border-[#333] shadow-sm">
-          <div className="flex items-center gap-2 text-[11px] text-gray-400 font-medium">
+        <div className="mt-4 flex items-center justify-between bg-white py-3 px-4 rounded-xl border border-[#EAEAEA] shadow-sm">
+          <div className="flex items-center gap-2 text-[11px] text-gray-600 font-medium">
             <ShieldCheck size={14} className="text-green-500" />
             <span>دفع آمن 100%</span>
           </div>
           <div className="flex items-center gap-3 text-gray-400">
-             <CreditCard size={18} className="hover:text-white transition-colors"/>
-             <Banknote size={18} className="hover:text-white transition-colors"/>
-             <div className="bg-[#1a1a1a] px-1.5 py-0.5 rounded text-[9px] border border-[#333] font-bold tracking-wider">INSTAPAY</div>
-             <div className="bg-[#1a1a1a] px-1.5 py-0.5 rounded text-[9px] border border-[#333] font-bold tracking-wider">VISA</div>
+             <CreditCard size={18} className="hover:text-[#1A1A1A] transition-colors"/>
+             <Banknote size={18} className="hover:text-[#1A1A1A] transition-colors"/>
+             <div className="bg-[#FAF9F6] px-1.5 py-0.5 rounded text-[9px] border border-[#EAEAEA] text-[#1A1A1A] font-bold tracking-wider">INSTAPAY</div>
+             <div className="bg-[#FAF9F6] px-1.5 py-0.5 rounded text-[9px] border border-[#EAEAEA] text-[#1A1A1A] font-bold tracking-wider">VISA</div>
           </div>
         </div>
 
         {product.description && (
-          <div className="py-8 border-t border-[#333]/50 mt-8">
+          <div className="py-8 border-t border-[#EAEAEA] mt-8">
             <div className="flex items-center gap-2 mb-6">
-              <div className="w-1 h-5 bg-[#F5C518] rounded-sm" />
-              <span className="text-xs font-bold text-gray-400 uppercase tracking-widest" style={{fontFamily:"Cairo,sans-serif"}}>تفاصيل المنتج</span>
+              <div className="w-[4px] h-[20px] bg-[#E6AE00] rounded-full" />
+              <span className="text-sm font-bold text-[#1A1A1A] tracking-wide" style={{fontFamily:"Cairo,sans-serif"}}>تفاصيل المنتج</span>
             </div>
-            <div className="ql-editor-display dark-wind-tabs" dir="rtl">
+            <div className="ql-editor-display light-wind-tabs" dir="rtl">
               <div dangerouslySetInnerHTML={{__html: closedDescriptionHTML}} />
             </div>
+            {renderCustomHtml('below_description')}
           </div>
         )}
         
-        {/* 🔥 قسم تقييمات المنتج الحقيقية (بإرسال دوال التحديث للاستماع للأرقام) */}
-        <div className="py-4 mt-2">
+        <div id="reviews-section" className="py-4 mt-2">
           <ProductReviews 
             productHandle={product.handle || product.id} 
             onReviewStatsUpdate={(rating, count) => {
@@ -588,46 +720,48 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           />
         </div>
 
-        {relatedProducts.length > 0 && (
-          <div className="py-8 border-t border-[#333]/50 mt-4">
-            <div className="flex items-center gap-2 mb-6">
-              <div className="w-1 h-6 bg-[#F5C518] rounded-sm" />
-              <h2 className="text-lg md:text-xl font-black text-white tracking-tight" style={{fontFamily:"Cairo,sans-serif"}}>
+        {product.metafields?.hideRelatedSection !== "Yes" && relatedProducts.length > 0 && (
+          <div className="py-10 border-t border-[#EAEAEA] mt-6">
+            <div className="flex items-center gap-3 mb-8">
+              <div className="w-[4px] h-[24px] bg-[#E6AE00] rounded-full" />
+              <h2 className="text-xl md:text-2xl font-black text-[#1A1A1A] tracking-tight" style={{fontFamily:"Cairo,sans-serif"}}>
                 منتجات قد تعجبك
               </h2>
             </div>
             
-            <div className="flex gap-4 overflow-x-auto hide-scrollbar-horizontal pb-4 pt-2 -mx-4 px-4 md:mx-0 md:px-0">
+            <div className="flex gap-4 md:gap-6 overflow-x-auto hide-scrollbar-horizontal pb-4 pt-2 -mx-4 px-4 md:mx-0 md:px-0" dir="rtl">
               {relatedProducts.map(rp => (
                 <Link 
                   href={`/product/${rp.id}`} 
                   key={rp.id} 
-                  className="flex-shrink-0 w-[140px] md:w-[180px] group cursor-pointer block transition-all duration-300 hover:shadow-[0_8px_32px_rgba(245,197,24,0.10)] rounded-2xl"
+                  className="flex-shrink-0 w-[150px] md:w-[200px] group cursor-pointer block transition-all duration-300"
                 >
-                  <div className="relative aspect-[3/4] bg-[#1a1a1a] rounded-2xl overflow-hidden border border-[#333] shadow-lg mb-3 group-hover:border-[#F5C518]/30 transition-colors duration-300">
+                  <div className="relative aspect-[3/4] bg-white rounded-2xl overflow-hidden border border-[#EAEAEA] shadow-sm mb-3 group-hover:border-[#1A1A1A]/30 group-hover:shadow-lg transition-all duration-500">
                     <img 
                       src={getRelatedImageUrl(rp)} 
                       alt={rp.title} 
                       loading="lazy"
-                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 
+                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" 
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
                     
-                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300">
-                      <div className="bg-[#F5C518] text-black p-2 rounded-full shadow-[0_0_15px_rgba(245,197,24,0.4)]">
+                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 z-10">
+                      <div className="bg-white text-[#1A1A1A] p-2.5 rounded-full shadow-md hover:bg-[#1A1A1A] hover:text-white transition-colors">
                         <ShoppingBag size={16} />
                       </div>
                     </div>
                   </div>
                   
-                  <h3 className="text-xs md:text-sm text-gray-300 font-bold truncate mb-1.5 transition-colors group-hover:text-white" style={{fontFamily:"Cairo,sans-serif"}}>
-                    {rp.title}
-                  </h3>
-                  <div className="flex items-end gap-1">
-                    <span className="text-white font-black text-sm md:text-base" style={{fontFamily:"Impact, sans-serif", letterSpacing:"1px"}}>
-                      {rp.price}
-                    </span>
-                    <span className="text-gray-400 text-[10px] md:text-xs font-bold mb-0.5">ج.م</span>
+                  <div className="text-right px-1">
+                    <h3 className="text-sm md:text-base text-[#1A1A1A] font-bold line-clamp-2 mb-1.5 transition-colors group-hover:text-gray-600" style={{fontFamily:"Cairo,sans-serif"}}>
+                      {rp.title}
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[#1A1A1A] font-black text-sm md:text-lg" style={{fontFamily:"Impact, sans-serif", letterSpacing:"1px"}}>
+                        {rp.price}
+                      </span>
+                      <span className="text-gray-500 text-[10px] md:text-xs font-bold mt-1">ج.م</span>
+                    </div>
                   </div>
                 </Link>
               ))}
@@ -635,21 +769,23 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           </div>
         )}
 
+        {renderCustomHtml('bottom_page')}
+
       </div>
 
       {isGalleryOpen && (
         <div 
-          className="fixed inset-0 z-[99999] bg-black/95 flex flex-col gallery-enter backdrop-blur-md"
+          className="fixed inset-0 z-[99999] bg-[#FAF9F6]/98 flex flex-col gallery-enter backdrop-blur-md"
           onClick={() => setGalleryOpen(false)} 
         >
-          <div className="flex items-center justify-between px-5 py-4 border-b border-white/10" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between px-5 py-4 border-b border-[#EAEAEA]" onClick={e => e.stopPropagation()}>
             <div className="flex items-center gap-3">
-              <div className="w-[3px] h-5 bg-[#F5C518] rounded-sm shadow-[0_0_8px_rgba(245,197,24,0.4)]" />
-              <span className="text-white font-black text-sm" style={{fontFamily:"Cairo,sans-serif"}}>{product.title}</span>
+              <div className="w-[4px] h-5 bg-[#E6AE00] rounded-full" />
+              <span className="text-[#1A1A1A] font-black text-sm" style={{fontFamily:"Cairo,sans-serif"}}>{product.title}</span>
             </div>
             <div className="flex items-center gap-3">
-              <span className="text-gray-400 text-xs" style={{fontFamily:"Cairo,sans-serif"}}>{galleryIdx+1} / {gallery.length}</span>
-              <button onClick={() => setGalleryOpen(false)} className="bg-white/5 hover:bg-white/10 border border-white/10 p-2 rounded-full text-gray-300 hover:text-white transition-colors"><X size={18} /></button>
+              <span className="text-gray-500 text-xs font-bold" style={{fontFamily:"Cairo,sans-serif"}}>{galleryIdx+1} / {gallery.length}</span>
+              <button onClick={() => setGalleryOpen(false)} className="bg-white hover:bg-gray-100 border border-[#EAEAEA] p-2 rounded-full text-[#1A1A1A] transition-colors shadow-sm"><X size={18} /></button>
             </div>
           </div>
           
@@ -669,13 +805,13 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             
             {!isZoomed && (
               <>
-                <button onClick={galleryPrev} className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/80 backdrop-blur-sm border border-white/10 hover:border-[#F5C518]/40 text-white/60 hover:text-[#F5C518] p-3 rounded-full transition-all hover:shadow-[0_0_12px_rgba(245,197,24,0.2)]"><ChevronRight size={22} strokeWidth={1.5} /></button>
-                <button onClick={galleryNext} className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/80 backdrop-blur-sm border border-white/10 hover:border-[#F5C518]/40 text-white/60 hover:text-[#F5C518] p-3 rounded-full transition-all hover:shadow-[0_0_12px_rgba(245,197,24,0.2)]"><ChevronLeft size={22} strokeWidth={1.5} /></button>
+                <button onClick={galleryPrev} className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white backdrop-blur-sm border border-[#EAEAEA] hover:border-[#1A1A1A] text-[#1A1A1A] p-3 rounded-full transition-all shadow-md"><ChevronRight size={22} strokeWidth={1.5} /></button>
+                <button onClick={galleryNext} className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white backdrop-blur-sm border border-[#EAEAEA] hover:border-[#1A1A1A] text-[#1A1A1A] p-3 rounded-full transition-all shadow-md"><ChevronLeft size={22} strokeWidth={1.5} /></button>
               </>
             )}
             
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 pointer-events-none items-center">
-              {gallery.map((_,i) => <span key={i} className={`rounded-full bg-[#F5C518] transition-all duration-400 ease-out ${galleryIdx===i ? "w-5 h-1.5 opacity-100" : "w-1.5 h-1.5 opacity-25"}`} />)}
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-1.5 pointer-events-none items-center bg-white/60 px-3 py-1.5 rounded-full backdrop-blur-sm border border-[#EAEAEA]">
+              {gallery.map((_,i) => <span key={i} className={`rounded-full bg-[#1A1A1A] transition-all duration-400 ease-out ${galleryIdx===i ? "w-5 h-1.5 opacity-100" : "w-1.5 h-1.5 opacity-25"}`} />)}
             </div>
           </div>
         </div>
@@ -683,37 +819,37 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
       {isImageZoomModalOpen && (
         <div 
-          className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-[fadeIn_0.3s_ease-out]"
+          className="fixed inset-0 z-[99999] flex items-center justify-center bg-[#FAF9F6]/95 backdrop-blur-md p-4 animate-[fadeIn_0.3s_ease-out]"
           onClick={() => setImageZoomModalOpen(false)}
         >
-          <div className="relative w-full max-w-lg aspect-[3/4] rounded-2xl overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
-            <Image src={getImageUrl(currentColorImage())} fill quality={85} sizes="(max-width: 768px) 100vw, 500px" className="object-cover" alt="Zoomed Color" />
+          <div className="relative w-full max-w-lg aspect-[3/4] rounded-2xl overflow-hidden shadow-2xl border border-[#EAEAEA]" onClick={e => e.stopPropagation()}>
+            <Image src={getImageUrl(currentColorImage())} fill sizes="(max-width: 768px) 100vw, 500px" className="object-cover" alt="Zoomed Color" />
             <button 
               onClick={() => setImageZoomModalOpen(false)} 
-              className="absolute top-4 left-4 bg-black/60 hover:bg-black p-2 rounded-full text-white/70 hover:text-white transition-colors backdrop-blur-sm border border-white/20"
+              className="absolute top-4 left-4 bg-white/80 hover:bg-white p-2.5 rounded-full text-[#1A1A1A] transition-colors backdrop-blur-sm border border-[#EAEAEA] shadow-sm"
             >
-              <X size={24} />
+              <X size={20} />
             </button>
-            <div className="absolute bottom-4 right-4 bg-black/60 px-3 py-1.5 rounded-full backdrop-blur-sm border border-[#F5C518]/40">
-              <span className="text-white font-bold text-sm">{selectedColor}</span>
+            <div className="absolute bottom-4 right-4 bg-white/90 px-4 py-2 rounded-full backdrop-blur-sm border border-[#EAEAEA] shadow-sm">
+              <span className="text-[#1A1A1A] font-bold text-sm">{selectedColor}</span>
             </div>
           </div>
         </div>
       )}
 
       {isDescModalOpen && (
-        <div className="fixed inset-0 z-[99999] flex items-end md:items-center justify-center bg-black/80 backdrop-blur-sm p-0 md:p-4">
-          <div className="bg-[#121212] w-full md:max-w-xl rounded-t-2xl md:rounded-2xl border border-[#333] shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-[fadeIn_0.3s_ease-out]">
-            <div className="p-4 border-b border-[#333] flex justify-between items-center bg-[#1a1a1a] sticky top-0 z-10">
-              <h3 className="font-black text-lg text-white flex items-center gap-2">
-                <div className="w-1.5 h-5 bg-[#F5C518] rounded-full shadow-[0_0_8px_rgba(245,197,24,0.4)]"></div>
+        <div className="fixed inset-0 z-[99999] flex items-end md:items-center justify-center bg-black/50 backdrop-blur-sm p-0 md:p-4">
+          <div className="bg-white w-full md:max-w-xl rounded-t-2xl md:rounded-2xl border border-[#EAEAEA] shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-[fadeIn_0.3s_ease-out]">
+            <div className="p-4 border-b border-[#EAEAEA] flex justify-between items-center bg-[#FAF9F6] sticky top-0 z-10">
+              <h3 className="font-black text-lg text-[#1A1A1A] flex items-center gap-2">
+                <div className="w-[4px] h-[20px] bg-[#E6AE00] rounded-full"></div>
                 معلومات المنتج والتفاصيل
               </h3>
-              <button onClick={() => setDescModalOpen(false)} className="bg-[#242424] hover:bg-[#333] p-1.5 rounded-full text-gray-400 transition-colors">
+              <button onClick={() => setDescModalOpen(false)} className="bg-white border border-[#EAEAEA] hover:bg-gray-100 p-1.5 rounded-full text-gray-500 transition-colors shadow-sm">
                 <X size={20} />
               </button>
             </div>
-            <div className="p-5 overflow-y-auto ql-editor-display dark-wind-tabs" dir="rtl">
+            <div className="p-5 overflow-y-auto ql-editor-display light-wind-tabs" dir="rtl">
               <div dangerouslySetInnerHTML={{ __html: closedDescriptionHTML }} />
             </div>
           </div>
@@ -729,42 +865,19 @@ export default function ProductView({ initialProduct, sourceCategory }) {
         @keyframes galleryIn { from{opacity:0} to{opacity:1} }
         @keyframes imgIn { from{opacity:0.4} to{opacity:1} } 
 
-        @keyframes kenBurns {
-          0%   { transform: scale(1);    transform-origin: center top; }
-          100% { transform: scale(1.06); transform-origin: center top; }
-        }
-        .hero-ken-burns {
-          animation: kenBurns 8s ease-out forwards;
-        }
-
-        @keyframes shineContinuous {
-          0%   { background-position: -200% center; }
-          100% { background-position: 200% center; }
-        }
-        
         .gallery-enter { animation: galleryIn 0.25s ease-out }
         .gallery-img-enter { animation: imgIn 0.3s cubic-bezier(0.25,1,0.5,1) }
         
         .hide-scrollbar-horizontal::-webkit-scrollbar { height: 0px; background: transparent; }
         .hide-scrollbar-horizontal { -ms-overflow-style: none; scrollbar-width: none; }
-        .hide-scrollbar-vertical::-webkit-scrollbar { width: 0px; background: transparent; }
-        .hide-scrollbar-vertical { -ms-overflow-style: none; scrollbar-width: none; }
-
-        .thumb-item { transition: width 0.35s cubic-bezier(0.25,1,0.5,1), height 0.35s cubic-bezier(0.25,1,0.5,1), opacity 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease; }
-        .thumb-inactive:hover { opacity: 0.85 !important; border-color: rgba(245,197,24,0.25) !important; }
-
-        .poster-card { transition: transform 0.4s cubic-bezier(0.25,1,0.5,1), box-shadow 0.4s ease; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
-        .poster-card:hover { transform: scale(1.03) translateY(-2px); box-shadow: 0 16px 40px rgba(0,0,0,0.7), 0 0 24px rgba(245,197,24,0.15); }
-        .poster-card:hover .poster-img { transform: scale(1.08); }
-        .poster-img { transition: transform 0.7s cubic-bezier(0.25,1,0.5,1); }
-
-        @keyframes shine {
+        
+        @keyframes shineContinuous {
           0%   { background-position: -200% center; }
           100% { background-position: 200% center; }
         }
         .pay-btn {
           background: #F5C518;
-          color: #1a1a1a;
+          color: #1A1A1A;
           position: relative;
           overflow: hidden;
         }
@@ -776,25 +889,25 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           background-size: 250% auto;
           animation: shineContinuous 2.5s linear infinite;
         }
-        .pay-btn:hover { background: #e6b800; }
+        .pay-btn:hover { background: #e6b800; transform: translateY(-2px); box-shadow: 0 8px 25px rgba(245,197,24,0.4); }
 
-        .dark-wind-tabs .wind-tabs-container { background:transparent!important }
-        .dark-wind-tabs .wind-tabs-container details { background:#161616!important; border-bottom:1px solid #1e1e1e!important; border-radius:10px; margin-bottom:8px; padding:0 16px!important; transition:all .3s }
-        .dark-wind-tabs .wind-tabs-container details[open] { border-color:#F5C518!important; background:#181818!important }
-        .dark-wind-tabs .wind-tabs-container summary { color:#e5e7eb!important; border:none!important; padding:14px 0!important; font-family:'Cairo',sans-serif; font-weight:700 }
-        .dark-wind-tabs .wind-tabs-container summary::-webkit-details-marker { display:none }
-        .dark-wind-tabs .wind-tabs-container summary svg path { stroke:#F5C518!important }
-        .dark-wind-tabs .wind-tabs-container div { color:#9ca3af!important; font-family:'Tajawal',sans-serif; line-height:1.8 }
-        .dark-wind-tabs .wind-tabs-container span[style*="color: #800020"] { color:#F5C518!important }
-        .dark-wind-tabs .wind-tabs-container div[style*="border-bottom: 1px solid #f3f4f6"] { border-bottom:1px solid #1e1e1e!important }
-        .dark-wind-tabs .wind-tabs-container div[style*="color: #111827"], .dark-wind-tabs .wind-tabs-container strong[style*="color: #111827"] { color:#f3f4f6!important }
-        .dark-wind-tabs .wind-tabs-container button, .dark-wind-tabs .wind-tabs-container .read-more-wrapper summary { color:#F5C518!important }
-        .dark-wind-tabs .wind-tabs-container summary:hover { background-color:transparent!important }
+        .light-wind-tabs .wind-tabs-container { background:transparent!important }
+        .light-wind-tabs .wind-tabs-container details { background:#FFFFFF!important; border:1px solid #EAEAEA!important; border-radius:12px; margin-bottom:12px; padding:0 16px!important; transition:all .3s; box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
+        .light-wind-tabs .wind-tabs-container details[open] { border-color:#1A1A1A!important; background:#FAF9F6!important; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .light-wind-tabs .wind-tabs-container summary { color:#1A1A1A!important; border:none!important; padding:16px 0!important; font-family:'Cairo',sans-serif; font-weight:700; font-size: 15px; }
+        .light-wind-tabs .wind-tabs-container summary::-webkit-details-marker { display:none }
+        .light-wind-tabs .wind-tabs-container summary svg path { stroke:#1A1A1A!important }
+        .light-wind-tabs .wind-tabs-container div { color:#4B5563!important; font-family:'Tajawal',sans-serif; line-height:1.8; padding-bottom: 16px; }
+        .light-wind-tabs .wind-tabs-container span[style*="color: #800020"] { color:#1A1A1A!important; font-weight: bold; }
+        .light-wind-tabs .wind-tabs-container div[style*="border-bottom: 1px solid #f3f4f6"] { border-bottom:1px solid #EAEAEA!important }
+        .light-wind-tabs .wind-tabs-container div[style*="color: #111827"], .light-wind-tabs .wind-tabs-container strong[style*="color: #111827"] { color:#1A1A1A!important }
+        .light-wind-tabs .wind-tabs-container button, .light-wind-tabs .wind-tabs-container .read-more-wrapper summary { color:#1A1A1A!important; font-weight: bold; text-decoration: underline; }
+        .light-wind-tabs .wind-tabs-container summary:hover { background-color:transparent!important; color: #1A1A1A!important; }
         
-        .ql-editor-display ul { list-style-type:disc!important; padding-right:20px!important; margin-bottom:10px }
-        .ql-editor-display ol { list-style-type:decimal!important; padding-right:20px!important; margin-bottom:10px }
-        .ql-editor-display strong { font-weight:900; color:#f9fafb }
-        .ql-editor-display p { margin-bottom:8px; line-height:1.75; color:#9ca3af; font-family:'Tajawal',sans-serif }
+        .ql-editor-display ul { list-style-type:disc!important; padding-right:24px!important; margin-bottom:12px; color: #4B5563; }
+        .ql-editor-display ol { list-style-type:decimal!important; padding-right:24px!important; margin-bottom:12px; color: #4B5563; }
+        .ql-editor-display strong { font-weight:800; color:#1A1A1A }
+        .ql-editor-display p { margin-bottom:10px; line-height:1.8; color:#4B5563; font-family:'Tajawal',sans-serif }
       `}</style>
     </div>
   );

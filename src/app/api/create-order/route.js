@@ -1,7 +1,4 @@
-export const runtime = 'nodejs';
 import { NextResponse } from 'next/server';
-import crypto from 'crypto';
-import { Resend } from 'resend';
 import { 
   ADMIN_EMAIL, 
   EMAIL_FROM, 
@@ -13,9 +10,6 @@ import {
   KASHIER_CONFIG 
 } from '@/lib/constants';
 import { getShippingDisplayText, calculateAllTotals } from '@/lib/cartCalculations';
-
-// API key stored in environment variables for security
-const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Generate unique order number with format: WND-YYYYMMDD-TTTT
 function generateOrderNumber() {
@@ -62,12 +56,24 @@ export async function POST(req) {
 
       const amountStr = parseFloat(amount).toFixed(2);
 
-      // Generate payment hash (HMAC SHA256)
+      // Generate payment hash (HMAC SHA256) using Web Crypto API
       const hashPath = `/?payment=${merchantId}.${orderId}.${amountStr}.${CURRENCY}`;
-      const hash = crypto
-        .createHmac('sha256', paymentApiKey)
-        .update(hashPath)
-        .digest('hex');
+      
+      const keyBuffer = new TextEncoder().encode(paymentApiKey);
+      const cryptoKey = await crypto.subtle.importKey(
+        'raw',
+        keyBuffer,
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign']
+      );
+      
+      const dataBuffer = new TextEncoder().encode(hashPath);
+      const signatureBuffer = await crypto.subtle.sign('HMAC', cryptoKey, dataBuffer);
+      
+      const hash = Array.from(new Uint8Array(signatureBuffer))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
 
       // Return iframe data instead of redirect URL
       return NextResponse.json({
@@ -154,16 +160,23 @@ export async function POST(req) {
     `;
 
     // ============================================
-    // 3. إرسال الإيميل عبر Resend — لم يتغير شيء
+    // 3. إرسال الإيميل عبر Resend REST API — Edge-compatible
     // ============================================
     try {
-      await resend.emails.send({
-        from: EMAIL_FROM, 
-        to: ADMIN_EMAIL,
-        subject: `طلب جديد من ${formData.firstName} #${orderNumber}`,
-        html: htmlContent,
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: EMAIL_FROM, 
+          to: ADMIN_EMAIL,
+          subject: `طلب جديد من ${formData.firstName} #${orderNumber}`,
+          html: htmlContent,
+        })
       });
-      console.log('✅ Email sent successfully via Resend');
+      console.log('✅ Email sent successfully via Resend REST API');
     } catch (emailError) {
       console.error('❌ Resend Email Error:', emailError.message);
       // Don't break the entire operation if email fails, just log the error

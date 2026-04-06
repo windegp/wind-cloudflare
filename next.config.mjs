@@ -42,6 +42,19 @@ const nextConfig = {
       },
     ];
   },
+
+  // ============================================
+  // 🔥 FIREBASE EDGE COMPATIBILITY (Cloudflare Pages)
+  // ============================================
+  webpack: (config, { isServer, nextRuntime }) => {
+    if (isServer && nextRuntime === 'edge') {
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        '@firebase/firestore': '@firebase/firestore/dist/index.cjs.js',
+      };
+    }
+    return config;
+  },
 };
 
 export default nextConfig;

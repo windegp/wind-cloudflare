@@ -1,8 +1,10 @@
 "use client";
 import { useState } from 'react';
 import Papa from 'papaparse';
-import { db } from "@/lib/firebase";
-import { collection, doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { getDb } from "@/lib/firebase";
+import { collection, doc, setDoc, serverTimestamp } from "firebase/firestore/lite";
+
+export const dynamic = 'force-dynamic';
 
 export default function ImportShopifyCSV() {
   const [file, setFile] = useState(null);
@@ -114,6 +116,7 @@ export default function ImportShopifyCSV() {
         for (const product of productsArray) {
           try {
             // نستخدم الـ handle كـ ID للمنتج لسهولة البحث والروابط
+            const db = getDb();
             const productRef = doc(collection(db, "products"), product.seo.handle);
             await setDoc(productRef, product);
             successCount++;

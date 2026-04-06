@@ -1,0 +1,8 @@
+{
+	"name": "wind-shopping",
+	"pages_build_output_dir": ".open-next",
+	"compatibility_date": "2025-10-10",
+	"compatibility_flags": [
+		"nodejs_compat_v2"
+	]
+}

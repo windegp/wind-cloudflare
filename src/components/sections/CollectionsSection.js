@@ -7,7 +7,7 @@ export default function CollectionsSection() {
 
   return (
     <section className="max-w-[1280px] mx-auto px-4 py-12">
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {collections.map((col, index) => (
           <div key={index} className="relative h-64 rounded-lg overflow-hidden group cursor-pointer border border-[#333]">
             <img src={col.img} className="w-full h-full object-cover transition duration-700 group-hover:scale-110 opacity-70" />

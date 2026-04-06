@@ -1,12 +1,11 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { db } from "@/lib/firebase";
-import { doc, getDoc, setDoc } from "firebase/firestore";
-import { 
-  Settings, ShieldCheck, Truck, RefreshCw, Scale, 
-  Save, Loader2, Code2, Eye 
-} from "lucide-react";
+import { getDb } from "@/lib/firebase";
+import { doc, getDoc, setDoc } from "firebase/firestore/lite";
+import { Settings, ShieldCheck, Truck, RefreshCw, Scale, Save, Loader2, Code2, Eye } from '@/components/icons-extra';
+
+export const dynamic = 'force-dynamic';
 
 const policiesList = [
   { id: 'shipping-policy', title: 'سياسة الشحن والتوصيل', icon: <Truck size={20} /> },
@@ -27,6 +26,7 @@ export default function SettingsPolicies() {
     const fetchPolicy = async () => {
       setLoading(true);
       try {
+        const db = getDb();
         const docRef = doc(db, "Policies", activeTab);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
@@ -43,6 +43,7 @@ export default function SettingsPolicies() {
   const handleSave = async () => {
     setSaving(true);
     try {
+      const db = getDb();
       await setDoc(doc(db, "Policies", activeTab), {
         htmlContent: htmlContent,
         lastUpdate: new Date().toISOString(),

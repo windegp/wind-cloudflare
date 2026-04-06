@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-// تأكد من المسارات حسب مشروعك
+import { usePathname } from 'next/navigation';
 import { useCart } from "@/context/CartContext"; 
-import { db } from "@/lib/firebase"; 
-import { doc, onSnapshot } from "firebase/firestore";
-import { X, ShoppingBag, ChevronLeft, ArrowRight } from "lucide-react";
+import { getDb } from "@/lib/firebase"; 
+import { doc, getDoc } from "firebase/firestore/lite";
+import { X, ShoppingBag, ChevronLeft, ArrowRight, ChevronRight } from '@/components/icons-extra';
 
 export default function Navbar() {
+  const pathname = usePathname();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { cartItems = [], toggleCart } = useCart() || {};
   
@@ -18,6 +19,33 @@ export default function Navbar() {
   // نظام الطبقات: الطبقة الحالية + تاريخ التصفح للرجوع
   const [activeLayer, setActiveLayer] = useState({ title: "الرئيسية", items: [] });
   const [history, setHistory] = useState([]);
+
+  // --- إعدادات شريط الإعلانات الجديد ---
+  const announcements = [
+    "🚚 شحن مجاني للطلبات فوق 2000 ج.م",
+    "🔥 استعمل كود WIND لخصم إضافي",
+    "✨ جودة مصرية بمقاييس عالمية"
+  ];
+  const [adIndex, setAdIndex] = useState(0);
+
+  // تبديل الجملة كل 4 ثواني
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setAdIndex((prev) => (prev === announcements.length - 1 ? 0 : prev + 1));
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [announcements.length]);
+
+  // دوال التقليب اليدوي للإعلانات (يمين وشمال)
+  const nextAd = () => {
+    setAdIndex((prev) => (prev === announcements.length - 1 ? 0 : prev + 1));
+  };
+  const prevAd = () => {
+    setAdIndex((prev) => (prev === 0 ? announcements.length - 1 : prev - 1));
+  };
+
+  // --- شرط الإخفاء (الآدمن والـ Checkout) ---
+  const shouldHideNavbar = pathname.startsWith('/admin') || pathname.startsWith('/checkout');
 
   // --- دوال المعالجة ---
   const formatLink = (link) => {
@@ -38,15 +66,20 @@ export default function Navbar() {
   };
 
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, "settings", "navigation"), (docSnap) => {
-      if (docSnap.exists() && docSnap.data().menuItems) {
-        const cleanData = sanitizeMenuItems(docSnap.data().menuItems);
-        setCategories(cleanData);
-        // تهيئة الطبقة الأولى
-        setActiveLayer({ title: "WIND Catalogue", items: cleanData });
+    const fetchNavigation = async () => {
+      try {
+        const docSnap = await getDoc(doc(getDb(), "settings", "navigation"));
+        if (docSnap.exists() && docSnap.data().menuItems) {
+          const cleanData = sanitizeMenuItems(docSnap.data().menuItems);
+          setCategories(cleanData);
+          // تهيئة الطبقة الأولى
+          setActiveLayer({ title: "WIND Catalogue", items: cleanData });
+        }
+      } catch (error) {
+        console.error("Error fetching navigation:", error);
       }
-    });
-    return () => unsub();
+    };
+    fetchNavigation();
   }, []);
 
   // --- محرك التنقل (Drill-down Logic) ---
@@ -76,29 +109,45 @@ export default function Navbar() {
     }, 300);
   };
 
+  // لو في صفحة مستثناة (آدمن أو تشيك أوت) مش هنرسم النافبار خالص
+  if (shouldHideNavbar) return null;
+
   return (
     <>
-      {/* 1. الشريط العلوي (نفس كودك بالظبط) */}
-      <div className="bg-[#F5C518] text-black h-10 flex items-center overflow-hidden border-b border-black relative z-[110]">
-        <div className="whitespace-nowrap flex animate-marquee font-black text-[10px] md:text-xs uppercase tracking-[0.2em]">
-          {[1, 2, 3].map((i) => (
-            <span key={i} className="flex items-center">
-              <span className="mx-10">🚚 شحن مجاني للطلبات فوق 2000 ج.م</span>
-              <span className="mx-10">•</span>
-              <span className="mx-10">🔥 استعمل كود WIND لخصم إضافي</span>
-              <span className="mx-10">•</span>
-              <span className="mx-10">✨ جودة مصرية بمقاييس عالمية</span>
-              <span className="mx-10">•</span>
-            </span>
-          ))}
+      {/* 1. الشريط العلوي (اللمسة الكريمية الكلاسيكية مع خط العناوين Tajawal) */}
+      <div className="bg-[#FAF9F6] text-[#1A1A1A] h-10 flex items-center justify-center border-b border-[#EAEAEA] relative z-[110] px-4 shadow-sm transition-colors duration-700">
+        <div className="flex items-center gap-4 md:gap-8 relative justify-center">
+          
+          {/* السهم الأيسر (للسابق) */}
+          <button onClick={prevAd} className="hover:scale-125 hover:text-[#F5C518] transition-all p-1 z-10">
+            <ChevronLeft className="w-4 h-4 animate-arrow-slide-left cursor-pointer text-[#666]" />
+          </button>
+
+          {/* حاوية الجمل الإعلانية */}
+          <div className="overflow-hidden relative h-6 flex justify-center items-center w-[250px] md:w-[350px]">
+            {announcements.map((text, index) => (
+              <span 
+                key={index}
+                className={`text-[11px] md:text-sm font-bold tracking-wide absolute inset-0 flex items-center justify-center whitespace-nowrap font-tajawal
+                ${index === adIndex ? 'animate-slide-right-text' : 'opacity-0'}`}
+              >
+                {text}
+              </span>
+            ))}
+          </div>
+
+          {/* السهم الأيمن (للتالي) */}
+          <button onClick={nextAd} className="hover:scale-125 hover:text-[#F5C518] transition-all p-1 z-10">
+            <ChevronRight className="w-4 h-4 animate-arrow-slide-right cursor-pointer text-[#666]" />
+          </button>
         </div>
       </div>
 
-      {/* 2. النافبار (نفس كودك بالظبط للحفاظ على اللوجو والأيقونة) */}
+      {/* 2. النافبار */}
       <nav className="bg-black/95 backdrop-blur-xl border-b border-white/5 sticky top-0 z-[100] h-20 w-full transition-all duration-500">
         <div className="max-w-[1600px] mx-auto px-6 h-full flex items-center justify-between">
           
-          {/* زر القائمة - (نفس تصميمك) */}
+          {/* زر القائمة */}
           <button 
             onClick={() => setIsMenuOpen(true)} 
             className="group flex items-center gap-3 text-white/70 hover:text-[#F5C518] transition-all"
@@ -110,18 +159,18 @@ export default function Navbar() {
             <span className="hidden md:block text-[10px] font-black tracking-widest uppercase">Menu</span>
           </button>
 
-          {/* اللوجو - (نفس كودك) */}
+          {/* اللوجو (تم عمل زووم للصورة نفسها لتبدو أكبر دون تغيير مساحة النافبار) */}
           <div className="absolute left-1/2 -translate-x-1/2">
-            <Link href="/">
+            <Link href="/" className="block">
               <img 
                 src="/logo.jpg" 
                 alt="WIND" 
-                className="h-12 md:h-14 w-auto object-contain brightness-110 contrast-125 hover:scale-105 transition-all duration-700" 
+                className="h-12 md:h-14 w-auto object-contain scale-[1.3] md:scale-[1.5] origin-center brightness-110 contrast-125 hover:scale-[1.4] md:hover:scale-[1.6] transition-all duration-700" 
               />
             </Link>
           </div>
 
-          {/* السلة - (نفس كودك) */}
+          {/* السلة */}
           <div className="flex items-center gap-6">
             <button onClick={toggleCart} className="relative group p-2 text-white/70 hover:text-[#F5C518] transition-all">
               <ShoppingBag size={24} strokeWidth={1.5} />
@@ -135,11 +184,11 @@ export default function Navbar() {
         </div>
       </nav>
 
-      {/* 3. المنيو الداخلي (التعديل الجذري هنا للأداء والرجوع) */}
+      {/* 3. المنيو الداخلي */}
       {isMenuOpen && (
         <div className="fixed inset-0 z-[1000] overflow-hidden" dir="rtl">
           
-          {/* الخلفية: شلنا البلور التقيل وخليناها لون نصف شفاف للأداء السريع */}
+          {/* الخلفية */}
           <div 
             className="absolute inset-0 bg-black/80 transition-opacity duration-300"
             onClick={closeMenu}
@@ -147,10 +196,10 @@ export default function Navbar() {
           
           <div className="absolute top-0 right-0 w-full max-w-[400px] h-full bg-[#0a0a0a] border-l border-white/5 shadow-2xl flex flex-col animate-slide-in">
             
-            {/* رأس المنيو: هنا بيظهر زر الرجوع */}
+            {/* رأس المنيو */}
             <div className="p-6 border-b border-white/10 bg-[#111] flex justify-between items-center min-h-[80px]">
               {history.length > 0 ? (
-                // --- زر الرجوع الجديد والواضح ---
+                // --- زر الرجوع ---
                 <button 
                   onClick={goBack}
                   className="flex items-center gap-2 bg-[#F5C518] text-black px-4 py-2 rounded-lg font-black text-xs hover:bg-white transition-colors"
@@ -178,7 +227,7 @@ export default function Navbar() {
               <div className="h-1 w-12 bg-[#F5C518] mt-2 mb-4"></div>
             </div>
 
-            {/* محتوى القائمة (سريع جداً بدون تهنيج) */}
+            {/* محتوى القائمة */}
             <div className="flex-1 overflow-y-auto px-6 pb-10 custom-scrollbar">
               <ul className="space-y-3">
                 {activeLayer.items.map((item, i) => (
@@ -220,11 +269,33 @@ export default function Navbar() {
         </div>
       )}
 
-      {/* الستايلات والأنيميشن المخففة للأداء */}
+      {/* الستايلات والأنيميشن */}
       <style jsx global>{`
-        @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
-        .animate-marquee { animation: marquee 30s linear infinite; }
-        
+        /* انيميشن سحب النصوص من اليسار لليمين */
+        @keyframes slide-right-text {
+          0% { opacity: 0; transform: translateX(-30px); }
+          15% { opacity: 1; transform: translateX(0); }
+          85% { opacity: 1; transform: translateX(0); }
+          100% { opacity: 0; transform: translateX(30px); }
+        }
+        .animate-slide-right-text {
+          animation: slide-right-text 4s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+        }
+
+        /* انيميشن الأسهم في شريط الإعلانات (يمين ويسار) */
+        @keyframes arrow-slide-right {
+          0% { transform: translateX(-3px); opacity: 0.4; }
+          50% { transform: translateX(3px); opacity: 1; }
+          100% { transform: translateX(-3px); opacity: 0.4; }
+        }
+        @keyframes arrow-slide-left {
+          0% { transform: translateX(3px); opacity: 0.4; }
+          50% { transform: translateX(-3px); opacity: 1; }
+          100% { transform: translateX(3px); opacity: 0.4; }
+        }
+        .animate-arrow-slide-right { animation: arrow-slide-right 2s ease-in-out infinite; }
+        .animate-arrow-slide-left { animation: arrow-slide-left 2s ease-in-out infinite; }
+
         @keyframes slide-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
         .animate-slide-in { animation: slide-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); }
 

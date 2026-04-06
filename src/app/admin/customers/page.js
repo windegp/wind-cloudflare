@@ -1,14 +1,15 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { db } from "@/lib/firebase";
-import { collection, query, where, getDocs, deleteDoc, doc } from "firebase/firestore";
+import { getDb } from "@/lib/firebase";
+import { collection, query, where, getDocs, deleteDoc, doc } from "firebase/firestore/lite";
 import { useRouter } from 'next/navigation';
-import { 
-  Users, Target, Mail, ShoppingCart, Download, Crown, 
-  UserMinus, Search, Monitor, Archive, Layers, Trash2, AlertTriangle, X,
-  ChevronLeft, ChevronRight 
-} from "lucide-react";
+import { Users, Target, Search, Trash2, AlertTriangle, X,
+  ChevronLeft, ChevronRight, Package 
+} from '@/components/icons-extra';
+import { Mail, ShoppingCart, Download, Crown, UserMinus, Monitor, Archive, Layers } from '@/components/icons-extra';
+
+export const dynamic = 'force-dynamic';
 
 const segmentsList = [
   { id: 'all', label: 'كل العملاء', icon: <Users size={16} /> },
@@ -90,6 +91,7 @@ export default function CustomersPage() {
   const handleDeleteSelected = async () => {
     setIsDeleting(true);
     try {
+      const db = getDb();
       for (const uniqueId of selectedCustomers) {
         // 1. مسح الطلبات المرتبطة بالإيميل لو موجودة
         const qEmail = query(collection(db, "Orders"), where("Email", "==", uniqueId));
@@ -125,6 +127,7 @@ export default function CustomersPage() {
   const fetchCustomers = async () => {
     setLoading(true);
     try {
+      const db = getDb();
       // 1. نجيب كل العملاء من الداتا بيز (عشان منخسرش أرشيف شوبيفاي المتروك أو اللي لسه مشتراش)
       const customersSnap = await getDocs(collection(db, "Customers"));
       const customersMap = new Map();

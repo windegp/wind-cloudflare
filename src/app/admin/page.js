@@ -1,15 +1,17 @@
 "use client";
 import { useEffect, useState } from 'react';
-import { db } from "@/lib/firebase";
-import { collection, getDocs } from "firebase/firestore";
-import { Package, TrendingUp, ShoppingCart, Users, Activity, Calendar, ChevronDown, Eye } from "lucide-react";
+import { getDb } from "@/lib/firebase";
+import { collection, getDocs } from "firebase/firestore/lite";
+import { Package, TrendingUp, ShoppingCart, Users, Activity, Calendar, ChevronDown, Eye } from '@/components/icons-extra';
+
+export const dynamic = 'force-dynamic';
 
 export default function Dashboard() {
   // ⚠️ المنطق القديم بالكامل بدون أي مساس
   const [stats, setStats] = useState({ products: 0, orders: 12, sales: 4500 });
 
   useEffect(() => {
-    getDocs(collection(db, "products")).then(s => setStats(p => ({...p, products: s.size})));
+    getDocs(collection(getDb(), "products")).then(s => setStats(p => ({...p, products: s.size})));
   }, []);
 
   return (
