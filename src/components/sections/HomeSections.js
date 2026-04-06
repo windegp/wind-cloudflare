@@ -958,12 +958,13 @@ export const TopRatedWeekly = ({ data }) => {
 
         const fetchedProducts = [];
         for (const item of topHandles) {
-          const pRef  = doc(db, "products", item.handle);
-          const pSnap = await getDoc(pRef);
-          if (pSnap.exists()) {
+          const q = query(collection(db, "products"), where("handle", "==", item.handle));
+          const querySnapshot = await getDocs(q);
+          if (!querySnapshot.empty) {
+            const doc = querySnapshot.docs[0];
             fetchedProducts.push({
-              id: pSnap.id,
-              ...pSnap.data(),
+              id: doc.id,
+              ...doc.data(),
               weeklyAvg:   item.avg.toFixed(1),
               weeklyCount: item.count,
             });
@@ -1249,10 +1250,11 @@ export const TopRatedAllTime = ({ data }) => {
 
         const fetchedProducts = [];
         for (const item of topHandles) {
-          const pRef = doc(db, "products", item.handle);
-          const pSnap = await getDoc(pRef);
-          if (pSnap.exists()) {
-            fetchedProducts.push({ id: pSnap.id, ...pSnap.data(), allTimeAvg: item.avg.toFixed(1), allTimeCount: item.count });
+          const q = query(collection(db, "products"), where("handle", "==", item.handle));
+          const querySnapshot = await getDocs(q);
+          if (!querySnapshot.empty) {
+            const doc = querySnapshot.docs[0];
+            fetchedProducts.push({ id: doc.id, ...doc.data(), allTimeAvg: item.avg.toFixed(1), allTimeCount: item.count });
           }
         }
         setProducts(fetchedProducts);

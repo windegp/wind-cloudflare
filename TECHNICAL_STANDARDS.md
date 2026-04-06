@@ -102,13 +102,6 @@ This document codifies the technical principles, performance targets, and code q
 - WebSocket-dependent features
 - File streaming (incomplete in Edge)
 
-### Edge Runtime Implementation
-```js
-// src/app/api/route.js
-export const runtime = 'edge';
-
-export async function GET(request) {
-  // Lightweight logic here
   return Response.json({ data });
 }
 ```
