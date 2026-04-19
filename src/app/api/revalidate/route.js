@@ -1,60 +1,37 @@
 import { NextResponse } from 'next/server';
+import { getCloudflareContext } from '@opennextjs/cloudflare';
+
+export const dynamic = 'force-dynamic';
+
+const CACHE_KEY = 'homepage_data_v1';
+
+async function getKV() {
+  try {
+    const ctx = await getCloudflareContext({ async: true });
+    return ctx?.env?.WIND_KV || null;
+  } catch {
+    return null;
+  }
+}
 
 export async function POST(request) {
   try {
-    const body = await request.json();
-    const { secret, keys } = body;
+    const { secret, keys } = await request.json();
 
-    // Validate the secret
-    const expectedSecret = process.env.REVALIDATE_SECRET || process.env.NEXT_PUBLIC_REVALIDATE_SECRET;
-    if (!expectedSecret || secret !== expectedSecret) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid secret' },
-        { status: 401 }
-      );
+    if (secret !== process.env.REVALIDATE_SECRET) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get KV namespace
-    const kv = globalThis.__ENV__?.WIND_KV || process.env.WIND_KV;
-    
+    const kv = await getKV();
     if (!kv) {
-      console.log('KV not available in development - cache revalidate skipped');
-      return NextResponse.json({
-        success: true,
-        message: 'KV not available in development, cache revalidate skipped',
-        cleared: []
-      });
+      return NextResponse.json({ revalidated: true, note: "KV not available" });
     }
 
-    const clearedKeys = [];
+    const keysToDelete = keys?.length ? keys : [CACHE_KEY];
+    await Promise.all(keysToDelete.map(k => kv.delete(k)));
 
-    // Clear specific keys if provided, otherwise clear homepage data
-    const keysToClear = keys && keys.length > 0 ? keys : ['homepage_data_v1'];
-
-    for (const key of keysToClear) {
-      try {
-        await kv.delete(key);
-        clearedKeys.push(key);
-        console.log(`KV Cache: Cleared key "${key}"`);
-      } catch (error) {
-        console.error(`Failed to clear KV key "${key}":`, error);
-      }
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: `Cache invalidated for ${clearedKeys.length} key(s)`,
-      cleared: clearedKeys
-    });
-
+    return NextResponse.json({ revalidated: true, keys: keysToDelete });
   } catch (error) {
-    console.error('Revalidate API Error:', error);
-    return NextResponse.json(
-      { 
-        success: false, 
-        error: 'Failed to invalidate cache'
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
