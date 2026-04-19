@@ -5,8 +5,6 @@ import { usePageReady } from "@/context/GlobalLoaderContext";
 import { DESIGN_REGISTRY } from "@/lib/designRegistry";
 // استيراد الهوكات الأسطورية اللي جهزناها
 import { useHomepageProductsSections, useSiteSettings } from '@/hooks/useFirestore';
-import { getDb } from "@/lib/firebase";
-import { doc, getDoc } from "firebase/firestore/lite";
 import useSWR from 'swr';
 
 const HomeSectionsMain = dynamic(() => import("@/components/HomeSectionsMain"), { 
@@ -17,25 +15,27 @@ const HomeSectionsMain = dynamic(() => import("@/components/HomeSectionsMain"), 
 export default function HomeSectionsMainContent() {
   const { signalPageReady } = usePageReady();
 
-  // 1. جلب التنسيق (Layout) عبر SWR لضمان الكاش
-  const { data: layoutConfig, isLoading: isLayoutLoading } = useSWR('homepage/layout_config', async () => {
-    const db = getDb();
-    const snap = await getDoc(doc(db, "homepage", "layout_config"));
-    return snap.exists() ? snap.data().sections || [] : [];
+  // 1. جلب التنسيق (Layout) والهيرو من ال API عبر ال KV cache
+  const { data: homepageData, isLoading: isHomepageLoading } = useSWR('homepage/data', async () => {
+    const response = await fetch("/api/homepage");
+    const result = await response.json();
+    if (!result.success) {
+      throw new Error('Failed to fetch homepage data');
+    }
+    return result.data;
   }, { dedupingInterval: 3600000 });
 
-  // 2. جلب الهيرو (Hero) عبر SWR
-  const { data: heroData, isLoading: isHeroLoading } = useSWR('homepage/main-hero', async () => {
-    const db = getDb();
-    const snap = await getDoc(doc(db, "homepage", "main-hero"));
-    return snap.exists() ? snap.data() : { slides: [], categories: [] };
-  }, { dedupingInterval: 3600000 });
+  // استخراج بيانات التنسيق والهيرو من ال API
+  const layoutConfig = homepageData?.layout?.sections || [];
+  const heroData = homepageData?.hero || { slides: [], categories: [] };
+  const isLayoutLoading = isHomepageLoading;
+  const isHeroLoading = isHomepageLoading;
 
   // 3. "الضربة الاستباقية": سحب داتا الأقسام الأربعة فوراً وحفظها في الكاش
   // ده بيخلي أي قسم جواه (Best Sellers أو Top Rated) يلاقي داته جاهزة وميطلبش تاني
   const { data: homeSectionsData, isLoading: isSectionsLoading } = useHomepageProductsSections();
 
-  // 🪄 حساس الجاهزية: أول ما الداتا الأساسية توصل وصورة الهيرو تحمل، نلغي اللودر
+  // حساس الجاهزية: أول ما الداتا الأساسية توصل وصورة الهيرو تحمل، نلغي اللودر
   useEffect(() => {
     if (!isLayoutLoading && !isHeroLoading) {
       const preloadHeroImage = async () => {

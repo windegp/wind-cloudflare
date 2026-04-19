@@ -441,8 +441,30 @@ export default function HomeManagerPage() {
       await setDoc(doc(db, "homepage", "layout_config"), { sections: payloadSections });
       await setDoc(doc(db, "homepage", "main-hero"), { slides, categories });
       
-      // 🔥 تحديث كاش SWR صمتاً بعد الحفظ لضمان تطابق البيانات
+      //  update SWR cache after save
       mutate('home-config');
+      
+      //  Clear KV cache so visitors see updates
+      try {
+        const revalidateResponse = await fetch('/api/revalidate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            secret: process.env.NEXT_PUBLIC_REVALIDATE_SECRET,
+            keys: ['homepage_data_v1']
+          })
+        });
+        
+        if (revalidateResponse.ok) {
+          console.log('KV cache cleared successfully');
+        } else {
+          console.error('Failed to clear KV cache');
+        }
+      } catch (revalidateError) {
+        console.error('Revalidate API error:', revalidateError);
+      }
       
       alert("تم حفظ التحديثات بنجاح! راجع الصفحة الرئيسية الآن.");
     } catch (error) {
