@@ -27,44 +27,49 @@ export default function ProductReviews({ productHandle, onReviewStatsUpdate }) {
   // حالة الفلاتر
   const [filter, setFilter] = useState("all");
 
-  // 🔥 تعديل ذكي: جلب ملخص الإحصائيات أو عمل جرد لمرة واحدة
+  // 🔥 جلب الإحصائيات من KV Cache عبر API أولاً — Firebase فقط كـ Fallback
   useEffect(() => {
     const fetchGlobalStats = async () => {
       if (!productHandle) return;
+      try {
+        // 1. جرب الـ API (KV Cache) أولاً — صفر قراءات Firebase
+        const res = await fetch(`/api/product-stats?handle=${encodeURIComponent(productHandle)}`);
+        if (res.ok) {
+          const json = await res.json();
+          const total = json.count || 0;
+          const avg = json.rating || 5;
+          setLocalStats({ avg, total });
+          if (onReviewStatsUpdate) onReviewStatsUpdate(avg, total);
+          return;
+        }
+      } catch {}
+
+      // 2. Fallback: Firebase مباشرة (الكود الأصلي — لا تحذفه)
       try {
         const db = getDb();
         const statsRef = doc(db, "ProductStats", productHandle);
         const statsSnap = await getDoc(statsRef);
 
         if (statsSnap.exists()) {
-          // ✅ الحالة 1: المنتج متأرشف والملخص موجود (تكلفة: 1 قراءة فقط)
           const data = statsSnap.data();
           const total = data.totalCount || 0;
           const avg = total > 0 ? (data.totalRatingSum / total) : 5;
-          
-          // 👈 السطر المضاف هنا:
-          setLocalStats({ avg, total }); 
-          
+          setLocalStats({ avg, total });
           if (onReviewStatsUpdate) onReviewStatsUpdate(avg, total);
         } else {
-          // ⚠️ الحالة 2: أول مرة نفتح المنتج (جرد شامل لمرة واحدة فقط)
-          const q = query(collection(db, "Reviews"), where("productHandle", "==", productHandle), where("status", "==", "published"));
+          // أول مرة نفتح المنتج — جرد شامل لمرة واحدة فقط
+          const q = query(
+            collection(db, "Reviews"),
+            where("productHandle", "==", productHandle),
+            where("status", "==", "published")
+          );
           const snap = await getDocs(q);
-          
           if (!snap.empty) {
             const total = snap.size;
             const sum = snap.docs.reduce((acc, d) => acc + (d.data().rating || 5), 0);
             const avg = sum / total;
-
-            // حفظ نتيجة الجرد
-            await setDoc(statsRef, {
-              totalCount: total,
-              totalRatingSum: sum
-            });
-
-            // 👈 السطر المضاف هنا أيضاً:
+            await setDoc(statsRef, { totalCount: total, totalRatingSum: sum });
             setLocalStats({ avg, total });
-
             if (onReviewStatsUpdate) onReviewStatsUpdate(avg, total);
           }
         }
@@ -73,7 +78,7 @@ export default function ProductReviews({ productHandle, onReviewStatsUpdate }) {
     fetchGlobalStats();
   }, [productHandle]);
 
-  // 🔥 تعديل (أ): ربط الجلب بالفلتر الحالي
+  // ربط الجلب بالفلتر الحالي
   const { data: firstBatch, isValidating } = usePaginatedReviews(productHandle, null, filter);
 
   useEffect(() => {
@@ -83,9 +88,9 @@ export default function ProductReviews({ productHandle, onReviewStatsUpdate }) {
       setHasMore(firstBatch.reviews.length === 3);
       setLoading(false);
     }
-  }, [firstBatch, filter]); // التحديث يتم فوراً عند تغيير الفلتر
+  }, [firstBatch, filter]);
 
-  // 2. دالة تحميل 3 تقييمات إضافية من السيرفر (عند الضغط على الزر)
+  // دالة تحميل 3 تقييمات إضافية من السيرفر (عند الضغط على الزر)
   const fetchMoreFromFirebase = async () => {
     if (!lastDoc || loadingMore) return;
     setLoadingMore(true);
@@ -98,7 +103,6 @@ export default function ProductReviews({ productHandle, onReviewStatsUpdate }) {
         orderBy("date", "desc")
       );
 
-      // 🔥 تعديل (أ): ضمان سحب المزيد بناءً على نفس الفلتر المختار
       if (filter === "images") q = query(q, where("hasImages", "==", true));
       if (filter === "5star") q = query(q, where("rating", "==", 5));
 
@@ -122,86 +126,87 @@ export default function ProductReviews({ productHandle, onReviewStatsUpdate }) {
   };
 
   const handleSubmitReview = async (e) => {
-  e.preventDefault();
-  if (!newReview.text.trim()) return alert("يرجى كتابة رأيك أولاً");
-  setIsSubmitting(true);
-  try {
-    // 🔥 دالة حذف التقييم وتحديث العداد (للحفاظ على الدقة)
-  const handleDeleteReview = async (reviewId, reviewRating) => {
-    if (!confirm("هل أنت متأكد من حذف هذا التقييم؟")) return;
+    e.preventDefault();
+    if (!newReview.text.trim()) return alert("يرجى كتابة رأيك أولاً");
+    setIsSubmitting(true);
     try {
-      const db = getDb();
-      // 1. حذف الوثيقة من Reviews
-      // await deleteDoc(doc(db, "Reviews", reviewId)); // ملاحظة: لازم تعمل import لـ deleteDoc
+      const handleDeleteReview = async (reviewId, reviewRating) => {
+        if (!confirm("هل أنت متأكد من حذف هذا التقييم؟")) return;
+        try {
+          const db = getDb();
+          const statsRef = doc(db, "ProductStats", productHandle);
+          await setDoc(statsRef, {
+            totalCount: increment(-1),
+            totalRatingSum: increment(-reviewRating)
+          }, { merge: true });
+          setReviews(prev => prev.filter(r => r.id !== reviewId));
+          if (onReviewStatsUpdate) {
+            const newTotal = Math.max(0, localStats.total - 1);
+            const newAvg = newTotal > 0 ? (localStats.avg * localStats.total - reviewRating) / newTotal : 5;
+            setLocalStats({ avg: newAvg, total: newTotal });
+            onReviewStatsUpdate(newAvg, newTotal);
+          }
+          alert("تم حذف التقييم وتحديث الإحصائيات!");
+        } catch (e) { console.error("Delete Failed", e); }
+      };
 
-      // 2. 🔥 تحديث العداد (تخفيض بالناقص)
+      const db = getDb();
+      const newReviewData = {
+        productHandle: productHandle,
+        reviewerName: newReview.name || "عميل مميز",
+        rating: newReview.rating,
+        text: newReview.text,
+        date: new Date().toISOString(),
+        status: "published",
+        imageUrls: newReview.imageUrls || [],
+        hasImages: (newReview.imageUrls && newReview.imageUrls.length > 0) || false,
+        source: "website"
+      };
+
+      // 1. إضافة التقييم لجدول التقييمات
+      const docRef = await addDoc(collection(db, "Reviews"), newReviewData);
+      
+      // 2. تحديث العداد أوتوماتيك
       const statsRef = doc(db, "ProductStats", productHandle);
       await setDoc(statsRef, {
-        totalCount: increment(-1),
-        totalRatingSum: increment(-reviewRating)
+        totalCount: increment(1),
+        totalRatingSum: increment(newReview.rating)
       }, { merge: true });
 
-      // 3. تحديث الواجهة محلياً
-      setReviews(prev => prev.filter(r => r.id !== reviewId));
+      // 3. مسح KV Cache عشان التقييم الجديد يظهر فوراً
+      try {
+        await fetch("/api/revalidate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            secret: process.env.NEXT_PUBLIC_REVALIDATE_SECRET,
+            type: "product_stats",
+            handle: productHandle
+          })
+        });
+      } catch {}
+
+      setShowAddModal(false);
+      setNewReview({ name: '', rating: 5, text: '', imageUrls: [] });
+      setUploadedImages([]);
+      alert("تمت إضافة تقييمك بنجاح!");
       
-      // 4. تحديث الهيدر فوق
+      // التحديث اللحظي للواجهة بدون ريفريش
+      setReviews(prev => [{ id: docRef.id, ...newReviewData }, ...prev]);
       if (onReviewStatsUpdate) {
-        const newTotal = Math.max(0, localStats.total - 1);
-        const newAvg = newTotal > 0 ? (localStats.avg * localStats.total - reviewRating) / newTotal : 5;
+        const newTotal = localStats.total + 1;
+        const newAvg = ((localStats.avg * localStats.total) + newReview.rating) / newTotal;
         setLocalStats({ avg: newAvg, total: newTotal });
         onReviewStatsUpdate(newAvg, newTotal);
       }
       
-      alert("تم حذف التقييم وتحديث الإحصائيات!");
-    } catch (e) { console.error("Delete Failed", e); }
-  };
-    const db = getDb(); // استدعاء الداتابيز
-    const newReviewData = {
-      productHandle: productHandle,
-      reviewerName: newReview.name || "عميل مميز",
-      rating: newReview.rating,
-      text: newReview.text,
-      date: new Date().toISOString(),
-      status: "published",
-      imageUrls: newReview.imageUrls || [],
-      hasImages: (newReview.imageUrls && newReview.imageUrls.length > 0) || false,
-      source: "website"
-    };
-
-    // 1. إضافة التقييم لجدول التقييمات
-    const docRef = await addDoc(collection(db, "Reviews"), newReviewData);
-    
-    // 2. 🔥 تحديث العداد أوتوماتيك (بنزود 1 على العدد ونجمع النجوم)
-    const statsRef = doc(db, "ProductStats", productHandle);
-    await setDoc(statsRef, {
-      totalCount: increment(1),
-      totalRatingSum: increment(newReview.rating)
-    }, { merge: true });
-
-    setShowAddModal(false);
-    setNewReview({ name: '', rating: 5, text: '', imageUrls: [] });
-    setUploadedImages([]);
-    alert("تمت إضافة تقييمك بنجاح!");
-    
-    // 🔥 التحديث اللحظي للواجهة بدون ريفريش
-    setReviews(prev => [{ id: docRef.id, ...newReviewData }, ...prev]);
-    // 🔥 تحديث أرقام النجوم والعدد الإجمالي فوق فوراً (بدون ريفريش)
-    if (onReviewStatsUpdate) {
-      const newTotal = localStats.total + 1;
-      const newAvg = ((localStats.avg * localStats.total) + newReview.rating) / newTotal;
-      
-      // تحديث الحالة المحلية وحالة الأب (Parent) في نفس الوقت
-      setLocalStats({ avg: newAvg, total: newTotal });
-      onReviewStatsUpdate(newAvg, newTotal);
+    } catch (error) {
+      console.error("Review submission error:", error);
+      alert("حدث خطأ أثناء الإرسال: " + error.message);
+    } finally {
+      setIsSubmitting(false);
     }
-    
-  } catch (error) {
-    console.error("Review submission error:", error);
-    alert("حدث خطأ أثناء الإرسال: " + error.message);
-  } finally {
-    setIsSubmitting(false);
-  }
-};
+  };
 
   const filteredReviews = reviews.filter(r => {
     if (filter === "images") return r.imageUrls && r.imageUrls.length > 0;
@@ -231,7 +236,6 @@ export default function ProductReviews({ productHandle, onReviewStatsUpdate }) {
           </button>
         </div>
 
-        {/* 1. الفلاتر تظهر دايماً طالما فيه داتا أو فلتر نشط */}
         {!loading && (reviews.length > 0 || filter !== "all") && (
           <div className="flex flex-wrap gap-2.5 mb-8">
             <button onClick={() => setFilter("all")} className={`px-4 py-2 rounded-full text-xs font-bold border transition-colors ${filter === "all" ? "bg-[#1A1A1A] text-white border-[#1A1A1A]" : "bg-white text-gray-600 border-[#EAEAEA]"}`}>الكل</button>
@@ -239,11 +243,9 @@ export default function ProductReviews({ productHandle, onReviewStatsUpdate }) {
           </div>
         )}
 
-        {/* 2. منطق عرض المحتوى */}
         {loading ? (
           <div className="text-center text-gray-400 py-10 text-sm font-bold animate-pulse font-cairo">جاري التحميل...</div>
         ) : filteredReviews.length === 0 ? (
-          /* حالة عدم وجود نتائج للفلتر المختار */
           <div className="text-center bg-[#FAF9F6] rounded-xl p-10 border border-[#EAEAEA]">
             <Star className="mx-auto text-gray-300 mb-4" size={40} fill="currentColor" />
             <p className="text-[#1A1A1A] font-bold mb-2 font-cairo">
@@ -254,7 +256,6 @@ export default function ProductReviews({ productHandle, onReviewStatsUpdate }) {
             )}
           </div>
         ) : (
-          /* حالة وجود تقييمات للعرض */
           <div className="flex flex-col gap-6">
             {filteredReviews.map((rev) => (
               <div key={rev.id} className="border-b border-[#EAEAEA] pb-6 last:border-0 last:pb-0 relative group">
@@ -318,12 +319,9 @@ export default function ProductReviews({ productHandle, onReviewStatsUpdate }) {
               <input type="text" value={newReview.name} onChange={(e) => setNewReview({...newReview, name: e.target.value})} placeholder="الاسم" className="w-full p-3 bg-[#FAF9F6] border border-[#EAEAEA] rounded-xl outline-none focus:border-[#1A1A1A]" />
               <textarea required value={newReview.text} onChange={(e) => setNewReview({...newReview, text: e.target.value})} placeholder="رأيك..." rows="4" className="w-full p-3 bg-[#FAF9F6] border border-[#EAEAEA] rounded-xl outline-none focus:border-[#1A1A1A] resize-none"></textarea>
               
-              {/* Image Upload Section */}
               <div className="space-y-3">
                 <label className="block text-sm font-bold text-[#1A1A1A]">أضف صور (اختياري)</label>
                 <ImageUploader onUploadSuccess={handleImageUpload} />
-                
-                {/* Preview Uploaded Images */}
                 {uploadedImages.length > 0 && (
                   <div className="flex flex-wrap gap-2 mt-3">
                     {uploadedImages.map((url, index) => (

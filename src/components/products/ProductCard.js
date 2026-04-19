@@ -4,7 +4,7 @@ import Link from "next/link";
 import { createPortal } from "react-dom";
 import { ShoppingBag, Eye, Heart, Star, X } from '@/components/icons-extra';
 import { getDb } from "../../lib/firebase";
-import { doc, updateDoc, increment, getDoc, collection, query, where, getDocs, limit } from "firebase/firestore/lite";
+import { doc, updateDoc, increment, getDoc } from "firebase/firestore/lite";
 
 import QuickViewModal from "@/components/QuickViewModal";
 import ProductReviews from "@/components/products/ProductReviews";
@@ -21,7 +21,7 @@ export default function ProductCard(props) {
 
   useEffect(() => setMounted(true), []);
 
-  // 🔥 [النسخة النهائية]: استرجاع النجوم بذكاء (ProductStats Direct Doc + Session Cache)
+  // 🔥 استرجاع النجوم بذكاء: Props → SessionCache → KV API → Firebase
   useEffect(() => {
     // 1. استخدام البيانات الممررة (Props) لو متوفرة
     if (props.reviewsCount !== undefined && props.rating !== undefined && props.reviewsCount > 0) {
@@ -32,7 +32,7 @@ export default function ProductCard(props) {
     const handleToSearch = props.handle || props.seo?.handle || String(props.id);
     if (!handleToSearch) return;
 
-    // 2. الكاش الذكي (Session Cache) لمنع السحب المتكرر
+    // 2. الكاش الذكي (Session Cache) لمنع السحب المتكرر في نفس الجلسة
     const cacheKey = `wind_stats_${handleToSearch}`;
     const cachedData = sessionStorage.getItem(cacheKey);
     
@@ -43,23 +43,16 @@ export default function ProductCard(props) {
       return;
     }
 
-    // 3. السحب المباشر والأسرع من الإحصائيات المجمعة
+    // 3. السحب من KV Cache عبر API (صفر قراءات Firebase للزوار)
     const fetchStats = async () => {
       try {
-        const statsDocRef = doc(getDb(), "ProductStats", handleToSearch);
-        const statsSnap = await getDoc(statsDocRef);
-
-        if (statsSnap.exists()) {
-          const statsDoc = statsSnap.data();
-          const totalReviews = statsDoc.totalCount || 0;
-          
-          if (totalReviews > 0) {
-            const sumRatings = statsDoc.totalRatingSum || 0;
-            const avgRating = (sumRatings / totalReviews).toFixed(1);
-            
-            const result = { count: totalReviews, rating: avgRating };
+        const res = await fetch(`/api/product-stats?handle=${encodeURIComponent(handleToSearch)}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.count > 0) {
+            const result = { count: json.count, rating: json.rating };
             setReviewsData(result);
-            setMergedProduct(prev => ({ ...prev, reviewsCount: totalReviews, rating: avgRating }));
+            setMergedProduct(prev => ({ ...prev, reviewsCount: json.count, rating: json.rating }));
             sessionStorage.setItem(cacheKey, JSON.stringify(result));
           }
         }
@@ -132,7 +125,6 @@ export default function ProductCard(props) {
     e.preventDefault();
     e.stopPropagation();
     
-    // لو المنتج ملوش تفاصيل (ألوان/مقاسات) بنروح نجيبها "دلوقتي بس"
     const lacksDetails = (!mergedProduct.options?.length && !mergedProduct.variants?.length && !mergedProduct.colors?.length);
     
     if (id && lacksDetails) {
@@ -140,7 +132,6 @@ export default function ProductCard(props) {
         const docRef = doc(getDb(), "products", id.toString());
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
-          // دمج البيانات مع الحفاظ على التقييمات الموجودة
           setMergedProduct({ 
             ...docSnap.data(), 
             ...props,

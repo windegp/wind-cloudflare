@@ -1,7 +1,8 @@
 import { getDb } from "../../../lib/firebase"; 
 import { getFirebaseEdge, getEdgeDb } from "../../../lib/firebase-edge";
-import { collection, query, where, getDocs } from "firebase/firestore/lite";
-import CategoryView from "./CategoryView"; 
+import { collection, query, where, getDocs, limit } from "firebase/firestore/lite";
+import CategoryView from "./CategoryView";
+import { kvGet, kvSet } from "../../../lib/kv-cache"; // 🔥 KV Cache
 
 // Use edge-compatible Firebase when running on edge runtime
 const isEdgeRuntime = typeof window === 'undefined' && process.env.NEXT_RUNTIME === 'edge';
@@ -20,7 +21,6 @@ function serializeData(obj) {
   const serialized = {};
   for (const key in obj) {
     if (obj[key] && typeof obj[key].toDate === 'function') {
-      // Firebase Timestamp
       serialized[key] = obj[key].toDate().toISOString();
     } else {
       serialized[key] = serializeData(obj[key]);
@@ -31,20 +31,37 @@ function serializeData(obj) {
 
 // دالة جلب بيانات القسم من السيرفر للـ SEO
 async function getCategoryData(slug) {
-  try {
-    // البحث السريع والمباشر
-let catQuery = query(collection(firestoreDb, "collections"), where("slug", "==", slug), limit(1));
-let catSnapshot = await getDocs(catQuery);
+  // 1. حاول تجيب من KV Cache
+  const cacheKey = `collection_${slug}`;
+  const cached = await kvGet(cacheKey);
+  if (cached) return cached;
 
-// لو ملقاش، يجرب الطريقة الثانية (بالـ Slash)
-if (catSnapshot.empty) {
-  catQuery = query(collection(firestoreDb, "collections"), where("slug", "==", `/${slug}`), limit(1));
-  catSnapshot = await getDocs(catQuery);
-}
+  // 2. اجيب من Firebase (مرة واحدة بس لحد ما يحصل تحديث)
+  try {
+    let catQuery = query(
+      collection(firestoreDb, "collections"),
+      where("slug", "==", slug),
+      limit(1)
+    );
+    let catSnapshot = await getDocs(catQuery);
+
+    if (catSnapshot.empty) {
+      catQuery = query(
+        collection(firestoreDb, "collections"),
+        where("slug", "==", `/${slug}`),
+        limit(1)
+      );
+      catSnapshot = await getDocs(catQuery);
+    }
     
     if (!catSnapshot.empty) {
       const data = catSnapshot.docs[0].data();
-      return serializeData({ id: catSnapshot.docs[0].id, ...data });
+      const category = serializeData({ id: catSnapshot.docs[0].id, ...data });
+
+      // 3. خزّن في KV للأبد
+      await kvSet(cacheKey, category);
+
+      return category;
     }
   } catch (error) {
     console.error("Error fetching category data:", error);

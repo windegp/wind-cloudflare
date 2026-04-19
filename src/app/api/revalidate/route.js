@@ -1,9 +1,6 @@
-import { NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 
 export const dynamic = 'force-dynamic';
-
-const CACHE_KEY = 'homepage_data_v1';
 
 async function getKV() {
   try {
@@ -15,23 +12,50 @@ async function getKV() {
 }
 
 export async function POST(request) {
+  let body;
   try {
-    const { secret, keys } = await request.json();
+    body = await request.json();
+  } catch {
+    return Response.json({ error: "Invalid JSON" }, { status: 400 });
+  }
 
-    if (secret !== process.env.REVALIDATE_SECRET) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  const { secret, type, id, slug, handle, keys } = body;
 
-    const kv = await getKV();
-    if (!kv) {
-      return NextResponse.json({ revalidated: true, note: "KV not available" });
-    }
+  if (secret !== process.env.REVALIDATE_SECRET) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
-    const keysToDelete = keys?.length ? keys : [CACHE_KEY];
+  const kv = await getKV();
+  if (!kv) {
+    return Response.json({ revalidated: true, note: "KV not available" });
+  }
+
+  let keysToDelete = [];
+
+  if (keys && keys.length > 0) {
+    // مسح مباشر بـ keys محددة — الأمثل لأي حالة
+    keysToDelete = keys;
+  } else if (type === 'homepage') {
+    keysToDelete = ['homepage_data_v1'];
+  } else if (type === 'product' && id) {
+    // مسح بيانات المنتج + إحصائياته معاً دفعة واحدة
+    keysToDelete = [`product_${id}`];
+    if (handle) keysToDelete.push(`product_stats_${handle}`);
+  } else if (type === 'product_stats' && handle) {
+    // مسح الإحصائيات فقط (لما يضاف review جديد)
+    keysToDelete = [`product_stats_${handle}`];
+  } else if (type === 'collection' && slug) {
+    keysToDelete = [`collection_${slug}`];
+  }
+
+  if (keysToDelete.length === 0) {
+    return Response.json({ error: "No keys to delete" }, { status: 400 });
+  }
+
+  try {
     await Promise.all(keysToDelete.map(k => kv.delete(k)));
-
-    return NextResponse.json({ revalidated: true, keys: keysToDelete });
+    return Response.json({ revalidated: true, keys: keysToDelete, timestamp: Date.now() });
   } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return Response.json({ error: error.message }, { status: 500 });
   }
 }

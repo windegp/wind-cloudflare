@@ -4,7 +4,8 @@ import { getFirebaseEdge, getEdgeDb } from "@/lib/firebase-edge";
 import { doc, getDoc } from "firebase/firestore/lite";
 import { products as staticProducts } from "@/lib/products";
 import ProductView from "./ProductView"; 
-import { cache } from 'react'; // إضافة الكاش لتوفير الكوتا 
+import { cache } from 'react';
+import { kvGet, kvSet } from "@/lib/kv-cache"; // 🔥 KV Cache
 
 // Use edge-compatible Firebase when running on edge runtime
 const isEdgeRuntime = typeof window === 'undefined' && process.env.NEXT_RUNTIME === 'edge';
@@ -12,28 +13,40 @@ const firestoreDb = isEdgeRuntime ? getEdgeDb() : getDb();
 
 // تم تغليف الدالة بـ cache لضمان جلب المنتج مرة واحدة فقط لكل طلب سيرفر (توفير كوتا)
 const getProductData = cache(async (id) => {
-  const staticProduct = staticProducts.find((p) => p.id.toString() === id.toString());
-  if (staticProduct) return staticProduct;
+  // 1. ابحث في Static Products أولاً
+  const staticProduct = staticProducts.find((p) => p.id.toString() === id.toString());
+  if (staticProduct) return staticProduct;
 
-  try {
-    const docRef = doc(firestoreDb, "products", id);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      const data = docSnap.data();
-      
-      if (data.createdAt && typeof data.createdAt.toDate === 'function') {
-        data.createdAt = data.createdAt.toDate().toISOString();
-      }
-      if (data.updatedAt && typeof data.updatedAt.toDate === 'function') {
-        data.updatedAt = data.updatedAt.toDate().toISOString();
-      }
-      
-      return { id: docSnap.id, ...data };
-    }
-  } catch (error) {
-    console.error("Error fetching product:", error);
-  }
-  return null;
+  // 2. حاول تجيب من KV Cache
+  const cacheKey = `product_${id}`;
+  const cached = await kvGet(cacheKey);
+  if (cached) return cached;
+
+  // 3. اجيب من Firebase (مرة واحدة بس لحد ما يحصل تحديث)
+  try {
+    const docRef = doc(firestoreDb, "products", id);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      
+      if (data.createdAt && typeof data.createdAt.toDate === 'function') {
+        data.createdAt = data.createdAt.toDate().toISOString();
+      }
+      if (data.updatedAt && typeof data.updatedAt.toDate === 'function') {
+        data.updatedAt = data.updatedAt.toDate().toISOString();
+      }
+      
+      const product = { id: docSnap.id, ...data };
+
+      // 4. خزّن في KV للأبد
+      await kvSet(cacheKey, product);
+
+      return product;
+    }
+  } catch (error) {
+    console.error("Error fetching product:", error);
+  }
+  return null;
 });
 
 // 1. الجزء الخاص بـ Metadata
@@ -56,7 +69,6 @@ export async function generateMetadata({ params }) {
   return {
     title: finalTitle,
     description: finalDescription,
-    // 👇 التعديل الجديد: سحب التاجات ككلمات مفتاحية لجوجل
     keywords: product.tags ? product.tags.split(',').map(tag => tag.trim()) : [],
     openGraph: {
       title: finalTitle,
@@ -91,7 +103,6 @@ export default async function Page({ params, searchParams }) {
     "description": product.seo?.description || cleanSchemaDesc,
     "brand": {
       "@type": "Brand",
-      // 👇 التعديل الجديد: استخدام الفيندور واسم البراند
       "name": product.vendor || "WIND"
     },
     "offers": {
