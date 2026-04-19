@@ -2,9 +2,6 @@ import { NextResponse } from 'next/server';
 import { getDb } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore/lite";
 
-// إضافة سطر الـ Edge Runtime (أحياناً بيكون ضروري عشان Cloudflare يشوف الـ Bindings)
-export const runtime = 'edge'; 
-
 export async function GET() {
   // 1. إعداد "الكشاف" لمعرفة حالة الخزنة
   let kvStatus = "NOT_FOUND_IN_ANY_ENVIRONMENT";
