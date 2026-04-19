@@ -6,9 +6,9 @@
 		"nodejs_compat_v2"
 	],
 	"kv_namespaces": [
-		{
-			"binding": "WIND_KV",
-			"id": "47cfb937f6354b88819be29386215889"
-		}
-	]
+    {
+      "binding": "WIND_KV",
+      "id": "47cfb937f6354b88819be29386215889"
+    }
+  ]
 }

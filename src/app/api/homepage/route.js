@@ -2,43 +2,56 @@ import { NextResponse } from 'next/server';
 import { getDb } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore/lite";
 
+// إضافة سطر الـ Edge Runtime (أحياناً بيكون ضروري عشان Cloudflare يشوف الـ Bindings)
+export const runtime = 'edge'; 
+
 export async function GET() {
+  // 1. إعداد "الكشاف" لمعرفة حالة الخزنة
+  let kvStatus = "NOT_FOUND_IN_ANY_ENVIRONMENT";
+  let kv = null;
+
   try {
-    // Try to get data from KV cache first
-    const kv = globalThis.__ENV__?.WIND_KV || process.env.WIND_KV;
-    
+    // 2. رحلة البحث عن الخزنة في كلودفلير
+    if (typeof process !== 'undefined' && process.env.WIND_KV) {
+      kv = process.env.WIND_KV;
+      kvStatus = "FOUND_IN_PROCESS_ENV";
+    } else if (globalThis.WIND_KV) {
+      kv = globalThis.WIND_KV;
+      kvStatus = "FOUND_IN_GLOBALTHIS";
+    } else if (globalThis.__ENV__?.WIND_KV) {
+      kv = globalThis.__ENV__.WIND_KV;
+      kvStatus = "FOUND_IN_GLOBALTHIS_ENV";
+    }
+
+    // 3. لو الخزنة موجودة، جرب تقرأ منها
     if (kv) {
       try {
-        // Check if data exists in KV cache
         const cachedData = await kv.get('homepage_data_v1');
-        
         if (cachedData) {
-          console.log('KV Cache HIT: Serving homepage data from cache');
           return NextResponse.json({
             success: true,
             source: 'cache',
+            kv_status: kvStatus + "_AND_SERVED_FROM_CACHE",
             data: JSON.parse(cachedData)
+          }, {
+            headers: {
+              "X-Cache": "HIT",
+              "Cache-Control": "public, max-age=30, stale-while-revalidate=60"
+            }
           });
         }
-        
-        console.log('KV Cache MISS: Data not found, fetching from Firebase');
+        kvStatus += "_BUT_CACHE_WAS_EMPTY";
       } catch (kvError) {
-        console.error('KV Error:', kvError);
-        // Continue to Firebase fallback
+        kvStatus += "_READ_ERROR: " + kvError.message;
       }
-    } else {
-      console.log('KV not available in development, using Firebase directly');
     }
 
-    // Firebase fallback - fetch data from Firebase
+    // 4. الخطة البديلة: جيب من فايربيز
     const db = getDb();
-    
-    // Fetch layout config
     const layoutRef = doc(db, "homepage", "layout_config");
     const layoutSnap = await getDoc(layoutRef);
     const layoutData = layoutSnap.exists() ? layoutSnap.data() : { sections: [] };
     
-    // Fetch hero data
     const heroRef = doc(db, "homepage", "main-hero");
     const heroSnap = await getDoc(heroRef);
     const heroData = heroSnap.exists() ? heroSnap.data() : { slides: [], categories: [] };
@@ -48,30 +61,35 @@ export async function GET() {
       hero: heroData
     };
 
-    // Store in KV cache for future requests (if KV is available)
+    // 5. لو الخزنة موجودة، خزن الداتا اللي جبناها من فايربيز
     if (kv) {
       try {
         await kv.put('homepage_data_v1', JSON.stringify(firebaseData));
-        console.log('KV Cache: Stored homepage data successfully');
+        kvStatus += "_AND_SAVED_SUCCESSFULLY";
       } catch (storeError) {
-        console.error('KV Store Error:', storeError);
-        // Continue - data is still served to user
+        kvStatus += "_WRITE_ERROR: " + storeError.message;
       }
     }
 
+    // 6. إرجاع النتيجة للعميل
     return NextResponse.json({
       success: true,
       source: 'firebase',
+      kv_status: kvStatus,  // ده السطر اللي هيفضح لنا المشكلة فين!
       data: firebaseData
+    }, {
+      headers: {
+        "X-Cache": "MISS"
+      }
     });
 
   } catch (error) {
-    console.error('Homepage API Error:', error);
     return NextResponse.json(
       { 
         success: false, 
-        error: 'Failed to fetch homepage data',
-        source: 'error'
+        source: 'error',
+        kv_status: kvStatus,
+        error: error.message 
       },
       { status: 500 }
     );
