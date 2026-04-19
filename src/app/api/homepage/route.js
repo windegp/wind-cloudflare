@@ -2,25 +2,23 @@ import { NextResponse } from 'next/server';
 import { getDb } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore/lite";
 
+// 🚀 السطر السحري لمنع Next.js من كاش الكود أثناء الـ Build
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
-  // 1. إعداد "الكشاف" لمعرفة حالة الخزنة
-  let kvStatus = "NOT_FOUND_IN_ANY_ENVIRONMENT";
+  let kvStatus = "NOT_FOUND";
   let kv = null;
 
   try {
-    // 2. رحلة البحث عن الخزنة في كلودفلير
+    // محاولة قراءة الخزنة بالطريقة المعتمدة لـ OpenNext على كلودفلير
     if (typeof process !== 'undefined' && process.env.WIND_KV) {
       kv = process.env.WIND_KV;
       kvStatus = "FOUND_IN_PROCESS_ENV";
-    } else if (globalThis.WIND_KV) {
-      kv = globalThis.WIND_KV;
-      kvStatus = "FOUND_IN_GLOBALTHIS";
     } else if (globalThis.__ENV__?.WIND_KV) {
       kv = globalThis.__ENV__.WIND_KV;
       kvStatus = "FOUND_IN_GLOBALTHIS_ENV";
     }
 
-    // 3. لو الخزنة موجودة، جرب تقرأ منها
     if (kv) {
       try {
         const cachedData = await kv.get('homepage_data_v1');
@@ -28,7 +26,7 @@ export async function GET() {
           return NextResponse.json({
             success: true,
             source: 'cache',
-            kv_status: kvStatus + "_AND_SERVED_FROM_CACHE",
+            kv_status: kvStatus + "_AND_SERVED",
             data: JSON.parse(cachedData)
           }, {
             headers: {
@@ -37,58 +35,43 @@ export async function GET() {
             }
           });
         }
-        kvStatus += "_BUT_CACHE_WAS_EMPTY";
+        kvStatus += "_BUT_EMPTY";
       } catch (kvError) {
-        kvStatus += "_READ_ERROR: " + kvError.message;
+        kvStatus += "_READ_ERROR";
       }
     }
 
-    // 4. الخطة البديلة: جيب من فايربيز
+    // جلب البيانات من فايربيز لو الخزنة فاضية أو مش موجودة
     const db = getDb();
-    const layoutRef = doc(db, "homepage", "layout_config");
-    const layoutSnap = await getDoc(layoutRef);
-    const layoutData = layoutSnap.exists() ? layoutSnap.data() : { sections: [] };
-    
-    const heroRef = doc(db, "homepage", "main-hero");
-    const heroSnap = await getDoc(heroRef);
-    const heroData = heroSnap.exists() ? heroSnap.data() : { slides: [], categories: [] };
+    const [layoutSnap, heroSnap] = await Promise.all([
+      getDoc(doc(db, "homepage", "layout_config")),
+      getDoc(doc(db, "homepage", "main-hero"))
+    ]);
     
     const firebaseData = {
-      layout: layoutData,
-      hero: heroData
+      layout: layoutSnap.exists() ? layoutSnap.data() : { sections: [] },
+      hero: heroSnap.exists() ? heroSnap.data() : { slides: [], categories: [] }
     };
 
-    // 5. لو الخزنة موجودة، خزن الداتا اللي جبناها من فايربيز
     if (kv) {
       try {
         await kv.put('homepage_data_v1', JSON.stringify(firebaseData));
-        kvStatus += "_AND_SAVED_SUCCESSFULLY";
+        kvStatus += "_AND_SAVED";
       } catch (storeError) {
-        kvStatus += "_WRITE_ERROR: " + storeError.message;
+        kvStatus += "_WRITE_ERROR";
       }
     }
 
-    // 6. إرجاع النتيجة للعميل
     return NextResponse.json({
       success: true,
       source: 'firebase',
-      kv_status: kvStatus,  // ده السطر اللي هيفضح لنا المشكلة فين!
+      kv_status: kvStatus,
       data: firebaseData
     }, {
-      headers: {
-        "X-Cache": "MISS"
-      }
+      headers: { "X-Cache": "MISS" }
     });
 
   } catch (error) {
-    return NextResponse.json(
-      { 
-        success: false, 
-        source: 'error',
-        kv_status: kvStatus,
-        error: error.message 
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, source: 'error', kv_status: kvStatus }, { status: 500 });
   }
 }
