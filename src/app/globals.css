@@ -1,0 +1,50 @@
+/* في بداية ملف globals.css */
+html {
+  background-color: #121212; /* يضمن أن أي فراغ قبل التحميل يكون أسوداً بنفس درجة الموقع */
+}
+
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
+
+:root {
+  --wind-bg: #121212;      /* أسود IMDb */
+  --wind-card: #1A1A1A;    /* رمادي الكروت */
+  --wind-gold: #F5C518;    /* الذهبي الرسمي */
+  --wind-text: #FFFFFF;
+  --wind-sub: #A1A1A1;     /* رمادي النصوص الفرعية */
+  --font-cairo: 'Cairo', system-ui, sans-serif;
+  --font-tajawal: 'Tajawal', system-ui, sans-serif;
+}
+
+/* التعديل هنا لضمان عمل Cairo */
+body {
+  background-color: var(--wind-bg);
+  color: var(--wind-text);
+  /* حذفنا قائمة الخطوط القديمة وتركنا الأولوية لـ Cairo */
+  font-family: var(--font-cairo), sans-serif !important; 
+  margin: 0;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* تصغير الخطوط العامة لتناسب الموبايل */
+html {
+  font-size: 14px; 
+}
+
+@layer utilities {
+  .text-xxs {
+    font-size: 0.65rem;
+    line-height: 1rem;
+  }
+}
+
+/* إخفاء شريط التمرير مع الحفاظ على وظيفة السحب */
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
+}
+.scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}

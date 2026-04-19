@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Next.js Build
+.next/
+out/
+
+# Vercel & Open-Next (Build Artifacts)
+.vercel
+.open-next
+
+# Secrets & Environment Variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+scripts/serviceAccountKey.json
+
+# OS files
+.DS_Store
+Thumbs.db
