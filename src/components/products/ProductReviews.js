@@ -175,14 +175,10 @@ export default function ProductReviews({ productHandle, onReviewStatsUpdate }) {
 
       // 3. مسح KV Cache عشان التقييم الجديد يظهر فوراً
       try {
-        await fetch("/api/revalidate", {
+        await fetch("/api/invalidate-stats", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            secret: process.env.NEXT_PUBLIC_REVALIDATE_SECRET,
-            type: "product_stats",
-            handle: productHandle
-          })
+          body: JSON.stringify({ handle: productHandle })
         });
       } catch {}
 
