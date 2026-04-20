@@ -160,6 +160,18 @@ export default function CollectionsPage() {
             
             // 🔥 4. بدلاً من تحديث الـ State يدوياً، نأمر SWR بتحديث الكاش أوتوماتيكياً
             mutate('collections-data');
+            // 🔥 مسح KV Cache للكوليكشن والصفحة الرئيسية
+try {
+  const slugToInvalidate = formData.slug?.trim().replace(/^\//, '');
+  await Promise.all([
+    fetch("/api/invalidate-product", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: slugToInvalidate })
+    }),
+    fetch("/api/invalidate-homepage", { method: "POST" })
+  ]);
+} catch {}
 
             setView('list');
             alert("تم التحديث بنجاح!");

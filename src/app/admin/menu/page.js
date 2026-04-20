@@ -294,6 +294,11 @@ export default function ProfessionalMenuManager() {
                 const db = getDb();
                 // 🔥 التعديل هنا للكتابة: الحفظ في siteSettings مع الحفاظ على البيانات الأخرى (merge: true)
                 await setDoc(doc(db, "settings", "siteSettings"), { menuItems: items }, { merge: true });
+                // 🔥 مسح KV Cache للصفحة الرئيسية
+// 🔥 مسح KV Cache للصفحة الرئيسية
+try {
+  await fetch("/api/invalidate-homepage", { method: "POST" });
+} catch {}
                 
                 // 🔥 تحديث كاش SWR صمتاً بالبيانات الجديدة
                 mutate('menu-data', { menu: items, collections: availableCollections }, false);
