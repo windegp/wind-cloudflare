@@ -218,12 +218,26 @@ export const useHomepageReviews = () => {
   });
 };
 
-// هوك الأقسام الأربعة (مقفل الكوتا بالكامل)
+// هوك الأقسام الأربعة (يقرأ من KV Cache لحماية الكوتا)
 export const useHomepageProductsSections = () => {
-  return useSWR('homepage-products-sections', fetchHomepageProductsSections, {
-    dedupingInterval: 3600000, // ساعة كاملة كاش
-    revalidateOnFocus: false,
-    revalidateOnReconnect: false
+  const fetcherWithCache = async () => {
+    try {
+      // محاولة القراءة من الـ KV API أولاً
+      const res = await fetch('/api/homepage');
+      if (res.ok) {
+        const result = await res.json();
+        if (result.success) return result.data;
+      }
+    } catch (e) {
+      console.error("WIND Cache Fetch Error:", e);
+    }
+    // Fallback: لو الكاش مش متاح، يروح لفايربيز مباشرة
+    return fetchHomepageProductsSections();
+  };
+
+  return useSWR('homepage-products-sections', fetcherWithCache, {
+    revalidateOnFocus: true, // السماح بالتحديث عند العودة للصفحة
+    dedupingInterval: 5000   // منع التكرار لمدة 5 ثواني فقط بدل ساعة
   });
 };
 
@@ -262,14 +276,29 @@ export const usePaginatedProducts = (categorySlug, limitCount = 10, lastVisibleD
 };
 // 🚀 هوك جلب تفاصيل منتج واحد (SWR)
 export const useProduct = (id) => {
-  const fetcher = async () => {
+  const fetcherWithCache = async () => {
+    if (!id) return null;
+    try {
+      // محاولة القراءة من كاش المنتج المخصص في KV
+      const res = await fetch(`/api/product-stats?id=${id}`);
+      if (res.ok) {
+        const result = await res.json();
+        // ملاحظة: لو الـ API بيرجع بيانات المنتج كاملة نستخدمها
+        if (result.success && result.data) return result.data;
+      }
+    } catch (e) {
+      console.error("WIND Product Cache Error:", e);
+    }
+
+    // Fallback لفايربيز لو الكاش مش موجود
     const db = getDb();
     const snap = await getDoc(doc(db, "products", id));
     return snap.exists() ? { id: snap.id, ...snap.data() } : null;
   };
-  return useSWR(id ? `product-${id}` : null, fetcher, {
-    dedupingInterval: 3600000, // كاش لمدة ساعة
-    revalidateOnFocus: false
+
+  return useSWR(id ? `product-${id}` : null, fetcherWithCache, {
+    revalidateOnFocus: true,
+    dedupingInterval: 5000 // كاش متصفح قصير جداً لضمان التحديث
   });
 };
 

@@ -127,6 +127,30 @@ export default function ImportShopifyCSV() {
           }
         }
 
+        // 🔥 مسح كاش الموقع بالكامل بعد انتهاء الاستيراد
+        try {
+          addLog("جاري مسح كاش السيرفر لتحديث الموقع...");
+          const revalidateRes = await fetch('/api/revalidate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              secret: process.env.NEXT_PUBLIC_REVALIDATE_SECRET, 
+              type: 'all' 
+            })
+          });
+          
+          if (!revalidateRes.ok) {
+            const errData = await revalidateRes.json();
+            console.error("WIND Cache Warning:", errData);
+            addLog("⚠️ تحذير: لم يتم مسح الكاش تلقائياً.");
+          } else {
+            addLog("✅ تم مسح الكاش وتحديث الموقع بنجاح.");
+          }
+        } catch (e) {
+          console.error("Cache Revalidate Network Error:", e);
+          addLog("⚠️ خطأ في الاتصال أثناء مسح الكاش.");
+        }
+
         addLog(`✅ اكتملت المهمة بنجاح!`);
         addLog(`نجح الرفع: ${successCount}`);
         if (errorCount > 0) addLog(`فشل الرفع: ${errorCount}`);
