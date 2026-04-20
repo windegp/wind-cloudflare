@@ -165,26 +165,27 @@ export default function ProductReviews({ productHandle, onReviewStatsUpdate }) {
 
       // 1. إضافة التقييم لجدول التقييمات
       const docRef = await addDoc(collection(db, "Reviews"), newReviewData);
-      
+
       // 2. تحديث العداد أوتوماتيك
       const statsRef = doc(db, "ProductStats", productHandle);
       await setDoc(statsRef, {
         totalCount: increment(1),
-        totalRatingSum: increment(newReview.rating)
       }, { merge: true });
 
-      // 3. مسح KV Cache عشان التقييم الجديد يظهر فوراً
+      // 🔥 إشارة WIND لمسح كاش إحصائيات المنتج في KV لتحديث النجوم فوراً في الموقع
       try {
-        await fetch("/api/invalidate-stats", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ handle: productHandle })
+        await fetch('/api/revalidate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            secret: process.env.NEXT_PUBLIC_REVALIDATE_SECRET, 
+            type: 'product_stats',
+            handle: productHandle 
+          })
         });
-      } catch {}
-
-      setShowAddModal(false);
-      setNewReview({ name: '', rating: 5, text: '', imageUrls: [] });
-      setUploadedImages([]);
+      } catch (e) {
+        console.error("WIND Cache Revalidate Error:", e);
+      }
       alert("تمت إضافة تقييمك بنجاح!");
       
       // التحديث اللحظي للواجهة بدون ريفريش

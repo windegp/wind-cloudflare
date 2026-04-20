@@ -355,44 +355,41 @@ function CreateProductForm() {
       const handleToUse = urlHandle || productData.title.toLowerCase().trim().replace(/\s+/g, '-');
       const documentId = isEditing ? productId : handleToUse;
 
-      // 🔥 تنظيف وتوحيد الأقسام: نعتمد على مصفوفة واحدة فقط
-        const finalCollections = (productData.selectedCollections || []).map(slug => slug.replace(/^\//, ''));
+      // 🔥 تنظيف WIND: نعتمد على collections فقط ونحذف categories المكررة لتوفير الكوتا
+        const cleanCollections = (productData.selectedCollections || []).map(slug => slug.replace(/^\//, ''));
         
-        // 🔥 استخراج الداتا مع حذف "كل" الحقول القديمة والمكررة لضمان نظافة المستند
-        const { 
-          selectedCollections, type, category, productCategory, 
-          barcode, categories, Price, oldPrice, ...baseData 
-        } = productData;
+        // 🔥 تنظيف WIND: استخراج البيانات واستبعاد الحقول المكررة والقديمة تماماً
+        const { selectedCollections, categories, Price, type, category, productCategory, barcode, ...pureData } = productData;
 
         const finalProduct = {
-          ...baseData,
-          // توحيد الأقسام في حقل واحد نظيف
-          collections: (productData.selectedCollections || []).map(s => s.replace(/^\//, '')),
+          ...pureData,
+          collections: (productData.selectedCollections || []).map(slug => slug.replace(/^\//, '')),
           images,
           chargeTax,
-          // 🔥 توحيد السعر: سحب السعر من أول Variant لضمان دقة الكارت
+          // 🔥 توحيد السعر: السعر الرئيسي يتبع دائماً سعر أول Variant لضمان دقة الكارت
           price: productData.variants && productData.variants.length > 0 
                  ? productData.variants[0].price.toString() 
                  : productData.price,
           compareAtPrice: productData.variants && productData.variants.length > 0 
                           ? productData.variants[0].compareAtPrice.toString() 
-                          : productData.compareAtPrice,
-          seo: { 
-            title: seoTitle || productData.title, 
-            description: seoDesc || productData.description.substring(0, 160), 
-            handle: handleToUse 
+                          : (productData.compareAtPrice || ""),
+          seo: {
+            title: seoTitle || productData.title,
+            description: seoDesc || productData.description.substring(0, 160),
+            handle: handleToUse
           },
           metafields,
           updatedAt: serverTimestamp(),
 
-          // 🔥 حذف الحقول المكررة من فايربيز تماماً (هذا يقلل حجم الوثيقة 40%)
+          // 🔥 حذف الحقول المكررة والقديمة من فايربيز نهائياً (Cleanup)
           categories: null,
+          Price: null,
+          type: null,
           category: null,
           productCategory: null,
-          type: null,
-          barcode: null,
-          Price: null, // حذف السعر المكتوب بكابيتال لو وجد
+          barcode: null
         };
+        
 
         // حذف الحقول القديمة من فايربيز لضمان نظافة الوثيقة
         finalProduct.categories = null; 

@@ -38,8 +38,8 @@ export async function POST(request) {
   } else if (type === 'homepage') {
     keysToDelete = ['homepage_data_v1'];
   } else if (type === 'product' && id) {
-    // مسح بيانات المنتج + إحصائياته معاً دفعة واحدة
-    keysToDelete = [`product_${id}`];
+    // 🔥 تحديث WIND: عند تعديل منتج، لازم نمسح كاش الهوم بيج كمان عشان السعر والنجوم يتحدثوا في الكروت
+    keysToDelete = [`product_${id}`, 'homepage_data_v1'];
     if (handle) keysToDelete.push(`product_stats_${handle}`);
   } else if (type === 'product_stats' && handle) {
     // مسح الإحصائيات فقط (لما يضاف review جديد)
