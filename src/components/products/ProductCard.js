@@ -66,7 +66,7 @@ export default function ProductCard(props) {
   }, [props.id, props.handle, props.reviewsCount, props.rating]);
 
   const { id, handle, title, price, oldPrice, compareAtPrice, category, productCategory, 
-type, folderName, mainImage, image, images, variants, colorSwatches, options, colors } = 
+type, folderName, mainImage, image, images, variants, colorSwatches, options, colors, collections } = 
 mergedProduct;
 
   // 🔥 تعديل WIND لتوحيد السعر: الأولوية للسعر الرئيسي (Root Price) لضمان التحديث الفوري من الأدمن
