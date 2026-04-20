@@ -297,7 +297,14 @@ export default function ProfessionalMenuManager() {
                 // 🔥 مسح KV Cache للصفحة الرئيسية
 // 🔥 مسح KV Cache للصفحة الرئيسية
 try {
-  await fetch("/api/invalidate-homepage", { method: "POST" });
+  await Promise.all([
+    fetch("/api/invalidate-homepage", { method: "POST" }),
+    fetch("/api/revalidate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ secret: process.env.REVALIDATE_SECRET, type: "site_settings" })
+    })
+  ]);
 } catch {}
                 
                 // 🔥 تحديث كاش SWR صمتاً بالبيانات الجديدة

@@ -7,20 +7,16 @@ import { useCart } from "@/context/CartContext";
 import { useSettings } from "@/context/SettingsContext";
 import { X, ShoppingBag, ChevronLeft, ArrowRight, ChevronRight } from '@/components/icons-extra';
 import logo from '@/../public/logo.png';
-// ✅ استخدام الهوك الموحد لضمان كاش واحد وحماية الكوتا
-import { useSiteSettings } from '@/hooks/useFirestore';
+
 
 export default function Navbar() {
   const pathname = usePathname();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { cartItems = [], toggleCart } = useCart() || {};
   
-  // ⚡ 1. جلب البيانات من الكاش الموحد (SWR)
-  const { data: liveSettings, isLoading: loading } = useSiteSettings();
-  const { settings: contextSettings } = useSettings();
-  
+  const { settings: activeSettings } = useSettings();
+
   // دمج البيانات (الأولوية للبيانات الحية)
-  const activeSettings = liveSettings || contextSettings;
   const announcements = activeSettings?.announcements || ["WIND Shopping"];
   const liveMenuItems = activeSettings?.menuItems || [];
 

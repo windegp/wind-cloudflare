@@ -46,6 +46,8 @@ export async function POST(request) {
     keysToDelete = [`product_stats_${handle}`];
   } else if (type === 'collection' && slug) {
     keysToDelete = [`collection_${slug}`];
+  } else if (type === 'site_settings') {
+    keysToDelete = ['site_settings_v1'];
   }
 
   if (keysToDelete.length === 0) {

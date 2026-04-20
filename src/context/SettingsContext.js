@@ -1,7 +1,7 @@
 "use client";
 import { createContext, useContext, useEffect, useState } from "react";
 import { getDb } from "../lib/firebase";
-import { doc, getDoc, updateDoc, increment } from "firebase/firestore/lite";
+import { updateDoc, increment, doc } from "firebase/firestore/lite";
 import { usePathname } from "next/navigation";
 import useSWR from 'swr';
 
@@ -13,13 +13,12 @@ export const SettingsProvider = ({ children }) => {
 
   // 🔥 1. SWR مع نظام "الذاكرة الحديدية"
   const { data: settings, isLoading } = useSWR('site-settings', async () => {
-    const db = getDb();
-    const settingsDoc = await getDoc(doc(db, "settings", "siteSettings"));
-    const data = settingsDoc.exists() ? settingsDoc.data() : null;
-    return data;
+    const res = await fetch("/api/site-settings");
+    const result = await res.json();
+    return result.success ? result.data : null;
   }, {
-    revalidateOnFocus: false, 
-    dedupingInterval: 3600000, // ساعة كاملة "هدوء" للكوتا
+    revalidateOnFocus: false,
+    dedupingInterval: 3600000,
   });
 
   // 🔥 2. عداد الزوار (من كودك الأصلي - مُحسن)
