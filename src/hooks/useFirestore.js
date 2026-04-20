@@ -7,59 +7,57 @@ import {
 } from 'firebase/firestore/lite';
 
 // =========================================================
-// 1. Fetchers (المصانع الخلفية اللي بتكلم الفايربيز)
+// 1. Fetchers (المصانع الخلفية اللي بتكلم الفايربيز أو الـ KV)
 // =========================================================
 
-// مصنع جلب مستند واحد (مثل الإعدادات أو منتج معين)
 const fetchDoc = async (path) => {
   const db = getDb();
   const snap = await getDoc(doc(db, ...path.split('/')));
   return snap.exists() ? { id: snap.id, ...snap.data() } : null;
 };
 
-// مصنع جلب القوائم (مثل المنتجات، العملاء) مع حماية الـ Limit
 const fetchCollection = async ([path, limitCount, orderField, orderDir]) => {
   const db = getDb();
   let q = query(collection(db, path));
-  
-  if (orderField) {
-    q = query(q, orderBy(orderField, orderDir || 'asc'));
-  }
-  // 🛡️ حماية إجبارية: لو محدش بعت Limit، الفايربيز هيسحب 20 بس كحد أقصى عشان الكوتا
+  if (orderField) q = query(q, orderBy(orderField, orderDir || 'asc'));
   q = query(q, limit(limitCount || 20)); 
-
   const snap = await getDocs(q);
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 };
 
-// مصنع جلب تقييمات الصفحة الرئيسية (Legendary Batch Fetching)
+// 🔥 تعديل: محاولة الجلب من KV Cache أولاً لتقييمات الصفحة الرئيسية
 const fetchHomepageReviews = async () => {
   try {
+    const res = await fetch('/api/homepage-reviews');
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.reviews) return data;
+    }
+  } catch (error) {
+    // صمت تام، لو الـ API فشل هنكمل للفايربيز
+  }
+
+  // 🛡️ Fallback: الكود الأصلي (Legendary Batch Fetching)
+  try {
     const db = getDb();
-    
-    // 1. جلب أحدث 10 تقييمات فقط (قراءة واحدة)
     const qReviews = query(collection(db, "Reviews"), where("status", "==", "published"), orderBy("date", "desc"), limit(10));
     const snapReviews = await getDocs(qReviews);
     const fetchedReviews = snapReviews.docs.map(d => ({ id: d.id, ...d.data() }));
 
     if (fetchedReviews.length === 0) return { reviews: [], products: {} };
 
-    // Legendary Batch Fetching: جمع كل المعرفات المطلوبة
     const uniqueHandles = [...new Set(fetchedReviews.map(r => r.productHandle).filter(Boolean))].slice(0, 10);
     const productsMap = {};
 
     if (uniqueHandles.length > 0) {
-      // استدعاء واحد فقط لجميع المنتجات المطلوبة
       const qProducts = query(collection(db, "products"), where(documentId(), "in", uniqueHandles));
       const snapProducts = await getDocs(qProducts);
-      
       snapProducts.docs.forEach(doc => {
         const pData = doc.data();
         const h = pData.handle || doc.id;
         productsMap[h] = { ...pData, id: doc.id, mainImage: pData.images?.[0] || pData.image || "" };
       });
       
-      // لو لسه في منتجات ناقصة، نبحث عنها مرة واحدة فقط
       const missingHandles = uniqueHandles.filter(h => !productsMap[h]);
       if (missingHandles.length > 0) {
         const qByHandle = query(collection(db, "products"), where("handle", "in", missingHandles));
@@ -71,7 +69,6 @@ const fetchHomepageReviews = async () => {
         });
       }
     }
-
     return { reviews: fetchedReviews, products: productsMap };
   } catch (error) {
     console.error("WIND Error fetching homepage reviews:", error);
@@ -79,10 +76,18 @@ const fetchHomepageReviews = async () => {
   }
 };
 
-// مصنع جلب منتجات الأقسام الأربعة (Legendary Batch Fetching - قراءة واحدة فقط للمنتجات)
+// 🔥 تعديل: محاولة الجلب من KV Cache أولاً لمنتجات الأقسام الأربعة
 const fetchHomepageProductsSections = async () => {
+  try {
+    const res = await fetch('/api/homepage-sections');
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.topRatedWeekly) return data;
+    }
+  } catch (error) {}
+
+  // 🛡️ Fallback: الكود الأصلي
   const db = getDb();
-  
   const getCurrentWeekString = () => {
     const d = new Date();
     d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
@@ -93,24 +98,17 @@ const fetchHomepageProductsSections = async () => {
   const currentWeek = getCurrentWeekString();
 
   try {
-    // Legendary Batch Fetching: جمع المعرفات فقط أولاً
     const [mostLikedIdsSnap, weeklyLikedIdsSnap, topStatsIdsSnap, recentReviewsSnap] = await Promise.all([
-      // 1. جمع معرفات المنتجات الأعلى إعجاباً (كل الأوقات) - معرفات فقط
       getDocs(query(collection(db, "products"), orderBy("likesCount", "desc"), limit(5))),
-      // 2. جمع معرفات المنتجات الأعلى إعجاباً (أسبوعياً) - معرفات فقط
       getDocs(query(collection(db, "products"), where("currentWeekId", "==", currentWeek), orderBy("weeklyLikesCount", "desc"), limit(5))),
-      // 3. جمع معرفات ProductStats - معرفات فقط
       getDocs(query(collection(db, "ProductStats"), orderBy("totalCount", "desc"), limit(5))),
-      // 4. جمع التقييمات الأسبوعية للتحليل
       getDocs(query(collection(db, "Reviews"), where("date", ">=", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()), limit(50)))
     ]);
 
-    // جمع كل المعرفات المطلوبة في مصفوفة واحدة
     const mostLikedIds = mostLikedIdsSnap.docs.map(d => d.id);
     const weeklyLikedIds = weeklyLikedIdsSnap.docs.map(d => d.id);
     const topAllTimeHandles = topStatsIdsSnap.docs.map(d => d.id);
     
-    // حساب التقييمات الأسبوعية من البيانات المحملة
     const weeklyRatings = {};
     recentReviewsSnap.docs.forEach(d => {
       const rev = d.data();
@@ -126,31 +124,24 @@ const fetchHomepageProductsSections = async () => {
       .sort((a, b) => b.avg - a.avg || b.count - a.count)
       .slice(0, 5);
 
-    // Legendary Batch Fetching: استدعاء واحد فقط لجميع المنتجات
     const allProductIds = [
-      ...mostLikedIds,
-      ...weeklyLikedIds,
-      ...topAllTimeHandles,
-      ...topWeeklyHandles.map(t => t.handle)
-    ].filter((id, i, arr) => arr.indexOf(id) === i); // إزالة التكرارات
+      ...mostLikedIds, ...weeklyLikedIds, ...topAllTimeHandles, ...topWeeklyHandles.map(t => t.handle)
+    ].filter((id, i, arr) => arr.indexOf(id) === i);
 
     const productsMap = {};
     if (allProductIds.length > 0) {
-      // استدعاء واحد فقط لجميع المنتجات المطلوبة
       const allProductsSnap = await getDocs(query(collection(db, "products"), where(documentId(), "in", allProductIds)));
       allProductsSnap.docs.forEach(doc => {
         const data = doc.data();
         const handle = data.handle || doc.id;
         productsMap[doc.id] = { id: doc.id, ...data, handle };
-        productsMap[handle] = { id: doc.id, ...data, handle }; // للوصول بالمعرف أو بالـ handle
+        productsMap[handle] = { id: doc.id, ...data, handle };
       });
     }
 
-    // بناء النتائج النهائية من الخريطة المحملة
     const mostLikedAllTime = mostLikedIds.map(id => productsMap[id]).filter(Boolean);
     const mostLikedWeeklyRaw = weeklyLikedIds.map(id => productsMap[id]).filter(Boolean);
     
-    // بناء المنتجات الأعلى تقييماً (كل الأوقات)
     const topRatedAllTime = topAllTimeHandles.map(handle => {
       const product = productsMap[handle];
       if (!product) return null;
@@ -159,21 +150,16 @@ const fetchHomepageProductsSections = async () => {
       return { ...product, allTimeAvg: avg, allTimeCount: stats?.totalCount || 0 };
     }).filter(Boolean);
 
-    // بناء المنتجات الأعلى تقييماً (أسبوعياً)
     const topRatedWeeklyRaw = topWeeklyHandles.map(t => {
       const product = productsMap[t.handle];
       if (!product) return null;
       return { ...product, weeklyAvg: t.avg.toFixed(1) || "5.0", weeklyCount: t.count || 0 };
     }).filter(Boolean);
 
-    // الحفاظ على نظام الاستكمال الذكي (Smart Fill)
     let finalTopRatedWeekly = [...topRatedWeeklyRaw];
     if (finalTopRatedWeekly.length < 5) {
       const existingIds = new Set(finalTopRatedWeekly.map(p => p.id));
-      const fillers = topRatedAllTime
-        .filter(p => !existingIds.has(p.id))
-        .slice(0, 5 - finalTopRatedWeekly.length)
-        .map(p => ({ ...p, weeklyAvg: p.allTimeAvg, weeklyCount: p.allTimeCount }));
+      const fillers = topRatedAllTime.filter(p => !existingIds.has(p.id)).slice(0, 5 - finalTopRatedWeekly.length).map(p => ({ ...p, weeklyAvg: p.allTimeAvg, weeklyCount: p.allTimeCount }));
       finalTopRatedWeekly = [...finalTopRatedWeekly, ...fillers];
     }
 
@@ -192,96 +178,91 @@ const fetchHomepageProductsSections = async () => {
 };
 
 // =========================================================
-// 2. Custom Hooks (الخطافات الجاهزة للاستخدام في أي صفحة)
+// 2. Custom Hooks
 // =========================================================
 
-// هوك الإعدادات (مقفل الكوتا بالكامل)
+// 🔥 تعديل: هوك الإعدادات (يحاول الـ API أولاً)
 export const useSiteSettings = () => {
-  return useSWR('settings/siteSettings', fetchDoc, {
-    dedupingInterval: 3600000, // ساعة كاملة كاش
+  const fetcher = async () => {
+    try {
+      const res = await fetch('/api/settings');
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.id) return data;
+      }
+    } catch (e) {}
+    return fetchDoc('settings/siteSettings'); // Fallback
+  };
+  return useSWR('settings/siteSettings', fetcher, {
+    dedupingInterval: 3600000,
     revalidateOnFocus: false,
     revalidateOnReconnect: false
   });
 };
 
-// هوك قائمة المنتجات (بنمررله العدد المطلوب)
 export const useProductsList = (limitCount = 20) => {
   return useSWR(['products', limitCount, 'title', 'asc'], fetchCollection);
 };
 
-// هوك تقييمات الصفحة الرئيسية (مقفل الكوتا بالكامل)
 export const useHomepageReviews = () => {
   return useSWR('homepage-reviews', fetchHomepageReviews, {
-    dedupingInterval: 3600000, // ساعة كاملة كاش
+    dedupingInterval: 3600000,
     revalidateOnFocus: false,
     revalidateOnReconnect: false
   });
 };
 
-// هوك الأقسام الأربعة (مقفل الكوتا بالكامل)
 export const useHomepageProductsSections = () => {
   return useSWR('homepage-products-sections', fetchHomepageProductsSections, {
-    dedupingInterval: 3600000, // ساعة كاملة كاش
+    dedupingInterval: 3600000,
     revalidateOnFocus: false,
     revalidateOnReconnect: false
   });
 };
 
-// هوك جلب منتجات القسم مع Pagination لدعم التصفح اللانهائي
 export const usePaginatedProducts = (categorySlug, limitCount = 10, lastVisibleDoc = null) => {
   const fetcher = async () => {
     const db = getDb();
     const productsRef = collection(db, "products");
-    
-    // بناء الكويري الأساسي للقسم
-    let q = query(
-      productsRef, 
-      where("categories", "array-contains", categorySlug), 
-      orderBy("createdAt", "desc"), 
-      limit(limitCount)
-    );
-
-    // إذا كان هناك وثيقة سابقة، ابدأ التحميل من بعدها
-    if (lastVisibleDoc) {
-      q = query(q, startAfter(lastVisibleDoc));
-    }
-
+    let q = query(productsRef, where("categories", "array-contains", categorySlug), orderBy("createdAt", "desc"), limit(limitCount));
+    if (lastVisibleDoc) q = query(q, startAfter(lastVisibleDoc));
     const snap = await getDocs(q);
-    
-    return {
-      products: snap.docs.map(d => ({ id: d.id, ...d.data() })),
-      lastDoc: snap.docs[snap.docs.length - 1] || null 
-    };
+    return { products: snap.docs.map(d => ({ id: d.id, ...d.data() })), lastDoc: snap.docs[snap.docs.length - 1] || null };
   };
-
-  // مفتاح SWR فريد يعتمد على القسم ومكان التوقف (lastVisibleDoc)
   return useSWR(`paginated-products-${categorySlug}-${lastVisibleDoc?.id || 'start'}`, fetcher, {
     revalidateOnFocus: false,
-    dedupingInterval: 600000, // كاش 10 دقائق
+    dedupingInterval: 600000,
   });
 };
-// 🚀 هوك جلب تفاصيل منتج واحد (SWR)
+
 export const useProduct = (id) => {
   const fetcher = async () => {
     const db = getDb();
     const snap = await getDoc(doc(db, "products", id));
     return snap.exists() ? { id: snap.id, ...snap.data() } : null;
   };
-  return useSWR(id ? `product-${id}` : null, fetcher, {
-    dedupingInterval: 3600000, // كاش لمدة ساعة
-    revalidateOnFocus: false
-  });
+  return useSWR(id ? `product-${id}` : null, fetcher, { dedupingInterval: 3600000, revalidateOnFocus: false });
 };
 
-// 🚀 هوك جلب المنتجات ذات الصلة (النسخة الكاملة والمطابقة لمنطقك الأصلي)
+// 🔥 تعديل: هوك المنتجات ذات الصلة (يحاول الـ API أولاً)
 export const useRelatedProducts = (product) => {
   const fetcher = async () => {
     if (!product?.id) return [];
+    
+    // 1. محاولة الجلب من API الكاش أولاً
+    try {
+      const res = await fetch(`/api/related-products?id=${product.id}&handle=${encodeURIComponent(product.handle || '')}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data)) return data;
+      }
+    } catch (e) {}
+
+    // 2. Fallback: الكود الأصلي للفايربيز
     const db = getDb();
     const productsRef = collection(db, "products");
     let related = [];
 
-    // 1. جلب عن طريق الـ Metafields (الـ Handles اليدوية)
     const pageHandlesStr = product.metafields?.pageCrossSellHandles;
     if (pageHandlesStr && pageHandlesStr.trim() !== "") {
       const handlesArray = pageHandlesStr.split(',').map(h => h.trim()).filter(Boolean);
@@ -291,25 +272,19 @@ export const useRelatedProducts = (product) => {
       });
     } 
 
-    // 2. لو مفيش، جلب عن طريق الـ Categories (Array-contains)
     if (related.length === 0) {
       const fbRefValue = (Array.isArray(product.categories) && product.categories[0]) || product.category;
       if (fbRefValue) {
         const qCat = query(productsRef, where("categories", "array-contains", fbRefValue), limit(6));
         const snap = await getDocs(qCat);
-        snap.forEach(d => {
-          if (d.id !== product.id) related.push({ id: d.id, ...d.data() });
-        });
+        snap.forEach(d => { if (d.id !== product.id) related.push({ id: d.id, ...d.data() }); });
       }
     }
 
-    // 3. لو لسه مفيش، جلب عشوائي (Fallback)
     if (related.length === 0) {
       const qFallback = query(productsRef, limit(6));
       const snapFallback = await getDocs(qFallback);
-      snapFallback.forEach(d => {
-        if (d.id !== product.id) related.push({ id: d.id, ...d.data() });
-      });
+      snapFallback.forEach(d => { if (d.id !== product.id) related.push({ id: d.id, ...d.data() }); });
     }
 
     return Array.from(new Map(related.map(item => [item.id, item])).values()).slice(0, 5);
@@ -320,9 +295,7 @@ export const useRelatedProducts = (product) => {
     revalidateOnFocus: false
   });
 };
-// 🚀 هوك جلب تقييمات المنتج (3 تقييمات فقط في المرة)
 
-// 🚀 النسخة النهائية المفلترة والمحمية من الكوتا
 export const usePaginatedReviews = (productHandle, lastVisibleDoc = null, filter = "all") => {
   const fetcher = async () => {
     if (!productHandle) return { reviews: [], lastDoc: null };
@@ -334,15 +307,10 @@ export const usePaginatedReviews = (productHandle, lastVisibleDoc = null, filter
       orderBy("date", "desc")
     );
 
-    // تطبيق فلترة (أ) من الداتابيز مباشرة
     if (filter === "images") q = query(q, where("hasImages", "==", true));
     if (filter === "5star") q = query(q, where("rating", "==", 5));
-
     q = query(q, limit(3));
-
-    if (lastVisibleDoc) {
-      q = query(q, startAfter(lastVisibleDoc));
-    }
+    if (lastVisibleDoc) q = query(q, startAfter(lastVisibleDoc));
 
     const snap = await getDocs(q);
     return {

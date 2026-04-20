@@ -1,48 +1,33 @@
 import { NextResponse } from 'next/server';
 import { getDb } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore/lite";
-import { getCloudflareContext } from '@opennextjs/cloudflare';
+// 🌟 استدعاء الدوال الجاهزة من ملفنا المركزي
+import { kvGet, kvSet } from "@/lib/kv-cache"; 
 
 export const dynamic = 'force-dynamic';
-
 const CACHE_KEY = 'homepage_data_v1';
-
-async function getKV() {
-  try {
-    const ctx = await getCloudflareContext({ async: true });
-    return ctx?.env?.WIND_KV || null;
-  } catch {
-    return null;
-  }
-}
 
 export async function GET() {
   let kvStatus = "NOT_FOUND";
 
   try {
-    const kv = await getKV();
-
-    if (kv) {
-      kvStatus = "FOUND";
-      try {
-        const cached = await kv.get(CACHE_KEY);
-        if (cached) {
-          return NextResponse.json({
-            success: true,
-            source: 'cache',
-            kv_status: "HIT",
-            data: JSON.parse(cached)
-          }, {
-            headers: { "X-Cache": "HIT" }
-          });
-        }
-        kvStatus = "FOUND_BUT_EMPTY";
-      } catch {
-        kvStatus = "READ_ERROR";
-      }
+    // 1. جرب تجيب من KV Cache
+    const cachedData = await kvGet(CACHE_KEY);
+    
+    // الدالة بتاعتنا بترجع JSON جاهز، مش محتاجين نعمل parse
+    if (cachedData) {
+      return NextResponse.json({
+        success: true,
+        source: 'cache',
+        kv_status: "HIT",
+        data: cachedData
+      }, {
+        headers: { "X-Cache": "HIT" }
+      });
     }
 
-    // جيب من Firebase
+    // 2. لو مش موجود، جيب من Firebase
+    kvStatus = "MISS_FETCHING_FIREBASE";
     const db = getDb();
     const [layoutSnap, heroSnap] = await Promise.all([
       getDoc(doc(db, "homepage", "layout_config")),
@@ -54,15 +39,10 @@ export async function GET() {
       hero: heroSnap.exists() ? heroSnap.data() : { slides: [], categories: [] }
     };
 
-    // خزّن في KV
-    if (kv) {
-      try {
-        await kv.put(CACHE_KEY, JSON.stringify(firebaseData));
-        kvStatus = "SAVED";
-      } catch {
-        kvStatus = "WRITE_ERROR";
-      }
-    }
+    // 3. خزّن في KV للأبد
+    // الدالة بتاعتنا kvSet بتعمل JSON.stringify أوتوماتيك
+    const saved = await kvSet(CACHE_KEY, firebaseData);
+    kvStatus = saved ? "SAVED" : "WRITE_ERROR";
 
     return NextResponse.json({
       success: true,
@@ -77,7 +57,7 @@ export async function GET() {
     return NextResponse.json({
       success: false,
       error: error.message,
-      kv_status: kvStatus
+      kv_status: "ERROR"
     }, { status: 500 });
   }
 }
