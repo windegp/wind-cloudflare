@@ -11,14 +11,16 @@ export const SettingsProvider = ({ children }) => {
   const pathname = usePathname();
   const isAdmin = pathname?.startsWith('/admin');
 
-  // 🔥 1. SWR مع نظام "الذاكرة الحديدية"
-  const { data: settings, isLoading } = useSWR('site-settings', async () => {
-    const res = await fetch("/api/site-settings");
+  // 🔥 تعديل WIND: تقليل الكاش للأدمن لضمان رؤية العدادات (الزوار والتقييمات) لحظياً
+  const { data: settings, isLoading, mutate } = useSWR('site-settings', async () => {
+    // للأدمن: نسحب دائماً نسخة جديدة بتخطي الكاش
+    const url = isAdmin ? "/api/site-settings?fresh=true" : "/api/site-settings";
+    const res = await fetch(url);
     const result = await res.json();
     return result.success ? result.data : null;
   }, {
-    revalidateOnFocus: false,
-    dedupingInterval: 3600000,
+    revalidateOnFocus: isAdmin, // تحديث بمجرد رجوعك لتبويب الأدمن
+    dedupingInterval: isAdmin ? 30000 : 3600000, // 30 ثانية للأدمن مقابل ساعة للزائر
   });
 
   // 🔥 2. عداد الزوار (من كودك الأصلي - مُحسن)

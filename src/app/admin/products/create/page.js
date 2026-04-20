@@ -355,27 +355,34 @@ function CreateProductForm() {
       const handleToUse = urlHandle || productData.title.toLowerCase().trim().replace(/\s+/g, '-');
       const documentId = isEditing ? productId : handleToUse;
 
-      const finalCategories = (productData.selectedCollections || []).flatMap(slug => [slug, `/${slug}`]);
-      const { selectedCollections, ...cleanProductData } = productData; 
-      
-      const finalProduct = {
-        ...cleanProductData,
-        categories: finalCategories, 
-        collections: finalCategories, 
-        images,
-        chargeTax,
-        inventoryTracked,
-        physicalProduct,
-        options,
-        colorSwatches,
-        seo: { 
-          title: seoTitle || productData.title, 
-          description: seoDesc || productData.description.substring(0, 160), 
-          handle: handleToUse 
-        },
-        metafields,
-        updatedAt: serverTimestamp(),
-      };
+      // 🔥 تنظيف وتوحيد الأقسام: نعتمد على مصفوفة واحدة فقط
+        const finalCollections = (productData.selectedCollections || []).map(slug => slug.replace(/^\//, ''));
+        
+        // استخراج البيانات وتنظيف الحقول المكررة التي تستهلك الكوتا
+        const { selectedCollections, type, category, productCategory, barcode, ...cleanProductData } = productData;
+
+        const finalProduct = {
+          ...cleanProductData,
+          collections: finalCollections, // المصدر الوحيد للأقسام
+          images,
+          chargeTax,
+          // 🔥 توحيد السعر: التأكد أن سعر الكارت هو نفس سعر أول Variant
+          price: productData.variants && productData.variants.length > 0 
+                 ? productData.variants[0].price.toString() 
+                 : productData.price,
+          seo: {
+            title: seoTitle || productData.title,
+            description: seoDesc || productData.description.substring(0, 160),
+            handle: handleToUse
+          },
+          metafields,
+          updatedAt: serverTimestamp(),
+        };
+
+        // حذف الحقول القديمة من فايربيز لضمان نظافة الوثيقة
+        finalProduct.categories = null; 
+        finalProduct.type = null;
+        finalProduct.category = null;
 
       if (!isEditing) {
         finalProduct.createdAt = serverTimestamp();

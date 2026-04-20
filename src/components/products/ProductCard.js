@@ -65,18 +65,27 @@ export default function ProductCard(props) {
     fetchStats();
   }, [props.id, props.handle, props.reviewsCount, props.rating]);
 
-  const { id, handle, title, price, oldPrice, compareAtPrice, category, productCategory, type, folderName, mainImage, image, images, variants, colorSwatches, options, colors } = mergedProduct;
+  const { id, handle, title, price, oldPrice, compareAtPrice, category, productCategory, 
+type, folderName, mainImage, image, images, variants, colorSwatches, options, colors } = 
+mergedProduct;
 
-  const displayPrice = variants && variants.length > 0 && variants[0].price ? variants[0].price : price;
-  const displayOldPrice = variants && variants.length > 0 && variants[0].compareAtPrice ? variants[0].compareAtPrice : (compareAtPrice || oldPrice);
-  const discount = displayOldPrice && displayOldPrice > displayPrice ? Math.round(((displayOldPrice - displayPrice) / displayOldPrice) * 100) : null;
+  // 🔥 تعديل WIND لتوحيد السعر: الأولوية للسعر الرئيسي (Root Price) لضمان التحديث الفوري من الأدمن
+  const displayPrice = price || (variants && variants.length > 0 ? variants[0].price : "0");
+  const displayOldPrice = (compareAtPrice || oldPrice) || (variants && variants.length > 0 ? variants[0].compareAtPrice : null);
+  const discount = displayOldPrice && Number(displayOldPrice) > Number(displayPrice) 
+    ? Math.round(((Number(displayOldPrice) - Number(displayPrice)) / Number(displayOldPrice)) * 100) 
+    : null;
 
   const defaultProductImage = (images && images.length > 0) ? images[0] : (image || `/images/products/${folderName}/${mainImage}`);
   
   const [activeCardImage, setActiveCardImage] = useState(null);
   const [activeColorIdx, setActiveColorIdx] = useState(null);
 
-  const displayCategory = type || productCategory || category || "WIND";
+  // 🔥 تعديل WIND: جلب القسم من مصفوفة الأقسام بدلاً من الحقول المكررة
+  const displayCategory = (collections && collections.length > 0) 
+    ? collections[0].replace(/-/g, ' ') 
+    : "WIND";
+    
   const productLink = handle ? `/product/${handle}` : `/product/${id}`;
 
   let cardColors = [];
