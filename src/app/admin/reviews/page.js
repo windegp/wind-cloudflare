@@ -48,10 +48,24 @@ export default function ReviewsAdminPage() {
     setLoading(true);
     const db = getDb();
     const CACHE_KEY = "wind_admin_data_cache";
+    
     try {
-      const cached = localStorage.getItem(CACHE_KEY);
-      if (cached) {
-        const { pDocs, statsMap } = JSON.parse(cached);
+      // 🔥 نظام Cache Busting الذكي 🔥
+      const cachedString = localStorage.getItem(CACHE_KEY);
+      const globalUpdateTime = localStorage.getItem("wind_global_product_update");
+      let shouldUseCache = false;
+      let cachedData = null;
+
+      if (cachedString) {
+        cachedData = JSON.parse(cachedString);
+        // نستخدم الكاش بس لو مفيش تحديث جلوبال جديد، أو لو الكاش أحدث من التحديث الجلوبال
+        if (!globalUpdateTime || (cachedData.timestamp && cachedData.timestamp > Number(globalUpdateTime))) {
+          shouldUseCache = true;
+        }
+      }
+
+      if (shouldUseCache && cachedData) {
+        const { pDocs, statsMap } = cachedData;
         setProducts(pDocs);
         setProductStats(statsMap);
         const likesState = {};
@@ -71,7 +85,13 @@ export default function ReviewsAdminPage() {
         const likesState = {};
         pDocs.forEach(p => likesState[p.id] = p.likesCount);
         setEditingLikes(likesState);
-        localStorage.setItem(CACHE_KEY, JSON.stringify({ pDocs, statsMap }));
+        
+        // حفظ الكاش مع Timestamp عشان نقارن بيه بعدين
+        localStorage.setItem(CACHE_KEY, JSON.stringify({ 
+          pDocs, 
+          statsMap,
+          timestamp: Date.now() 
+        }));
       }
       // جلب آخر 20 تقييم
       const rQuery = query(collection(db, "Reviews"), orderBy("date", "desc"), limit(20));
@@ -412,6 +432,12 @@ export default function ReviewsAdminPage() {
     return { count, avgRating, sources, reviewsList: productReviews };
   };
 
+  // 🔥 دالة تحديث الكاش اليدوية للأدمن
+  const handleForceRefresh = () => {
+    localStorage.removeItem("wind_admin_data_cache");
+    fetchData();
+  };
+
   return (
     <div className="min-h-screen bg-[#f4f6f8] p-4 sm:p-8 font-sans text-[#202223]" dir="rtl">
       <div className="max-w-7xl mx-auto">
@@ -429,6 +455,11 @@ export default function ReviewsAdminPage() {
 
             <button onClick={() => setShowAddModal(true)} className="bg-[#008060] text-white px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 shadow-sm hover:bg-[#006e52] transition-all">
               <Plus size={16} /> إضافة تقييم يدوي
+            </button>
+
+            <button onClick={handleForceRefresh} className="bg-white border border-gray-300 text-gray-700 px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-gray-50 transition-all shadow-sm">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 1 0 2.13-5.83L2 12"></path></svg>
+              تحديث الأرقام
             </button>
           </div>
         </div>
