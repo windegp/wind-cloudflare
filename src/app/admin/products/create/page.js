@@ -381,12 +381,6 @@ function CreateProductForm() {
         finalProduct.createdAt = serverTimestamp();
       }
 
-      // 🔥 البحث والاستبدال داخل دالة الحفظ
-// تأكد أن السعر الرئيسي للمنتج (Root) يطابق دائماً سعر أول Variant
-if (finalProduct.variants && finalProduct.variants.length > 0) {
-  finalProduct.price = finalProduct.variants[0].price.toString();
-}
-
       const db = getDb();
      await setDoc(doc(db, "products", documentId), finalProduct, { merge: true });
 
@@ -398,31 +392,6 @@ if (finalProduct.variants && finalProduct.variants.length > 0) {
           body: JSON.stringify({ id: documentId })
         });
       } catch {}
-
-      // 🔥 مسح كاش إضافي للمنتج والصفحة الرئيسية
-      try {
-        // مسح كاش المنتج نفسه
-        await fetch('/api/revalidate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            secret: process.env.NEXT_PUBLIC_REVALIDATE_SECRET,
-            type: 'product',
-            id: documentId // استخدم المتغير الصحيح للـ ID هنا بناءً على الكود
-          })
-        });
-        // مسح كاش الصفحة الرئيسية والأقسام لتحديث كروت المنتجات
-        await fetch('/api/revalidate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            secret: process.env.NEXT_PUBLIC_REVALIDATE_SECRET,
-            type: 'all'
-          })
-        });
-      } catch (error) {
-        console.error("Failed to revalidate cache", error);
-      }
 
       // 🔥 Update product counter atomically (only for new products, not edits)
       if (!isEditing) {
