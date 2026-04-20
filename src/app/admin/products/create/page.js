@@ -381,6 +381,12 @@ function CreateProductForm() {
         finalProduct.createdAt = serverTimestamp();
       }
 
+      // 🔥 البحث والاستبدال داخل دالة الحفظ
+// تأكد أن السعر الرئيسي للمنتج (Root) يطابق دائماً سعر أول Variant
+if (finalProduct.variants && finalProduct.variants.length > 0) {
+  finalProduct.price = finalProduct.variants[0].price.toString();
+}
+
       const db = getDb();
      await setDoc(doc(db, "products", documentId), finalProduct, { merge: true });
 
