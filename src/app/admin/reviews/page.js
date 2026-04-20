@@ -162,6 +162,15 @@ export default function ReviewsAdminPage() {
 
       await updateDoc(productRef, updateData);
 
+      // 🔥 مسح KV Cache للـ stats
+      try {
+        await fetch("/api/invalidate-stats", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ handle: productId })
+        });
+      } catch {}
+
       // تحديث الواجهة أوتوماتيك
       setProducts(products.map(p => p.id === productId ? { 
         ...p, 
@@ -357,6 +366,15 @@ export default function ReviewsAdminPage() {
         totalCount: increment(-1),
         totalRatingSum: increment(-Number(reviewRating))
       }, { merge: true });
+      
+      // 🔥 مسح KV Cache للـ stats
+      try {
+        await fetch("/api/invalidate-stats", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ handle: productHandle })
+        });
+      } catch {}
 
       // تحديث المودال
       setSelectedProductReviews(prev => prev.filter(r => r.id !== id));

@@ -102,10 +102,18 @@ export default function ProductsList() {
       }
 
       // 🔥 6. تحديث الواجهة والذاكرة معاً بعد الحذف بدون إعادة سحب
+      // 🔥 مسح KV Cache للمنتج المحذوف
+      try {
+        await fetch("/api/invalidate-product", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id })
+        });
+      } catch {}
+
       const updatedProducts = products.filter(p => p.id !== id);
       setProducts(updatedProducts);
-      globalProductsCache.data = updatedProducts; 
-      
+      globalProductsCache.data = updatedProducts;
     } catch (error) {
       console.error("WIND Error: Deleting product failed", error);
       alert("حدث خطأ أثناء الحذف");
