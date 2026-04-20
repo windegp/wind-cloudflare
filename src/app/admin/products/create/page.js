@@ -382,8 +382,24 @@ function CreateProductForm() {
       }
 
       const db = getDb();
-      await setDoc(doc(db, "products", documentId), finalProduct, { merge: true });
-      
+     await setDoc(doc(db, "products", documentId), finalProduct, { merge: true });
+
+      // 🔥 مسح KV Cache للمنتج والصفحة الرئيسية عند الحفظ
+      try {
+        await fetch("/api/revalidate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            secret: process.env.REVALIDATE_SECRET,
+            keys: [
+              `product_${documentId}`,
+              `product_stats_${documentId}`,
+              "homepage_data_v1"
+            ]
+          })
+        });
+      } catch {}
+
       // 🔥 Update product counter atomically (only for new products, not edits)
       if (!isEditing) {
         try {
