@@ -640,7 +640,9 @@ export default function ReviewsAdminPage() {
                   <select required value={newReview.productHandle} onChange={(e) => setNewReview({...newReview, productHandle: e.target.value})} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-[#008060] font-bold text-gray-700">
                     <option value="" disabled>-- اختر منتجاً من المتجر --</option>
                     {products.map(p => {
-                      const c = getProductStats(p.handle).count;
+                      // 🔥 القراءة المباشرة من ProductStats الدقيقة
+                      const stats = productStats[p.handle];
+                      const c = stats ? stats.totalCount : 0;
                       return <option key={p.id} value={p.handle}>{p.title} {c > 0 ? `(${c} تقييم)` : ''}</option>;
                     })}
                   </select>

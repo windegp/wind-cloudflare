@@ -213,11 +213,7 @@ export const useHomepageReviews = () => {
 };
 
 export const useHomepageProductsSections = () => {
-  return useSWR('homepage-products-sections', fetchHomepageProductsSections, {
-    dedupingInterval: 3600000,
-    revalidateOnFocus: false,
-    revalidateOnReconnect: false
-  });
+  return useSWR('homepage-products-sections', fetchHomepageProductsSections);
 };
 
 export const usePaginatedProducts = (categorySlug, limitCount = 10, lastVisibleDoc = null) => {
@@ -241,7 +237,7 @@ export const useProduct = (id) => {
     const snap = await getDoc(doc(db, "products", id));
     return snap.exists() ? { id: snap.id, ...snap.data() } : null;
   };
-  return useSWR(id ? `product-${id}` : null, fetcher, { dedupingInterval: 3600000, revalidateOnFocus: false });
+  return useSWR(id ? `product-${id}` : null, fetcher);
 };
 
 // 🔥 تعديل: هوك المنتجات ذات الصلة (يحاول الـ API أولاً)
