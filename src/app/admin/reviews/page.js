@@ -48,9 +48,16 @@ export default function ReviewsAdminPage() {
     setLoading(true);
     const db = getDb();
     const CACHE_KEY = "wind_admin_data_cache";
+    const VERSION_KEY = "wind_admin_cache_version"; // مفتاح تتبع النسخة
+
     try {
       const cached = localStorage.getItem(CACHE_KEY);
-      if (cached) {
+      const cacheVersion = localStorage.getItem(VERSION_KEY);
+      
+      // لا نستخدم الكاش إلا لو كان موجوداً والنسخة محدثة (تم تعيينها خلال ساعة مثلاً)
+      const isCacheValid = cached && cacheVersion && (Date.now() - Number(cacheVersion) < 3600000);
+
+      if (isCacheValid) {
         const { pDocs, statsMap } = JSON.parse(cached);
         setProducts(pDocs);
         setProductStats(statsMap);
@@ -71,6 +78,9 @@ export default function ReviewsAdminPage() {
         const likesState = {};
         pDocs.forEach(p => likesState[p.id] = p.likesCount);
         setEditingLikes(likesState);
+        
+        // حفظ البيانات مع تحديث رقم الإصدار (الوقت الحالي)
+        localStorage.setItem(VERSION_KEY, Date.now().toString());
         localStorage.setItem(CACHE_KEY, JSON.stringify({ pDocs, statsMap }));
       }
       // جلب آخر 20 تقييم

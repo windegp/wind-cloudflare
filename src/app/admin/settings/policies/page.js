@@ -44,13 +44,36 @@ export default function SettingsPolicies() {
     setSaving(true);
     try {
       const db = getDb();
-      await setDoc(doc(db, "Policies", activeTab), {
-        htmlContent: htmlContent,
-        lastUpdate: new Date().toISOString(),
-        title: policiesList.find(p => p.id === activeTab).title
-      }, { merge: true });
-      alert("تم حفظ كود HTML بنجاح!");
-    } catch (err) { alert("خطأ في الحفظ"); }
+      await setDoc(doc(db, "Policies", tab), {
+        content: content,
+        updatedAt: new Date().toISOString()
+      });
+
+      // 🔥 مسح الكاش لتحديث السياسات في الفوتر وباقي الموقع فوراً
+      try {
+        const revalidateRes = await fetch('/api/revalidate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            secret: process.env.NEXT_PUBLIC_REVALIDATE_SECRET, 
+            type: 'all' 
+          })
+        });
+        
+        // كشف الأخطاء الصامتة (مثل رفض الباسورد أو خطأ السيرفر)
+        if (!revalidateRes.ok) {
+          const errData = await revalidateRes.json();
+          console.error("WIND Cache Warning: لم يتم مسح الكاش", errData);
+        }
+      } catch (e) {
+        console.error("Cache Revalidate Network Error:", e);
+      }
+
+      alert("تم حفظ السياسة بنجاح ✅");
+    } catch (error) {
+      console.error("Save Error:", error);
+      alert("خطأ في الحفظ");
+    }
     finally { setSaving(false); }
   };
 
