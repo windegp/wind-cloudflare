@@ -6,14 +6,19 @@ export const dynamic = 'force-dynamic';
 
 const CACHE_KEY = 'site_settings_v1';
 
-export async function GET() {
+export async function GET(request) {
+  // 🔥 تعديل WIND: استخراج بارامتر "fresh" لمعرفة هل الطلب من الأدمن أم من الزوار
+  const { searchParams } = new URL(request.url);
+  const isFreshRequested = searchParams.get('fresh') === 'true';
+
   let kv = null;
   try {
     const ctx = await getCloudflareContext({ async: true });
     kv = ctx?.env?.WIND_KV || null;
   } catch {}
 
-  if (kv) {
+  // 🛡️ لو الطلب مش "فريش" والـ KV متاح، نرجع الكاش فوراً للزوار (توفير كوتا)
+  if (kv && !isFreshRequested) {
     try {
       const cached = await kv.get(CACHE_KEY);
       if (cached) {

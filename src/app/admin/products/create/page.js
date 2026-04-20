@@ -358,25 +358,40 @@ function CreateProductForm() {
       // 🔥 تنظيف وتوحيد الأقسام: نعتمد على مصفوفة واحدة فقط
         const finalCollections = (productData.selectedCollections || []).map(slug => slug.replace(/^\//, ''));
         
-        // استخراج البيانات وتنظيف الحقول المكررة التي تستهلك الكوتا
-        const { selectedCollections, type, category, productCategory, barcode, ...cleanProductData } = productData;
+        // 🔥 استخراج الداتا مع حذف "كل" الحقول القديمة والمكررة لضمان نظافة المستند
+        const { 
+          selectedCollections, type, category, productCategory, 
+          barcode, categories, Price, oldPrice, ...baseData 
+        } = productData;
 
         const finalProduct = {
-          ...cleanProductData,
-          collections: finalCollections, // المصدر الوحيد للأقسام
+          ...baseData,
+          // توحيد الأقسام في حقل واحد نظيف
+          collections: (productData.selectedCollections || []).map(s => s.replace(/^\//, '')),
           images,
           chargeTax,
-          // 🔥 توحيد السعر: التأكد أن سعر الكارت هو نفس سعر أول Variant
+          // 🔥 توحيد السعر: سحب السعر من أول Variant لضمان دقة الكارت
           price: productData.variants && productData.variants.length > 0 
                  ? productData.variants[0].price.toString() 
                  : productData.price,
-          seo: {
-            title: seoTitle || productData.title,
-            description: seoDesc || productData.description.substring(0, 160),
-            handle: handleToUse
+          compareAtPrice: productData.variants && productData.variants.length > 0 
+                          ? productData.variants[0].compareAtPrice.toString() 
+                          : productData.compareAtPrice,
+          seo: { 
+            title: seoTitle || productData.title, 
+            description: seoDesc || productData.description.substring(0, 160), 
+            handle: handleToUse 
           },
           metafields,
           updatedAt: serverTimestamp(),
+
+          // 🔥 حذف الحقول المكررة من فايربيز تماماً (هذا يقلل حجم الوثيقة 40%)
+          categories: null,
+          category: null,
+          productCategory: null,
+          type: null,
+          barcode: null,
+          Price: null, // حذف السعر المكتوب بكابيتال لو وجد
         };
 
         // حذف الحقول القديمة من فايربيز لضمان نظافة الوثيقة
