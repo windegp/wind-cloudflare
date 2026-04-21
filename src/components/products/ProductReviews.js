@@ -195,11 +195,13 @@ export default function ProductReviews({ productHandle, onReviewStatsUpdate }) {
       setNewReview({ name: '', rating: 5, text: '', imageUrls: [] });
       setUploadedImages([]);
       
-      // 5. التحديث اللحظي للواجهة بدون ريفريش
+      // 5. التحديث اللحظي للواجهة وإصلاح خطأ النجوم الرمادية (NaN)
       setReviews(prev => [{ id: docRef.id, ...newReviewData }, ...prev]);
       if (onReviewStatsUpdate) {
         const newTotal = localStats.total + 1;
-        const newAvg = ((localStats.avg * localStats.total) + newReview.rating) / newTotal;
+        // 🔥 استخدام Number() لضمان الحساب الرياضي الصحيح للنجوم
+        const safeRating = Number(newReview.rating) || 5;
+        const newAvg = ((localStats.avg * localStats.total) + safeRating) / newTotal;
         setLocalStats({ avg: newAvg, total: newTotal });
         onReviewStatsUpdate(newAvg, newTotal);
       }

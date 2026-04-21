@@ -48,50 +48,28 @@ export default function ReviewsAdminPage() {
   const fetchData = async () => {
     setLoading(true);
     const db = getDb();
-    const CACHE_KEY = "wind_admin_data_cache";
-    const VERSION_KEY = "wind_admin_cache_version"; // مفتاح تتبع النسخة
-
     try {
-      const cached = localStorage.getItem(CACHE_KEY);
-      const cacheVersion = localStorage.getItem(VERSION_KEY);
+      // 🔥 إلغاء كاش المتصفح نهائياً لصفحة الأدمن لضمان رؤية التقييمات الجديدة فوراً بعد الـ Refresh
+      const [pSnap, sSnap] = await Promise.all([
+        getDocs(query(collection(db, "products"), limit(1000))),
+        getDocs(query(collection(db, "ProductStats"), limit(1000)))
+      ]);
+      const pDocs = pSnap.docs.map(doc => ({ id: doc.id, ...doc.data(), handle: doc.data().handle || doc.id }));
+      const statsMap = {};
+      sSnap.docs.forEach(doc => { statsMap[doc.id] = doc.data(); });
+      setProducts(pDocs);
+      setProductStats(statsMap);
+      const likesState = {};
+      pDocs.forEach(p => likesState[p.id] = p.likesCount);
+      setEditingLikes(likesState);
       
-      // لا نستخدم الكاش إلا لو كان موجوداً والنسخة محدثة (تم تعيينها خلال ساعة مثلاً)
-      const isCacheValid = cached && cacheVersion && (Date.now() - Number(cacheVersion) < 3600000);
-
-      if (isCacheValid) {
-        const { pDocs, statsMap } = JSON.parse(cached);
-        setProducts(pDocs);
-        setProductStats(statsMap);
-        const likesState = {};
-        pDocs.forEach(p => likesState[p.id] = p.likesCount);
-        setEditingLikes(likesState);
-      } else {
-        // 🔥 وضع صمام أمان (Limit 1000) لمنع سحب الداتا اللانهائي في المستقبل
-        const [pSnap, sSnap] = await Promise.all([
-          getDocs(query(collection(db, "products"), limit(1000))),
-          getDocs(query(collection(db, "ProductStats"), limit(1000)))
-        ]);
-        const pDocs = pSnap.docs.map(doc => ({ id: doc.id, ...doc.data(), handle: doc.data().handle || doc.id }));
-        const statsMap = {};
-        sSnap.docs.forEach(doc => { statsMap[doc.id] = doc.data(); });
-        setProducts(pDocs);
-        setProductStats(statsMap);
-        const likesState = {};
-        pDocs.forEach(p => likesState[p.id] = p.likesCount);
-        setEditingLikes(likesState);
-        
-        // حفظ البيانات مع تحديث رقم الإصدار (الوقت الحالي)
-        localStorage.setItem(VERSION_KEY, Date.now().toString());
-        localStorage.setItem(CACHE_KEY, JSON.stringify({ pDocs, statsMap }));
-      }
-      // جلب آخر 20 تقييم
       const rQuery = query(collection(db, "Reviews"), orderBy("date", "desc"), limit(20));
       const rSnap = await getDocs(rQuery);
       setReviews(rSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     } catch (err) { 
       console.error("Fetch Error:", err); 
     } finally {
-      setLoading(false); // 👈 دي اللي هتوقف الدائرة مهما حصل
+      setLoading(false);
     }
   };
   const fetchProducts = async () => {
@@ -513,7 +491,7 @@ export default function ReviewsAdminPage() {
               disabled={isRecalculating} 
               className="bg-red-50 border border-red-200 text-red-600 px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-red-100 transition-all shadow-sm"
             >
-              {isRecalculating ? <Loader2 size={16} className="animate-spin" /> : <Loader2 size={16} />}
+              {isRecalculating ? <Loader2 size={16} className="animate-spin" /> : <span className="font-bold text-lg">↻</span>}
               مزامنة التقييمات
             </button>
 

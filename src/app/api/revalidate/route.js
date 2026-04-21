@@ -43,7 +43,7 @@ export async function POST(request) {
     if (handle) keysToDelete.push(`product_stats_${handle}`);
   } else if (type === 'product_stats' && handle) {
     // مسح الإحصائيات فقط (لما يضاف review جديد)
-    keysToDelete = [`product_stats_${handle}`];
+    keysToDelete = [`product_stats_${handle}`, 'homepage_data_v1'];
   } else if (type === 'collection' && slug) {
     keysToDelete = [`collection_${slug}`];
   } else if (type === 'site_settings') {
