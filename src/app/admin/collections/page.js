@@ -164,10 +164,10 @@ export default function CollectionsPage() {
 try {
   const slugToInvalidate = formData.slug?.trim().replace(/^\//, '');
   await Promise.all([
-    fetch("/api/invalidate-product", {
+    fetch("/api/invalidate-collection", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: slugToInvalidate })
+      body: JSON.stringify({ slug: slugToInvalidate })
     }),
     fetch("/api/invalidate-homepage", { method: "POST" })
   ]);
