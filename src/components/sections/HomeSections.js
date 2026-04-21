@@ -1570,22 +1570,22 @@ export const VisualBreakSection = ({ data }) => {
 // ==========================================================================
 
 export const CustomerReviewsSection = ({ data, bundle }) => {
-  // استخدام البيانات الممررة عبر props بدلًا من الاستدعاء المباشر
+  // 🔥 استخراج آمن للبيانات 
   const reviews = bundle?.reviews || data?.reviews || [];
   const allProducts = bundle?.products || data?.products || {};
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
   const sectionRef = useRef(null);
-  
+
   const [expandedReviews, setExpandedReviews] = useState({});
   const [quickViewProduct, setQuickViewProduct] = useState(null);
   const [isQuickViewModalOpen, setIsQuickViewModalOpen] = useState(false);
   const [isSectionVisible, setIsSectionVisible] = useState(false);
 
-  // 1. مراقب ظهور القسم على الشاشة
+  // 1. مراقب ظهور القسم
   useEffect(() => {
-    if (reviews.length === 0) return;
+    if (!reviews || reviews.length === 0) return;
 
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -1597,19 +1597,19 @@ export const CustomerReviewsSection = ({ data, bundle }) => {
       { threshold: 0.15 }
     );
     if (sectionRef.current) observer.observe(sectionRef.current);
-    
-    return () => observer.disconnect();
-  }, [reviews.length]); 
 
-  // 2. مؤقت تقليب التقييمات التلقائي
+    return () => observer.disconnect();
+  }, [reviews?.length]);
+
+  // 2. مؤقت تقليب تلقائي آمن
   useEffect(() => {
-    if (reviews.length <= 1 || isHovered || isQuickViewModalOpen) return; 
+    if (!reviews || reviews.length <= 1 || isHovered || isQuickViewModalOpen) return;
     const timer = setInterval(() => {
       setCurrentIndex((prev) => (prev === reviews.length - 1 ? 0 : prev + 1));
       setExpandedReviews({}); 
-    }, 6000); 
+    }, 6000);
     return () => clearInterval(timer);
-  }, [reviews.length, isHovered, isQuickViewModalOpen]);
+  }, [reviews?.length, isHovered, isQuickViewModalOpen]);
 
   // 3. دوال التحكم
   const nextReview = () => { setCurrentIndex((prev) => (prev === reviews.length - 1 ? 0 : prev + 1)); setExpandedReviews({}); };
@@ -1630,75 +1630,80 @@ export const CustomerReviewsSection = ({ data, bundle }) => {
     }
   };
 
-  if (reviews.length === 0) return null;
+  // لو لا يوجد تقييمات قادمة من الصفحة الرئيسية لا تعرض القسم
+  if (!reviews || reviews.length === 0) return null;
 
   return (
     <section ref={sectionRef} className="bg-[#F5F5F5] py-12 md:py-16 flex flex-col items-center justify-center" dir="rtl">
-      
+
       <div className={`mb-6 md:mb-8 px-4 text-center transition-all duration-[800ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${isSectionVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
         <h2 className="text-[#1A1A1A] font-bold text-[19px] md:text-[23px] uppercase tracking-[0.15em]" style={{ fontFamily: "'Cairo', sans-serif" }}>
-          {data.title || "Happy Customers"}
+          {data?.title || "Happy Customers"}
         </h2>
       </div>
 
       <div className={`max-w-[1400px] w-full mx-auto px-4 flex flex-col items-center transition-all duration-[1000ms] delay-150 ease-[cubic-bezier(0.16,1,0.3,1)] ${isSectionVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
-        
+
         <div className="bg-white rounded-[2px] shadow-sm w-full max-w-2xl px-6 pt-7 pb-8 md:px-12 md:pt-9 md:pb-10 relative h-auto"
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >
           {reviews.map((review, index) => {
-            const productData = allProducts[review.productHandle] || null;
-            const isEnglish = /^[a-zA-Z]/.test(review.text || "");
-            const isExpanded = expandedReviews[review.id];
-            const isLongText = review.text && review.text.length > 160;
+            // 🔥 حماية WIND: تأمين جميع الحقول لمنع الـ Crash
+            const productData = allProducts[review?.productHandle] || null;
+            const safeText = review?.text || "";
+            const isEnglish = /^[a-zA-Z]/.test(safeText);
+            const isExpanded = expandedReviews[review?.id || index];
+            const isLongText = safeText.length > 160;
             const isActive = index === currentIndex;
+            const safeRating = Number(review?.rating) || 5;
 
             return (
-              <div key={review.id || index}
+              <div key={review?.id || index}
                 className={`w-full transition-all duration-[800ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
                   isActive ? 'opacity-100 relative translate-x-0' : 'opacity-0 absolute inset-x-6 md:inset-x-12 translate-x-4 pointer-events-none'
                 }`}
-                style={{ 
-                  display: isActive ? 'block' : 'none', 
+                style={{
+                  display: isActive ? 'block' : 'none',
                   textAlign: isEnglish ? 'left' : 'right', 
                   dir: isEnglish ? 'ltr' : 'rtl',
-                  willChange: 'opacity, transform' 
+                  willChange: 'opacity, transform'
                 }}
               >
-                <h3 
+                <h3
                   className={`text-[#1A1A1A] font-bold mb-0.5 transition-all duration-500 ease-out ${isActive ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'} ${isEnglish ? 'text-[14px] md:text-[17px] font-sans' : 'text-[15px] md:text-[18px] font-tajawal'}`}
                   style={{ transitionDelay: isActive ? '100ms' : '0ms' }}
                 >
-                  <span dir={isEnglish ? "ltr" : "rtl"} className="inline-block">
-                    {formatReviewerName(review.reviewerName, isEnglish)}
+                  <span dir={isEnglish ? "ltr" : "rtl"} className="inline-block">       
+                    {formatReviewerName(review?.reviewerName, isEnglish)}
                   </span>
                 </h3>
 
-                <div 
+                <div
                   className={`flex gap-[1.5px] mb-4 transition-all duration-500 ease-out ${isActive ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'} ${isEnglish ? 'justify-start' : 'justify-start'}`}
                   style={{ transitionDelay: isActive ? '200ms' : '0ms' }}
                 >
+                  {/* 🔥 استخدام safeRating لضمان ظهور النجوم مهما حدث */}
                   {[...Array(5)].map((_, i) => (
-                    <Star 
-                      key={i} 
-                      size={11} 
-                      className={i < (review.rating || 5) ? "fill-[#FFC107] text-[#FFC107]" : "fill-gray-200 text-gray-200"} 
+                    <Star
+                      key={i}
+                      size={11}
+                      className={i < safeRating ? "fill-[#FFC107] text-[#FFC107]" : "fill-gray-200 text-gray-200"}
                     />
                   ))}
                 </div>
 
-                <div 
+                <div
                   className={`min-h-[105px] md:min-h-[115px] flex flex-col justify-start mb-5 transition-all duration-500 ease-out ${isActive ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}
                   style={{ transitionDelay: isActive ? '300ms' : '0ms' }}
                 >
                   <p className={`text-[#333333] leading-[1.7] ${!isExpanded ? 'line-clamp-4' : ''} ${isEnglish ? 'text-[13px] md:text-[15px] font-sans' : 'text-[14px] md:text-[16px] font-tajawal'}`}>
-                    "{review.text}"
+                    "{safeText}"
                   </p>
-                  
+
                   {isLongText && (
-                    <button 
-                      onClick={() => toggleExpand(review.id)}
+                    <button
+                      onClick={() => toggleExpand(review?.id || index)}
                       className={`text-[#999999] hover:text-[#1A1A1A] text-[11px] md:text-[12px] font-bold mt-1.5 underline underline-offset-4 transition-colors w-max ${isEnglish ? 'self-start' : 'self-start'}`}
                     >
                       {isExpanded ? (isEnglish ? "Show less" : "عرض أقل") : (isEnglish ? "Read more" : "اقرأ المزيد")}
@@ -1706,13 +1711,13 @@ export const CustomerReviewsSection = ({ data, bundle }) => {
                   )}
                 </div>
 
-                <div className="w-[98%] mx-auto h-[1px] bg-[#EEEEEE] mb-5"></div>
+                <div className="w-[98%] mx-auto h-[1px] bg-[#EEEEEE] mb-5"></div>       
 
-                <div 
-                  className={`flex items-center gap-4 px-1 transition-all duration-500 ease-out ${isActive ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'} ${isEnglish ? 'flex-row' : 'flex-row'}`}
+                <div
+                  className={`flex items-center gap-4 px-1 transition-all duration-500 ease-out ${isActive ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'} flex-row`}
                   style={{ transitionDelay: isActive ? '400ms' : '0ms' }}
                 >
-                  
+
                   <button onClick={() => handleOpenQuickView(productData)} className="cursor-pointer w-14 h-18 md:w-16 md:h-20 rounded-[1px] border border-[#EEEEEE] overflow-hidden bg-white flex-none hover:opacity-80 transition-opacity">
                     {productData?.mainImage ? (
                       <img src={productData.mainImage} alt="Product" className="w-full h-full object-cover" />
@@ -1720,12 +1725,12 @@ export const CustomerReviewsSection = ({ data, bundle }) => {
                       <div className="w-full h-full bg-[#FAFAFA] flex items-center justify-center text-[8px] text-gray-300 font-bold uppercase">WIND</div>
                     )}
                   </button>
-                  
-                  <button 
-                    onClick={() => handleOpenQuickView(productData)} 
+
+                  <button
+                    onClick={() => handleOpenQuickView(productData)}
                     className="group border-b border-[#CCCCCC] hover:border-[#1A1A1A] pb-0.5 transition-colors cursor-pointer"
                   >
-                    <span className={`text-[#1A1A1A] font-bold line-clamp-1 ${isEnglish ? 'text-[12px] md:text-[14px] font-sans' : 'text-[13px] md:text-[15px] font-tajawal'}`}>
+                    <span className={`text-[#1A1A1A] font-bold line-clamp-1 ${isEnglish ? 'text-[12px] md:text-[14px] font-sans' : 'text-[13px] md:text-[15px] font-tajawal'}`}>  
                       {productData?.title || "Wind Exclusive Piece"}
                     </span>
                   </button>
@@ -1736,43 +1741,45 @@ export const CustomerReviewsSection = ({ data, bundle }) => {
           })}
         </div>
 
-        <div className={`mt-6 flex items-center bg-white/90 backdrop-blur-sm px-6 py-2.5 rounded-full border border-white shadow-sm gap-5 transition-all duration-[1000ms] delay-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${isSectionVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
-          <button onClick={prevReview} className="text-[#1A1A1A] hover:opacity-40 transition-opacity">
-            <ChevronRight size={18} strokeWidth={2} />
-          </button>
+        {reviews.length > 1 && (
+          <div className={`mt-6 flex items-center bg-white/90 backdrop-blur-sm px-6 py-2.5 rounded-full border border-white shadow-sm gap-5 transition-all duration-[1000ms] delay-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${isSectionVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+            <button onClick={prevReview} className="text-[#1A1A1A] hover:opacity-40 transition-opacity">
+              <ChevronRight size={18} strokeWidth={2} />
+            </button>
 
-          <div className="flex items-center gap-3" dir="ltr">
-             <span className="text-[#1A1A1A] font-bold text-[11px] font-mono opacity-80 w-4 text-center">
-               {currentIndex + 1}
-             </span>
-             
-             <div className="flex gap-1.5 items-center">
-               {[...Array(5)].map((_, i) => {
-                 const isActiveDot = (currentIndex % 5) === i;
-                 return (
-                   <div 
-                     key={i} 
-                     className={`h-[5px] rounded-full transition-all duration-[600ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${isActiveDot ? 'w-4 bg-[#1A1A1A]' : 'w-[5px] bg-[#D4D4D4]'}`}
-                     style={{ willChange: 'width' }}
-                   />
-                 );
-               })}
-             </div>
+            <div className="flex items-center gap-3" dir="ltr">
+              <span className="text-[#1A1A1A] font-bold text-[11px] font-mono opacity-80 w-4 text-center">
+                {currentIndex + 1}
+              </span>
+
+              <div className="flex gap-1.5 items-center">
+                {[...Array(Math.min(reviews.length, 5))].map((_, i) => {
+                  const isActiveDot = (currentIndex % 5) === i;
+                  return (
+                    <div
+                      key={i}
+                      className={`h-[5px] rounded-full transition-all duration-[600ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${isActiveDot ? 'w-4 bg-[#1A1A1A]' : 'w-[5px] bg-[#D4D4D4]'}`}
+                      style={{ willChange: 'width' }}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+
+            <button onClick={nextReview} className="text-[#1A1A1A] hover:opacity-40 transition-opacity">
+              <ChevronLeft size={18} strokeWidth={2} />
+            </button>
           </div>
-
-          <button onClick={nextReview} className="text-[#1A1A1A] hover:opacity-40 transition-opacity">
-            <ChevronLeft size={18} strokeWidth={2} />
-          </button>
-        </div>
+        )}
 
       </div>
 
-      <QuickViewModal 
-        product={quickViewProduct} 
-        isOpen={isQuickViewModalOpen} 
-        onClose={() => setIsQuickViewModalOpen(false)} 
+      <QuickViewModal
+        product={quickViewProduct}
+        isOpen={isQuickViewModalOpen}
+        onClose={() => setIsQuickViewModalOpen(false)}
       />
-      
+
     </section>
   );
 };
