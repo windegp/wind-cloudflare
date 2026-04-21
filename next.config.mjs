@@ -32,12 +32,19 @@ const nextConfig = {
   // ============================================
   // 🔄 REWRITES FOR DYNAMIC ROUTING
   // ============================================
+  async redirects() {
+    return [
+      {
+        source: '/products/:slug',
+        destination: '/product/:slug',
+        permanent: true,
+      },
+    ];
+  },
+
   async rewrites() {
     return [
       {
-        /** * السحر هنا: أي رابط فرعي (ما عدا الملفات الثابتة والصفحات الموجودة فعلياً)
-         * سيتم توجيهه داخلياً لمسار الكولكشنز الديناميكي.
-         */
         source: '/:slug',
         destination: '/collections/:slug',
       },
