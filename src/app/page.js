@@ -20,9 +20,11 @@ export default function MaintenancePage() {
     signalPageReady();
   }, [signalPageReady]);
 
-  const handleAccess = (e) => {
+  const handleAccess = async (e) => {
     e.preventDefault();
     if (password === "271117") {
+      // حفظ الـ cookie عبر API عشان يفضل مع الزيارات الجاية
+      await fetch('/api/grant-access', { method: 'POST' });
       setIsAuthorized(true);
     } else {
       setShowError(true);
