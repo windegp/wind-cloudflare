@@ -279,26 +279,23 @@ export const useProduct = (id) => {
   const fetcherWithCache = async () => {
     if (!id) return null;
     try {
-      // محاولة القراءة من كاش المنتج المخصص في KV
-      const res = await fetch(`/api/product-stats?id=${id}`);
+      // جيب من KV Cache عبر API
+      const res = await fetch(`/api/product/${id}`);
       if (res.ok) {
         const result = await res.json();
-        // ملاحظة: لو الـ API بيرجع بيانات المنتج كاملة نستخدمها
-        if (result.success && result.data) return result.data;
+        if (result?.id) return result;
       }
     } catch (e) {
       console.error("WIND Product Cache Error:", e);
     }
-
-    // Fallback لفايربيز لو الكاش مش موجود
+    // Fallback لفايربيز
     const db = getDb();
     const snap = await getDoc(doc(db, "products", id));
     return snap.exists() ? { id: snap.id, ...snap.data() } : null;
   };
-
   return useSWR(id ? `product-${id}` : null, fetcherWithCache, {
-    revalidateOnFocus: true,
-    dedupingInterval: 5000 // كاش متصفح قصير جداً لضمان التحديث
+    revalidateOnFocus: false,
+    dedupingInterval: 60000
   });
 };
 
