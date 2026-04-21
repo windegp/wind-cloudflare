@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic';
 import { usePageReady } from "@/context/GlobalLoaderContext";
 import { DESIGN_REGISTRY } from "@/lib/designRegistry";
 // استيراد الهوكات الأسطورية اللي جهزناها
-import { useHomepageProductsSections, useSiteSettings } from '@/hooks/useFirestore';
+import { useHomepageProductsSections, useHomepageReviews, useSiteSettings } from '@/hooks/useFirestore';
 import useSWR from 'swr';
 
 const HomeSectionsMain = dynamic(() => import("@/components/HomeSectionsMain"), { 
@@ -34,6 +34,7 @@ export default function HomeSectionsMainContent() {
   // 3. "الضربة الاستباقية": سحب داتا الأقسام الأربعة فوراً وحفظها في الكاش
   // ده بيخلي أي قسم جواه (Best Sellers أو Top Rated) يلاقي داته جاهزة وميطلبش تاني
   const { data: homeSectionsData, isLoading: isSectionsLoading } = useHomepageProductsSections();
+  const { data: homepageReviewsData } = useHomepageReviews();
 
   // حساس الجاهزية: أول ما الداتا الأساسية توصل وصورة الهيرو تحمل، نلغي اللودر
   useEffect(() => {
@@ -67,8 +68,13 @@ export default function HomeSectionsMainContent() {
       if (section.category === "HERO_SECTION") {
         sectionData = heroData;
       } else if (["FEATURED_PRODUCTS", "TOP_RATED"].includes(section.category)) {
-        // تمرير الداتا المجهزة مسبقاً (homeSectionsData) للقسم
         sectionData = { ...section.data, bundle: homeSectionsData };
+      } else if (section.category === "CUSTOMER_REVIEWS_SECTION") {
+        sectionData = {
+          ...section.data,
+          reviews: homepageReviewsData?.reviews || [],
+          products: homepageReviewsData?.products || {}
+        };
       }
 
       return (
