@@ -299,11 +299,7 @@ export default function ProfessionalMenuManager() {
 try {
   await Promise.all([
     fetch("/api/invalidate-homepage", { method: "POST" }),
-    fetch("/api/revalidate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ secret: process.env.REVALIDATE_SECRET, type: "site_settings" })
-    })
+    fetch("/api/invalidate-settings", { method: "POST" })
   ]);
 } catch {}
                 
