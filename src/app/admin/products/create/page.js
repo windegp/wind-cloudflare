@@ -901,7 +901,7 @@ function CreateProductForm() {
                 <div>
                   <label className="block text-xs text-gray-600 mb-1.5">الرابط (URL handle)</label>
                   <div className="flex items-center text-sm bg-gray-50 border border-gray-300 rounded-lg px-3 overflow-hidden" dir="ltr">
-                    <span className="text-gray-500 whitespace-nowrap py-2">windeg.com/product/</span>
+                    <span className="text-gray-500 whitespace-nowrap py-2">windeg.com/products/</span>
                     <input 
                       type="text" 
                       value={urlHandle} 
