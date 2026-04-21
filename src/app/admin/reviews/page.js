@@ -151,14 +151,23 @@ export default function ReviewsAdminPage() {
 
       await updateDoc(productRef, updateData);
 
-      // 🔥 مسح KV Cache للـ stats
+      // 🔥 إشارة WIND: مسح كاش صفحة المنتج والهوم بيج عشان الإعجابات الجديدة تسمع فوراً للزوار
       try {
-        await fetch("/api/invalidate-stats", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ handle: productId })
+        await fetch('/api/revalidate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            secret: process.env.NEXT_PUBLIC_REVALIDATE_SECRET, 
+            type: 'product',
+            id: productId, 
+            handle: productToUpdate.handle 
+          })
         });
-      } catch {}
+      } catch (e) {
+        console.error("WIND Cache Revalidate Error:", e);
+      }
+
+      // تحديث الواجهة أوتوماتيك
 
       // تحديث الواجهة أوتوماتيك
       setProducts(products.map(p => p.id === productId ? { 
