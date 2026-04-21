@@ -37,20 +37,26 @@ export default function ProductCard(props) {
     const cachedData = sessionStorage.getItem(cacheKey);
     
     if (cachedData) {
-      const parsed = JSON.parse(cachedData);
+      const parsed = JSON.parse(cachedData); 
       setReviewsData(parsed);
       setMergedProduct(prev => ({ ...prev, reviewsCount: parsed.count, rating: parsed.rating }));
-      return;
+      
+      // 🔥 تعديل WIND: لو الكاش لسه جديد (أقل من دقيقة)، وفر الكوتا وما تسحبش
+      // لكن لو قديم، كمل الدالة واسحب الداتا فريش في الخلفية وحدث الكارت!
+      if (parsed.timestamp && Date.now() - parsed.timestamp < 60000) {
+        return;
+      }
     }
 
-    // 3. السحب من KV Cache عبر API (صفر قراءات Firebase للزوار)
+    // 3. السحب من KV Cache عبر API
     const fetchStats = async () => {
       try {
         const res = await fetch(`/api/product-stats?handle=${encodeURIComponent(handleToSearch)}`);
         if (res.ok) {
-          const json = await res.json();
+          const json = await res.json();     
           if (json.count > 0) {
-            const result = { count: json.count, rating: json.rating };
+            // 🔥 ضفنا الـ timestamp عشان المتصفح يعرف عمر الكاش
+            const result = { count: json.count, rating: json.rating, timestamp: Date.now() };
             setReviewsData(result);
             setMergedProduct(prev => ({ ...prev, reviewsCount: json.count, rating: json.rating }));
             sessionStorage.setItem(cacheKey, JSON.stringify(result));
@@ -169,7 +175,9 @@ mergedProduct;
     return val.toString().trim().charAt(0).toUpperCase() + val.toString().trim().slice(1);
   };
 
-  const fullStarsCount = Math.round(Number(reviewsData.rating));
+  // 🔥 حماية WIND: ضمان عدم ظهور نجوم رمادية حتى لو الداتا القديمة فيها أخطاء
+  const safeRating = Number(reviewsData.rating) || 5;
+  const fullStarsCount = Math.round(safeRating);
 
   return (
     <>
