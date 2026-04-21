@@ -28,6 +28,7 @@ export default function ReviewsAdminPage() {
   const [lastReviewDoc, setLastReviewDoc] = useState(null); // عشان نعرف وقفنا فين في السحب
   const [hasMoreReviews, setHasMoreReviews] = useState(false); // عشان نظهر أو نخفي زرار "المزيد"
   const [loadingMore, setLoadingMore] = useState(false); // أنيميشن زرار المزيد
+  const [isRecalculating, setIsRecalculating] = useState(false); // أنيميشن زرار الطوارئ
 
   const [newReview, setNewReview] = useState({
     productHandle: '',
@@ -311,6 +312,19 @@ export default function ReviewsAdminPage() {
       // 🔥 4. مسح الكاش عشان لو عملت ريفريش يقرأ الجديد من فايربيز
       localStorage.removeItem("wind_admin_data_cache");
 
+      // 🔥 إشارة WIND لمسح كاش إحصائيات المنتج في الموقع فوراً
+      try {
+        await fetch('/api/revalidate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            secret: process.env.NEXT_PUBLIC_REVALIDATE_SECRET, 
+            type: 'product_stats',
+            handle: pHandle 
+          })
+        });
+      } catch (e) {}
+
       setShowAddModal(false);
       setNewReview({ productHandle: '', reviewerName: '', rating: 5, text: '', imageUrl: '', reviewDate: new Date().toISOString().split('T')[0] });
       alert("تمت إضافة التقييم وتحديث الإحصائيات بنجاح!");
@@ -406,6 +420,67 @@ export default function ReviewsAdminPage() {
     } catch (error) { console.error("Error deleting:", error); }
   };
 
+  // 🔥 زر الطوارئ: إعادة حساب وتصحيح جميع إحصائيات المنتجات من الصفر
+  const recalculateAllProductStats = async () => {
+    if (!window.confirm("تحذير: هل أنت متأكد من مزامنة جميع التقييمات؟ ستقوم هذه العملية بجمع النجوم الحقيقية من قاعدة البيانات وإعادة ضبط الإحصائيات لجميع المنتجات.")) return;
+    
+    setIsRecalculating(true);
+    try {
+      const db = getDb();
+      // 1. جلب جميع التقييمات
+      const reviewsSnap = await getDocs(query(collection(db, "Reviews")));
+      const allReviews = reviewsSnap.docs.map(d => d.data());
+
+      // 2. تجميع النجوم والعدد لكل منتج بدقة
+      const statsMap = {};
+      allReviews.forEach(rev => {
+        const h = rev.productHandle;
+        if (h) {
+          if (!statsMap[h]) statsMap[h] = { count: 0, sum: 0 };
+          statsMap[h].count += 1;
+          statsMap[h].sum += Number(rev.rating || 5);
+        }
+      });
+
+      // 3. تحديث الإحصائيات باستخدام Batch لضمان السرعة وتوفير الكوتا
+      const batch = writeBatch(db);
+      Object.keys(statsMap).forEach((handle) => {
+        const sRef = doc(db, "ProductStats", handle);
+        batch.set(sRef, {
+          totalCount: statsMap[handle].count,
+          totalRatingSum: statsMap[handle].sum,
+        }, { merge: true });
+      });
+      
+      if (Object.keys(statsMap).length > 0) {
+        await batch.commit();
+      }
+
+      // 4. مسح الكاش الشامل للموقع بالكامل
+      try {
+        await fetch('/api/revalidate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            secret: process.env.NEXT_PUBLIC_REVALIDATE_SECRET, 
+            type: 'all' 
+          })
+        });
+      } catch (e) {}
+
+      // تحديث واجهة الأدمن
+      localStorage.removeItem("wind_admin_data_cache");
+      fetchData();
+      
+      alert("🚀 تمت عملية المزامنة بنجاح! جميع التقييمات والنجوم مطابقة الآن لقاعدة البيانات.");
+    } catch (err) {
+      console.error(err);
+      alert("حدث خطأ أثناء مزامنة التقييمات.");
+    } finally {
+      setIsRecalculating(false);
+    }
+  };
+
   // دوال الإحصائيات المجمعة للمنتج
   const getProductStats = (handle) => {
     const productReviews = reviews.filter(r => r.productHandle === handle);
@@ -430,8 +505,19 @@ export default function ReviewsAdminPage() {
             <MessageSquare className="text-[#008060]" /> 
             <span>إدارة التقييمات والإعجابات</span>
           </h1>
-          <div className="flex items-center gap-3">
-            <button onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="bg-white border border-[#008060] text-[#008060] px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-green-50 transition-all">
+          <div className="flex flex-wrap items-center gap-3">
+            
+            {/* 🔥 زر مزامنة التقييمات (الطوارئ) */}
+            <button 
+              onClick={recalculateAllProductStats} 
+              disabled={isRecalculating} 
+              className="bg-red-50 border border-red-200 text-red-600 px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-red-100 transition-all shadow-sm"
+            >
+              {isRecalculating ? <Loader2 size={16} className="animate-spin" /> : <Loader2 size={16} />}
+              مزامنة التقييمات
+            </button>
+
+            <button onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="bg-white border border-[#008060] text-[#008060] px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-green-50 transition-all shadow-sm">
               {isUploading ? <span className="animate-spin h-4 w-4 border-2 border-[#008060] border-t-transparent rounded-full"></span> : <Upload size={16} />}
               رفع شيت التقييمات
             </button>
