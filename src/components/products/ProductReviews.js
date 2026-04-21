@@ -166,13 +166,14 @@ export default function ProductReviews({ productHandle, onReviewStatsUpdate }) {
       // 1. إضافة التقييم لجدول التقييمات
       const docRef = await addDoc(collection(db, "Reviews"), newReviewData);
 
-      // 2. تحديث العداد أوتوماتيك
+      // 2. 🔥 تحديث العداد والنجوم أوتوماتيك (تمت إضافة totalRatingSum)
       const statsRef = doc(db, "ProductStats", productHandle);
       await setDoc(statsRef, {
         totalCount: increment(1),
+        totalRatingSum: increment(Number(newReview.rating)) // 👈 هذا ما كان ينقصنا
       }, { merge: true });
 
-      // 🔥 إشارة WIND لمسح كاش إحصائيات المنتج في KV لتحديث النجوم فوراً في الموقع
+      // 3. إشارة WIND لمسح كاش إحصائيات المنتج في KV لتحديث النجوم فوراً في الموقع
       try {
         await fetch('/api/revalidate', {
           method: 'POST',
@@ -186,9 +187,15 @@ export default function ProductReviews({ productHandle, onReviewStatsUpdate }) {
       } catch (e) {
         console.error("WIND Cache Revalidate Error:", e);
       }
+      
       alert("تمت إضافة تقييمك بنجاح!");
       
-      // التحديث اللحظي للواجهة بدون ريفريش
+      // 4. 🔥 الإغلاق التلقائي للمودال وتصفير البيانات
+      setShowAddModal(false);
+      setNewReview({ name: '', rating: 5, text: '', imageUrls: [] });
+      setUploadedImages([]);
+      
+      // 5. التحديث اللحظي للواجهة بدون ريفريش
       setReviews(prev => [{ id: docRef.id, ...newReviewData }, ...prev]);
       if (onReviewStatsUpdate) {
         const newTotal = localStats.total + 1;
