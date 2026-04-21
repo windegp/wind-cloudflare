@@ -17,9 +17,6 @@ export default function MaintenancePage() {
   const { signalPageReady } = usePageReady();
 
   useEffect(() => {
-    // تحقق من الـ cookie عند التحميل
-    const hasAccess = document.cookie.includes('wind_site_access=granted');
-    if (hasAccess) setIsAuthorized(true);
     signalPageReady();
   }, [signalPageReady]);
 
