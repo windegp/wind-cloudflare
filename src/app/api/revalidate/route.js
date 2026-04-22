@@ -7,10 +7,7 @@ export async function POST(request) {
   catch { return Response.json({ error: 'Invalid JSON' }, { status: 400 }); }
 
   const { secret, type, id, slug, handle, keys } = body;
-
-  // ✅ الإصلاح: قبول المتغيرين عشان Client و Server يتفقوا
-  const validSecret = process.env.REVALIDATE_SECRET || process.env.NEXT_PUBLIC_REVALIDATE_SECRET;
-  if (secret !== validSecret) {
+if (secret !== process.env.REVALIDATE_SECRET) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
