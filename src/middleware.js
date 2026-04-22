@@ -2,28 +2,34 @@ import { NextResponse } from 'next/server';
 
 export function middleware(request) {
   const url = request.nextUrl.clone();
+  const { pathname } = url;
 
-  // 1. السماح لملفات النظام والـ API
+  // 1. استثناء ملفات النظام والـ API والـ Static Files (تحسين الأداء)
   if (
-    url.pathname.startsWith('/_next') ||
-    url.pathname.startsWith('/api/') ||
-    url.pathname.match(/\.(png|jpg|jpeg|gif|svg|webp|ico)$/)
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/api/') ||
+    pathname.includes('.') || // بيغطي كل الصور والملفات اللي فيها نقطة
+    pathname === '/favicon.ico'
   ) {
     return NextResponse.next();
   }
 
-  // 2. السماح للأدمن دايماً
-  if (url.pathname.startsWith('/admin') || url.pathname.startsWith('/login')) {
+  // 2. السماح للأدمن واللوجن دايماً
+  if (pathname.startsWith('/admin') || pathname.startsWith('/login')) {
     return NextResponse.next();
   }
 
-
-  // 3. لو عنده cookie → يدخل
+  // 3. فحص الوصول (Cookie Check)
   const hasAccess = request.cookies.get('wind_site_access')?.value === 'granted';
-  if (hasAccess) return NextResponse.next();
 
-  // 5. لو مش عنده cookie → يروح الصفحة الرئيسية (اللي فيها الباسورد)
-  if (url.pathname !== '/') {
+  // 4. إذا كان لديه صلاحية، يسمح له بالمرور
+  if (hasAccess) {
+    return NextResponse.next();
+  }
+
+  // 5. حماية الصفحات: لو مش معاك كوكيز ومش واقف على الصفحة الرئيسية
+  // بنحوله للرئيسية عشان يكتب الباسورد
+  if (!hasAccess && pathname !== '/') {
     return NextResponse.redirect(new URL('/', request.url));
   }
 
@@ -32,6 +38,7 @@ export function middleware(request) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico).*)',
+    // بيطبق الميدل وير على كل المسارات ما عدا المذكور في الاستثناءات فوق
+    '/((?!api|_next/static|_next/image|favicon.ico).*)',
   ],
 };
