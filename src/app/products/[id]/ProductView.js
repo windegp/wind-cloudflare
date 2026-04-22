@@ -647,7 +647,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             <div className="flex gap-4 md:gap-6 overflow-x-auto hide-scrollbar-horizontal pb-4 pt-2 -mx-4 px-4 md:mx-0 md:px-0" dir="rtl">
               {relatedProducts.map(rp => (
                 <Link 
-                  href={`/product/${rp.id}`} 
+                  href={`/products/${rp.id}`} 
                   key={rp.id} 
                   className="flex-shrink-0 w-[150px] md:w-[200px] group cursor-pointer block transition-all duration-300"
                 >

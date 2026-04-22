@@ -35,9 +35,9 @@ const nextConfig = {
   async redirects() {
     return [
       {
-        source: '/products/:slug',
-        destination: '/product/:slug',
-        permanent: true,
+        source: '/products/:path*',
+        destination: '/products/:path*',
+        permanent: true, // مهم جداً للـ SEO
       },
     ];
   },

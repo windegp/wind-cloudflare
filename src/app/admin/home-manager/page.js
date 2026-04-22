@@ -298,7 +298,7 @@ export default function HomeManagerPage() {
         originalPrice: item.price || "",
         originalCategory: item.category || "",
         customName: "", customImage: "", badge: "",
-        linkUrl: type === 'product' ? `/product/${item.id}` : `/collections/${item.slug || item.id}`,
+        linkUrl: type === 'product' ? `/products/${item.id}` : `/collections/${item.slug || item.id}`,
         badgeType: "none", linkText: "", subCards: [],
         customPrice: "", compareAtPrice: item.compareAtPrice || "", customRating: "", customReviews: "", customCategory: "",
         customDescription: "",

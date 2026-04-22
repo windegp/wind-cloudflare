@@ -92,7 +92,7 @@ mergedProduct;
     ? collections[0].replace(/-/g, ' ') 
     : "WIND";
     
-  const productLink = handle ? `/product/${handle}` : `/product/${id}`;
+  const productLink = handle ? `/products/${handle}` : `/products/${id}`;
 
   let cardColors = [];
   if (options && Array.isArray(options)) {

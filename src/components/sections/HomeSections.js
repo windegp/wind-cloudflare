@@ -961,7 +961,7 @@ export const TopRatedWeekly = ({ data, bundle }) => {
                   border:      isFirst ? '1.5px solid rgba(245,197,24,0.5)' : '1.5px solid #EEEBE5',
                   boxShadow:   isFirst ? '0 4px 20px rgba(245,197,24,0.10)' : '0 2px 8px rgba(0,0,0,0.04)',
                 }}>
-                <Link href={`/product/${p.id}`} className="relative shrink-0 rounded-xl overflow-hidden block group" style={{ width: 110, height: 160 }}>
+                <Link href={`/products/${p.id}`} className="relative shrink-0 rounded-xl overflow-hidden block group" style={{ width: 110, height: 160 }}>
                   <img src={p.images?.[0] || p.mainImage} alt={p.title} className="w-full h-full object-cover img-zoom" />
                   <div className="absolute top-0 right-0 w-7 flex items-start justify-center pt-1.5 z-10" style={{ height: 48, clipPath: 'polygon(0 0, 100% 0, 100% 100%, 50% 80%, 0 100%)', background: 'linear-gradient(180deg,#1A1A1A 0%,#2E2E2E 100%)', boxShadow: '0 3px 8px rgba(0,0,0,0.25)' }}>
                     <Plus size={18} className="text-[#F5C518]" />
@@ -969,7 +969,7 @@ export const TopRatedWeekly = ({ data, bundle }) => {
                 </Link>
                 <div className="flex flex-col justify-start flex-1 py-0.5 text-right">
                   <div className="w-fit mb-3"><div className="px-3 pt-1.5 pb-3" style={{ background: '#1A1A1A', clipPath: 'polygon(0 0, 100% 0, 100% 100%, 50% 85%, 0 100%)', borderRadius: '2px 2px 0 0' }}><span className="wind-title text-[#F5C518] text-sm leading-none block">#{idx + 1}</span></div></div>
-                  <Link href={`/product/${p.id}`}><h3 className="wind-title text-[#1A1A1A] text-base md:text-lg line-clamp-2 leading-snug mb-1.5 hover:opacity-70 transition-opacity">{p.title}</h3></Link>
+                  <Link href={`/products/${p.id}`}><h3 className="wind-title text-[#1A1A1A] text-base md:text-lg line-clamp-2 leading-snug mb-1.5 hover:opacity-70 transition-opacity">{p.title}</h3></Link>
                   <span className="gold-bar mb-3" />
                   <div className="flex items-center gap-2.5 mb-3 flex-wrap"><span className="wind-title text-[#1A1A1A] text-base md:text-lg font-black">{p.price} LE</span><span className="wind-title text-[11px] font-bold px-2 py-0.5 rounded-sm bg-black text-white">متوفر</span></div>
                   <div className="flex items-center gap-3 mb-3">
@@ -1007,10 +1007,10 @@ export const MostLikedWeekly = ({ data, bundle }) => {
           {products.map((p, idx) => (
             <div key={idx} className="group relative flex flex-col items-center text-center">
               <div className="relative aspect-[3/4] w-full arch-frame bg-[#EDEAE3] shadow-sm group-hover:shadow-xl transition-all duration-500 border border-[#E2DDD5] group-hover:border-[#F5C518]/40">
-                <Link href={`/product/${p.id}`} className="block w-full h-full"><img src={p.images?.[0] || p.mainImage} alt={p.title} className="w-full h-full object-cover img-zoom" /></Link>
+                <Link href={`/products/${p.id}`} className="block w-full h-full"><img src={p.images?.[0] || p.mainImage} alt={p.title} className="w-full h-full object-cover img-zoom" /></Link>
                 <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setQuickViewProduct(p); }} aria-label="نظرة سريعة" className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 bg-white/92 backdrop-blur-sm text-[#1A1A1A] p-2.5 rounded-full shadow-md hover:bg-[#1A1A1A] hover:text-[#F5C518] transition-all duration-300 opacity-100 md:opacity-0 md:translate-y-2 md:group-hover:opacity-100 md:group-hover:translate-y-0"><Eye size={15} strokeWidth={2} /></button>
               </div>
-              <Link href={`/product/${p.id}`} className="pt-4 flex flex-col items-center w-full px-1">
+              <Link href={`/products/${p.id}`} className="pt-4 flex flex-col items-center w-full px-1">
                 <h3 className="wind-title text-[#1A1A1A] text-sm md:text-base line-clamp-1 group-hover:opacity-70 transition-opacity">{p.title}</h3>
                 <span className="gold-bar mt-1.5 max-w-[60%]" />
                 <p className="wind-body text-[#1A1A1A] text-sm mt-2 font-semibold">{p.price} ج.م</p>
@@ -1052,13 +1052,13 @@ export const TopRatedAllTime = ({ data, bundle }) => {
             const cardBgStyle = isFirstCard ? "bg-gradient-to-l from-[#1A1A1A] to-[#2c230b] border border-[#F5C518]/30 shadow-[0_0_30px_rgba(245,197,24,0.15)]" : "bg-[#1A1A1A] border border-gray-800 shadow-sm";
             return (
               <div key={idx} className={`flex gap-3 md:gap-4 p-5 rounded-2xl overflow-hidden transition-all duration-300 ${cardBgStyle}`}>
-                <Link href={`/product/${p.id}`} className="relative w-[110px] h-[160px] md:w-[130px] md:h-[180px] shrink-0 bg-gray-800 rounded-lg overflow-hidden block shadow-md group z-0">
+                <Link href={`/products/${p.id}`} className="relative w-[110px] h-[160px] md:w-[130px] md:h-[180px] shrink-0 bg-gray-800 rounded-lg overflow-hidden block shadow-md group z-0">
                   <img src={p.images?.[0] || p.mainImage} alt={p.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
                   <div className="absolute top-0 right-0 w-7 h-[50px] flex items-start justify-center pt-2 z-10 transition-transform group-hover:translate-y-px" style={{ clipPath: 'polygon(0 0, 100% 0, 100% 100%, 50% 80%, 0 100%)', background: 'linear-gradient(180deg, #1d3557 0%, #457b9d 100%)', boxShadow: '0 6px 10px rgba(0,0,0,0.6)', borderTop: '1px solid rgba(255,255,255,0.1)' }}><Plus size={22} className="text-white drop-shadow-sm" /></div>
                 </Link>
                 <div className="flex flex-col justify-start flex-1 py-0.5 w-full text-right">
                   <div className="w-fit mb-2"><div className="bg-[#5799EF] px-3 pt-1.5 pb-2.5 rounded-t-sm" style={{ clipPath: 'polygon(0 0, 100% 0, 100% 100%, 50% 85%, 0 100%)' }}><span className="text-white font-extrabold text-sm md:text-base leading-none block pt-0.5">#{idx + 1}</span></div></div>
-                  <Link href={`/product/${p.id}`}><h3 className="text-white font-bold text-base md:text-xl leading-tight line-clamp-2 mb-2 hover:underline">{p.title}</h3></Link>
+                  <Link href={`/products/${p.id}`}><h3 className="text-white font-bold text-base md:text-xl leading-tight line-clamp-2 mb-2 hover:underline">{p.title}</h3></Link>
                   <div className="text-[#A3A3A3] text-sm md:text-base mb-3 flex items-center gap-3 font-medium"><span className="font-black text-base md:text-lg text-white">{p.price} LE</span><span className="bg-gray-900/80 px-2.5 py-1 rounded text-[11px] md:text-xs border border-gray-800">متوفر الآن</span></div>
                   <div className="flex items-center gap-4 mb-4">
                     <div className="flex items-center gap-1.5"><Star size={16} className="text-[#F5C518] fill-[#F5C518]" /><span className="text-white text-base font-medium pt-0.5">{p.allTimeAvg}</span><span className="text-[#A3A3A3] text-xs pt-0.5">({p.allTimeCount})</span></div>
@@ -1103,8 +1103,8 @@ export const MostLikedAllTime = ({ data, bundle }) => {
                 {p.likesCount}
               </div>
               <button onClick={(e) => { e.preventDefault(); setQuickViewProduct(p); }} className="absolute bottom-[95px] left-3 z-20 bg-white/90 backdrop-blur-sm text-[#1A1A1A] border border-[#EAEAEA] p-2.5 rounded-full shadow-md opacity-100 md:opacity-0 md:-translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 hover:bg-[#1A1A1A] hover:text-white"><Eye size={18} /></button>
-              <Link href={`/product/${p.id}`} className="block relative w-full aspect-[3/4] overflow-hidden bg-[#F0EEE6]"><img src={p.images?.[0] || p.mainImage} alt={p.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" /></Link>
-              <Link href={`/product/${p.id}`} className="flex flex-col justify-between flex-1 p-4 text-right">
+              <Link href={`/products/${p.id}`} className="block relative w-full aspect-[3/4] overflow-hidden bg-[#F0EEE6]"><img src={p.images?.[0] || p.mainImage} alt={p.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" /></Link>
+              <Link href={`/products/${p.id}`} className="flex flex-col justify-between flex-1 p-4 text-right">
                 <h3 className="text-[#1A1A1A] text-sm md:text-base font-bold line-clamp-2 group-hover:text-gray-500 transition-colors leading-snug" style={{fontFamily:"Cairo,sans-serif"}}>{p.title}</h3>
                 <p className="text-[#1A1A1A] text-base md:text-lg font-black mt-3" style={{fontFamily:"Impact, sans-serif"}}>{p.price} <span className="text-xs font-bold text-gray-500 font-sans">ج.م</span></p>
               </Link>
