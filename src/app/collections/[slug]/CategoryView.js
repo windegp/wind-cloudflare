@@ -58,7 +58,7 @@ export default function CategoryView({ initialSlug, initialCategoryData }) {
         const weekStr = `${d.getUTCFullYear()}-W${Math.ceil((((d - new Date(Date.UTC(d.getUTCFullYear(), 0, 1))) / 86400000) + 1) / 7)}`;
         baseQ = query(collection(db, "products"), where("currentWeekId", "==", weekStr), orderBy("weeklyLikesCount", "desc"));
       } else {
-        baseQ = query(collection(db, "products"), where("categories", "array-contains-any", [currentSlug, `/${currentSlug}`]));
+        baseQ = query(collection(db, "products"), where("collections", "array-contains", currentSlug));
       }
 
       const q = query(baseQ, startAfter(lastDoc), limit(PAGE_SIZE));

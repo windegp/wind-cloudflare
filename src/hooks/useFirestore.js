@@ -256,7 +256,7 @@ export const usePaginatedProducts = (categorySlug, limitCount = 10, lastVisibleD
     // بناء الكويري الأساسي للقسم
     let q = query(
       productsRef, 
-      where("categories", "array-contains", categorySlug), 
+      where("collections", "array-contains", categorySlug), // 🔥 التعديل هنا
       orderBy("createdAt", "desc"), 
       limit(limitCount)
     );
@@ -323,11 +323,13 @@ export const useRelatedProducts = (product) => {
       });
     } 
 
-    // 2. لو مفيش، جلب عن طريق الـ Categories (Array-contains)
+    // 2. لو مفيش، جلب عن طريق الـ Collections (Array-contains)
     if (related.length === 0) {
-      const fbRefValue = (Array.isArray(product.categories) && product.categories[0]) || product.category;
+      // 🔥 التعديل هنا: خليناه يقرأ من collections
+      const fbRefValue = (Array.isArray(product.collections) && product.collections[0]) || product.category;
       if (fbRefValue) {
-        const qCat = query(productsRef, where("categories", "array-contains", fbRefValue), limit(6));
+        // 🔥 التعديل هنا: البحث في حقل collections
+        const qCat = query(productsRef, where("collections", "array-contains", fbRefValue), limit(6));
         const snap = await getDocs(qCat);
         snap.forEach(d => {
           if (d.id !== product.id) related.push({ id: d.id, ...d.data() });

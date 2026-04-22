@@ -411,6 +411,21 @@ function CreateProductForm() {
           body: JSON.stringify({ id: documentId })
         });
       } catch {}
+      
+      // 🔥 مسح كاش الأقسام المرتبطة بالمنتج لضمان ظهوره فوراً
+      if (finalProduct.collections && finalProduct.collections.length > 0) {
+        try {
+          await Promise.all(finalProduct.collections.map(async (slug) => {
+            await fetch("/api/invalidate-collection", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ slug: slug })
+            });
+          }));
+        } catch (colError) {
+          console.error("Collection Invalidation Error:", colError);
+        }
+      }
 
       // 🔥 Update product counter atomically (only for new products, not edits)
       if (!isEditing) {
