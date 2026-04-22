@@ -175,25 +175,28 @@ mergedProduct;
     return val.toString().trim().charAt(0).toUpperCase() + val.toString().trim().slice(1);
   };
 
-  // 🔥 المنطق الذكي لاختيار اسم القسم وتنسيقه (مثال: Shop All)
+  // 🔥 المنطق الذكي لاختيار اسم القسم وتنسيقه
   const getSmartCategory = () => {
-    // تحديد الأقسام المتاحة
-    const availableCats = (collections?.length > 0 ? collections : categories) || [];
+    // 1. استخراج البيانات من الـ props بأمان تام
+    const safeCollections = props.collections || [];
+    const safeCategories = props.categories || [];
+    const safeSource = props.sourceCategory || "";
+
+    // 2. تحديد الأقسام المتاحة
+    const availableCats = safeCollections.length > 0 ? safeCollections : safeCategories;
     let chosen = "";
 
-    // لو الكارت معروض جوه قسم معين، نعرض اسم القسم ده
-    if (sourceCategory && availableCats.includes(sourceCategory)) {
-      chosen = sourceCategory;
-    } 
-    // لو في الرئيسية، نتجنب الكلمات العامة ونعرض قسم محدد
-    else if (availableCats.length > 0) {
+    // 3. اختيار القسم المناسب
+    if (safeSource && availableCats.includes(safeSource)) {
+      chosen = safeSource;
+    } else if (availableCats.length > 0) {
       const specificCats = availableCats.filter(c => c !== "shop-all" && c !== "best-sellers" && c !== "new-arrivals");
       chosen = specificCats.length > 0 ? specificCats[0] : availableCats[0];
     }
 
     if (!chosen) return "";
 
-    // تنسيق النص: إزالة الشرط وتكبير أول حرف من كل كلمة
+    // 4. تنسيق النص النهائي (تجنب الحروف الكبيرة بالكامل)
     return chosen
       .replace(/-/g, ' ')
       .split(' ')
