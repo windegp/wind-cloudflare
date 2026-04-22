@@ -175,6 +175,34 @@ mergedProduct;
     return val.toString().trim().charAt(0).toUpperCase() + val.toString().trim().slice(1);
   };
 
+  // 🔥 المنطق الذكي لاختيار اسم القسم وتنسيقه (مثال: Shop All)
+  const getSmartCategory = () => {
+    // تحديد الأقسام المتاحة
+    const availableCats = (collections?.length > 0 ? collections : categories) || [];
+    let chosen = "";
+
+    // لو الكارت معروض جوه قسم معين، نعرض اسم القسم ده
+    if (sourceCategory && availableCats.includes(sourceCategory)) {
+      chosen = sourceCategory;
+    } 
+    // لو في الرئيسية، نتجنب الكلمات العامة ونعرض قسم محدد
+    else if (availableCats.length > 0) {
+      const specificCats = availableCats.filter(c => c !== "shop-all" && c !== "best-sellers" && c !== "new-arrivals");
+      chosen = specificCats.length > 0 ? specificCats[0] : availableCats[0];
+    }
+
+    if (!chosen) return "";
+
+    // تنسيق النص: إزالة الشرط وتكبير أول حرف من كل كلمة
+    return chosen
+      .replace(/-/g, ' ')
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  };
+
+  const smartCategoryText = getSmartCategory();
+
   // 🔥 حماية WIND: ضمان عدم ظهور نجوم رمادية حتى لو الداتا القديمة فيها أخطاء
   const safeRating = Number(reviewsData.rating) || 5;
   const fullStarsCount = Math.round(safeRating);
@@ -201,7 +229,7 @@ mergedProduct;
         </div>
 
         <div className="flex flex-col text-right px-1 pb-6 mt-4">
-          <span className="text-[#888888] text-[11px] font-bold uppercase tracking-widest mb-2 font-tajawal">{displayCategory}</span>
+          <span className="text-[#888888] text-[11px] font-bold tracking-widest mb-2 font-tajawal">{smartCategoryText}</span>
           <Link href={productLink}>
             <h3 className="text-[#1A1A1A] text-[14px] md:text-[15px] font-semibold line-clamp-1 hover:text-[#E6AE00] transition-colors mb-1.5 font-cairo">{title}</h3>
           </Link>
