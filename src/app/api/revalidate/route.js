@@ -8,7 +8,9 @@ export async function POST(request) {
 
   const { secret, type, id, slug, handle, keys } = body;
 
-  if (secret !== process.env.REVALIDATE_SECRET) {
+  // ✅ الإصلاح: قبول المتغيرين عشان Client و Server يتفقوا
+  const validSecret = process.env.REVALIDATE_SECRET || process.env.NEXT_PUBLIC_REVALIDATE_SECRET;
+  if (secret !== validSecret) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
