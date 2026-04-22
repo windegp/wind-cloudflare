@@ -1,48 +1,24 @@
 import { NextResponse } from 'next/server';
 import { getDb } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore/lite";
-import { getCloudflareContext } from '@opennextjs/cloudflare';
+import { kvGet, kvSet } from '@/lib/kv-cache';
 
 export const dynamic = 'force-dynamic';
 
 const CACHE_KEY = 'homepage_data_v1';
 
-async function getKV() {
-  try {
-    const ctx = await getCloudflareContext({ async: true });
-    return ctx?.env?.WIND_KV || null;
-  } catch {
-    return null;
-  }
-}
-
 export async function GET() {
-  let kvStatus = "NOT_FOUND";
+  // 1. جرب KV أولاً
+  const cached = await kvGet(CACHE_KEY);
+  if (cached) {
+    return NextResponse.json(
+      { success: true, source: 'cache', data: cached },
+      { headers: { 'X-Cache': 'HIT' } }
+    );
+  }
 
+  // 2. جيب من Firebase
   try {
-    const kv = await getKV();
-
-    if (kv) {
-      kvStatus = "FOUND";
-      try {
-        const cached = await kv.get(CACHE_KEY);
-        if (cached) {
-          return NextResponse.json({
-            success: true,
-            source: 'cache',
-            kv_status: "HIT",
-            data: JSON.parse(cached)
-          }, {
-            headers: { "X-Cache": "HIT" }
-          });
-        }
-        kvStatus = "FOUND_BUT_EMPTY";
-      } catch {
-        kvStatus = "READ_ERROR";
-      }
-    }
-
-    // جيب من Firebase
     const db = getDb();
     const [layoutSnap, heroSnap] = await Promise.all([
       getDoc(doc(db, "homepage", "layout_config")),
@@ -51,9 +27,8 @@ export async function GET() {
 
     const layoutData = layoutSnap.exists() ? layoutSnap.data() : { sections: [] };
 
-    // 🔥 Price Enrichment — تحديث أسعار المنتجات من products collection
+    // Price Enrichment
     if (layoutData.sections?.length > 0) {
-      // جمع كل product IDs من كل الـ sections
       const allProductIds = [];
       layoutData.sections.forEach(section => {
         const items = section.data?.cards || section.data?.products || [];
@@ -62,7 +37,6 @@ export async function GET() {
         });
       });
 
-      // جيب أحدث بيانات المنتجات دفعة واحدة
       if (allProductIds.length > 0) {
         const uniqueIds = [...new Set(allProductIds)];
         const { getDocs, collection, query, where, documentId } = await import('firebase/firestore/lite');
@@ -77,11 +51,9 @@ export async function GET() {
           };
         });
 
-        // حدّث الأسعار في الـ layout
         layoutData.sections = layoutData.sections.map(section => {
           const items = section.data?.cards || section.data?.products || [];
           if (items.length === 0) return section;
-
           const updatedItems = items.map(item => {
             if (!item.productId || !pricesMap[item.productId]) return item;
             return {
@@ -90,10 +62,7 @@ export async function GET() {
               compareAtPrice: pricesMap[item.productId].compareAtPrice || item.compareAtPrice
             };
           });
-
-          if (section.data?.cards) {
-            return { ...section, data: { ...section.data, cards: updatedItems } };
-          }
+          if (section.data?.cards) return { ...section, data: { ...section.data, cards: updatedItems } };
           return { ...section, data: { ...section.data, products: updatedItems } };
         });
       }
@@ -104,30 +73,15 @@ export async function GET() {
       hero: heroSnap.exists() ? heroSnap.data() : { slides: [], categories: [] }
     };
 
-    // خزّن في KV
-    if (kv) {
-      try {
-        await kv.put(CACHE_KEY, JSON.stringify(firebaseData));
-        kvStatus = "SAVED";
-      } catch {
-        kvStatus = "WRITE_ERROR";
-      }
-    }
+    // 3. خزّن في KV
+    await kvSet(CACHE_KEY, firebaseData);
 
-    return NextResponse.json({
-      success: true,
-      source: 'firebase',
-      kv_status: kvStatus,
-      data: firebaseData
-    }, {
-      headers: { "X-Cache": "MISS" }
-    });
+    return NextResponse.json(
+      { success: true, source: 'firebase', data: firebaseData },
+      { headers: { 'X-Cache': 'MISS' } }
+    );
 
   } catch (error) {
-    return NextResponse.json({
-      success: false,
-      error: error.message,
-      kv_status: kvStatus
-    }, { status: 500 });
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

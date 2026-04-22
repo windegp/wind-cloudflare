@@ -1,29 +1,18 @@
-import { getCloudflareContext } from '@opennextjs/cloudflare';
-import { revalidatePath } from 'next/cache'; // 🔥 ضروري جداً
-
+// invalidate-collection/route.js
+import { kvDeleteMany } from '@/lib/kv-cache';
+import { revalidatePath } from 'next/cache';
 export const dynamic = 'force-dynamic';
 
 export async function POST(request) {
-  const { slug } = await request.json();
-  if (!slug) return Response.json({ error: "slug required" }, { status: 400 });
-
-  try {
-    const ctx = await getCloudflareContext({ async: true });
-    const kv = ctx?.env?.WIND_KV || null;
-    
-    if (kv) {
-      await Promise.all([
-        kv.delete(`collection_${slug}`),
-        kv.delete("homepage_data_v1")
-      ]);
-    }
-
-    // 🔥 تحديث كاش صفحة القسم
-    revalidatePath(`/collections/${slug}`);
-    revalidatePath('/');
-
-    return Response.json({ invalidated: true });
-  } catch (error) {
-    return Response.json({ invalidated: false });
+  const body = await request.json();
+  if (body.secret !== process.env.REVALIDATE_SECRET) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
+  const { slug } = body;
+  if (!slug) return Response.json({ error: 'slug required' }, { status: 400 });
+
+  await kvDeleteMany([`collection_${slug}`, 'homepage_data_v1']);
+  revalidatePath(`/collections/${slug}`);
+  revalidatePath('/');
+  return Response.json({ invalidated: true });
 }

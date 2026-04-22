@@ -1,33 +1,18 @@
-import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { getDb } from "@/lib/firebase";
 import { collection, query, where, orderBy, limit, getDocs, documentId } from "firebase/firestore/lite";
+import { kvGet, kvSet } from '@/lib/kv-cache';
 
 export const dynamic = 'force-dynamic';
 const CACHE_KEY = 'homepage_reviews_v1';
 
-async function getKV() {
-  try {
-    const ctx = await getCloudflareContext({ async: true });
-    return ctx?.env?.WIND_KV || null;
-  } catch { return null; }
-}
-
 export async function GET() {
-  const kv = await getKV();
-
-  // 1. حاول من KV
-  if (kv) {
-    try {
-      const cached = await kv.get(CACHE_KEY);
-      if (cached) {
-        return Response.json(JSON.parse(cached), {
-          headers: { 'X-Cache': 'HIT' }
-        });
-      }
-    } catch {}
+  // 1. جرب KV أولاً
+  const cached = await kvGet(CACHE_KEY);
+  if (cached) {
+    return Response.json(cached, { headers: { 'X-Cache': 'HIT' } });
   }
 
-  // 2. Firebase
+  // 2. جيب من Firebase
   try {
     const db = getDb();
     const qReviews = query(
@@ -61,14 +46,14 @@ export async function GET() {
       });
     }
 
+    // ✅ Bug Fix: result كانت مش معرّفة
     const result = { reviews: fetchedReviews, products: productsMap };
 
     // 3. خزّن في KV
-    if (kv) {
-      try { await kv.put(CACHE_KEY, JSON.stringify(result)); } catch {}
-    }
+    await kvSet(CACHE_KEY, result);
 
     return Response.json(result, { headers: { 'X-Cache': 'MISS' } });
+
   } catch (error) {
     return Response.json({ reviews: [], products: {} }, { status: 500 });
   }

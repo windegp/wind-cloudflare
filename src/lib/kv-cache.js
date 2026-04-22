@@ -41,3 +41,15 @@ export async function kvDelete(key) {
     return false;
   }
 }
+
+// ✅ جديد - لحذف أكتر من key دفعة واحدة
+export async function kvDeleteMany(keys = []) {
+  try {
+    const kv = await getKV();
+    if (!kv || keys.length === 0) return false;
+    await Promise.all(keys.map(k => kv.delete(k)));
+    return true;
+  } catch {
+    return false;
+  }
+}
