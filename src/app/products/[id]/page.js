@@ -1,4 +1,4 @@
-// app/products/[id]/page.js
+// app/product/[id]/page.js
 import { getDb } from "@/lib/firebase"; 
 import { getFirebaseEdge, getEdgeDb } from "@/lib/firebase-edge";
 import { doc, getDoc } from "firebase/firestore/lite";
@@ -51,7 +51,7 @@ const getProductData = cache(async (id) => {
 
 // 1. الجزء الخاص بـ Metadata
 export async function generateMetadata({ params }) {
-  const { id } = await params; // Next.js 15 Async Params
+  const { id } = await params;
   const product = await getProductData(id);
 
   if (!product) return { title: "المنتج غير موجود | WIND" };
@@ -73,7 +73,7 @@ export async function generateMetadata({ params }) {
     openGraph: {
       title: finalTitle,
       description: finalDescription,
-      url: `https://windeg.com/products/${id}`, // ✅ تم التحديث لـ products
+      url: `https://windeg.com/product/${id}`,
       siteName: 'WIND',
       images: [{ url: product.images?.[0] || product.mainImage || "" }],
       type: 'article',
@@ -83,7 +83,7 @@ export async function generateMetadata({ params }) {
 
 // 2. الصفحة الرئيسية
 export default async function Page({ params, searchParams }) {
-  const { id } = await params; // Next.js 15 Async Params
+  const { id } = await params;
   const sourceCat = (await searchParams)?.cat;
   const product = await getProductData(id);
 
@@ -107,7 +107,7 @@ export default async function Page({ params, searchParams }) {
     },
     "offers": {
       "@type": "Offer",
-      "url": `https://windeg.com/products/${id}`, // ✅ تم التحديث لـ products
+      "url": `https://windeg.com/product/${id}`,
       "priceCurrency": "EGP",
       "price": product.price || "0",
       "availability": (Number(product.quantity) > 0 || product.sellOutOfStock === "Yes") ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
