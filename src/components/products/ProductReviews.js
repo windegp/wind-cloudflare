@@ -67,7 +67,7 @@ export default function ProductReviews({ productHandle, onReviewStatsUpdate }) {
           if (!snap.empty) {
             const total = snap.size;
             const sum = snap.docs.reduce((acc, d) => acc + (d.data().rating || 5), 0);
-            const avg = sum / total;
+            const avg = sum / total; // 🔥 تعريف الـ avg اللي كان ناقص
             await setDoc(statsRef, { totalCount: total, totalRatingSum: sum });
             setLocalStats({ avg, total });
             if (onReviewStatsUpdate) onReviewStatsUpdate(avg, total);

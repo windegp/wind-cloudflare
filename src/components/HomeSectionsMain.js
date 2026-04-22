@@ -78,13 +78,13 @@ export default function HomeSectionsMainContent() {
       }
 
       return (
-        <Component 
-          key={`${section.category}-${index}`} 
-          data={sectionData} 
+        <Component
+          key={`${section.category}-${index}`}
+          data={sectionData}
         />
       );
     });
-  }, [layoutConfig, heroData, homeSectionsData]);
+  }, [layoutConfig, heroData, homeSectionsData, homepageReviewsData]); // 🔥 إضافة الديبيندينسي
 
   return (
     <main className="bg-white min-h-screen">

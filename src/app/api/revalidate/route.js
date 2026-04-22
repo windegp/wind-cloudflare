@@ -41,9 +41,9 @@ export async function POST(request) {
     // 🔥 تحديث WIND: عند تعديل منتج، لازم نمسح كاش الهوم بيج كمان عشان السعر والنجوم يتحدثوا في الكروت
     keysToDelete = [`product_${id}`, 'homepage_data_v1'];
     if (handle) keysToDelete.push(`product_stats_${handle}`);
-  } else if (type === 'product_stats' && handle) {
-    // مسح الإحصائيات فقط (لما يضاف review جديد)
-    keysToDelete = [`product_stats_${handle}`, 'homepage_data_v1'];
+ } else if (type === 'product_stats' && handle) {
+    // 🔥 تحديث WIND: مسح إحصائيات المنتج + قسم التقييمات في الرئيسية (بدون المساس بكاش تصميم الهوم بيج)
+    keysToDelete = [`product_stats_${handle}`, 'homepage_reviews_v1'];
   } else if (type === 'collection' && slug) {
     keysToDelete = [`collection_${slug}`];
   } else if (type === 'site_settings') {

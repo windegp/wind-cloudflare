@@ -35,16 +35,22 @@ const fetchCollection = async ([path, limitCount, orderField, orderDir]) => {
 // مصنع جلب تقييمات الصفحة الرئيسية (Legendary Batch Fetching)
 const fetchHomepageReviews = async () => {
   try {
+    // 1. جرب الـ KV Cache أولاً
+    const res = await fetch('/api/homepage-reviews');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.reviews) return data;
+    }
+  } catch {}
+
+  // 2. Fallback: Firebase مباشرة
+  try {
     const db = getDb();
-    
-    // 1. جلب أحدث 10 تقييمات فقط (قراءة واحدة)
     const qReviews = query(collection(db, "Reviews"), where("status", "==", "published"), orderBy("date", "desc"), limit(10));
     const snapReviews = await getDocs(qReviews);
     const fetchedReviews = snapReviews.docs.map(d => ({ id: d.id, ...d.data() }));
-
     if (fetchedReviews.length === 0) return { reviews: [], products: {} };
-
-    // Legendary Batch Fetching: جمع كل المعرفات المطلوبة
+    
     const uniqueHandles = [...new Set(fetchedReviews.map(r => r.productHandle).filter(Boolean))].slice(0, 10);
     const productsMap = {};
 
