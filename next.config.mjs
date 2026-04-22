@@ -35,7 +35,7 @@ const nextConfig = {
   async redirects() {
     return [
       {
-        source: '/products/:path*',
+        source: '/product/:path*',
         destination: '/products/:path*',
         permanent: true, // مهم جداً للـ SEO
       },
