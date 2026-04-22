@@ -416,23 +416,34 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             <span className="text-gray-600">منتجات ويند</span>
             
             {(() => {
-              let validPaths = [];
-              if (Array.isArray(product?.collections)) validPaths = [...validPaths, ...product.collections.filter(c => typeof c === 'string' && c.startsWith('/'))];
-              if (Array.isArray(product?.categories)) validPaths = [...validPaths, ...product.categories.filter(c => typeof c === 'string' && c.startsWith('/'))];
+              // 1. قراءة الأقسام بأمان (القديمة والجديدة) بدون الاعتماد على السلاش
+              const safeCollections = product?.collections || [];
+              const safeCategories = product?.categories || [];
+              const availableCats = safeCollections.length > 0 ? safeCollections : safeCategories;
               
               let displayCategory = sourceCategory;
-              if (!displayCategory && validPaths.length > 0) {
-                const generalTerms = ['shop-all', 'best-sellers', 'new-arrivals', 'sale', 'womens-clothing'];
-                const specificPaths = validPaths.filter(c => !generalTerms.some(term => c.includes(term)));
-                displayCategory = specificPaths[0] || validPaths[0];
+
+              // 2. اختيار القسم الأنسب لو مش جايين من قسم معين
+              if (!displayCategory && availableCats.length > 0) {
+                const generalTerms = ['shop-all', 'best-sellers', 'new-arrivals', 'sale'];
+                const specificPaths = availableCats.filter(c => typeof c === 'string' && !generalTerms.some(term => c.includes(term)));
+                displayCategory = specificPaths.length > 0 ? specificPaths[0] : availableCats[0];
               }
 
+              // 3. التنسيق الاحترافي (إزالة الشرط، وتكبير أول حرف من كل كلمة)
               if (displayCategory) {
-                const cleanName = String(displayCategory).replace(/^\//, '').replace(/-/g, ' ').trim();
+                const cleanName = String(displayCategory)
+                  .replace(/^\//, '') // إزالة السلاش لو موجود في القديم
+                  .replace(/-/g, ' ') // إزالة الشرط
+                  .split(' ')
+                  .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                  .join(' ')
+                  .trim();
+                  
                 return (
                   <>
                     <span className="w-1.5 h-1.5 bg-gray-300 rounded-full"></span>
-                    <span className="capitalize text-[#1A1A1A] font-bold">{cleanName}</span>
+                    <span className="text-[#1A1A1A] font-bold tracking-wider">{cleanName}</span>
                   </>
                 );
               }
