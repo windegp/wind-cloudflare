@@ -55,7 +55,11 @@ export async function POST(request) {
       keysToDelete = list.keys.map(k => k.name);
     } catch (e) {
       // Fallback في حالة فشل الـ list
-      keysToDelete = ['homepage_data_v1', 'site_settings_v1'];
+      keysToDelete = [
+        'homepage_data_v1',
+        'homepage_reviews_v1',
+        'site_settings_v1'
+      ];
     }
   }
 
