@@ -378,14 +378,20 @@ export default function ReviewsAdminPage() {
         totalRatingSum: increment(-Number(reviewRating))
       }, { merge: true });
       
-      // 🔥 مسح KV Cache للـ stats
+      // 🔥 إشارة WIND: مسح كاش الإحصائيات + كاش التقييمات في الرئيسية فوراً
       try {
-        await fetch("/api/invalidate-stats", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ handle: productHandle })
+        await fetch('/api/revalidate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            secret: process.env.NEXT_PUBLIC_REVALIDATE_SECRET, 
+            type: 'product_stats',
+            handle: productHandle 
+          })
         });
-      } catch {}
+      } catch (e) {
+        console.error("WIND Cache Revalidate Error:", e);
+      }
 
       // تحديث المودال
       setSelectedProductReviews(prev => prev.filter(r => r.id !== id));
