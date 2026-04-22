@@ -1,4 +1,5 @@
 import { getCloudflareContext } from '@opennextjs/cloudflare';
+import { revalidatePath } from 'next/cache'; // 🔥 ضروري جداً
 
 export const dynamic = 'force-dynamic';
 
@@ -9,6 +10,7 @@ export async function POST(request) {
   try {
     const ctx = await getCloudflareContext({ async: true });
     const kv = ctx?.env?.WIND_KV || null;
+    
     if (kv) {
       await Promise.all([
         kv.delete(`product_${id}`),
@@ -16,8 +18,14 @@ export async function POST(request) {
         kv.delete("homepage_data_v1")
       ]);
     }
+
+    // 🔥 السطر ده هو اللي هيخلي المنتج يظهر فوراً في المسار الجديد
+    revalidatePath(`/products/${id}`); 
+    revalidatePath('/'); 
+
     return Response.json({ invalidated: true });
-  } catch {
-    return Response.json({ invalidated: false });
+  } catch (error) {
+    console.error("Invalidation Error:", error);
+    return Response.json({ invalidated: false, message: error.message });
   }
 }

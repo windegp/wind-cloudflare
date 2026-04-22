@@ -49,7 +49,7 @@ export default async function sitemap() {
     }
 
     return {
-      url: `${baseUrl}/product/${identifier}`,
+      url: `${baseUrl}/products/${identifier}`,
       lastModified: finalDate,
       changeFrequency: 'daily',
       priority: 0.7,
