@@ -13,6 +13,8 @@ const firestoreDb = isEdgeRuntime ? getEdgeDb() : getDb();
 
 // تم تغليف الدالة بـ cache لضمان جلب المنتج مرة واحدة فقط لكل طلب سيرفر (توفير كوتا)
 const getProductData = cache(async (id) => {
+  if (!id) return null;
+  
   // 1. ابحث في Static Products أولاً
   const staticProduct = staticProducts.find((p) => p.id.toString() === id.toString());
   if (staticProduct) return staticProduct;
@@ -51,7 +53,7 @@ const getProductData = cache(async (id) => {
 
 // 1. الجزء الخاص بـ Metadata
 export async function generateMetadata({ params }) {
-  const { id } = await params; // Next.js 15 Async Params
+  const { id } = await params; // 🔥 Next.js 15 Fix
   const product = await getProductData(id);
 
   if (!product) return { title: "المنتج غير موجود | WIND" };
@@ -73,7 +75,7 @@ export async function generateMetadata({ params }) {
     openGraph: {
       title: finalTitle,
       description: finalDescription,
-      url: `https://windeg.com/products/${id}`, // ✅ تم التحديث لـ products
+      url: `https://windeg.com/products/${id}`, // ✅ تم تحديث الرابط بـ S
       siteName: 'WIND',
       images: [{ url: product.images?.[0] || product.mainImage || "" }],
       type: 'article',
@@ -83,8 +85,9 @@ export async function generateMetadata({ params }) {
 
 // 2. الصفحة الرئيسية
 export default async function Page({ params, searchParams }) {
-  const { id } = await params; // Next.js 15 Async Params
-  const sourceCat = (await searchParams)?.cat;
+  const { id } = await params; // 🔥 Next.js 15 Fix
+  const sParams = await searchParams; // 🔥 Next.js 15 Fix
+  const sourceCat = sParams?.cat;
   const product = await getProductData(id);
 
   if (!product) return null; // Silent fallback
@@ -107,7 +110,7 @@ export default async function Page({ params, searchParams }) {
     },
     "offers": {
       "@type": "Offer",
-      "url": `https://windeg.com/products/${id}`, // ✅ تم التحديث لـ products
+      "url": `https://windeg.com/products/${id}`, // ✅ تم تحديث الرابط بـ S
       "priceCurrency": "EGP",
       "price": product.price || "0",
       "availability": (Number(product.quantity) > 0 || product.sellOutOfStock === "Yes") ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
