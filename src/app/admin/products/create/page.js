@@ -356,14 +356,15 @@ function CreateProductForm() {
       const documentId = isEditing ? productId : handleToUse;
 
       // 🔥 تنظيف WIND: نعتمد على collections فقط ونحذف categories المكررة لتوفير الكوتا
-        const cleanCollections = (productData.selectedCollections || []).map(slug => slug.replace(/^\//, ''));
+        const cleanCollections = (productData.selectedCollections || []).map(slug => slug.replace(/^\//, '').trim());
         
         // 🔥 تنظيف WIND: استخراج البيانات واستبعاد الحقول المكررة والقديمة تماماً
         const { selectedCollections, categories, Price, type, category, productCategory, barcode, ...pureData } = productData;
 
         const finalProduct = {
           ...pureData,
-          collections: (productData.selectedCollections || []).map(slug => slug.replace(/^\//, '')),
+          categories: cleanCollections, // 🔥 حفظ الأقسام هنا عشان الموقع القديم يقرأها
+          collections: cleanCollections, // 🔥 وحفظها هنا كمان عشان التنظيم الجديد
           images,
           chargeTax,
           // 🔥 توحيد السعر: السعر الرئيسي يتبع دائماً سعر أول Variant لضمان دقة الكارت
@@ -381,8 +382,7 @@ function CreateProductForm() {
           metafields,
           updatedAt: serverTimestamp(),
 
-          // 🔥 حذف الحقول المكررة والقديمة من فايربيز نهائياً (Cleanup)
-          categories: null,
+          // 🔥 حذف الحقول المكررة والقديمة (تم الإبقاء على categories)
           Price: null,
           type: null,
           category: null,
@@ -392,7 +392,6 @@ function CreateProductForm() {
         
 
         // حذف الحقول القديمة من فايربيز لضمان نظافة الوثيقة
-        finalProduct.categories = null; 
         finalProduct.type = null;
         finalProduct.category = null;
 

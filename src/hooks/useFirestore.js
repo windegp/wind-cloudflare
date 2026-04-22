@@ -255,11 +255,11 @@ export const usePaginatedProducts = (categorySlug, limitCount = 10, lastVisibleD
     
     // بناء الكويري الأساسي للقسم
     let q = query(
-      productsRef, 
-      where("collections", "array-contains", categorySlug), // 🔥 التعديل هنا
-      orderBy("createdAt", "desc"), 
-      limit(limitCount)
-    );
+  productsRef, 
+  where("categories", "array-contains-any", [categorySlug, `/${categorySlug}`]), // السلاش للقديم وبدونه للجديد
+  orderBy("createdAt", "desc"), 
+  limit(limitCount)
+);
 
     // إذا كان هناك وثيقة سابقة، ابدأ التحميل من بعدها
     if (lastVisibleDoc) {
