@@ -298,10 +298,20 @@ export default function ProfessionalMenuManager() {
 // 🔥 مسح KV Cache للصفحة الرئيسية
 try {
   await Promise.all([
-    fetch("/api/invalidate-homepage", { method: "POST" }),
-    fetch("/api/invalidate-settings", { method: "POST" })
+    fetch("/api/revalidate", { 
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: 'homepage' })
+    }),
+    fetch("/api/revalidate", { 
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: 'site_settings' })
+    })
   ]);
-} catch {}
+} catch (error) {
+  console.error("WIND Error: Menu and Settings revalidate failed", error);
+}
                 
                 // 🔥 تحديث كاش SWR صمتاً بالبيانات الجديدة
                 mutate('menu-data', { menu: items, collections: availableCollections }, false);

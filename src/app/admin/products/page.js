@@ -104,11 +104,11 @@ export default function ProductsList() {
       // 🔥 6. تحديث الواجهة والذاكرة معاً بعد الحذف بدون إعادة سحب
       // 🔥 مسح KV Cache للمنتج المحذوف
       try {
-        await fetch("/api/invalidate-product", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: documentId })
-        });
+        await fetch('/api/revalidate', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ type: 'product', id: id }) // استخدم المتغير id الصح
+});
       } catch {}
 
       const updatedProducts = products.filter(p => p.id !== id);

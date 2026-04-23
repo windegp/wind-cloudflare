@@ -163,15 +163,15 @@ export default function CollectionsPage() {
             // 🔥 مسح KV Cache للكوليكشن والصفحة الرئيسية
 try {
   const slugToInvalidate = formData.slug?.trim().replace(/^\//, '');
-  await Promise.all([
-    fetch("/api/invalidate-collection", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ slug: slugToInvalidate })
-    }),
-    fetch("/api/invalidate-homepage", { method: "POST" })
-  ]);
-} catch {}
+  
+  await fetch("/api/revalidate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type: 'collection', slug: slugToInvalidate })
+  });
+} catch (error) {
+  console.error("WIND Error: Collection and Homepage revalidate failed", error);
+}
 
             setView('list');
             alert("تم التحديث بنجاح!");

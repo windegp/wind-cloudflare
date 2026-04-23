@@ -404,25 +404,27 @@ function CreateProductForm() {
 
       // 🔥 مسح KV Cache للمنتج والصفحة الرئيسية عند الحفظ
       try {
-        await fetch("/api/invalidate-product", {
+        await fetch("/api/revalidate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: documentId })
+          body: JSON.stringify({ type: 'product', id: documentId })
         });
-      } catch {}
+      } catch (e) { 
+        console.error("WIND Error: Product revalidate failed", e); 
+      }
       
       // 🔥 مسح كاش الأقسام المرتبطة بالمنتج لضمان ظهوره فوراً
       if (finalProduct.collections && finalProduct.collections.length > 0) {
         try {
           await Promise.all(finalProduct.collections.map(async (slug) => {
-            await fetch("/api/invalidate-collection", {
+            await fetch("/api/revalidate", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ slug: slug })
+              body: JSON.stringify({ type: 'collection', slug: slug })
             });
           }));
-        } catch (colError) {
-          console.error("Collection Invalidation Error:", colError);
+        } catch (e) { 
+          console.error("WIND Error: Collections revalidate failed", e); 
         }
       }
 
