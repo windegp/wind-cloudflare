@@ -517,18 +517,20 @@ export default function ReviewsAdminPage() {
     } catch (error) { console.error("Error deleting:", error); }
   };
 
-  // 🔥 زر الطوارئ: إعادة حساب وتصحيح جميع إحصائيات المنتجات من الصفر
+  // 🔥 زر الطوارئ: إعادة حساب + مزامنة ProductStats → products.reviewsCount
   const recalculateAllProductStats = async () => {
-    if (!window.confirm("تحذير: هل أنت متأكد من مزامنة جميع التقييمات؟ ستقوم هذه العملية بجمع النجوم الحقيقية من قاعدة البيانات وإعادة ضبط الإحصائيات لجميع المنتجات.")) return;
+    if (!window.confirm("⚡ مزامنة تاريخية شاملة:\n1. إعادة حساب إحصائيات التقييمات\n2. مزامنة reviewsCount لجميع المنتجات\n\nهل تريد المتابعة؟")) return;
     
     setIsRecalculating(true);
     try {
       const db = getDb();
-      // 1. جلب جميع التقييمات
+      
+      // ═══════════════════════════════════════════════════════════
+      // PHASE 1: إعادة حساب الإحصائيات من Reviews (المنطق القديم)
+      // ═══════════════════════════════════════════════════════════
       const reviewsSnap = await getDocs(query(collection(db, "Reviews")));
       const allReviews = reviewsSnap.docs.map(d => d.data());
 
-      // 2. تجميع النجوم والعدد لكل منتج بدقة
       const statsMap = {};
       allReviews.forEach(rev => {
         const h = rev.productHandle;
@@ -539,28 +541,87 @@ export default function ReviewsAdminPage() {
         }
       });
 
-      // 3. تحديث الإحصائيات باستخدام Batch لضمان السرعة وتوفير الكوتا
-      const batch = writeBatch(db);
+      // ═══════════════════════════════════════════════════════════
+      // PHASE 2: جلب ProductStats + إنشاء lookup للـ handle → doc.id
+      // ═══════════════════════════════════════════════════════════
+      const [pSnap, sSnap] = await Promise.all([
+        getDocs(query(collection(db, "products"), limit(1000))),
+        getDocs(query(collection(db, "ProductStats"), limit(1000)))
+      ]);
+
+      // بناء map: handle → productId
+      const productIdMap = {};
+      pSnap.docs.forEach(d => {
+        const handle = d.data().handle || d.data().seo?.handle || d.id;
+        productIdMap[handle] = d.id;
+      });
+
+      // بناء map: handle → ProductStats data
+      const productStatsMap = {};
+      sSnap.docs.forEach(d => {
+        productStatsMap[d.id] = d.data();
+      });
+
+      // ═══════════════════════════════════════════════════════════
+      // PHASE 3: تحديث ProductStats (المنطق القديم)
+      // ═══════════════════════════════════════════════════════════
+      let batch = writeBatch(db);
+      let batchCount = 0;
+      const batchLimit = 500; // Firestore limit
+
       Object.keys(statsMap).forEach((handle) => {
         const sRef = doc(db, "ProductStats", handle);
         batch.set(sRef, {
           totalCount: statsMap[handle].count,
           totalRatingSum: statsMap[handle].sum,
         }, { merge: true });
+        batchCount++;
+
+        if (batchCount >= batchLimit) {
+          batch.commit();
+          batch = writeBatch(db);
+          batchCount = 0;
+        }
       });
-      
-      if (Object.keys(statsMap).length > 0) {
+
+      // ═══════════════════════════════════════════════════════════
+      // PHASE 4: 🔥 مزامنة ProductStats → products.reviewsCount
+      // ═══════════════════════════════════════════════════════════
+      Object.keys(productStatsMap).forEach((handle) => {
+        const productId = productIdMap[handle];
+        if (productId) {
+          const productRef = doc(db, "products", productId);
+          batch.set(productRef, {
+            reviewsCount: productStatsMap[handle].totalCount || 0
+          }, { merge: true });
+          batchCount++;
+
+          if (batchCount >= batchLimit) {
+            batch.commit();
+            batch = writeBatch(db);
+            batchCount = 0;
+          }
+        }
+      });
+
+      // تنفيذ أي batch متبقي
+      if (batchCount > 0) {
         await batch.commit();
       }
 
-      // تحديث واجهة الأدمن
+      // ═══════════════════════════════════════════════════════════
+      // PHASE 5: تحديث الواجهة والـ Cache
+      // ═══════════════════════════════════════════════════════════
       localStorage.removeItem("wind_admin_data_cache");
-      fetchData();
+      await fetchData();
       
-      alert("🚀 تمت عملية المزامنة بنجاح! جميع التقييمات والنجوم مطابقة الآن لقاعدة البيانات.");
+      const syncedCount = Object.keys(productStatsMap).filter(h => productIdMap[h]).length;
+      const missingCount = Object.keys(productStatsMap).filter(h => !productIdMap[h]).length;
+      
+      alert(`✅ تمت المزامنة بنجاح!\n\n📊 منتجات تم تحديثها: ${syncedCount}\n⚠️ منتجات بدون ID: ${missingCount}\n\nجميع المنتجات الآن تحتوي على reviewsCount محدث.`);
     } catch (err) {
       console.error(err);
-      alert("حدث خطأ أثناء مزامنة التقييمات.");
+      alert("❌ حدث خطأ أثناء المزامنة: " + err.message);
     } finally {
       setIsRecalculating(false);
     }
