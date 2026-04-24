@@ -315,6 +315,9 @@ try {
                 
                 // 🔥 تحديث كاش SWR صمتاً بالبيانات الجديدة
                 mutate('menu-data', { menu: items, collections: availableCollections }, false);
+                // 🔥 تحديث إعدادات الموقع للنوبار (Navbar يستخدم site-settings)
+                mutate('site-settings');
+                mutate('homepage/data');
                 
                 setSaving(false);
                 alert("تم حفظ الهيكل بنجاح!");

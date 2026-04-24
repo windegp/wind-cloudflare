@@ -261,10 +261,12 @@ export default function ReviewsAdminPage() {
               mutate('homepage/data');
               mutate('homepage-reviews');
               mutate('homepage-products-sections');
-              // تحديث كل المنتجات المتأثرة
+              // تحديث كل المنتجات المتأثرة + كاش التقييمات
               affectedHandles.forEach(pHandle => {
                 const productId = products.find(p => p.handle === pHandle)?.id || pHandle;
                 mutate(`product-${productId}`);
+                // 🔥 مسح كاش التقييمات الخاصة بالمنتج (ProductReviews component)
+                mutate(key => typeof key === 'string' && key.startsWith(`reviews-${pHandle}`), undefined, { revalidate: true });
               });
             } catch (e) {
               console.error("WIND CSV Revalidate Error:", e);
@@ -344,6 +346,8 @@ export default function ReviewsAdminPage() {
         mutate('homepage-reviews');
         mutate('homepage-products-sections');
         mutate(`product-${productId}`);
+        // 🔥 مسح كاش التقييمات الخاصة بالمنتج (ProductReviews component)
+        mutate(key => typeof key === 'string' && key.startsWith(`reviews-${pHandle}`), undefined, { revalidate: true });
       } catch (e) {
         console.error("WIND Revalidate Error:", e);
       }
@@ -435,6 +439,8 @@ export default function ReviewsAdminPage() {
         mutate('homepage-products-sections');
         mutate('homepage-reviews');
         mutate(`product-${productId}`);
+        // 🔥 مسح كاش التقييمات الخاصة بالمنتج (ProductReviews component)
+        mutate(key => typeof key === 'string' && key.startsWith(`reviews-${productHandle}`), undefined, { revalidate: true });
       } catch (e) {
         console.error("WIND Cache Revalidate Error:", e);
       }
