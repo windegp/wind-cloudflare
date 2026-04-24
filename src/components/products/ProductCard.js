@@ -22,55 +22,66 @@ export default function ProductCard(props) {
 
   useEffect(() => setMounted(true), []);
 
-  // 🔥 استرجاع النجوم بذكاء: Props (initial) → SessionCache → KV API → Firebase
+  // 🔥 استرجاع النجوم بذكاء: Props (PRIMARY) → SessionCache (fallback) → KV API (last resort)
   useEffect(() => {
     const handleToSearch = props.handle || props.seo?.handle || String(props.id);
     if (!handleToSearch) return;
 
-    // 1. استخدام البيانات الممررة (Props) كـ initial state فقط
-    if (props.reviewsCount !== undefined && props.rating !== undefined) {
-      setReviewsData({ count: props.reviewsCount, rating: props.rating });
+    const cacheKey = `wind_stats_${handleToSearch}`;
+    
+    // 🔥 PRIORITY 1: Use props.reviewsCount if available (synced from /api/homepage via mutate)
+    if (props.reviewsCount !== undefined && props.reviewsCount > 0) {
+      const result = { 
+        count: props.reviewsCount, 
+        rating: props.rating || 5, 
+        timestamp: Date.now() 
+      };
+      setReviewsData(result);
+      setMergedProduct(prev => ({ ...prev, reviewsCount: props.reviewsCount, rating: props.rating }));
+      // Cache for consistency but don't fetch - props are live via SWR mutation
+      sessionStorage.setItem(cacheKey, JSON.stringify(result));
+      return; // ✅ No API call needed - props are live!
     }
 
-    // 2. الكاش الذكي (Session Cache) - نستخدمه للـ initial render فقط
-    const cacheKey = `wind_stats_${handleToSearch}`;
+    // 🔥 PRIORITY 2: No props? Check sessionStorage
     const cachedData = sessionStorage.getItem(cacheKey);
-    
-    // 3. السحب من KV Cache عبر API (ALWAYS fetch fresh data)
-    const fetchStats = async () => {
-      try {
-        const res = await fetch(`/api/product-stats?handle=${encodeURIComponent(handleToSearch)}`);
-        if (res.ok) {
-          const json = await res.json();     
-          // 🔥 نحدث دائماً بالبيانات الحية من API (ت override الـ props القديمة)
-          const result = { count: json.count, rating: json.rating, timestamp: Date.now() };
-          setReviewsData(result);
-          setMergedProduct(prev => ({ ...prev, reviewsCount: json.count, rating: json.rating }));
-          sessionStorage.setItem(cacheKey, JSON.stringify(result));
-        }
-      } catch (error) {
-        // خطأ صامت في الخلفية حتى لا يزعج العميل
-        console.error("WIND Error: Product Stats fetch failed", error);
-      }
-    };
-    
-    // 🔥 تعديل WIND: لو في كاش جديد نستخدمه مؤقتاً، لكن نسحب فريش على طول في الخلفية
     if (cachedData) {
-      const parsed = JSON.parse(cachedData); 
-      // نستخدم الكاش للعرض الفوري فقط لو البروبس فاضية
-      if (props.reviewsCount === undefined || props.reviewsCount === 0) {
+      const parsed = JSON.parse(cachedData);
+      const cacheAge = Date.now() - (parsed.timestamp || 0);
+      
+      // Use cache if fresh (< 60 seconds) and no props available
+      if (cacheAge < 60000) {
         setReviewsData(parsed);
         setMergedProduct(prev => ({ ...prev, reviewsCount: parsed.count, rating: parsed.rating }));
+        // Silently refresh in background if old
+        if (cacheAge > 30000) {
+          fetchStats(handleToSearch, cacheKey, true); // silent background fetch
+        }
+        return;
       }
-      // نسحب فريش بعدين (stale-while-revalidate pattern)
-      if (!parsed.timestamp || Date.now() - parsed.timestamp > 5000) {
-        fetchStats();
-      }
-    } else {
-      // مفيش كاش، نسحب على طول
-      fetchStats();
     }
+
+    // 🔥 PRIORITY 3: No props, no fresh cache → fetch from API
+    fetchStats(handleToSearch, cacheKey, false);
   }, [props.id, props.handle, props.reviewsCount, props.rating]);
+
+  // Separate fetch function for cleaner control
+  const fetchStats = async (handleToSearch, cacheKey, silent) => {
+    try {
+      const res = await fetch(`/api/product-stats?handle=${encodeURIComponent(handleToSearch)}`);
+      if (res.ok) {
+        const json = await res.json();     
+        const result = { count: json.count, rating: json.rating, timestamp: Date.now() };
+        setReviewsData(result);
+        if (!silent) {
+          setMergedProduct(prev => ({ ...prev, reviewsCount: json.count, rating: json.rating }));
+        }
+        sessionStorage.setItem(cacheKey, JSON.stringify(result));
+      }
+    } catch (error) {
+      console.error("WIND Error: Product Stats fetch failed", error);
+    }
+  };
 
   const { id, handle, title, price, oldPrice, compareAtPrice, category, productCategory, 
 type, folderName, mainImage, image, images, variants, colorSwatches, options, colors, collections } = 

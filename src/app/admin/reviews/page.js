@@ -78,16 +78,31 @@ export default function ReviewsAdminPage() {
       const db = getDb();
       // 🔥 وضع صمام أمان (Limit 1000) لمنع استنزاف الكوتا
       const q = query(collection(db, "products"), limit(1000));
-      const snap = await getDocs(q);
-      const docs = snap.docs.map(doc => ({ 
-        id: doc.id, 
-        title: doc.data().title || "بدون اسم",
-        handle: doc.data().handle || doc.data().seo?.handle || doc.id,
-        likesCount: doc.data().likesCount || 0,
-        likesUpdatedAt: doc.data().likesUpdatedAt || null,
-        currentWeekId: doc.data().currentWeekId || null,
-        weeklyLikesCount: doc.data().weeklyLikesCount || 0
-      }));
+      const [pSnap, sSnap] = await Promise.all([
+        getDocs(q),
+        getDocs(query(collection(db, "ProductStats"), limit(1000)))
+      ]);
+      
+      // بناء map للـ ProductStats
+      const statsMap = {};
+      sSnap.docs.forEach(doc => { statsMap[doc.id] = doc.data(); });
+      
+      const docs = pSnap.docs.map(doc => {
+        const data = doc.data();
+        const handle = data.handle || data.seo?.handle || doc.id;
+        const stats = statsMap[handle];
+        return { 
+          id: doc.id, 
+          title: data.title || "بدون اسم",
+          handle: handle,
+          likesCount: data.likesCount || 0,
+          likesUpdatedAt: data.likesUpdatedAt || null,
+          currentWeekId: data.currentWeekId || null,
+          weeklyLikesCount: data.weeklyLikesCount || 0,
+          // 🔥 إضافة reviewsCount من ProductStats للـ Dropdown
+          reviewsCount: stats?.totalCount || 0
+        };
+      });
       setProducts(docs);
       
       // تهيئة حالة الإعجابات
@@ -235,6 +250,17 @@ export default function ReviewsAdminPage() {
             }, { merge: true });
           });
 
+          // 🔥 تحديث reviewsCount في products collection لكل منتج متأثر (للـ Homepage API)
+          Object.keys(statsUpdates).forEach((handle) => {
+            const productId = products.find(p => p.handle === handle)?.id;
+            if (productId) {
+              const productRef = doc(db, "products", productId);
+              batch.set(productRef, {
+                reviewsCount: increment(statsUpdates[handle].count)
+              }, { merge: true });
+            }
+          });
+
           if (count > 0) {
             await batch.commit();
             // 🔥 مسح الكاش وسحب الداتا من جديد عشان كل المنتجات تتحدث أوتوماتيك
@@ -310,12 +336,21 @@ export default function ReviewsAdminPage() {
         source: "manual"
       });
 
-      // 2. تحديث العداد في فايربيز
+      // 2. تحديث العداد في فايربيز (ProductStats - Source of Truth)
       const statsRef = doc(db, "ProductStats", pHandle);
       batch.set(statsRef, {
         totalCount: increment(1),
         totalRatingSum: increment(pRating)
       }, { merge: true });
+
+      // 🔥 2b. تحديث reviewsCount في products collection (للـ Homepage API)
+      const productId = products.find(p => p.handle === pHandle)?.id;
+      if (productId) {
+        const productRef = doc(db, "products", productId);
+        batch.set(productRef, {
+          reviewsCount: increment(1)
+        }, { merge: true });
+      }
 
       await batch.commit();
 
@@ -330,7 +365,8 @@ export default function ReviewsAdminPage() {
       }));
 
       // 🔥 4. مسح KV Cache + تحديث فوري للواجهة (مثل likes)
-      const productId = products.find(p => p.handle === pHandle)?.id || pHandle;
+      // productId already declared above for batch update
+      const effectiveProductId = productId || pHandle;
       try {
         await fetch('/api/revalidate', {
           method: 'POST',
@@ -338,14 +374,14 @@ export default function ReviewsAdminPage() {
           body: JSON.stringify({
             type: 'product_stats',
             handle: pHandle,
-            id: productId
+            id: effectiveProductId
           })
         });
         sessionStorage.removeItem(`wind_stats_${pHandle}`);
         mutate('homepage/data');
         mutate('homepage-reviews');
         mutate('homepage-products-sections');
-        mutate(`product-${productId}`);
+        mutate(`product-${effectiveProductId}`);
         // 🔥 مسح كاش التقييمات الخاصة بالمنتج (ProductReviews component)
         mutate(key => typeof key === 'string' && key.startsWith(`reviews-${pHandle}`), undefined, { revalidate: true });
       } catch (e) {
@@ -413,17 +449,33 @@ export default function ReviewsAdminPage() {
     if(!window.confirm("هل أنت متأكد؟ سيتم تحديث إحصائيات المنتج أوتوماتيكياً.")) return;
     try {
       const db = getDb();
-      await deleteDoc(doc(db, "Reviews", id));
+      const batch = writeBatch(db);
 
+      // 1. حذف التقييم من Reviews collection
+      const reviewRef = doc(db, "Reviews", id);
+      batch.delete(reviewRef);
+
+      // 2. تحديث ProductStats (Source of Truth)
       const statsRef = doc(db, "ProductStats", productHandle);
-      await setDoc(statsRef, {
+      batch.set(statsRef, {
         totalCount: increment(-1),
         totalRatingSum: increment(-Number(reviewRating))
       }, { merge: true });
+
+      // 🔥 3. تحديث reviewsCount في products collection (للـ Homepage API)
+      const productId = selectedProductForReviews?.id;
+      if (productId) {
+        const productRef = doc(db, "products", productId);
+        batch.set(productRef, {
+          reviewsCount: increment(-1)
+        }, { merge: true });
+      }
+
+      await batch.commit();
       
       // 🔥 إشارة WIND الموحدة: تحديث إحصائيات المنتج والصفحات المرتبطة فوراً
-      // استخدام selectedProductForReviews.id (Firestore doc ID) للـ product cache
-      const productId = selectedProductForReviews?.id || productHandle;
+      // (نفس logic الـ handleAddManualReview بالظبط)
+      const effectiveProductId = productId || productHandle;
       try {
         await fetch('/api/revalidate', {
           method: 'POST',
@@ -431,14 +483,14 @@ export default function ReviewsAdminPage() {
           body: JSON.stringify({
             type: 'product_stats',
             handle: productHandle,
-            id: productId
+            id: effectiveProductId
           })
         });
         sessionStorage.removeItem(`wind_stats_${productHandle}`);
         mutate('homepage/data');
         mutate('homepage-products-sections');
         mutate('homepage-reviews');
-        mutate(`product-${productId}`);
+        mutate(`product-${effectiveProductId}`);
         // 🔥 مسح كاش التقييمات الخاصة بالمنتج (ProductReviews component)
         mutate(key => typeof key === 'string' && key.startsWith(`reviews-${productHandle}`), undefined, { revalidate: true });
       } catch (e) {
