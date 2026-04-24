@@ -22,46 +22,31 @@ export default function ProductCard(props) {
 
   useEffect(() => setMounted(true), []);
 
-  // 🔥 استرجاع النجوم بذكاء: Props → SessionCache → KV API → Firebase
+  // 🔥 استرجاع النجوم بذكاء: Props (initial) → SessionCache → KV API → Firebase
   useEffect(() => {
-    // 1. استخدام البيانات الممررة (Props) لو متوفرة
-    if (props.reviewsCount !== undefined && props.rating !== undefined && props.reviewsCount > 0) {
-      setReviewsData({ count: props.reviewsCount, rating: props.rating });
-      return;
-    }
-
     const handleToSearch = props.handle || props.seo?.handle || String(props.id);
     if (!handleToSearch) return;
 
-    // 2. الكاش الذكي (Session Cache) لمنع السحب المتكرر في نفس الجلسة
+    // 1. استخدام البيانات الممررة (Props) كـ initial state فقط
+    if (props.reviewsCount !== undefined && props.rating !== undefined) {
+      setReviewsData({ count: props.reviewsCount, rating: props.rating });
+    }
+
+    // 2. الكاش الذكي (Session Cache) - نستخدمه للـ initial render فقط
     const cacheKey = `wind_stats_${handleToSearch}`;
     const cachedData = sessionStorage.getItem(cacheKey);
     
-    if (cachedData) {
-      const parsed = JSON.parse(cachedData); 
-      setReviewsData(parsed);
-      setMergedProduct(prev => ({ ...prev, reviewsCount: parsed.count, rating: parsed.rating }));
-      
-      // 🔥 تعديل WIND: لو الكاش لسه جديد (أقل من دقيقة)، وفر الكوتا وما تسحبش
-      // لكن لو قديم، كمل الدالة واسحب الداتا فريش في الخلفية وحدث الكارت!
-      if (parsed.timestamp && Date.now() - parsed.timestamp < 60000) {
-        return;
-      }
-    }
-
-    // 3. السحب من KV Cache عبر API
+    // 3. السحب من KV Cache عبر API (ALWAYS fetch fresh data)
     const fetchStats = async () => {
       try {
         const res = await fetch(`/api/product-stats?handle=${encodeURIComponent(handleToSearch)}`);
         if (res.ok) {
           const json = await res.json();     
-          if (json.count > 0) {
-            // 🔥 ضفنا الـ timestamp عشان المتصفح يعرف عمر الكاش
-            const result = { count: json.count, rating: json.rating, timestamp: Date.now() };
-            setReviewsData(result);
-            setMergedProduct(prev => ({ ...prev, reviewsCount: json.count, rating: json.rating }));
-            sessionStorage.setItem(cacheKey, JSON.stringify(result));
-          }
+          // 🔥 نحدث دائماً بالبيانات الحية من API (ت override الـ props القديمة)
+          const result = { count: json.count, rating: json.rating, timestamp: Date.now() };
+          setReviewsData(result);
+          setMergedProduct(prev => ({ ...prev, reviewsCount: json.count, rating: json.rating }));
+          sessionStorage.setItem(cacheKey, JSON.stringify(result));
         }
       } catch (error) {
         // خطأ صامت في الخلفية حتى لا يزعج العميل
@@ -69,7 +54,22 @@ export default function ProductCard(props) {
       }
     };
     
-    fetchStats();
+    // 🔥 تعديل WIND: لو في كاش جديد نستخدمه مؤقتاً، لكن نسحب فريش على طول في الخلفية
+    if (cachedData) {
+      const parsed = JSON.parse(cachedData); 
+      // نستخدم الكاش للعرض الفوري فقط لو البروبس فاضية
+      if (props.reviewsCount === undefined || props.reviewsCount === 0) {
+        setReviewsData(parsed);
+        setMergedProduct(prev => ({ ...prev, reviewsCount: parsed.count, rating: parsed.rating }));
+      }
+      // نسحب فريش بعدين (stale-while-revalidate pattern)
+      if (!parsed.timestamp || Date.now() - parsed.timestamp > 5000) {
+        fetchStats();
+      }
+    } else {
+      // مفيش كاش، نسحب على طول
+      fetchStats();
+    }
   }, [props.id, props.handle, props.reviewsCount, props.rating]);
 
   const { id, handle, title, price, oldPrice, compareAtPrice, category, productCategory, 

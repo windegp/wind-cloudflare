@@ -81,11 +81,24 @@ export default function QuickViewModal({ product, isOpen, onClose }) {
       setQvActiveImage(product.images?.[0] || product.mainImageUrl || product.image || product.mainImage || "");
       setQvQuantity(1);
 
-      // ✅ تحديث التقييمات من البيانات الجاهزة فوراً
+      // ✅ تحديث التقييمات من البيانات الجاهزة فوراً (initial)
       setQvReviewsData({ 
         count: product.reviewsCount || 0, 
         rating: product.rating || 0 
       });
+      
+      // 🔥 تعديل WIND: جلب fresh data من API عشان الـ counts تكون حية
+      const handleToSearch = product.handle || product.seo?.handle || String(product.id);
+      if (handleToSearch) {
+        fetch(`/api/product-stats?handle=${encodeURIComponent(handleToSearch)}`)
+          .then(res => res.ok ? res.json() : null)
+          .then(json => {
+            if (json) {
+              setQvReviewsData({ count: json.count, rating: json.rating });
+            }
+          })
+          .catch(() => {}); // خطأ صامت
+      }
     }
   }, [product, isOpen]);
 
