@@ -204,7 +204,7 @@ const fetchHomepageProductsSections = async () => {
 // هوك الإعدادات (مقفل الكوتا بالكامل)
 export const useSiteSettings = () => {
   return useSWR('settings/siteSettings', fetchDoc, {
-    dedupingInterval: 3600000, // ساعة كاملة كاش
+    dedupingInterval: 300000, // 5 دقائق كاش (mutate() بيجبر الريفريش فوراً)
     revalidateOnFocus: false,
     revalidateOnReconnect: false
   });
@@ -218,7 +218,7 @@ export const useProductsList = (limitCount = 20) => {
 // هوك تقييمات الصفحة الرئيسية (مقفل الكوتا بالكامل)
 export const useHomepageReviews = () => {
   return useSWR('homepage-reviews', fetchHomepageReviews, {
-    dedupingInterval: 3600000, // ساعة كاملة كاش
+    dedupingInterval: 300000, // 5 دقائق كاش (mutate() بيجبر الريفريش فوراً)
     revalidateOnFocus: false,
     revalidateOnReconnect: false
   });
@@ -350,13 +350,15 @@ export const useRelatedProducts = (product) => {
   };
 
   return useSWR(product?.id ? `related-${product.id}` : null, fetcher, {
-    dedupingInterval: 3600000,
+    dedupingInterval: 600000, // 10 دقائق كاش
     revalidateOnFocus: false
   });
 };
-// 🚀 هوك جلب تقييمات المنتج (3 تقييمات فقط في المرة)
+// هوك جلب تقييمات المنتج (3 تقييمات فقط في المرة)
 
-// 🚀 النسخة النهائية المفلترة والمحمية من الكوتا
+// هوك جلب تقييمات المنتج (3 تقييمات فقط في المرة)
+
+// النسخة النهائية المفلترة والمحمية من الكوتا
 export const usePaginatedReviews = (productHandle, lastVisibleDoc = null, filter = "all") => {
   const fetcher = async () => {
     if (!productHandle) return { reviews: [], lastDoc: null };

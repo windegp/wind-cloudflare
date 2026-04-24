@@ -6,7 +6,8 @@ import { products as staticProducts } from "../../../lib/products";
 import { useCart } from "../../../context/CartContext";
 import { usePageReady, useGlobalLoader } from "../../../context/GlobalLoaderContext";
 import { getDb } from "../../../lib/firebase";
-import { doc, updateDoc, increment } from "firebase/firestore/lite"; 
+import { doc, updateDoc, increment } from "firebase/firestore/lite";
+import { mutate } from 'swr'; 
 import SizeChartModal from "@/components/SizeChartModal";
 import ProductReviews from "@/components/products/ProductReviews";
 // استدعاء الهوكات الجديدة لتقليل استهلاك الكوتا
@@ -154,6 +155,11 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             id: product.id,
             handle: product.handle || product.id
           })
+        }).then(() => {
+          sessionStorage.removeItem(`wind_stats_${product.handle || product.id}`);
+          mutate('homepage/data');
+          mutate('homepage-products-sections');
+          mutate(`product-${product.id}`);
         }).catch(() => {});
 
       } catch (error) {

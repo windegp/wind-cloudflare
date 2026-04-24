@@ -23,19 +23,16 @@ export async function POST(request) {
     revalidatePath('/');
     if (handle) revalidatePath(`/products/${handle}`);
   } else if (type === 'product_stats' && handle) {
-    keysToDelete = [`product_stats_${handle}`, `product_${handle}`, 'homepage_data_v1', 'homepage_reviews_v1'];
+    keysToDelete = [`product_stats_${handle}`, 'homepage_data_v1', 'homepage_reviews_v1'];
+    if (id) keysToDelete.push(`product_${id}`);
     revalidatePath('/');
     revalidatePath(`/products/${handle}`);
-  } 
-  // 👇 الجزء الجديد هنا:
-  else if (type === 'likes' && id) {
+  } else if (type === 'likes' && id) {
     keysToDelete = [`product_${id}`, 'homepage_data_v1'];
     if (handle) keysToDelete.push(`product_stats_${handle}`);
-    // اختياري: لو حابب تحديث فوري للصفحة كـ HTML
     if (handle) revalidatePath(`/products/${handle}`);
     revalidatePath('/');
-  } 
-  // 👆 انتهى الجزء الجديد
+  }
   else if (type === 'collection' && slug) {
     keysToDelete = [`collection_${slug}`, 'homepage_data_v1'];
     revalidatePath('/');

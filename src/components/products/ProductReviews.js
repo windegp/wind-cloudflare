@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useState } from 'react';
+import { mutate } from 'swr';
 import { getDb } from '@/lib/firebase';
 import { 
   collection, getDocs, query, limit, 
@@ -173,17 +174,22 @@ export default function ProductReviews({ productHandle, onReviewStatsUpdate }) {
         totalRatingSum: increment(Number(newReview.rating)) // 👈 هذا ما كان ينقصنا
       }, { merge: true });
 
-      // 3. إشارة WIND لمسح كاش إحصائيات المنتج في KV لتحديث النجوم فوراً في الموقع
+      // 3. مسح KV Cache + تحديث فوري للواجهة
       try {
         await fetch('/api/revalidate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
-            secret: process.env.NEXT_PUBLIC_REVALIDATE_SECRET, 
             type: 'product_stats',
             handle: productHandle 
           })
         });
+        // مسح sessionStorage عشان الـ ProductCard يسحب فريش
+        sessionStorage.removeItem(`wind_stats_${productHandle}`);
+        // تحديث فوري لكل الـ SWR caches المرتبطة
+        mutate('homepage/data');
+        mutate('homepage-products-sections');
+        mutate('homepage-reviews');
       } catch (e) {
         console.error("WIND Cache Revalidate Error:", e);
       }

@@ -23,7 +23,7 @@ export default function HomeSectionsMainContent() {
       throw new Error('Failed to fetch homepage data');
     }
     return result.data;
-  }, { dedupingInterval: 3600000 });
+  }, { dedupingInterval: 300000 });
 
   // استخراج بيانات التنسيق والهيرو من ال API
   const layoutConfig = homepageData?.layout?.sections || [];

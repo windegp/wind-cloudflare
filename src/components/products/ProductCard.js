@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { ShoppingBag, Eye, Heart, Star, X } from '@/components/icons-extra';
 import { getDb } from "../../lib/firebase";
 import { doc, updateDoc, increment, getDoc } from "firebase/firestore/lite";
+import { mutate } from 'swr';
 
 import QuickViewModal from "@/components/QuickViewModal";
 import ProductReviews from "@/components/products/ProductReviews";
@@ -129,16 +130,28 @@ mergedProduct;
     localStorage.setItem('wind_wishlist', JSON.stringify(newWishlist));
     try {
       const productRef = doc(getDb(), "products", id.toString());
-      await updateDoc(productRef, { likesCount: increment(isCurrentlyWishlisted ? -1 : 1) });
-      // 🔥 مسح KV Cache بعد Firebase
+      const likeChange = isCurrentlyWishlisted ? -1 : 1;
+      const updatePayload = {
+        likesCount: increment(likeChange),
+        likesUpdatedAt: new Date().toISOString(),
+        weeklyLikesCount: increment(likeChange)
+      };
+      await updateDoc(productRef, updatePayload);
+      // 🔥 مسح KV Cache + تحديث فوري للواجهة
+      const resolvedHandle = handle || mergedProduct.handle || mergedProduct.seo?.handle || String(id);
       fetch('/api/revalidate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type: 'likes',
           id: id.toString(),
-          handle: handle || String(id)
+          handle: resolvedHandle
         })
+      }).then(() => {
+        sessionStorage.removeItem(`wind_stats_${resolvedHandle}`);
+        mutate('homepage/data');
+        mutate('homepage-products-sections');
+        mutate(`product-${id}`);
       }).catch(() => {});
     } catch (e) { console.log("Like Update Failed"); } finally { setIsLikeProcessing(false); }
   };

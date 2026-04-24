@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { getDb } from "@/lib/firebase";
 import { collection, query, getDocs, deleteDoc, doc, writeBatch, orderBy, updateDoc, setDoc, increment, where, limit, startAfter } from "firebase/firestore/lite";
 import Papa from 'papaparse';
+import { mutate } from 'swr';
 import { Star, Upload, Plus, MessageSquare, CheckCircle, X, Trash2, Calendar, Save, Heart, Eye, Loader2 } from '@/components/icons-extra';
 
 export const dynamic = 'force-dynamic';
@@ -151,6 +152,23 @@ export default function ReviewsAdminPage() {
 
       await updateDoc(productRef, updateData);
 
+      // مسح KV Cache + تحديث فوري للواجهة
+      try {
+        await fetch('/api/revalidate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'likes',
+            id: productId,
+            handle: productToUpdate.handle || productId
+          })
+        });
+        sessionStorage.removeItem(`wind_stats_${productToUpdate.handle || productId}`);
+        mutate('homepage/data');
+        mutate('homepage-products-sections');
+      } catch (e) {
+        console.error("WIND Likes Revalidate Error:", e);
+      }
 
       // تحديث الواجهة أوتوماتيك
       setProducts(products.map(p => p.id === productId ? { 
@@ -350,19 +368,25 @@ export default function ReviewsAdminPage() {
       }, { merge: true });
       
       // 🔥 إشارة WIND الموحدة: تحديث إحصائيات المنتج والصفحات المرتبطة فوراً
-try {
-  await fetch('/api/revalidate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+      // استخدام selectedProductForReviews.id (Firestore doc ID) للـ product cache
+      const productId = selectedProductForReviews?.id || productHandle;
+      try {
+        await fetch('/api/revalidate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
             type: 'product_stats',
-            handle: productHandle
+            handle: productHandle,
+            id: productId
           })
-  });
-  console.log("WIND: Cache revalidated successfully");
-} catch (e) {
-  console.error("WIND Cache Revalidate Error:", e);
-}
+        });
+        sessionStorage.removeItem(`wind_stats_${productHandle}`);
+        mutate('homepage/data');
+        mutate('homepage-products-sections');
+        mutate('homepage-reviews');
+      } catch (e) {
+        console.error("WIND Cache Revalidate Error:", e);
+      }
 
       // تحديث المودال
       setSelectedProductReviews(prev => prev.filter(r => r.id !== id));
