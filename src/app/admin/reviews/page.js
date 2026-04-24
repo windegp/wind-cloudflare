@@ -151,24 +151,7 @@ export default function ReviewsAdminPage() {
 
       await updateDoc(productRef, updateData);
 
-      // 🔥 إشارة WIND: مسح كاش صفحة المنتج والهوم بيج عشان الإعجابات الجديدة تسمع فوراً للزوار
-      try {
-        await fetch('/api/revalidate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            secret: process.env.NEXT_PUBLIC_REVALIDATE_SECRET, 
-            type: 'product',
-            id: productId, 
-            handle: productToUpdate.handle 
-          })
-        });
-      } catch (e) {
-        console.error("WIND Cache Revalidate Error:", e);
-      }
-
-      // تحديث الواجهة أوتوماتيك
-
+      
       // تحديث الواجهة أوتوماتيك
       setProducts(products.map(p => p.id === productId ? { 
         ...p, 
@@ -378,20 +361,21 @@ export default function ReviewsAdminPage() {
         totalRatingSum: increment(-Number(reviewRating))
       }, { merge: true });
       
-      // 🔥 إشارة WIND: مسح كاش الإحصائيات + كاش التقييمات في الرئيسية فوراً
-      try {
-        await fetch('/api/revalidate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            secret: process.env.NEXT_PUBLIC_REVALIDATE_SECRET, 
-            type: 'product_stats',
-            handle: productHandle 
-          })
-        });
-      } catch (e) {
-        console.error("WIND Cache Revalidate Error:", e);
-      }
+      // 🔥 إشارة WIND الموحدة: تحديث إحصائيات المنتج والصفحات المرتبطة فوراً
+try {
+  await fetch('/api/revalidate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ 
+      type: 'product_stats',
+      id: productId,        // الـ ID بتاع المنتج
+      handle: productHandle // الـ Slug بتاع المنتج (مهم جداً)
+    })
+  });
+  console.log("WIND: Cache revalidated successfully");
+} catch (e) {
+  console.error("WIND Cache Revalidate Error:", e);
+}
 
       // تحديث المودال
       setSelectedProductReviews(prev => prev.filter(r => r.id !== id));
@@ -449,17 +433,6 @@ export default function ReviewsAdminPage() {
         await batch.commit();
       }
 
-      // 4. مسح الكاش الشامل للموقع بالكامل
-      try {
-        await fetch('/api/revalidate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            secret: process.env.NEXT_PUBLIC_REVALIDATE_SECRET, 
-            type: 'all' 
-          })
-        });
-      } catch (e) {}
 
       // تحديث واجهة الأدمن
       localStorage.removeItem("wind_admin_data_cache");
