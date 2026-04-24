@@ -130,6 +130,16 @@ mergedProduct;
     try {
       const productRef = doc(getDb(), "products", id.toString());
       await updateDoc(productRef, { likesCount: increment(isCurrentlyWishlisted ? -1 : 1) });
+      // 🔥 مسح KV Cache بعد Firebase
+      fetch('/api/revalidate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'likes',
+          id: id.toString(),
+          handle: handle || String(id)
+        })
+      }).catch(() => {});
     } catch (e) { console.log("Like Update Failed"); } finally { setIsLikeProcessing(false); }
   };
 

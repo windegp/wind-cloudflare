@@ -354,11 +354,10 @@ try {
   await fetch('/api/revalidate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ 
-      type: 'product_stats',
-      id: productId,        // الـ ID بتاع المنتج
-      handle: productHandle // الـ Slug بتاع المنتج (مهم جداً)
-    })
+    body: JSON.stringify({
+            type: 'product_stats',
+            handle: productHandle
+          })
   });
   console.log("WIND: Cache revalidated successfully");
 } catch (e) {

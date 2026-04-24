@@ -10,9 +10,6 @@ export async function POST(request) {
 
   const { type, id, slug, handle, keys } = body;
   
-  // لا نحتاج Secret Key هنا لأن صفحات الأدمن محمية بالفعل (Auth)
-  // وهذا يمنع ظهور المتغيرات في المتصفح
-
   let keysToDelete = [];
 
   if (keys?.length > 0) {
@@ -26,11 +23,20 @@ export async function POST(request) {
     revalidatePath('/');
     if (handle) revalidatePath(`/products/${handle}`);
   } else if (type === 'product_stats' && handle) {
-    // 🔥 هذا الجزء سيحل مشكلة التقييمات المعلقة
-    keysToDelete = [`product_stats_${handle}`, 'homepage_data_v1', 'homepage_reviews_v1'];
+    keysToDelete = [`product_stats_${handle}`, `product_${handle}`, 'homepage_data_v1', 'homepage_reviews_v1'];
     revalidatePath('/');
     revalidatePath(`/products/${handle}`);
-  } else if (type === 'collection' && slug) {
+  } 
+  // 👇 الجزء الجديد هنا:
+  else if (type === 'likes' && id) {
+    keysToDelete = [`product_${id}`, 'homepage_data_v1'];
+    if (handle) keysToDelete.push(`product_stats_${handle}`);
+    // اختياري: لو حابب تحديث فوري للصفحة كـ HTML
+    if (handle) revalidatePath(`/products/${handle}`);
+    revalidatePath('/');
+  } 
+  // 👆 انتهى الجزء الجديد
+  else if (type === 'collection' && slug) {
     keysToDelete = [`collection_${slug}`, 'homepage_data_v1'];
     revalidatePath('/');
     revalidatePath(`/collections/${slug}`);
@@ -44,7 +50,7 @@ export async function POST(request) {
         const list = await kv.list();
         keysToDelete = list.keys.map(k => k.name);
       }
-      revalidatePath('/', 'layout'); // يمسح كاش الموقع بالكامل
+      revalidatePath('/', 'layout');
     } catch {}
   }
 

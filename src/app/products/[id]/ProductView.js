@@ -141,10 +141,23 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           updateData.currentWeekId = currentWeekIdStr;
         }
 
+       // 1. استنى فايربيز يخلص حفظ الأول
         await updateDoc(productRef, updateData);
-        pendingActionRef.current = 0; // تصفير العداد بعد نجاح الإرسال
+        pendingActionRef.current = 0; 
+
+        // 2. 🔥 هنا مكان الإضافة الصح! بعد التأكد إن الداتا الجديدة بقت في فايربيز
+        fetch('/api/revalidate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'likes',
+            id: product.id,
+            handle: product.handle || product.id
+          })
+        }).catch(() => {});
+
       } catch (error) {
-        console.log("Firebase Update Skipped:", error);
+        console.log("Firebase Update Error:", error);
         pendingActionRef.current = 0;
       }
     }, 1500);
