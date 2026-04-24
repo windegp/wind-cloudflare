@@ -240,7 +240,37 @@ export default function ReviewsAdminPage() {
             // 🔥 مسح الكاش وسحب الداتا من جديد عشان كل المنتجات تتحدث أوتوماتيك
             localStorage.removeItem("wind_admin_data_cache");
             fetchData();
-            alert(`تم رفع ${count} تقييم وتحديث إحصائيات ${Object.keys(statsUpdates).length} منتج بدقة ✅`);
+            
+            // 🔥 مسح KV Cache + تحديث فوري لكل المنتجات المتأثرة
+            const affectedHandles = Object.keys(statsUpdates);
+            try {
+              await Promise.all(affectedHandles.map(async (pHandle) => {
+                const productId = products.find(p => p.handle === pHandle)?.id || pHandle;
+                await fetch('/api/revalidate', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    type: 'product_stats',
+                    handle: pHandle,
+                    id: productId
+                  })
+                });
+                sessionStorage.removeItem(`wind_stats_${pHandle}`);
+              }));
+              // تحديث فوري لكل الـ SWR caches
+              mutate('homepage/data');
+              mutate('homepage-reviews');
+              mutate('homepage-products-sections');
+              // تحديث كل المنتجات المتأثرة
+              affectedHandles.forEach(pHandle => {
+                const productId = products.find(p => p.handle === pHandle)?.id || pHandle;
+                mutate(`product-${productId}`);
+              });
+            } catch (e) {
+              console.error("WIND CSV Revalidate Error:", e);
+            }
+            
+            alert(`تم رفع ${count} تقييم وتحديث إحصائيات ${affectedHandles.length} منتج بدقة ✅`);
           }
         } catch (error) {
           console.error("Error uploading batch:", error);
@@ -297,9 +327,29 @@ export default function ReviewsAdminPage() {
         }
       }));
 
-      // 🔥 4. مسح الكاش عشان لو عملت ريفريش يقرأ الجديد من فايربيز
-      localStorage.removeItem("wind_admin_data_cache");
+      // 🔥 4. مسح KV Cache + تحديث فوري للواجهة (مثل likes)
+      const productId = products.find(p => p.handle === pHandle)?.id || pHandle;
+      try {
+        await fetch('/api/revalidate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'product_stats',
+            handle: pHandle,
+            id: productId
+          })
+        });
+        sessionStorage.removeItem(`wind_stats_${pHandle}`);
+        mutate('homepage/data');
+        mutate('homepage-reviews');
+        mutate('homepage-products-sections');
+        mutate(`product-${productId}`);
+      } catch (e) {
+        console.error("WIND Revalidate Error:", e);
+      }
 
+      // 🔥 5. مسح الكاش المحلي
+      localStorage.removeItem("wind_admin_data_cache");
 
       setShowAddModal(false);
       setNewReview({ productHandle: '', reviewerName: '', rating: 5, text: '', imageUrl: '', reviewDate: new Date().toISOString().split('T')[0] });
@@ -384,6 +434,7 @@ export default function ReviewsAdminPage() {
         mutate('homepage/data');
         mutate('homepage-products-sections');
         mutate('homepage-reviews');
+        mutate(`product-${productId}`);
       } catch (e) {
         console.error("WIND Cache Revalidate Error:", e);
       }
