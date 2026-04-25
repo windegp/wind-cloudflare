@@ -9,6 +9,7 @@ import {
 import { X, CheckCircle, ImageIcon, ChevronDown, Star } from '@/components/icons-extra';
 import { usePaginatedReviews } from "@/hooks/useFirestore";
 import ImageUploader from "@/components/ImageUploader";
+import { SWR_KEYS } from '@/lib/swr-keys';
 
 export default function ProductReviews({ productHandle, onReviewStatsUpdate }) {
   const [reviews, setReviews] = useState([]);
@@ -77,7 +78,7 @@ export default function ProductReviews({ productHandle, onReviewStatsUpdate }) {
       } catch (e) { console.error("Stats Optimization Failed", e); }
     };
     fetchGlobalStats();
-  }, [productHandle]);
+  }, [productHandle, onReviewStatsUpdate]);
 
   // ربط الجلب بالفلتر الحالي
   const { data: firstBatch, isValidating } = usePaginatedReviews(productHandle, null, filter);
@@ -187,9 +188,9 @@ export default function ProductReviews({ productHandle, onReviewStatsUpdate }) {
         // مسح sessionStorage عشان الـ ProductCard يسحب فريش
         sessionStorage.removeItem(`wind_stats_${productHandle}`);
         // تحديث فوري لكل الـ SWR caches المرتبطة
-        mutate('homepage/data');
-        mutate('homepage-products-sections');
-        mutate('homepage-reviews');
+        mutate(SWR_KEYS.HOMEPAGE_DATA);
+        mutate(SWR_KEYS.HOMEPAGE_SECTIONS);
+        mutate(SWR_KEYS.HOMEPAGE_REVIEWS);
       } catch (e) {
         console.error("WIND Cache Revalidate Error:", e);
       }

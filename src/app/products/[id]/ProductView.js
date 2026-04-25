@@ -12,6 +12,7 @@ import SizeChartModal from "@/components/SizeChartModal";
 import ProductReviews from "@/components/products/ProductReviews";
 // استدعاء الهوكات الجديدة لتقليل استهلاك الكوتا
 import { useProduct, useRelatedProducts } from "@/hooks/useFirestore";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { Plus, Minus, Star, Info, Share2, Heart, ImageIcon, X, Truck, Eye, ShieldCheck, ChevronLeft, Search, ChevronRight, ShoppingBag, CreditCard, Banknote } from '@/components/icons-extra';
 
 export default function ProductView({ initialProduct, sourceCategory }) {
@@ -157,9 +158,9 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           })
         }).then(() => {
           sessionStorage.removeItem(`wind_stats_${product.handle || product.id}`);
-          mutate('homepage/data');
-          mutate('homepage-products-sections');
-          mutate(`product-${product.id}`);
+          mutate(SWR_KEYS.HOMEPAGE_DATA);
+          mutate(SWR_KEYS.HOMEPAGE_SECTIONS);
+          mutate(SWR_KEYS.PRODUCT(product.id));
         }).catch(() => {});
 
       } catch (error) {

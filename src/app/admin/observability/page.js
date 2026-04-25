@@ -19,7 +19,9 @@ import {
   Radio,
   Server,
   HardDrive,
-  Layers
+  Layers,
+  Moon,
+  Sun
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 
@@ -338,6 +340,7 @@ export default function ObservabilityDashboard() {
   const [testLoading, setTestLoading] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(null);
   const [hasData, setHasData] = useState(false);
+  const [themeMode, setThemeMode] = useState('dark');
   
   const { data: streamData, connected, error: sseError } = useObservabilitySSE(sseEnabled);
 
@@ -379,6 +382,92 @@ export default function ObservabilityDashboard() {
       errorRate: `${errorRate}%`,
       opsPerSec: (d.eventsPerSecond || 0).toFixed(1),
       cacheHit: d.cacheHitRate ? `${d.cacheHitRate.toFixed(1)}%` : '٩٥.٢٪'
+    };
+  }, [streamData]);
+
+  const advancedMetrics = useMemo(() => {
+    const raw = streamData?.data || {};
+    const recentEvents = raw.recentEvents || [];
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    const weekMs = 7 * dayMs;
+    const monthMs = 30 * dayMs;
+
+    const dayReads = recentEvents
+      .filter(e => e.type === 'firestore' && e.source === 'read' && now - e.timestamp <= dayMs)
+      .reduce((sum, e) => sum + (e.count || 1), 0);
+    const weekReads = recentEvents
+      .filter(e => e.type === 'firestore' && e.source === 'read' && now - e.timestamp <= weekMs)
+      .reduce((sum, e) => sum + (e.count || 1), 0);
+    const monthReads = recentEvents
+      .filter(e => e.type === 'firestore' && e.source === 'read' && now - e.timestamp <= monthMs)
+      .reduce((sum, e) => sum + (e.count || 1), 0);
+
+    const cacheHits = recentEvents.filter(e => ['cache_hit', 'dedupe'].includes(e.source)).length;
+    const cacheMisses = recentEvents.filter(e => ['cache_miss', 'fetch'].includes(e.source)).length;
+    const cacheSavings = cacheHits + cacheMisses > 0 ? (cacheHits / (cacheHits + cacheMisses)) * 100 : 0;
+    const duplicatePrevented = recentEvents.filter(e => e.type === 'swr' && e.source === 'dedupe').length;
+    const cancelledRequests = recentEvents.filter(e => e.metadata?.cancelled === true).length;
+
+    const byHour = {};
+    recentEvents.forEach((e) => {
+      const hour = new Date(e.timestamp).getHours();
+      byHour[hour] = (byHour[hour] || 0) + 1;
+    });
+    const [peakHour, peakHourCount] = Object.entries(byHour).sort((a, b) => b[1] - a[1])[0] || ['--', 0];
+
+    const pageUsageMap = {};
+    recentEvents.forEach((e) => {
+      const page = e.metadata?.pathname || e.metadata?.route || e.function || 'unknown';
+      pageUsageMap[page] = (pageUsageMap[page] || 0) + (e.count || 1);
+    });
+
+    const topPages = Object.entries(pageUsageMap)
+      .map(([page, reads]) => ({ page, reads }))
+      .sort((a, b) => b.reads - a.reads)
+      .slice(0, 8);
+
+    const leakWarnings = [];
+    const hotKeys = {};
+    recentEvents
+      .filter(e => e.key)
+      .forEach((e) => {
+        hotKeys[e.key] = (hotKeys[e.key] || 0) + 1;
+      });
+
+    Object.entries(hotKeys).forEach(([key, count]) => {
+      if (count >= 8) {
+        leakWarnings.push({
+          type: 'loop',
+          level: 'high',
+          message: `Hot key loop suspected: ${key}`,
+          details: `key seen ${count} times in recent window`
+        });
+      }
+    });
+
+    if ((raw.errorMetrics?.errorsPerMinute || 0) > 20) {
+      leakWarnings.push({
+        type: 'error-burst',
+        level: 'critical',
+        message: 'High errors/minute detected',
+        details: `${raw.errorMetrics.errorsPerMinute} errors/min`
+      });
+    }
+
+    const avgPerMinute = raw.eventsPerSecond ? (raw.eventsPerSecond * 60).toFixed(1) : '0.0';
+    return {
+      dayReads,
+      weekReads,
+      monthReads,
+      avgPerMinute,
+      peakHour,
+      peakHourCount,
+      cacheSavings: cacheSavings.toFixed(1),
+      duplicatePrevented,
+      cancelledRequests,
+      topPages,
+      leakWarnings
     };
   }, [streamData]);
 
@@ -491,20 +580,28 @@ export default function ObservabilityDashboard() {
     );
   }
 
+  const isLight = themeMode === 'light';
+
   return (
-    <div className="min-h-screen bg-[#0f172a]" dir="rtl">
+    <div className={`min-h-screen ${isLight ? 'bg-slate-100' : 'bg-[#0f172a]'}`} dir="rtl">
       <div className="max-w-7xl mx-auto p-4 md:p-6">
         {/* ═══════════════════════════════════════════════════════════
             TOP BAR
         ═══════════════════════════════════════════════════════════ */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-[#f1f5f9]">لوحة المراقبة</h1>
-            <p className="text-[#94a3b8] mt-1">نظام المراقبة والمراقبة في الوقت الفعلي</p>
+            <h1 className={`text-2xl md:text-3xl font-bold ${isLight ? 'text-slate-900' : 'text-[#f1f5f9]'}`}>لوحة المراقبة</h1>
+            <p className={`${isLight ? 'text-slate-600' : 'text-[#94a3b8]'} mt-1`}>نظام مراقبة احترافي للقراءات والكاش في الوقت الفعلي</p>
           </div>
           
           <div className="flex flex-wrap items-center gap-3">
             <ConnectionStatus connected={connected} lastUpdate={lastUpdate} />
+            <button
+              onClick={() => setThemeMode(isLight ? 'dark' : 'light')}
+              className="px-3 py-2 rounded-lg border border-slate-400/30 text-slate-700 bg-white/80 hover:bg-white transition"
+            >
+              {isLight ? <Moon size={16} /> : <Sun size={16} />}
+            </button>
             
             <button
               onClick={testSystem}
@@ -575,12 +672,100 @@ export default function ObservabilityDashboard() {
           />
         </div>
 
+        {/* Advanced cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+          <MetricCard icon={Database} title="قراءات اليوم" value={advancedMetrics.dayReads.toLocaleString('ar-SA')} color="blue" />
+          <MetricCard icon={Database} title="قراءات الأسبوع" value={advancedMetrics.weekReads.toLocaleString('ar-SA')} color="amber" />
+          <MetricCard icon={Database} title="قراءات الشهر" value={advancedMetrics.monthReads.toLocaleString('ar-SA')} color="purple" />
+          <MetricCard icon={TrendingUp} title="متوسط الدقيقة" value={advancedMetrics.avgPerMinute} color="green" subtitle={`ذروة ${advancedMetrics.peakHour}:00 (${advancedMetrics.peakHourCount})`} />
+          <MetricCard icon={CheckCircle} title="توفير الكاش" value={`${advancedMetrics.cacheSavings}%`} color="green" />
+          <MetricCard icon={XCircle} title="طلبات ملغاة" value={advancedMetrics.cancelledRequests.toLocaleString('ar-SA')} color="red" />
+          <MetricCard icon={Layers} title="طلبات مكررة مُنعت" value={advancedMetrics.duplicatePrevented.toLocaleString('ar-SA')} color="amber" />
+        </div>
+
         {/* ═══════════════════════════════════════════════════════════
             CHARTS SECTION
         ═══════════════════════════════════════════════════════════ */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           <EventsChart data={chartData} />
           <ErrorDistributionChart data={errorDistribution} />
+        </div>
+
+        {/* Top pages heatmap-like bars */}
+        <div className="bg-[#1e293b] border border-[#334155] rounded-xl p-5 mb-6">
+          <h3 className="text-[#f1f5f9] font-semibold mb-4">أكثر الصفحات استهلاكًا</h3>
+          <div className="space-y-2">
+            {advancedMetrics.topPages.length === 0 ? (
+              <p className="text-[#94a3b8] text-sm">لا توجد بيانات كافية بعد.</p>
+            ) : advancedMetrics.topPages.map((item) => {
+              const maxReads = advancedMetrics.topPages[0]?.reads || 1;
+              const width = Math.max(6, Math.round((item.reads / maxReads) * 100));
+              return (
+                <div key={item.page} className="grid grid-cols-[1fr_auto] gap-3 items-center">
+                  <div className="bg-[#0f172a] rounded-md overflow-hidden">
+                    <div className="h-7 flex items-center px-2 text-xs text-white bg-blue-500/70" style={{ width: `${width}%` }}>
+                      {item.page}
+                    </div>
+                  </div>
+                  <span className="text-[#94a3b8] text-xs">{item.reads}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Detailed operations table */}
+        <div className="bg-[#1e293b] border border-[#334155] rounded-xl overflow-hidden mb-6">
+          <div className="p-4 border-b border-[#334155]">
+            <h3 className="text-[#f1f5f9] font-semibold">Detailed Read Operations</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-xs">
+              <thead className="bg-[#0f172a] text-[#94a3b8]">
+                <tr>
+                  <th className="p-2 text-right">الصفحة</th>
+                  <th className="p-2 text-right">النوع</th>
+                  <th className="p-2 text-right">المفتاح</th>
+                  <th className="p-2 text-right">المصدر</th>
+                  <th className="p-2 text-right">القراءات</th>
+                  <th className="p-2 text-right">الزمن ms</th>
+                  <th className="p-2 text-right">HIT/MISS</th>
+                  <th className="p-2 text-right">آخر استخدام</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(streamData?.data?.recentEvents || []).slice(0, 40).map((e) => (
+                  <tr key={e.id} className="border-t border-[#334155] text-[#cbd5e1]">
+                    <td className="p-2">{e.metadata?.pathname || e.function || 'unknown'}</td>
+                    <td className="p-2">{e.type}</td>
+                    <td className="p-2">{e.key || '-'}</td>
+                    <td className="p-2">{e.type === 'firestore' ? 'Firebase' : e.type === 'kv' ? 'Cache' : 'API/SWR'}</td>
+                    <td className="p-2">{e.count || 1}</td>
+                    <td className="p-2">{e.duration || '-'}</td>
+                    <td className="p-2">{['cache_hit', 'dedupe'].includes(e.source) ? 'HIT' : ['cache_miss', 'fetch'].includes(e.source) ? 'MISS' : '-'}</td>
+                    <td className="p-2">{new Date(e.timestamp).toLocaleTimeString('ar-SA')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Leak detection */}
+        <div className="bg-[#1e293b] border border-[#334155] rounded-xl p-5 mb-6">
+          <h3 className="text-[#f1f5f9] font-semibold mb-3">Leak Detection</h3>
+          {advancedMetrics.leakWarnings.length === 0 ? (
+            <p className="text-emerald-400 text-sm">لا توجد مؤشرات تسريب حالياً.</p>
+          ) : (
+            <div className="space-y-2">
+              {advancedMetrics.leakWarnings.map((w, idx) => (
+                <div key={`${w.type}-${idx}`} className="p-3 rounded border border-amber-400/20 bg-amber-500/10">
+                  <p className="text-amber-300 text-sm font-semibold">{w.message}</p>
+                  <p className="text-[#94a3b8] text-xs mt-1">{w.details}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* ═══════════════════════════════════════════════════════════

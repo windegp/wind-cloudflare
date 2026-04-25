@@ -1,5 +1,7 @@
 "use client";
-import useSWR, { mutate } from 'swr';
+import { mutate } from 'swr';
+import { useSmartSWR } from '@/hooks/useSmartSWR';
+import { SWR_KEYS } from '@/lib/swr-keys';
 import { getDb } from '@/lib/firebase';
 import { 
   collection, getDocs, doc, getDoc, query, limit, 
@@ -220,19 +222,19 @@ const fetchHomepageProductsSectionsFetcher = async () => {
 
 // هوك الإعدادات (مقفل الكوتا بالكامل)
 export const useSiteSettings = () => {
-  return useSWR('settings/siteSettings', fetchDoc);
+  return useSmartSWR(SWR_KEYS.SITE_SETTINGS, fetchDoc, { dedupingInterval: 300000 });
 };
 
 // هوك قائمة المنتجات (بنمررله العدد المطلوب)
 export const useProductsList = (limitCount = 20) => {
-  return useSWR(['products', limitCount, 'title', 'asc'], fetchCollection);
+  return useSmartSWR(['products', limitCount, 'title', 'asc'], fetchCollection, { dedupingInterval: 300000 });
 };
 
 // هوك تقييمات الصفحة الرئيسية (SWR + Session Cache)
 // Cache key: wind_homepage_reviews
 export const useHomepageReviews = () => {
   const cacheKey = SESSION_CACHE_KEYS.HOMEPAGE_REVIEWS;
-  const swrKey = 'homepage-reviews';
+  const swrKey = SWR_KEYS.HOMEPAGE_REVIEWS;
 
   const fetcherWithSessionCache = async () => {
     const fetchFn = async () => {
@@ -262,7 +264,7 @@ export const useHomepageReviews = () => {
     return result.data;
   };
 
-  return useSWR(swrKey, fetcherWithSessionCache);
+  return useSmartSWR(swrKey, fetcherWithSessionCache, { dedupingInterval: 300000 });
 };
 
 // هوك الأقسام الأربعة (SWR + Session Cache)
@@ -270,7 +272,7 @@ export const useHomepageReviews = () => {
 // Uses KV API first, then session cache, then Firestore fallback
 export const useHomepageProductsSections = () => {
   const cacheKey = SESSION_CACHE_KEYS.HOMEPAGE_SECTIONS;
-  const swrKey = 'homepage-products-sections';
+  const swrKey = SWR_KEYS.HOMEPAGE_SECTIONS;
 
   const fetcherWithSessionCache = async () => {
     const fetchFn = async () => {
@@ -300,7 +302,7 @@ export const useHomepageProductsSections = () => {
     return result.data;
   };
 
-  return useSWR(swrKey, fetcherWithSessionCache);
+  return useSmartSWR(swrKey, fetcherWithSessionCache, { dedupingInterval: 600000 });
 };
 
 // هوك جلب منتجات القسم مع Pagination لدعم التصفح اللانهائي
@@ -330,7 +332,7 @@ export const usePaginatedProducts = (categorySlug, limitCount = 10, lastVisibleD
     };
   };
 
-  return useSWR(`paginated-products-${categorySlug}-${lastVisibleDoc?.id || 'start'}`, fetcher);
+  return useSmartSWR(SWR_KEYS.PAGINATED_PRODUCTS(categorySlug, lastVisibleDoc?.id || 'start'), fetcher, { dedupingInterval: 600000 });
 };
 
 // هوك جلب تفاصيل منتج واحد (SWR + Session Cache)
@@ -340,7 +342,7 @@ export const usePaginatedProducts = (categorySlug, limitCount = 10, lastVisibleD
 // - Expired (> 5min): fetch fresh
 export const useProduct = (id) => {
   const cacheKey = id ? SESSION_CACHE_KEYS.PRODUCT(id) : null;
-  const swrKey = id ? `product-${id}` : null;
+  const swrKey = SWR_KEYS.PRODUCT(id);
 
   // Fetcher that uses session cache + API + Firestore fallback
   const fetcherWithSessionCache = async () => {
@@ -375,7 +377,7 @@ export const useProduct = (id) => {
     return result.data;
   };
 
-  return useSWR(swrKey, fetcherWithSessionCache);
+  return useSmartSWR(swrKey, fetcherWithSessionCache, { dedupingInterval: 120000 });
 };
 
 // هوك جلب المنتجات ذات الصلة (النسخة الكاملة والمطابقة لمنطقك الأصلي)
@@ -421,7 +423,7 @@ export const useRelatedProducts = (product) => {
 
     return Array.from(new Map(related.map(item => [item.id, item])).values()).slice(0, 5);
   };
-  return useSWR(product?.id ? `related-${product.id}` : null, fetcher);
+  return useSmartSWR(SWR_KEYS.RELATED(product?.id), fetcher, { dedupingInterval: 600000 });
 };
 
 // هوك جلب تقييمات المنتج (3 تقييمات فقط في المرة)
@@ -452,7 +454,11 @@ export const usePaginatedReviews = (productHandle, lastVisibleDoc = null, filter
       lastDoc: snap.docs[snap.docs.length - 1] || null
     };
   };
-  return useSWR(productHandle ? `reviews-${productHandle}-${filter}-${lastVisibleDoc?.id || 'start'}` : null, fetcher);
+  return useSmartSWR(
+    SWR_KEYS.PAGINATED_REVIEWS(productHandle, filter, lastVisibleDoc?.id || 'start'),
+    fetcher,
+    { dedupingInterval: 600000 }
+  );
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -463,7 +469,7 @@ export const usePaginatedReviews = (productHandle, lastVisibleDoc = null, filter
 // IMPORTANT: Clear this cache after new review using invalidateProductStatsCache(handle)
 export const useProductStats = (handle) => {
   const cacheKey = handle ? SESSION_CACHE_KEYS.PRODUCT_STATS(handle) : null;
-  const swrKey = handle ? `product-stats-${handle}` : null;
+  const swrKey = SWR_KEYS.PRODUCT_STATS(handle);
 
   const fetcherWithSessionCache = async () => {
     if (!handle) return null;
@@ -527,5 +533,5 @@ export const useProductStats = (handle) => {
     return result.data;
   };
 
-  return useSWR(swrKey, fetcherWithSessionCache);
+  return useSmartSWR(swrKey, fetcherWithSessionCache, { dedupingInterval: 60000 });
 };

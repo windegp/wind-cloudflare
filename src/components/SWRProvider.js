@@ -17,6 +17,7 @@ const HEAVY_HOOK_DEDUPING_INTERVAL_MAX = 600000;  // 10 minutes
 // ═══════════════════════════════════════════════════════════
 
 const DEBUG_MODE = process.env.NEXT_PUBLIC_SWR_DEBUG === 'true';
+const SAFETY_MODE = process.env.NEXT_PUBLIC_SWR_SAFETY_DEBUG === 'true';
 
 /**
  * Debug logger for SWR operations
@@ -50,7 +51,7 @@ let resetScheduled = false;
  * @returns {boolean} - true if duplicate
  */
 export function checkDuplicateSWRKey(key) {
-  if (!DEBUG_MODE || !key) return false;
+  if (!SAFETY_MODE || !key) return false;
 
   // Track duplicates only within the same microtask tick to avoid
   // false positives caused by React re-renders/StrictMode double render.
@@ -63,7 +64,8 @@ export function checkDuplicateSWRKey(key) {
   }
 
   if (usedKeysInTick.has(key)) {
-    console.warn(`[SWR SAFETY] Duplicate key detected in same render: "${key}"`);
+    const stack = typeof window !== 'undefined' ? new Error().stack?.split('\n').slice(2, 5).join(' | ') : '';
+    console.warn(`[SWR SAFETY] Duplicate key detected in same render: "${key}"`, stack);
     console.warn(`[SWR SAFETY] Consider combining these hooks or using different keys`);
     return true;
   }
@@ -216,7 +218,7 @@ export const SWRProvider = ({ children }) => {
           : fetcher;
 
         // Reset key tracking before each SWR hook call
-        if (typeof window !== 'undefined' && DEBUG_MODE) {
+        if (typeof window !== 'undefined' && SAFETY_MODE) {
           checkDuplicateSWRKey(typeof key === 'string' ? key : JSON.stringify(key));
         }
 

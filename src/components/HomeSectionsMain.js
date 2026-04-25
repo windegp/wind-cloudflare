@@ -4,13 +4,14 @@ import { usePageReady } from "@/context/GlobalLoaderContext";
 import { DESIGN_REGISTRY } from "@/lib/designRegistry";
 // استيراد الهوكات الأسطورية اللي جهزناها
 import { useHomepageProductsSections, useHomepageReviews } from '@/hooks/useFirestore';
-import useSWR from 'swr';
+import { useSmartSWR } from '@/hooks/useSmartSWR';
+import { SWR_KEYS } from '@/lib/swr-keys';
 
 export default function HomeSectionsMainContent() {
   const { signalPageReady } = usePageReady();
 
   // 1. جلب التنسيق (Layout) والهيرو من ال API عبر ال KV cache
-  const { data: homepageData, isLoading: isHomepageLoading } = useSWR('homepage/data', async () => {
+  const { data: homepageData, isLoading: isHomepageLoading } = useSmartSWR(SWR_KEYS.HOMEPAGE_DATA, async () => {
     const response = await fetch("/api/homepage");
     const result = await response.json();
     if (!result.success) {
