@@ -41,35 +41,33 @@ function swrDebugLog(key, trigger, isCacheHit, extra = {}) {
 // DUPLICATE KEY SAFEGUARD
 // ═══════════════════════════════════════════════════════════
 
-// Global tracking of keys per render tick (debug only)
-const usedKeysInTick = new Set();
-let resetScheduled = false;
+// Track ownership per key to avoid StrictMode false positives
+const keyOwnership = new Map();
+const OWNER_TTL_MS = 2000;
 
 /**
  * Checks if a key has been used in the current render cycle
  * @param {string} key - SWR key
  * @returns {boolean} - true if duplicate
  */
-export function checkDuplicateSWRKey(key) {
+export function checkDuplicateSWRKey(key, owner = 'unknown') {
   if (!SAFETY_MODE || !key) return false;
 
-  // Track duplicates only within the same microtask tick to avoid
-  // false positives caused by React re-renders/StrictMode double render.
-  if (!resetScheduled) {
-    resetScheduled = true;
-    queueMicrotask(() => {
-      usedKeysInTick.clear();
-      resetScheduled = false;
-    });
+  const now = Date.now();
+  // cleanup old entries
+  for (const [trackedKey, tracked] of keyOwnership.entries()) {
+    if (now - tracked.timestamp > OWNER_TTL_MS) keyOwnership.delete(trackedKey);
   }
 
-  if (usedKeysInTick.has(key)) {
-    const stack = typeof window !== 'undefined' ? new Error().stack?.split('\n').slice(2, 5).join(' | ') : '';
-    console.warn(`[SWR SAFETY] Duplicate key detected in same render: "${key}"`, stack);
+  const existing = keyOwnership.get(key);
+  if (existing && existing.owner !== owner) {
+    const stack = typeof window !== 'undefined' ? new Error().stack?.split('\n').slice(2, 6).join(' | ') : '';
+    console.warn(`[SWR SAFETY] Duplicate key detected with different owners: "${key}"`, stack);
+    console.warn(`[SWR SAFETY] ownerA="${existing.owner}" ownerB="${owner}"`);
     console.warn(`[SWR SAFETY] Consider combining these hooks or using different keys`);
     return true;
   }
-  usedKeysInTick.add(key);
+  keyOwnership.set(key, { owner, timestamp: now });
   return false;
 }
 
@@ -78,8 +76,7 @@ export function checkDuplicateSWRKey(key) {
  * Call this at the start of each render
  */
 export function resetSWRKeyTracking() {
-  usedKeysInTick.clear();
-  resetScheduled = false;
+  keyOwnership.clear();
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -219,7 +216,8 @@ export const SWRProvider = ({ children }) => {
 
         // Reset key tracking before each SWR hook call
         if (typeof window !== 'undefined' && SAFETY_MODE) {
-          checkDuplicateSWRKey(typeof key === 'string' ? key : JSON.stringify(key));
+          const owner = config?.meta?.owner || 'unknown-owner';
+          checkDuplicateSWRKey(typeof key === 'string' ? key : JSON.stringify(key), owner);
         }
 
         return useSWRNext(key, wrappedFetcher, mergedConfig);

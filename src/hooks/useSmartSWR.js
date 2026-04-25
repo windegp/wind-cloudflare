@@ -11,9 +11,13 @@ const DEFAULT_SWR_CONFIG = {
 };
 
 export function useSmartSWR(key, fetcher, config = {}) {
+  const { owner, ...restConfig } = config;
   return useSWR(key, fetcher, {
     ...DEFAULT_SWR_CONFIG,
-    ...config
+    ...restConfig,
+    meta: {
+      ...(restConfig.meta || {}),
+      ...(owner ? { owner } : {})
+    }
   });
 }
-

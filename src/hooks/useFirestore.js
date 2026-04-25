@@ -222,12 +222,12 @@ const fetchHomepageProductsSectionsFetcher = async () => {
 
 // هوك الإعدادات (مقفل الكوتا بالكامل)
 export const useSiteSettings = () => {
-  return useSmartSWR(SWR_KEYS.SITE_SETTINGS, fetchDoc, { dedupingInterval: 300000 });
+  return useSmartSWR(SWR_KEYS.SITE_SETTINGS, fetchDoc, { dedupingInterval: 300000, owner: 'useSiteSettings' });
 };
 
 // هوك قائمة المنتجات (بنمررله العدد المطلوب)
 export const useProductsList = (limitCount = 20) => {
-  return useSmartSWR(['products', limitCount, 'title', 'asc'], fetchCollection, { dedupingInterval: 300000 });
+  return useSmartSWR(['products', limitCount, 'title', 'asc'], fetchCollection, { dedupingInterval: 300000, owner: 'useProductsList' });
 };
 
 // هوك تقييمات الصفحة الرئيسية (SWR + Session Cache)
@@ -264,7 +264,7 @@ export const useHomepageReviews = () => {
     return result.data;
   };
 
-  return useSmartSWR(swrKey, fetcherWithSessionCache, { dedupingInterval: 300000 });
+  return useSmartSWR(swrKey, fetcherWithSessionCache, { dedupingInterval: 300000, owner: 'useHomepageReviews' });
 };
 
 // هوك الأقسام الأربعة (SWR + Session Cache)
@@ -302,12 +302,19 @@ export const useHomepageProductsSections = () => {
     return result.data;
   };
 
-  return useSmartSWR(swrKey, fetcherWithSessionCache, { dedupingInterval: 600000 });
+  return useSmartSWR(swrKey, fetcherWithSessionCache, { dedupingInterval: 600000, owner: 'useHomepageProductsSections' });
 };
 
 // هوك جلب منتجات القسم مع Pagination لدعم التصفح اللانهائي
 export const usePaginatedProducts = (categorySlug, limitCount = 10, lastVisibleDoc = null) => {
   const fetcher = async () => {
+    if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_SWR_SAFETY_DEBUG === 'true') {
+      window.__windSWRStats = window.__windSWRStats || {};
+      const metricKey = `paginated-products:${categorySlug}`;
+      const prev = window.__windSWRStats[metricKey] || { hookRuns: 0, fetchRuns: 0 };
+      window.__windSWRStats[metricKey] = { ...prev, fetchRuns: prev.fetchRuns + 1 };
+    }
+
     const db = getDb();
     const productsRef = collection(db, "products");
     
@@ -332,7 +339,17 @@ export const usePaginatedProducts = (categorySlug, limitCount = 10, lastVisibleD
     };
   };
 
-  return useSmartSWR(SWR_KEYS.PAGINATED_PRODUCTS(categorySlug, lastVisibleDoc?.id || 'start'), fetcher, { dedupingInterval: 600000 });
+  if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_SWR_SAFETY_DEBUG === 'true') {
+    window.__windSWRStats = window.__windSWRStats || {};
+    const metricKey = `paginated-products:${categorySlug}`;
+    const prev = window.__windSWRStats[metricKey] || { hookRuns: 0, fetchRuns: 0 };
+    window.__windSWRStats[metricKey] = { ...prev, hookRuns: prev.hookRuns + 1 };
+  }
+
+  return useSmartSWR(SWR_KEYS.PAGINATED_PRODUCTS(categorySlug, lastVisibleDoc?.id || 'start'), fetcher, {
+    dedupingInterval: 600000,
+    owner: `usePaginatedProducts:${categorySlug}`
+  });
 };
 
 // هوك جلب تفاصيل منتج واحد (SWR + Session Cache)
@@ -377,7 +394,7 @@ export const useProduct = (id) => {
     return result.data;
   };
 
-  return useSmartSWR(swrKey, fetcherWithSessionCache, { dedupingInterval: 120000 });
+  return useSmartSWR(swrKey, fetcherWithSessionCache, { dedupingInterval: 120000, owner: `useProduct:${id}` });
 };
 
 // هوك جلب المنتجات ذات الصلة (النسخة الكاملة والمطابقة لمنطقك الأصلي)
@@ -423,7 +440,7 @@ export const useRelatedProducts = (product) => {
 
     return Array.from(new Map(related.map(item => [item.id, item])).values()).slice(0, 5);
   };
-  return useSmartSWR(SWR_KEYS.RELATED(product?.id), fetcher, { dedupingInterval: 600000 });
+  return useSmartSWR(SWR_KEYS.RELATED(product?.id), fetcher, { dedupingInterval: 600000, owner: `useRelatedProducts:${product?.id || 'none'}` });
 };
 
 // هوك جلب تقييمات المنتج (3 تقييمات فقط في المرة)
@@ -457,7 +474,7 @@ export const usePaginatedReviews = (productHandle, lastVisibleDoc = null, filter
   return useSmartSWR(
     SWR_KEYS.PAGINATED_REVIEWS(productHandle, filter, lastVisibleDoc?.id || 'start'),
     fetcher,
-    { dedupingInterval: 600000 }
+    { dedupingInterval: 600000, owner: `usePaginatedReviews:${productHandle}:${filter}` }
   );
 };
 
@@ -533,5 +550,5 @@ export const useProductStats = (handle) => {
     return result.data;
   };
 
-  return useSmartSWR(swrKey, fetcherWithSessionCache, { dedupingInterval: 60000 });
+  return useSmartSWR(swrKey, fetcherWithSessionCache, { dedupingInterval: 60000, owner: `useProductStats:${handle}` });
 };
