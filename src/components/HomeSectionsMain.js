@@ -1,16 +1,10 @@
 'use client';
 import React, { useEffect, useMemo } from 'react';
-import dynamic from 'next/dynamic';
 import { usePageReady } from "@/context/GlobalLoaderContext";
 import { DESIGN_REGISTRY } from "@/lib/designRegistry";
 // استيراد الهوكات الأسطورية اللي جهزناها
-import { useHomepageProductsSections, useHomepageReviews, useSiteSettings } from '@/hooks/useFirestore';
+import { useHomepageProductsSections, useHomepageReviews } from '@/hooks/useFirestore';
 import useSWR from 'swr';
-
-const HomeSectionsMain = dynamic(() => import("@/components/HomeSectionsMain"), { 
-  ssr: false,
-  loading: () => <div className="bg-white min-h-screen" /> 
-});
 
 export default function HomeSectionsMainContent() {
   const { signalPageReady } = usePageReady();

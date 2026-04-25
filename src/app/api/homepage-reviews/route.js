@@ -3,7 +3,7 @@ import { getDb } from "@/lib/firebase";
 import { collection, query, where, orderBy, limit, getDocs, documentId } from "firebase/firestore/lite";
 import { kvFirstFetch, TTL, getStaleThresholdForKey } from '@/lib/kv-cache';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 300;
 const CACHE_KEY = 'homepage_reviews_v2'; // v2 for TTL support
 
 export async function GET() {
@@ -25,9 +25,11 @@ export async function GET() {
     result.data,
     { 
       headers: { 
+        'Cache-Control': `public, s-maxage=${TTL.HOMEPAGE_DATA}, stale-while-revalidate=${getStaleThresholdForKey(CACHE_KEY) - TTL.HOMEPAGE_DATA}`,
         'X-Cache': result.isStale ? 'HIT-STALE' : (isHit ? 'HIT' : 'MISS'),
         'X-Cache-TTL': String(TTL.HOMEPAGE_DATA),
-        'X-Cache-Source': result.source
+        'X-Cache-Source': result.source,
+        'X-Cache-Reason': result.isStale ? 'kv-stale-served-background-refresh' : (isHit ? 'kv-fresh-hit' : 'kv-empty-or-expired')
       } 
     }
   );
@@ -37,6 +39,7 @@ export async function GET() {
  * Fetches homepage reviews from Firestore
  */
 async function fetchHomepageReviews() {
+  const startedAt = Date.now();
   const db = getDb();
   
   const qReviews = query(
@@ -69,6 +72,11 @@ async function fetchHomepageReviews() {
       const h = pData.handle || d.id;
       productsMap[h] = { ...pData, id: d.id, mainImage: pData.images?.[0] || pData.image || "" };
     });
+  }
+
+  const durationMs = Date.now() - startedAt;
+  if (durationMs > 400) {
+    console.warn(`[Firestore Slow Query] homepage_reviews_v2 took ${durationMs}ms`);
   }
 
   return { reviews: fetchedReviews, products: productsMap };

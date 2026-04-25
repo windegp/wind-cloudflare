@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getDb } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore/lite";
-import { kvGet, kvSet, kvFirstFetch, TTL, getStaleThresholdForKey } from '@/lib/kv-cache';
+import { kvFirstFetch, TTL, getStaleThresholdForKey } from '@/lib/kv-cache';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 300;
 
 const CACHE_KEY = 'homepage_data_v2'; // v2 for TTL support
 
@@ -30,11 +30,14 @@ export async function GET() {
         data: result.data,
         isStale: result.isStale 
       },
-      { 
-        headers: { 
+      {
+        headers: {
+          'Cache-Control': `public, s-maxage=${TTL.HOMEPAGE_DATA}, stale-while-revalidate=${getStaleThresholdForKey(CACHE_KEY) - TTL.HOMEPAGE_DATA}`,
           'X-Cache': result.isStale ? 'HIT-STALE' : 'HIT',
-          'X-Cache-TTL': String(TTL.HOMEPAGE_DATA)
-        } 
+          'X-Cache-TTL': String(TTL.HOMEPAGE_DATA),
+          'X-Cache-Source': result.source,
+          'X-Cache-Reason': result.isStale ? 'kv-stale-served-background-refresh' : 'kv-fresh-hit'
+        }
       }
     );
   }
@@ -46,11 +49,14 @@ export async function GET() {
       source: 'firebase', 
       data: result.data 
     },
-    { 
-      headers: { 
+    {
+      headers: {
+        'Cache-Control': `public, s-maxage=${TTL.HOMEPAGE_DATA}, stale-while-revalidate=${getStaleThresholdForKey(CACHE_KEY) - TTL.HOMEPAGE_DATA}`,
         'X-Cache': 'MISS',
-        'X-Cache-TTL': String(TTL.HOMEPAGE_DATA)
-      } 
+        'X-Cache-TTL': String(TTL.HOMEPAGE_DATA),
+        'X-Cache-Source': 'firestore',
+        'X-Cache-Reason': 'kv-empty-or-expired'
+      }
     }
   );
 }
@@ -59,6 +65,7 @@ export async function GET() {
  * Fetches homepage data from Firestore
  */
 async function fetchHomepageData() {
+  const startedAt = Date.now();
 
   // 2. جيب من Firebase
   try {
@@ -115,6 +122,11 @@ async function fetchHomepageData() {
       layout: layoutData,
       hero: heroSnap.exists() ? heroSnap.data() : { slides: [], categories: [] }
     };
+
+    const durationMs = Date.now() - startedAt;
+    if (durationMs > 400) {
+      console.warn(`[Firestore Slow Query] homepage_data_v2 took ${durationMs}ms`);
+    }
 
     return firebaseData;
 

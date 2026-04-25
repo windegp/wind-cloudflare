@@ -234,7 +234,7 @@ export const useHomepageReviews = () => {
   const cacheKey = SESSION_CACHE_KEYS.HOMEPAGE_REVIEWS;
   const swrKey = 'homepage-reviews';
 
-  const fetcherWithSessionCache = async (key, { mutate }) => {
+  const fetcherWithSessionCache = async () => {
     const fetchFn = async () => {
       // 1. Try KV API first
       try {
@@ -255,8 +255,8 @@ export const useHomepageReviews = () => {
     const result = await smartFetch(
       cacheKey, 
       fetchFn, 
-      () => mutate(),  // Background refresh
-      (data) => mutate(data, false)  // Sync cache with SWR
+      () => mutate(swrKey),  // Background refresh
+      (data) => mutate(swrKey, data, false)  // Sync cache with SWR
     );
 
     return result.data;
@@ -272,7 +272,7 @@ export const useHomepageProductsSections = () => {
   const cacheKey = SESSION_CACHE_KEYS.HOMEPAGE_SECTIONS;
   const swrKey = 'homepage-products-sections';
 
-  const fetcherWithSessionCache = async (key, { mutate }) => {
+  const fetcherWithSessionCache = async () => {
     const fetchFn = async () => {
       // 1. Try KV API first (fastest)
       try {
@@ -293,8 +293,8 @@ export const useHomepageProductsSections = () => {
     const result = await smartFetch(
       cacheKey, 
       fetchFn, 
-      () => mutate(),  // Background refresh
-      (data) => mutate(data, false)  // Sync cache with SWR
+      () => mutate(swrKey),  // Background refresh
+      (data) => mutate(swrKey, data, false)  // Sync cache with SWR
     );
 
     return result.data;
@@ -343,7 +343,7 @@ export const useProduct = (id) => {
   const swrKey = id ? `product-${id}` : null;
 
   // Fetcher that uses session cache + API + Firestore fallback
-  const fetcherWithSessionCache = async (key, { mutate }) => {
+  const fetcherWithSessionCache = async () => {
     if (!id) return null;
 
     const fetchFn = async () => {
@@ -368,8 +368,8 @@ export const useProduct = (id) => {
     const result = await smartFetch(
       cacheKey, 
       fetchFn, 
-      () => mutate(),  // Background refresh
-      (data) => mutate(data, false)  // Sync cache with SWR
+      () => mutate(swrKey),  // Background refresh
+      (data) => mutate(swrKey, data, false)  // Sync cache with SWR
     );
 
     return result.data;
@@ -465,7 +465,7 @@ export const useProductStats = (handle) => {
   const cacheKey = handle ? SESSION_CACHE_KEYS.PRODUCT_STATS(handle) : null;
   const swrKey = handle ? `product-stats-${handle}` : null;
 
-  const fetcherWithSessionCache = async (key, { mutate }) => {
+  const fetcherWithSessionCache = async () => {
     if (!handle) return null;
 
     const fetchFn = async () => {
@@ -520,8 +520,8 @@ export const useProductStats = (handle) => {
     const result = await smartFetch(
       cacheKey, 
       fetchFn, 
-      () => mutate(),  // Background refresh
-      (data) => mutate(data, false)  // Sync cache with SWR
+      () => mutate(swrKey),  // Background refresh
+      (data) => mutate(swrKey, data, false)  // Sync cache with SWR
     );
 
     return result.data;

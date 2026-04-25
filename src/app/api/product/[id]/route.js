@@ -3,7 +3,7 @@ import { getDb } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore/lite";
 import { kvFirstFetch, TTL, getStaleThresholdForKey } from '@/lib/kv-cache';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 120;
 
 export async function GET(request, { params }) {
   const { id } = await params;
@@ -29,9 +29,11 @@ export async function GET(request, { params }) {
     result.data,
     { 
       headers: { 
+        'Cache-Control': `public, s-maxage=${TTL.PRODUCT}, stale-while-revalidate=${getStaleThresholdForKey(cacheKey) - TTL.PRODUCT}`,
         'X-Cache': result.isStale ? 'HIT-STALE' : (isHit ? 'HIT' : 'MISS'),
         'X-Cache-TTL': String(TTL.PRODUCT),
-        'X-Cache-Source': result.source
+        'X-Cache-Source': result.source,
+        'X-Cache-Reason': result.isStale ? 'kv-stale-served-background-refresh' : (isHit ? 'kv-fresh-hit' : 'kv-empty-or-expired')
       } 
     }
   );
@@ -41,6 +43,7 @@ export async function GET(request, { params }) {
  * Fetches product from Firestore
  */
 async function fetchProduct(id) {
+  const startedAt = Date.now();
   const db = getDb();
   const snap = await getDoc(doc(db, "products", id));
   
@@ -55,6 +58,11 @@ async function fetchProduct(id) {
   // تحويل Timestamps لـ strings (Firebase requirement)
   if (data.createdAt?.toDate) data.createdAt = data.createdAt.toDate().toISOString();
   if (data.updatedAt?.toDate) data.updatedAt = data.updatedAt.toDate().toISOString();
+
+  const durationMs = Date.now() - startedAt;
+  if (durationMs > 300) {
+    console.warn(`[Firestore Slow Query] product_${id}_v2 took ${durationMs}ms`);
+  }
 
   return { id: snap.id, ...data };
 }

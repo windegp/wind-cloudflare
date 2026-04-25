@@ -7,6 +7,8 @@ import ProductView from "./ProductView";
 import { cache } from 'react';
 import { kvGet, kvSet } from "@/lib/kv-cache"; // 🔥 KV Cache
 
+export const revalidate = 120;
+
 // Use edge-compatible Firebase when running on edge runtime
 const isEdgeRuntime = typeof window === 'undefined' && process.env.NEXT_RUNTIME === 'edge';
 const firestoreDb = isEdgeRuntime ? getEdgeDb() : getDb(); 
@@ -84,10 +86,8 @@ export async function generateMetadata({ params }) {
 }
 
 // 2. الصفحة الرئيسية
-export default async function Page({ params, searchParams }) {
+export default async function Page({ params }) {
   const { id } = await params; // 🔥 Next.js 15 Fix
-  const sParams = await searchParams; // 🔥 Next.js 15 Fix
-  const sourceCat = sParams?.cat;
   const product = await getProductData(id);
 
   if (!product) return null; // Silent fallback
@@ -127,7 +127,7 @@ export default async function Page({ params, searchParams }) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      <ProductView initialProduct={sanitizedProduct} sourceCategory={sourceCat} /> 
+      <ProductView initialProduct={sanitizedProduct} /> 
     </>
   );
 }

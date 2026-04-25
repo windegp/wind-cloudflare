@@ -3,7 +3,7 @@ import { getDb } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore/lite";
 import { kvFirstFetch, TTL, getStaleThresholdForKey } from '@/lib/kv-cache';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 300;
 const CACHE_KEY = 'site_settings_v2'; // v2 for TTL support
 
 export async function GET(request) {
@@ -43,9 +43,11 @@ export async function GET(request) {
     },
     { 
       headers: { 
+        'Cache-Control': `public, s-maxage=${TTL.SITE_SETTINGS}, stale-while-revalidate=${getStaleThresholdForKey(CACHE_KEY) - TTL.SITE_SETTINGS}`,
         'X-Cache': result.isStale ? 'HIT-STALE' : (isHit ? 'HIT' : 'MISS'),
         'X-Cache-TTL': String(TTL.SITE_SETTINGS),
-        'X-Cache-Source': result.source
+        'X-Cache-Source': result.source,
+        'X-Cache-Reason': result.isStale ? 'kv-stale-served-background-refresh' : (isHit ? 'kv-fresh-hit' : 'kv-empty-or-expired')
       } 
     }
   );
@@ -55,6 +57,7 @@ export async function GET(request) {
  * Fetches site settings from Firestore
  */
 async function fetchSiteSettings() {
+  const startedAt = Date.now();
   const db = getDb();
   const snap = await getDoc(doc(db, "settings", "siteSettings"));
 
@@ -62,6 +65,11 @@ async function fetchSiteSettings() {
     const error = new Error('Settings not found');
     error.status = 404;
     throw error;
+  }
+
+  const durationMs = Date.now() - startedAt;
+  if (durationMs > 300) {
+    console.warn(`[Firestore Slow Query] site_settings_v2 took ${durationMs}ms`);
   }
 
   return snap.data();

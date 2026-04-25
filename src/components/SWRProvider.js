@@ -40,9 +40,9 @@ function swrDebugLog(key, trigger, isCacheHit, extra = {}) {
 // DUPLICATE KEY SAFEGUARD
 // ═══════════════════════════════════════════════════════════
 
-// Global tracking of keys per render cycle
-const usedKeysInRender = new Set();
-let renderCycleId = 0;
+// Global tracking of keys per render tick (debug only)
+const usedKeysInTick = new Set();
+let resetScheduled = false;
 
 /**
  * Checks if a key has been used in the current render cycle
@@ -50,12 +50,24 @@ let renderCycleId = 0;
  * @returns {boolean} - true if duplicate
  */
 export function checkDuplicateSWRKey(key) {
-  if (usedKeysInRender.has(key)) {
+  if (!DEBUG_MODE || !key) return false;
+
+  // Track duplicates only within the same microtask tick to avoid
+  // false positives caused by React re-renders/StrictMode double render.
+  if (!resetScheduled) {
+    resetScheduled = true;
+    queueMicrotask(() => {
+      usedKeysInTick.clear();
+      resetScheduled = false;
+    });
+  }
+
+  if (usedKeysInTick.has(key)) {
     console.warn(`[SWR SAFETY] Duplicate key detected in same render: "${key}"`);
     console.warn(`[SWR SAFETY] Consider combining these hooks or using different keys`);
     return true;
   }
-  usedKeysInRender.add(key);
+  usedKeysInTick.add(key);
   return false;
 }
 
@@ -64,8 +76,8 @@ export function checkDuplicateSWRKey(key) {
  * Call this at the start of each render
  */
 export function resetSWRKeyTracking() {
-  usedKeysInRender.clear();
-  renderCycleId++;
+  usedKeysInTick.clear();
+  resetScheduled = false;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -152,10 +164,10 @@ export const SWRProvider = ({ children }) => {
   // Detect if we're in admin section
   const isAdminPage = pathname?.startsWith('/admin') || false;
 
-  // Reset key tracking on each render
+  // Reset when route changes only (not every render)
   useEffect(() => {
     resetSWRKeyTracking();
-  });
+  }, [pathname]);
 
   // Base configuration
   const baseConfig = {
@@ -204,7 +216,7 @@ export const SWRProvider = ({ children }) => {
           : fetcher;
 
         // Reset key tracking before each SWR hook call
-        if (typeof window !== 'undefined') {
+        if (typeof window !== 'undefined' && DEBUG_MODE) {
           checkDuplicateSWRKey(typeof key === 'string' ? key : JSON.stringify(key));
         }
 
