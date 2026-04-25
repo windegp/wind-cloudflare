@@ -64,7 +64,6 @@ export function checkDuplicateSWRKey(key, owner = 'unknown') {
     const stack = typeof window !== 'undefined' ? new Error().stack?.split('\n').slice(2, 6).join(' | ') : '';
     console.warn(`[SWR SAFETY] Duplicate key detected with different owners: "${key}"`, stack);
     console.warn(`[SWR SAFETY] ownerA="${existing.owner}" ownerB="${owner}"`);
-    console.warn(`[SWR SAFETY] Consider combining these hooks or using different keys`);
     return true;
   }
   keyOwnership.set(key, { owner, timestamp: now });
