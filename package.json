@@ -17,6 +17,7 @@
     "csv-parser": "^3.2.0",
     "firebase": "^12.9.0",
     "imagekit": "^6.0.0",
+    "lucide-react": "^1.11.0",
     "next": "^15.1.0",
     "papaparse": "^5.5.3",
     "react": "^19.0.0",
