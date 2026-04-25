@@ -21,6 +21,7 @@
     "papaparse": "^5.5.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-is": "^19.2.5",
     "react-nestable": "^3.0.2",
     "react-quill": "^2.0.0",
     "recharts": "^3.8.1",
