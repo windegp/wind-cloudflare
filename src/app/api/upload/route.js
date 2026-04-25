@@ -5,17 +5,14 @@ import ImageKit from "imagekit";
 // Important: Force dynamic behavior to prevent Vercel/Cloudflare caching
 export const dynamic = 'force-dynamic';
 
-// Initialize ImageKit SDK with environment variables
-const imagekit = new ImageKit({
-  publicKey: process.env.NEXT_PUBLIC_IMAGEKIT_PUBLIC_KEY,
-  privateKey: process.env.IMAGEKIT_PRIVATE_KEY,
-  urlEndpoint: process.env.NEXT_PUBLIC_IMAGEKIT_URL_ENDPOINT,
-});
-
 export async function GET() {
   try {
     // Validate environment variables
-    if (!process.env.IMAGEKIT_PRIVATE_KEY || !process.env.NEXT_PUBLIC_IMAGEKIT_PUBLIC_KEY) {
+    if (
+      !process.env.IMAGEKIT_PRIVATE_KEY ||
+      !process.env.NEXT_PUBLIC_IMAGEKIT_PUBLIC_KEY ||
+      !process.env.NEXT_PUBLIC_IMAGEKIT_URL_ENDPOINT
+    ) {
       const response = errorResponse(
         "Missing ImageKit configuration in environment variables",
         'MISSING_CONFIG',
@@ -23,6 +20,13 @@ export async function GET() {
       );
       return NextResponse.json(response.body, { status: response.status });
     }
+
+    // Initialize only at request time to avoid build-time crash in CI/Cloudflare
+    const imagekit = new ImageKit({
+      publicKey: process.env.NEXT_PUBLIC_IMAGEKIT_PUBLIC_KEY,
+      privateKey: process.env.IMAGEKIT_PRIVATE_KEY,
+      urlEndpoint: process.env.NEXT_PUBLIC_IMAGEKIT_URL_ENDPOINT,
+    });
 
     // Generate authentication parameters using official ImageKit SDK
     const authParams = imagekit.getAuthenticationParameters();
