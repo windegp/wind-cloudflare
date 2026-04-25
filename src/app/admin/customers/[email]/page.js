@@ -3,13 +3,29 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { getDb } from "@/lib/firebase";
-import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore/lite";
+import { doc, getDoc, collection, query, where, getDocs, limit } from "firebase/firestore/lite";
 import { ArrowRight, Mail, Phone, MapPin, Package, ShoppingBag, Users } from '@/components/icons-extra';
 // 🔥 1. استيراد SWR
 import useSWR from 'swr';
+// 🔥 حماية الكوتا
+import { kvGet, kvSet, kvDelete, TTL } from '@/lib/kv-cache';
+import { logRead } from '@/lib/firestoreQuota';
 
-// 🔥 2. دالة الجلب التي سيستخدمها SWR (مستقلة خارج المكون)
+const CUSTOMER_CACHE_PREFIX = 'admin_customer_detail';
+const CACHE_VERSION = 'v2'; // For TTL support
+
+// 🔥 2. دالة الجلب التي سيستخدمها SWR - مع KV cache و limit
 const fetchCustomerDetails = async (emailParam) => {
+  const cacheKey = `${CUSTOMER_CACHE_PREFIX}_${emailParam}_${CACHE_VERSION}`;
+  
+  // 🚀 محاولة KV cache أولاً
+  const cached = await kvGet(cacheKey);
+  if (cached && cached.customer) {
+    logRead('fetchCustomerDetails', 'customer+orders', 
+      1 + (cached.orders?.length || 0), 'cache');
+    return cached;
+  }
+  
   const db = getDb();
   const decodedParam = decodeURIComponent(emailParam).trim();
   let cData = null;
@@ -17,26 +33,28 @@ const fetchCustomerDetails = async (emailParam) => {
 
   // جلب بيانات العميل
   const cSnap = await getDoc(doc(db, "Customers", decodedParam));
+  logRead('fetchCustomerDetails', 'Customers', 1, 'firestore');
   if (cSnap.exists()) { 
     cData = cSnap.data(); 
   } else {
-    const fallbackQ = query(collection(db, "Customers"), where("Email", "==", decodedParam));
+    const fallbackQ = query(collection(db, "Customers"), where("Email", "==", decodedParam), limit(1));
     const fallSnap = await getDocs(fallbackQ);
     if (!fallSnap.empty) cData = fallSnap.docs[0].data();
   }
   
-  if (!cData) throw new Error("Customer Not Found"); // إيقاف التنفيذ إذا لم نجد العميل
+  if (!cData) throw new Error("Customer Not Found");
 
-  // جلب الطلبات المرتبطة
+  // جلب الطلبات المرتبطة - مع limit 20
   let q;
   const actualEmail = cData.Email || cData.email;
   if (actualEmail) {
-    q = query(collection(db, "Orders"), where("Email", "==", actualEmail));
+    q = query(collection(db, "Orders"), where("Email", "==", actualEmail), limit(20));
   } else {
-    q = query(collection(db, "Orders"), where("Billing Name", "==", `${cData['First Name']} ${cData['Last Name']}`));
+    q = query(collection(db, "Orders"), where("Billing Name", "==", `${cData['First Name']} ${cData['Last Name']}`), limit(20));
   }
   
   const oSnap = await getDocs(q);
+  logRead('fetchCustomerDetails', 'Orders', oSnap.docs.length, 'firestore');
   let oList = oSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
   // فلترة وتنظيف الطلبات
@@ -64,18 +82,22 @@ const fetchCustomerDetails = async (emailParam) => {
     }
   });
 
-  // جلب صور المنتجات
+  // جلب صور المنتجات - مع limit 1
   oWithImg = await Promise.all(uniqueOrders.map(async (order) => {
     if (order.data_source === 'WIND_Web') {
        return { ...order, productImage: order.lineItems?.[0]?.image || null };
     }
-    const pQ = query(collection(db, "products"), where("title", "==", order['Lineitem name']));
+    const pQ = query(collection(db, "products"), where("title", "==", order['Lineitem name']), limit(1));
     const pSnap = await getDocs(pQ);
     return { ...order, productImage: !pSnap.empty ? pSnap.docs[0].data().images?.[0] : null };
   }));
 
-  // إرجاع البيانات المجمعة
-  return { customer: cData, orders: oWithImg };
+  const result = { customer: cData, orders: oWithImg };
+  
+  // 💾 تخزين في KV مع TTL 2 دقيقة
+  await kvSet(cacheKey, result, TTL.ADMIN_MEDIUM);
+
+  return result;
 };
 
 export default function CustomerDetailsPage() {

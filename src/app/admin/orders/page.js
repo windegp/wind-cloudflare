@@ -5,6 +5,9 @@ import { getDb } from "@/lib/firebase";
 import { collection, query, where, getDocs, doc, writeBatch, orderBy, limit, startAfter, increment } from "firebase/firestore/lite";
 import { useRouter } from 'next/navigation';
 import { ShoppingBag, Search, Filter, Monitor, Archive, Layers, ChevronLeft, ChevronRight, Trash2, AlertTriangle, X, Download } from '@/components/icons-extra';
+// 🔥 حماية الكوتا
+import { kvGet, kvSet, kvDelete, TTL } from '@/lib/kv-cache';
+import { logRead } from '@/lib/firestoreQuota';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,12 +41,27 @@ export default function OrdersListPage() {
   // أضف هذا الـ State في الأعلى مع الـ States الأخرى
   const [initialLoadDone, setInitialLoadDone] = useState(false);
 
+  const CACHE_KEY_PREFIX = 'admin_orders';
+  const CACHE_VERSION = 'v2'; // For TTL support
+  const MAX_EXPORT_ITERATIONS = 50; // Safety limit for export loops
+
   const fetchOrders = useCallback(async (loadMore = false) => {
-    // 🛡️ نستخدم الـ State بشكل مباشر جوه الدالة بدون ما نضعها في التبعيات
+    // 🛡️ KV-first pattern
+    const cacheKey = `${CACHE_KEY_PREFIX}_${activeTab}_${CACHE_VERSION}`;
+    
+    if (!loadMore) {
+      // 🚀 محاولة KV cache أولاً
+      const cached = await kvGet(cacheKey);
+      if (cached && Array.isArray(cached)) {
+        setAllRawOrders(cached);
+        logRead('fetchOrders', 'Orders', cached.length, 'cache');
+        return;
+      }
+    }
+    
     setIsLoading(prev => {
-      if (prev) return true; // لو جاري التحميل فعلاً، اخرج
+      if (prev) return true;
       
-      // ابدأ عملية السحب
       (async () => {
         try {
           const db = getDb();
@@ -52,7 +70,7 @@ export default function OrdersListPage() {
           let constraints = [
             collection(db, "Orders"),
             orderBy("Created at", "desc"),
-            limit(fetchLimit)
+            limit(fetchLimit) // ✅ limit 20
           ];
 
           if (activeTab === 'wind') {
@@ -66,30 +84,32 @@ export default function OrdersListPage() {
           }
           
           const q = query(...constraints);
-          console.log(`WIND Quota Guard: Fetching ${activeTab} orders...`);
           
           const querySnapshot = await getDocs(q);
+          logRead('fetchOrders', 'Orders', querySnapshot.docs.length, 'firestore');
           const newDocs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
           
-          if (loadMore) {
-            setAllRawOrders(prevOrders => [...prevOrders, ...newDocs]);
-          } else {
-            setAllRawOrders(newDocs);
+          const finalDocs = loadMore ? [...allRawOrders, ...newDocs] : newDocs;
+          
+          if (!loadMore) {
+            // 💾 تخزين في KV مع TTL 2 دقيقة
+            await kvSet(cacheKey, finalDocs, TTL.ADMIN_MEDIUM);
           }
           
+          setAllRawOrders(finalDocs);
           setLastVisible(querySnapshot.docs[querySnapshot.docs.length - 1] || null);
           setHasMore(querySnapshot.docs.length === fetchLimit);
           
         } catch (err) {
           console.error("WIND Error: Fetch failed", err);
         } finally {
-          setIsLoading(false); // قفل التحميل
+          setIsLoading(false);
         }
       })();
       
-      return true; // تعيين isLoading لـ true في البداية
+      return true;
     });
-  }, [activeTab, lastVisible]); // 👈 شيلنا isLoading من هنا نهائياً
+  }, [activeTab, lastVisible, allRawOrders]);
 
   // ==========================================
   // 🔥 2. التحكم الآمن في التابات (يمنع الـ Loop)
@@ -196,6 +216,9 @@ export default function OrdersListPage() {
 
       await batch.commit();
 
+      // 🗑️ مسح KV cache بعد الحذف
+      await kvDelete(`${CACHE_KEY_PREFIX}_${activeTab}_${CACHE_VERSION}`);
+
       setAllRawOrders(prev => prev.filter(o => !selectedOrders.includes(o.id)));
       setSelectedOrders([]);
       setShowDeleteModal(false);
@@ -224,13 +247,14 @@ export default function OrdersListPage() {
       let lastDoc = null;
       let fetchMore = true;
 
-      // 1. 🛡️ بناء الاستعلام الموجه للقسم المختار (لتقليل القراءات)
-      // ملاحظة: لا نسحب أي بيانات إلا بعد ضغط الزرار
-      while (fetchMore) {
+      // 1. 🛡️ بناء الاستعلام الموجه للقسم المختار (مع limit 20 و max 50 iterations)
+      let iterationCount = 0;
+      while (fetchMore && iterationCount < MAX_EXPORT_ITERATIONS) {
+        iterationCount++;
         let constraints = [
           collection(db, "Orders"),
           orderBy("Created at", "desc"),
-          limit(500) // نسحب دفعات كبيرة (500) لسرعة التنزيل وتقليل عدد الطلبات
+          limit(20) // ✅ حماية الكوتا - 20 فقط
         ];
 
         // توجيه البحث بناءً على السجمنت المفتوح
@@ -244,6 +268,7 @@ export default function OrdersListPage() {
 
         const q = query(...constraints);
         const snap = await getDocs(q);
+        logRead('exportOrdersToExcel', 'Orders', snap.docs.length, 'firestore');
 
         if (snap.empty) {
           fetchMore = false;
@@ -252,8 +277,8 @@ export default function OrdersListPage() {
           allExportData = [...allExportData, ...docsData];
           lastDoc = snap.docs[snap.docs.length - 1];
           
-          // لو الدفعة أقل من 500 يبقى خلصنا كل الداتا اللي في السيرفر للقسم ده
-          if (snap.docs.length < 500) fetchMore = false;
+          // لو الدفعة أقل من 20 يبقى خلصنا كل الداتا
+          if (snap.docs.length < 20) fetchMore = false;
         }
       }
 

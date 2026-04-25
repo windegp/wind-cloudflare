@@ -4,6 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { getDb } from "@/lib/firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore/lite";
 import { Settings, ShieldCheck, Truck, RefreshCw, Scale, Save, Loader2, Code2, Eye } from '@/components/icons-extra';
+// 🔥 حماية الكوتا
+import { kvGet, kvSet, kvDelete, TTL } from '@/lib/kv-cache';
+import { logRead } from '@/lib/firestoreQuota';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,19 +24,35 @@ export default function SettingsPolicies() {
   const [saving, setSaving] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
 
-  // جلب البيانات من الفايربيس
+  const POLICIES_CACHE_PREFIX = 'admin_policy';
+  const CACHE_VERSION = 'v2'; // For TTL support
+
+  // جلب البيانات من الفايربيز - مع KV cache
   useEffect(() => {
     const fetchPolicy = async () => {
       setLoading(true);
       try {
+        const cacheKey = `${POLICIES_CACHE_PREFIX}_${activeTab}_${CACHE_VERSION}`;
+        
+        // 🚀 محاولة KV cache أولاً
+        const cached = await kvGet(cacheKey);
+        if (cached !== null) {
+          setHtmlContent(cached.htmlContent || "");
+          logRead('fetchPolicy', 'Policies', 1, 'cache');
+          setLoading(false);
+          return;
+        }
+        
         const db = getDb();
         const docRef = doc(db, "Policies", activeTab);
         const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setHtmlContent(docSnap.data().htmlContent || "");
-        } else {
-          setHtmlContent("");
-        }
+        logRead('fetchPolicy', 'Policies', 1, 'firestore');
+        
+        const content = docSnap.exists() ? (docSnap.data().htmlContent || "") : "";
+        setHtmlContent(content);
+        
+        // 💾 تخزين في KV مع TTL 5 دقائق (السياسات أقل تغيراً)
+        await kvSet(cacheKey, { htmlContent: content }, TTL.ADMIN_LONG);
       } catch (err) { console.error(err); }
       finally { setLoading(false); }
     };
@@ -44,10 +63,13 @@ export default function SettingsPolicies() {
     setSaving(true);
     try {
       const db = getDb();
-      await setDoc(doc(db, "Policies", tab), {
-        content: content,
+      await setDoc(doc(db, "Policies", activeTab), {
+        htmlContent: htmlContent,
         updatedAt: new Date().toISOString()
       });
+
+      // 🗑️ مسح KV cache
+      await kvDelete(`${POLICIES_CACHE_PREFIX}_${activeTab}_${CACHE_VERSION}`);
 
       // 🔥 مسح الكاش لتحديث السياسات في الفوتر وباقي الموقع فوراً
       try {

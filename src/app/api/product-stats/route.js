@@ -1,6 +1,7 @@
+// product-stats/route.js - مع TTL محدد (60s) و KV-first pattern
 import { getDb } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore/lite";
-import { kvGet, kvSet } from '@/lib/kv-cache';
+import { kvFirstFetch, TTL, getStaleThresholdForKey } from '@/lib/kv-cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,34 +13,49 @@ export async function GET(request) {
     return Response.json({ error: 'handle required' }, { status: 400 });
   }
 
-  const cacheKey = `product_stats_${handle}`;
+  const cacheKey = `product_stats_${handle}_v2`; // v2 for TTL support
 
-  // 1. جرب KV أولاً
-  const cached = await kvGet(cacheKey);
-  if (cached) {
-    return Response.json(cached, { headers: { 'X-Cache': 'HIT' } });
-  }
+  // 🚀 KV-first fetch with stale-while-revalidate (TTL: 60s, Stale: 120s)
+  // Shortest TTL - stats change frequently with new reviews
+  const result = await kvFirstFetch(
+    cacheKey,
+    async () => fetchProductStats(handle),
+    TTL.PRODUCT_STATS,
+    getStaleThresholdForKey(cacheKey),
+    'high' // High priority - stats change frequently
+  );
 
-  // 2. جيب من Firebase
-  try {
-    const db = getDb();
-    const statsSnap = await getDoc(doc(db, "ProductStats", handle));
+  // Log cache status
+  const isHit = result.source === 'cache' || result.source === 'cache-stale';
+  console.log(`[KV ${isHit ? 'HIT' : 'MISS'}] product_stats_${handle}: ${result.source}${result.isStale ? ' (stale)' : ''}`);
 
-    if (!statsSnap.exists()) {
-      return Response.json({ count: 0, rating: 5, handle });
+  // Return data with cache headers
+  return Response.json(
+    result.data,
+    { 
+      headers: { 
+        'X-Cache': result.isStale ? 'HIT-STALE' : (isHit ? 'HIT' : 'MISS'),
+        'X-Cache-TTL': String(TTL.PRODUCT_STATS),
+        'X-Cache-Source': result.source
+      } 
     }
+  );
+}
 
-    const data = statsSnap.data();
-    const total = data.totalCount || 0;
-    const avg = total > 0 ? parseFloat((data.totalRatingSum / total).toFixed(1)) : 5;
-    const result = { count: total, rating: avg, handle };
+/**
+ * Fetches product stats from Firestore
+ */
+async function fetchProductStats(handle) {
+  const db = getDb();
+  const statsSnap = await getDoc(doc(db, "ProductStats", handle));
 
-    // ✅ Bug Fix: kv.put كانت جوا block ناقص
-    await kvSet(cacheKey, result);
-
-    return Response.json(result, { headers: { 'X-Cache': 'MISS' } });
-
-  } catch (error) {
-    return Response.json({ error: error.message, count: 0, rating: 5 }, { status: 500 });
+  if (!statsSnap.exists()) {
+    return { count: 0, rating: 5, handle };
   }
+
+  const data = statsSnap.data();
+  const total = data.totalCount || 0;
+  const avg = total > 0 ? parseFloat((data.totalRatingSum / total).toFixed(1)) : 5;
+  
+  return { count: total, rating: avg, handle };
 }

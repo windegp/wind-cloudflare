@@ -9,6 +9,15 @@ import Link from "next/link";
 // 🔥 استدعاء الفايربيس
 import { getDb } from "@/lib/firebase";
 import { doc, setDoc, getDoc, deleteDoc, updateDoc, increment } from "firebase/firestore/lite";
+import { 
+  debounceAsync, 
+  executeWithIdempotency, 
+  generateOperationId, 
+  writeGuard, 
+  batchCreateOrder,
+  createSnapshot,
+  hasSnapshotChanged
+} from "@/lib/writeOptimizer";
 import { ChevronDown, Info, CheckCircle2, Phone, ShoppingBag, Shield, Tag, ChevronLeft, Truck, CreditCard, Banknote, Smartphone, X, Lock } from '@/components/icons-extra';
 
 // Helper function to handle Firebase errors
@@ -187,7 +196,78 @@ export default function CheckoutPage() {
  // ============================================================
   // 🚀 رادار السلة المتروكة المطور (استراتيجية المستند الواحد)
   // ============================================================
-  const lastSavedDraftRef = useRef(""); 
+  const lastSavedDraftRef = useRef("");
+
+  // Debounced abandoned cart save using write optimizer
+  const saveAbandonedCartDebounced = useRef(
+    debounceAsync(async () => {
+      if (isOrderSubmittedRef.current) return;
+
+      const currentSnapshot = createSnapshot(
+        { email: formData.email, phone: formData.phone, items: cartItems.length, total: finalTotal },
+        ['email', 'phone', 'items', 'total']
+      );
+
+      if (!hasSnapshotChanged(lastSavedDraftRef.current, currentSnapshot)) return;
+
+      try {
+        const orderRef = doc(getDb(), "Orders", activeOrderId);
+        
+        const draftData = {
+          Name: activeOrderId,
+          "Billing Name": `${formData.firstName} ${formData.lastName}`.trim() || 'عميل محتمل',
+          Email: formData.email ? formData.email.toLowerCase().trim() : '',
+          Phone: formData.phone,
+          "Shipping Address1": `${formData.address} ${formData.landmark ? '- ' + formData.landmark : ''}`,
+          "Shipping City": formData.city || "",
+          "Shipping Province": formData.governorate || "",
+          Subtotal: subtotal,
+          Shipping: shipping,
+          Total: finalTotal,
+          Currency: "EGP",
+          "Financial Status": "abandoned",
+          "Created at": new Date().toLocaleString('en-US', { timeZone: 'Africa/Cairo' }),
+          data_source: "WIND_Web",
+          lineItems: cartItems.map(item => ({
+            name: `${item.title} ${item.selectedSize ? '- ' + item.selectedSize : ''}`,
+            price: item.price,
+            quantity: item.qty,
+            image: item.image || item.images?.[0] || ''
+          }))
+        };
+
+        if (appliedPromo) draftData['Discount Code'] = appliedPromo;
+
+        await setDoc(orderRef, draftData, { merge: true });
+
+        // Update customer with write guard to prevent duplicates
+        const cleanPhone = formData.phone.replace(/[^0-9]/g, '');
+        const uniqueId = formData.email ? formData.email.toLowerCase().trim() : cleanPhone;
+        
+        if (uniqueId) {
+          const customerRef = doc(getDb(), "Customers", uniqueId);
+          await setDoc(customerRef, {
+            "First Name": formData.firstName || "",
+            "Last Name": formData.lastName || "",
+            Email: formData.email ? formData.email.toLowerCase().trim() : "",
+            Phone: formData.phone || "",
+            "Default Address Address1": formData.address || "",
+            "Default Address City": formData.city || "",
+            "Default Address Province": formData.governorate || "",
+            data_source: "WIND_Web",
+            segments: ["Abandoned_Checkout"],
+            hasAbandoned: true, 
+            last_active: new Date().toLocaleString('en-US', { timeZone: 'Africa/Cairo' })
+          }, { merge: true });
+        }
+
+        lastSavedDraftRef.current = currentSnapshot;
+
+      } catch (error) {
+        console.error("Error saving abandoned cart:", error);
+      }
+    }, 5000) // 5 second debounce
+  ).current;
 
   useEffect(() => {
     const isValidEmail = formData.email && formData.email.includes('@') && formData.email.includes('.');
@@ -195,23 +275,23 @@ export default function CheckoutPage() {
     const hasContactInfo = isValidEmail || isValidPhone;
 
     if (hasContactInfo && cartItems.length > 0) {
-      const timeoutId = setTimeout(async () => {
-        
-        if (isOrderSubmittedRef.current) return;
+      saveAbandonedCartDebounced();
+    }
+  }, [formData.email, formData.phone, cartItems, finalTotal, subtotal, shipping, appliedPromo, activeOrderId]);
 
-        const currentSnapshot = JSON.stringify({ 
-           email: formData.email, 
-           phone: formData.phone, 
-           items: cartItems.length, 
-           total: finalTotal 
-        });
+  // Abandoned cart safety: trigger immediate save on beforeunload
+  useEffect(() => {
+    const handleBeforeUnload = async () => {
+      if (isOrderSubmittedRef.current) return;
+      
+      const isValidEmail = formData.email && formData.email.includes('@') && formData.email.includes('.');
+      const isValidPhone = formData.phone && formData.phone.length >= 11;
+      const hasContactInfo = isValidEmail || isValidPhone;
 
-        if (lastSavedDraftRef.current === currentSnapshot) return; 
-
+      if (hasContactInfo && cartItems.length > 0) {
+        // Immediate save without debounce
         try {
-          // 1. تحديث الأوردر (نفس المستند الثابت)
           const orderRef = doc(getDb(), "Orders", activeOrderId);
-          
           const draftData = {
             Name: activeOrderId,
             "Billing Name": `${formData.firstName} ${formData.lastName}`.trim() || 'عميل محتمل',
@@ -237,39 +317,18 @@ export default function CheckoutPage() {
 
           if (appliedPromo) draftData['Discount Code'] = appliedPromo;
 
-          await setDoc(orderRef, draftData, { merge: true });
-
-          // 2. تحديث العميل (الجزء اللي كان ساقط مننا وبسببه العميل مكنش بيظهر في الداشبورد) 🔥
-          const cleanPhone = formData.phone.replace(/[^0-9]/g, '');
-          const uniqueId = isValidEmail ? formData.email.toLowerCase().trim() : cleanPhone;
-          
-          if (uniqueId) {
-            const customerRef = doc(getDb(), "Customers", uniqueId);
-            await setDoc(customerRef, {
-              "First Name": formData.firstName || "",
-              "Last Name": formData.lastName || "",
-              Email: formData.email ? formData.email.toLowerCase().trim() : "",
-              Phone: formData.phone || "",
-              "Default Address Address1": formData.address || "",
-              "Default Address City": formData.city || "",
-              "Default Address Province": formData.governorate || "",
-              data_source: "WIND_Web",
-              segments: ["Abandoned_Checkout"],
-              hasAbandoned: true, 
-              last_active: new Date().toLocaleString('en-US', { timeZone: 'Africa/Cairo' })
-            }, { merge: true });
-          }
-
-          lastSavedDraftRef.current = currentSnapshot;
-
+          // Use navigator.sendBeacon for reliable delivery during page unload
+          const blob = new Blob([JSON.stringify({ action: 'save_abandoned_cart', data: draftData })], { type: 'application/json' });
+          navigator.sendBeacon('/api/abandoned-cart-save', blob);
         } catch (error) {
-          console.error("Error saving abandoned cart:", error);
+          console.error('[AbandonedCart] Failed to save on beforeunload:', error);
         }
-      }, 5000); 
+      }
+    };
 
-      return () => clearTimeout(timeoutId); 
-    }
-  }, [formData.email, formData.phone, cartItems, finalTotal, subtotal, shipping, appliedPromo, activeOrderId]);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [formData, cartItems, finalTotal, subtotal, shipping, appliedPromo, activeOrderId]);
 
   const validate = () => {
     let tempErrors = {};
@@ -291,92 +350,72 @@ export default function CheckoutPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return window.scrollTo(0, 0);
-    setLoading(true);
     
-    // 🔥 إيقاف رادار السلة المتروكة فوراً عشان ميسجلش الداتا تاني بعد ما نعمل الأوردر
-    isOrderSubmittedRef.current = true;
+    // Use write guard to prevent duplicate submissions
+    const submissionKey = `order_submit_${activeOrderId}`;
+    const guardResult = await writeGuard.execute(submissionKey, async () => {
+      setLoading(true);
+      
+      // 🔥 إيقاف رادار السلة المتروكة فوراً عشان ميسجلش الداتا تاني بعد ما نعمل الأوردر
+      isOrderSubmittedRef.current = true;
 
-    // 1. استخدام نفس رقم الطلب اللي بدأنا بيه الصفحة
-    const orderId = activeOrderId;
+      // 1. استخدام نفس رقم الطلب اللي بدأنا بيه الصفحة
+      const orderId = activeOrderId;
 
-    // 2. تجهيز البيانات للتخزين المؤقت
-    const pendingOrder = {
-      orderId,
-      formData,
-      cartItems,
-      total: finalTotal,
-      amount: finalTotal,
-      appliedPromo,
-      customerEmail: formData.email,
-    };
-
-    try {
-      // ============================================================
-      // 🚀 رفع الداتا للفايربيس (Orders & Customers)
-      // ============================================================
-      const orderData = {
-        Name: orderId,
-        Email: formData.email ? formData.email.toLowerCase() : '',
-        Phone: formData.phone,
-        "Billing Name": `${formData.firstName} ${formData.lastName}`,
-        "Shipping Address1": `${formData.address} ${formData.landmark ? '- ' + formData.landmark : ''}`,
-        "Shipping City": formData.city,
-        "Shipping Province": formData.governorate,
-        "Shipping Phone": formData.phone,
-        "Shipping Zip": formData.postalCode || '',
-        Subtotal: subtotal,
-        Shipping: shipping,
-        Total: finalTotal,
-        Currency: "EGP",
-        "Financial Status": paymentMethod === 'card' ? "pending_payment" : "pending",
-        "Payment Method": paymentMethod,
-        "Created at": new Date().toLocaleString('en-US', { timeZone: 'Africa/Cairo' }),
-        data_source: "WIND_Web", // عشان الأدمن يفصلهم عن شوبيفاي
-        
-        // جلب الصور الدقيقة من سلة المشتريات
-        lineItems: cartItems.map(item => ({
-          name: `${item.title} ${item.selectedSize ? '- ' + item.selectedSize : ''}`,
-          price: item.price,
-          quantity: item.qty,
-          image: item.image || item.images?.[0] || ''
-        }))
+      // 2. تجهيز البيانات للتخزين المؤقت
+      const pendingOrder = {
+        orderId,
+        formData,
+        cartItems,
+        total: finalTotal,
+        amount: finalTotal,
+        appliedPromo,
+        customerEmail: formData.email,
       };
 
-      if (appliedPromo) orderData['Discount Code'] = appliedPromo;
-
-     // 1. إنشاء الأوردر أو تحديثه
       try {
-        await setDoc(doc(getDb(), "Orders", orderId), orderData, { merge: true });
+        // ============================================================
+        // 🚀 رفع الداتا للفايربيز (Orders & Customers)
+        // ============================================================
+        const orderData = {
+          Name: orderId,
+          Email: formData.email ? formData.email.toLowerCase() : '',
+          Phone: formData.phone,
+          "Billing Name": `${formData.firstName} ${formData.lastName}`,
+          "Shipping Address1": `${formData.address} ${formData.landmark ? '- ' + formData.landmark : ''}`,
+          "Shipping City": formData.city,
+          "Shipping Province": formData.governorate,
+          "Shipping Phone": formData.phone,
+          "Shipping Zip": formData.postalCode || '',
+          Subtotal: subtotal,
+          Shipping: shipping,
+          Total: finalTotal,
+          Currency: "EGP",
+          "Financial Status": paymentMethod === 'card' ? "pending_payment" : "pending",
+          "Payment Method": paymentMethod,
+          "Created at": new Date().toLocaleString('en-US', { timeZone: 'Africa/Cairo' }),
+          data_source: "WIND_Web",
+          lineItems: cartItems.map(item => ({
+            name: `${item.title} ${item.selectedSize ? '- ' + item.selectedSize : ''}`,
+            price: item.price,
+            quantity: item.qty,
+            image: item.image || item.images?.[0] || ''
+          }))
+        };
 
-        // 🔥 بوابة الأمان المنيعة: نمنع زيادة العداد لو الدفع "فيزا" عشان لو هرب من الصفحة!
-        // العداد هيزيد فقط في الدفع عند الاستلام وإنستا باي
-        if (paymentMethod !== 'card') {
-          const orderCountKey = `counted_${orderId}`;
-          const isAlreadyCounted = sessionStorage.getItem(orderCountKey);
+        if (appliedPromo) orderData['Discount Code'] = appliedPromo;
 
-          if (!isAlreadyCounted) {
-            const sRef = doc(getDb(), "settings", "siteSettings");
-            await updateDoc(sRef, {
-              "counters.orders": increment(1),
-              "counters.sales": increment(Number(finalTotal))
-            });
-            sessionStorage.setItem(orderCountKey, "true");
-          }
-        }
+        // Generate operation ID for idempotency
+        const orderOpId = generateOperationId('order', orderId);
 
-      } catch (error) {
-        const errorMessage = handleFirebaseError(error, 'creating order');
-        setSubmitError(errorMessage);
-        setLoading(false);
-        return;
-      }
-
-      // 2. تحديث ملف العميل (للدفع عند الاستلام وإنستا باي فقط)
-      if (paymentMethod !== 'card') {
+        // Prepare customer data for batch write
         const cleanPhone = formData.phone.replace(/[^0-9]/g, '');
         const customerId = formData.email ? formData.email.toLowerCase().trim() : cleanPhone;
         
-        if (customerId) {
+        let customerData = null;
+        let counterData = null;
+
+        if (paymentMethod !== 'card' && customerId) {
           const customerRef = doc(getDb(), "Customers", customerId);
           const customerSnap = await getDoc(customerRef);
 
@@ -386,125 +425,132 @@ export default function CheckoutPage() {
             const currentSpent = Number(existingData['Total Spent'] || 0);
             const newSegment = currentOrders >= 1 ? "VIP_Customer" : "Purchased_Once";
 
-            try {
-              await setDoc(customerRef, {
-                "Total Orders": currentOrders + 1,
-                "Total Spent": currentSpent + Number(finalTotal),
-                Last_Order_Status: "New",
-                data_source: "WIND_Web",
-                Phone: formData.phone,
-                "Default Address City": formData.city || "",
-                "Default Address Province": formData.governorate || "",
-                // 🔥 تحديث الشريحة وتمسح السلة المتروكة
-                segments: [newSegment],
-                last_active: new Date().toLocaleString('en-US', { timeZone: 'Africa/Cairo' })
-              }, { merge: true });
-            } catch (error) {
-              console.error('Error updating customer:', error);
-            }
+            customerData = {
+              _id: customerId,
+              "Total Orders": currentOrders + 1,
+              "Total Spent": currentSpent + Number(finalTotal),
+              Last_Order_Status: "New",
+              data_source: "WIND_Web",
+              Phone: formData.phone,
+              "Default Address City": formData.city || "",
+              "Default Address Province": formData.governorate || "",
+              segments: [newSegment],
+              last_active: new Date().toLocaleString('en-US', { timeZone: 'Africa/Cairo' })
+            };
           } else {
-            // عميل جديد تماماً
-            try {
-              // 🔥 بوابة الأمان: منع تكرار حساب العميل الجديد
-              const customerCountKey = `cust_counted_${customerId}`;
-              const isCustCounted = sessionStorage.getItem(customerCountKey);
+            customerData = {
+              _id: customerId,
+              "First Name": formData.firstName || "",
+              "Last Name": formData.lastName || "",
+              Email: formData.email ? formData.email.toLowerCase().trim() : "",
+              Phone: formData.phone || "",
+              "Default Address City": formData.city || "",
+              "Default Address Province": formData.governorate || "",
+              "Default Address Address1": formData.address || "",
+              "Total Orders": 1,
+              "Total Spent": Number(finalTotal),
+              Last_Order_Status: "New",
+              data_source: "WIND_Web",
+              segments: ["Purchased_Once"],
+              last_active: new Date().toLocaleString('en-US', { timeZone: 'Africa/Cairo' })
+            };
+          }
 
-              if (!isCustCounted) {
-                const sRefCust = doc(getDb(), "settings", "siteSettings");
-                await updateDoc(sRefCust, {
-                  "counters.customers": increment(1)
-                });
-                sessionStorage.setItem(customerCountKey, "true");
-              }
-
-              await setDoc(customerRef, {
-                "First Name": formData.firstName || "",
-                "Last Name": formData.lastName || "",
-                Email: formData.email ? formData.email.toLowerCase().trim() : "",
-                Phone: formData.phone || "",
-                "Default Address City": formData.city || "",
-                "Default Address Province": formData.governorate || "",
-                "Default Address Address1": formData.address || "",
-                "Total Orders": 1,
-                "Total Spent": Number(finalTotal),
-                Last_Order_Status: "New",
-                data_source: "WIND_Web",
-                segments: ["Purchased_Once"],
-                last_active: new Date().toLocaleString('en-US', { timeZone: 'Africa/Cairo' })
-              });
-            } catch (error) {
-              console.error('Error creating customer:', error);
-            }
+          // Counter data for batch write (include customer counter for new customers)
+          counterData = {
+            type: 'siteSettings',
+            "counters.orders": increment(1),
+            "counters.sales": increment(Number(finalTotal)),
+            "counters.customers": !customerSnap.exists() ? increment(1) : undefined
+          };
+          
+          // Remove undefined values
+          if (counterData["counters.customers"] === undefined) {
+            delete counterData["counters.customers"];
           }
         }
-      }
 
-      // ============================================================
-      // 🔥 تم إلغاء كود حذف المسودات نهائياً!
-      // لأننا بنستخدم (مستند واحد) من البداية، بمجرد الدفع المستند بيتحول من abandoned لـ pending فوراً
-      // ============================================================
+        // Execute batch write with idempotency (atomic: order + customer + counters)
+        await executeWithIdempotency(orderOpId, async () => {
+          if (paymentMethod !== 'card' && customerData && counterData) {
+            await batchCreateOrder(getDb(), orderData, customerData, counterData);
+          } else {
+            await setDoc(doc(getDb(), "Orders", orderId), orderData, { merge: true });
+          }
+        });
 
-      if (paymentMethod === 'card') {
-        localStorage.setItem('pendingOrder', JSON.stringify(pendingOrder));
+        // ============================================================
+        // 🔥 تم إلغاء كود حذف المسودات نهائياً!
+        // لأننا بنستخدم (مستند واحد) من البداية، بمجرد الدفع المستند بيتحول من abandoned لـ pending فوراً
+        // ============================================================
 
-        const res = await fetch('/api/create-order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            paymentMethod: 'card',
+        if (paymentMethod === 'card') {
+          localStorage.setItem('pendingOrder', JSON.stringify(pendingOrder));
+
+          const res = await fetch('/api/create-order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              paymentMethod: 'card',
+              orderId,
+              amount: finalTotal.toFixed(2),
+              customerName: `${formData.firstName} ${formData.lastName}`,
+              customerEmail: formData.email,
+              phone: formData.phone,
+              appliedPromo,
+            }),
+          });
+
+          const data = await res.json();
+          if (!res.ok || !data.iframeData) throw new Error(data.error || 'حدث خطأ');
+
+          localStorage.setItem('pendingOrder', JSON.stringify({
             orderId,
             amount: finalTotal.toFixed(2),
             customerName: `${formData.firstName} ${formData.lastName}`,
             customerEmail: formData.email,
             phone: formData.phone,
-            appliedPromo,
-          }),
-        });
-
-        const data = await res.json();
-        if (!res.ok || !data.iframeData) throw new Error(data.error || 'حدث خطأ');
-
-        localStorage.setItem('pendingOrder', JSON.stringify({
-          orderId,
-          amount: finalTotal.toFixed(2),
-          customerName: `${formData.firstName} ${formData.lastName}`,
-          customerEmail: formData.email,
-          phone: formData.phone,
-          formData,
-          cartItems,
-          total: finalTotal,
-          appliedPromo,
-        }));
-
-        setIframeData(data.iframeData);
-        setLoading(false);
-
-      } else {
-        // للدفع عند الاستلام وإنستا باي
-        const res = await fetch('/api/create-order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            paymentMethod,
-            orderId,
             formData,
             cartItems,
             total: finalTotal,
             appliedPromo,
-          }),
-        });
+          }));
 
-        if (!res.ok) throw new Error('حدث خطأ في إنشاء الطلب');
+          setIframeData(data.iframeData);
+          setLoading(false);
 
-        localStorage.removeItem('pendingOrder');
-        clearCart();
+        } else {
+          // للدفع عند الاستلام وإنستا باي
+          const res = await fetch('/api/create-order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              paymentMethod,
+              orderId,
+              formData,
+              cartItems,
+              total: finalTotal,
+              appliedPromo,
+            }),
+          });
+
+          if (!res.ok) throw new Error('حدث خطأ في إنشاء الطلب');
+
+          localStorage.removeItem('pendingOrder');
+          clearCart();
+          setLoading(false);
+          router.push(`/thank-you?orderId=${orderId}`);
+        }
+
+      } catch (err) {
+        alert(err.message);
         setLoading(false);
-        router.push(`/thank-you?orderId=${orderId}`);
       }
+    });
 
-    } catch (err) {
-      alert(err.message);
-      setLoading(false);
+    if (guardResult === null) {
+      console.warn('Duplicate submission prevented');
+      return;
     }
   };
 

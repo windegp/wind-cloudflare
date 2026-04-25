@@ -1,20 +1,47 @@
 "use client";
 import { useState, useEffect } from 'react';
 import { getDb } from "@/lib/firebase";
-import { collection, doc, query, orderBy, getDocs, writeBatch, where, arrayUnion, arrayRemove } from "firebase/firestore/lite";
+import { collection, doc, query, orderBy, getDocs, writeBatch, where, arrayUnion, arrayRemove, limit } from "firebase/firestore/lite";
 import { Plus, Trash2, Search, ArrowRight, AlertCircle, X, Star, Heart, Check, RotateCcw, FileText } from '@/components/icons-extra';
 import { Edit2, ExternalLink, Loader2, Save, ImageIcon, CheckSquare, Square, FolderTree } from '@/components/icons-extra';
 // 🔥 1. استدعاء Hook السحر من SWR
 import useSWR, { mutate } from 'swr';
+// 🔥 حماية الكوتا: KV cache و logging
+import { kvGet, kvSet, kvDelete, TTL } from '@/lib/kv-cache';
+import { logRead } from '@/lib/firestoreQuota';
 
 export const dynamic = 'force-dynamic';
 
-// 🔥 2. دالة جلب البيانات (Fetcher) اللي SWR هيستخدمها
+// 🔥 2. دالة جلب البيانات (Fetcher) اللي SWR هيستخدمها - مع KV cache و limit
+const CACHE_KEY = 'admin_collections_v1';
+const CACHE_VERSION = 'v2'; // Incremented for new TTL support
+const FETCH_LIMIT = 20; // حد أقصى 20
+
 const fetchCollections = async () => {
+    const fullCacheKey = `${CACHE_KEY}_${CACHE_VERSION}`;
+    
+    // 🚀 محاولة KV cache أولاً
+    const cached = await kvGet(fullCacheKey);
+    if (cached && Array.isArray(cached)) {
+        logRead('fetchCollections', 'collections', cached.length, 'cache');
+        return cached;
+    }
+    
+    // 🔥 جلب من Firestore مع limit
     const db = getDb();
-    const q = query(collection(db, "collections"), orderBy("name"));
+    const q = query(
+        collection(db, "collections"), 
+        orderBy("name"),
+        limit(FETCH_LIMIT) // ✅ حماية الكوتا
+    );
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    
+    // 💾 تخزين في KV مع TTL 2 دقيقة
+    await kvSet(fullCacheKey, data, TTL.ADMIN_MEDIUM);
+    logRead('fetchCollections', 'collections', data.length, 'firestore');
+    
+    return data;
 };
 
 export default function CollectionsPage() {
@@ -48,16 +75,36 @@ export default function CollectionsPage() {
     // الكلمة "collections-data" دي مفتاح الكاش، لو موجودة في الذاكرة مش هيسحب من الفايربيز
     const { data: collections, isLoading: loading, error } = useSWR('collections-data', fetchCollections);
 
-    // جلب المنتجات للمودال
+    // جلب المنتجات للمودال - مع KV cache و limit
     useEffect(() => {
         if (!isProductModalOpen) return;
         const fetchAllProducts = async () => {
             setIsSearching(true);
             try {
                 const db = getDb();
-                const q = query(collection(db, "products")); 
+                const PRODUCTS_CACHE_KEY = `admin_all_products_v2_${CACHE_VERSION}`;
+                
+                // 🚀 محاولة KV cache أولاً
+                const cached = await kvGet(PRODUCTS_CACHE_KEY);
+                if (cached && Array.isArray(cached)) {
+                    setAllProducts(cached);
+                    logRead('fetchAllProducts', 'products', cached.length, 'cache');
+                    setIsSearching(false);
+                    return;
+                }
+                
+                // 🔥 جلب من Firestore مع limit 20 (وليس 100!)
+                const q = query(
+                    collection(db, "products"),
+                    limit(FETCH_LIMIT) // ✅ حماية الكوتا - 20 منتج كحد أقصى
+                ); 
                 const snapshot = await getDocs(q);
-                setAllProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                const products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                
+                // 💾 تخزين في KV مع TTL 1 دقيقة
+                await kvSet(PRODUCTS_CACHE_KEY, products, TTL.ADMIN_SHORT);
+                setAllProducts(products);
+                logRead('fetchAllProducts', 'products', products.length, 'firestore');
             } catch (error) {
                 console.error("Fetch products error:", error);
             } finally {
@@ -82,14 +129,19 @@ export default function CollectionsPage() {
                 seoDescription: collectionItem.seoDescription || ''
             });
 
-            // هنا بنفتح المحرر، مش محتاجين loading عام للشاشة كلها
+            // هنا بنفتح المحرر - مع limit
             try {
                 const db = getDb();
-                const q = query(collection(db, "products"), where("categories", "array-contains-any", [collectionItem.slug, `/${collectionItem.slug}`]));
+                const q = query(
+                    collection(db, "products"), 
+                    where("categories", "array-contains-any", [collectionItem.slug, `/${collectionItem.slug}`]),
+                    limit(FETCH_LIMIT) // ✅ حماية الكوتا
+                );
                 const snapshot = await getDocs(q);
                 const products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 setSelectedProducts(products);
-                setOriginalProductIds(products.map(p => p.id)); 
+                setOriginalProductIds(products.map(p => p.id));
+                logRead('openEditor', 'products', products.length, 'firestore');
             } catch (error) { console.error(error); } 
         } else {
             setActiveId(null);
@@ -160,7 +212,8 @@ export default function CollectionsPage() {
             
             // 🔥 4. بدلاً من تحديث الـ State يدوياً، نأمر SWR بتحديث الكاش أوتوماتيكياً
             mutate('collections-data');
-            // 🔥 مسح KV Cache للكوليكشن والصفحة الرئيسية
+            // �️ مسح KV Cache للكوليكشن
+            await kvDelete(`${CACHE_KEY}_${CACHE_VERSION}`);
 try {
   const slugToInvalidate = formData.slug?.trim().replace(/^\//, '');
   
@@ -185,15 +238,21 @@ try {
                 const db = getDb();
                 const batch = writeBatch(db);
                 batch.delete(doc(db, "collections", id));
-                const q = query(collection(db, "products"), where("categories", "array-contains-any", [slug, `/${slug}`]));
+                const q = query(
+                    collection(db, "products"), 
+                    where("categories", "array-contains-any", [slug, `/${slug}`]),
+                    limit(FETCH_LIMIT) // ✅ حماية الكوتا
+                );
                 const snapshot = await getDocs(q);
                 snapshot.docs.forEach(productDoc => {
                     batch.update(doc(db, "products", productDoc.id), { categories: arrayRemove(slug, `/${slug}`) });
                 });
+                logRead('handleDeleteCollection', 'products', snapshot.docs.length, 'firestore');
                 await batch.commit();
                 
                 // 🔥 5. تحديث الكاش بعد الحذف
                 mutate('collections-data');
+                await kvDelete(`${CACHE_KEY}_${CACHE_VERSION}`);
 
             } catch (err) { alert("خطأ في الحذف"); }
         }
