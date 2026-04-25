@@ -7,7 +7,7 @@ import { getAuthInstance } from "@/lib/firebase";
 import { ADMIN_UID } from "@/lib/constants";
 
 // 👇 دمجنا كل الأيقونات في استدعاء واحد فقط عشان نمنع أي خطأ
-import { Search, Menu, X, User, ShoppingCart, ChevronDown, Grid, List, Filter, Edit, Trash2, Copy, Move, Plus, LayoutDashboard, Package, ShoppingBag, PlusCircle, Users, Star, Palette, FolderTree, FileText, Settings, Lock, LogOut, ChevronLeft } from '@/components/icons-extra';
+import { Search, Menu, X, User, ShoppingCart, ChevronDown, Grid, List, Filter, Edit, Trash2, Copy, Move, Plus, LayoutDashboard, Package, ShoppingBag, PlusCircle, Users, Star, Palette, FolderTree, FileText, Settings, Lock, LogOut, ChevronLeft, Activity } from '@/components/icons-extra';
 
 export default function AdminLayout({ children }) {
   const pathname = usePathname();
@@ -45,6 +45,7 @@ export default function AdminLayout({ children }) {
     { name: 'إدارة الواجهة', path: '/admin/home-manager', icon: <Palette size={20}/> },
     { name: 'المنيو', path: '/admin/menu', icon: <Menu size={20}/> },
     { name: 'الصفحات', path: '/admin/pages', icon: <FileText size={20}/> },
+    { name: 'المراقبة', path: '/admin/observability', icon: <Activity size={20}/> },
     { name: 'الإعدادات', path: '/admin/settings', icon: <Settings size={20}/> },
   ];
 

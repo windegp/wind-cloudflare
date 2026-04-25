@@ -1,5 +1,6 @@
 import { getKV, kvDeleteMany } from '@/lib/kv-cache';
 import { revalidatePath } from 'next/cache';
+import { addEvent } from '@/lib/observabilityBuffer';
 
 export const dynamic = 'force-dynamic';
 
@@ -166,6 +167,21 @@ export async function POST(request) {
   }
 
   await kvDeleteMany(keysToDelete);
+  
+  // Emit observability event
+  addEvent({
+    type: 'revalidate',
+    source: 'invalidation',
+    function: 'revalidate API',
+    count: keysToDelete.length,
+    duration: Date.now() - startTime,
+    metadata: {
+      keys: keysToDelete,
+      priority,
+      reason,
+      skipped: skippedCount
+    }
+  });
   
   const responseTime = Date.now() - startTime;
   logDebug(reason, keysToDelete, priority, skippedCount);

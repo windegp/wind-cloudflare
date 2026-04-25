@@ -9,6 +9,7 @@
  */
 
 import { kvGet, kvSet, kvDelete, TTL, kvFirstFetch, CACHE_PRIORITY } from './kv-cache';
+import { emitFirestoreRead } from './observabilityEmitter';
 
 // ═══════════════════════════════════════════════════════════
 // CONFIGURATION
@@ -73,6 +74,9 @@ export function logRead(functionName, collection, docCount = 1, source = 'firest
     console.log(`${icon}${staleIndicator} [${functionName}] ${collection}: ${docCount} docs (${source})`);
   }
 
+  // Emit to unified observability system
+  emitFirestoreRead(functionName, collection, docCount, source);
+
   // Track reads for quota monitoring (only Firestore reads, not cache)
   if (source === 'firestore') {
     const thisMinute = Math.floor(now / 60000);
@@ -94,7 +98,8 @@ export function logRead(functionName, collection, docCount = 1, source = 'firest
     checkQuotaSpike();
   }
 
-  // Store in sessionStorage for audit
+  // Legacy: Store in sessionStorage for backward compatibility
+  // New system uses unified observability emitter
   if (typeof window !== 'undefined') {
     try {
       const existing = JSON.parse(sessionStorage.getItem(READ_LOG_KEY) || '[]');

@@ -1,4 +1,5 @@
 import { getCloudflareContext } from '@opennextjs/cloudflare';
+import { emitKVEvent } from './observabilityEmitter';
 
 // ═══════════════════════════════════════════════════════════
 // CACHE STAMPEDE PROTECTION & BACKGROUND REFRESH
@@ -255,6 +256,7 @@ export async function kvDeleteMany(keys = []) {
 export async function kvFirstFetch(key, fetchFn, ttl = TTL.MEDIUM_PRIORITY, staleTtl = null, priority = CACHE_PRIORITY.MEDIUM) {
   // Calculate stale threshold
   const actualStaleTtl = staleTtl || getStaleThreshold(priority);
+  const startTime = Date.now();
   
   // 1. Try to get cache with metadata
   const cached = await kvGet(key);
@@ -264,14 +266,17 @@ export async function kvFirstFetch(key, fetchFn, ttl = TTL.MEDIUM_PRIORITY, stal
     const now = Date.now();
     const cachedAt = cachedWithMeta?.cachedAt || 0;
     const ageSeconds = (now - cachedAt) / 1000;
+    const duration = Date.now() - startTime;
     
     // Cache is fresh - return immediately
     if (ageSeconds < ttl) {
+      emitKVEvent('hit', key, { duration, ageSeconds, priority });
       return { data: cached, source: 'cache', isStale: false };
     }
     
     // Cache is stale but usable - return immediately + refresh in background
     if (ageSeconds < actualStaleTtl) {
+      emitKVEvent('hit', key, { duration, ageSeconds, priority, isStale: true });
       triggerBackgroundRefresh(key, fetchFn, ttl);
       return { data: cached, source: 'cache-stale', isStale: true };
     }
@@ -281,13 +286,24 @@ export async function kvFirstFetch(key, fetchFn, ttl = TTL.MEDIUM_PRIORITY, stal
   
   // 2. Deduplicate concurrent requests (prevent stampede)
   const result = await dedupeRequest(key, async () => {
+    const fetchStart = Date.now();
     const data = await fetchFn();
+    const fetchDuration = Date.now() - fetchStart;
+    
     if (data !== null && data !== undefined) {
       // Store data
       await kvSet(key, data, ttl);
       // Store metadata for stale tracking
       await kvSet(`${key}_meta`, { cachedAt: Date.now(), priority }, Math.max(ttl, actualStaleTtl));
     }
+    
+    // Emit cache miss event
+    emitKVEvent('miss', key, { 
+      duration: fetchDuration, 
+      priority,
+      hasData: data !== null && data !== undefined 
+    });
+    
     return data;
   });
   
