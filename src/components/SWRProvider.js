@@ -133,9 +133,6 @@ function createDebugFetcher(baseFetcher) {
     const startTime = performance.now();
 
     try {
-      // Check for duplicate keys
-      checkDuplicateSWRKey(typeof key === 'string' ? key : JSON.stringify(key));
-
       const result = await baseFetcher(key, ...args);
 
       if (DEBUG_MODE) {
