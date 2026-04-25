@@ -1,5 +1,7 @@
 "use client";
 import useSWR from 'swr';
+import { usePathname } from 'next/navigation';
+import { buildScopedSWRKey, getSWRNamespaceFromPath, serializeSWRKey } from '@/lib/swr-keys';
 
 const DEFAULT_SWR_CONFIG = {
   dedupingInterval: 120000,
@@ -11,13 +13,21 @@ const DEFAULT_SWR_CONFIG = {
 };
 
 export function useSmartSWR(key, fetcher, config = {}) {
+  const pathname = usePathname();
   const { owner, ...restConfig } = config;
-  return useSWR(key, fetcher, {
+  const scopedKey = buildScopedSWRKey(key, pathname);
+  const namespace = getSWRNamespaceFromPath(pathname);
+
+  return useSWR(scopedKey, fetcher, {
     ...DEFAULT_SWR_CONFIG,
     ...restConfig,
     meta: {
       ...(restConfig.meta || {}),
-      ...(owner ? { owner } : {})
+      ...(owner ? { owner } : {}),
+      namespace,
+      route: pathname || 'unknown-route',
+      rawKey: serializeSWRKey(key),
+      scopedKey,
     }
   });
 }

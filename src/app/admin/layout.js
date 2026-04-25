@@ -1,5 +1,4 @@
 "use client";
-import { SWRConfig } from 'swr';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -84,15 +83,6 @@ export default function AdminLayout({ children }) {
   }
 
  return (
-    // 🔥 تغليف الأدمن بالكامل بإعدادات SWR لتقليل استهلاك الكوتا
-    <SWRConfig 
-      value={{
-        revalidateOnFocus: false,
-        revalidateOnReconnect: false,
-        dedupingInterval: 300000, 
-        revalidateIfStale: false
-      }}
-    >
       <div className="h-screen bg-[#f4f6f8] text-[#202223] flex overflow-hidden font-sans" dir="rtl">
         {isOpen && (
         <div 
@@ -165,6 +155,5 @@ export default function AdminLayout({ children }) {
         </div>
       </main>
     </div>
-    </SWRConfig>
   );
 }

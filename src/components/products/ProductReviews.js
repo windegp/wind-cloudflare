@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useState } from 'react';
 import { mutate } from 'swr';
+import { usePathname } from 'next/navigation';
 import { getDb } from '@/lib/firebase';
 import { 
   collection, getDocs, query, limit, 
@@ -9,9 +10,10 @@ import {
 import { X, CheckCircle, ImageIcon, ChevronDown, Star } from '@/components/icons-extra';
 import { usePaginatedReviews } from "@/hooks/useFirestore";
 import ImageUploader from "@/components/ImageUploader";
-import { SWR_KEYS } from '@/lib/swr-keys';
+import { SWR_KEYS, buildScopedSWRKey } from '@/lib/swr-keys';
 
 export default function ProductReviews({ productHandle, onReviewStatsUpdate }) {
+  const pathname = usePathname();
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lastDoc, setLastDoc] = useState(null);
@@ -188,9 +190,9 @@ export default function ProductReviews({ productHandle, onReviewStatsUpdate }) {
         // مسح sessionStorage عشان الـ ProductCard يسحب فريش
         sessionStorage.removeItem(`wind_stats_${productHandle}`);
         // تحديث فوري لكل الـ SWR caches المرتبطة
-        mutate(SWR_KEYS.HOMEPAGE_DATA);
-        mutate(SWR_KEYS.HOMEPAGE_SECTIONS);
-        mutate(SWR_KEYS.HOMEPAGE_REVIEWS);
+        mutate(buildScopedSWRKey(SWR_KEYS.HOMEPAGE_DATA, pathname));
+        mutate(buildScopedSWRKey(SWR_KEYS.HOMEPAGE_SECTIONS, pathname));
+        mutate(buildScopedSWRKey(SWR_KEYS.HOMEPAGE_REVIEWS, pathname));
       } catch (e) {
         console.error("WIND Cache Revalidate Error:", e);
       }

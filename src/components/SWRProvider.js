@@ -1,118 +1,160 @@
 "use client";
-import { SWRConfig, SWRConfiguration } from 'swr';
+import { SWRConfig } from 'swr';
 import { usePathname } from 'next/navigation';
-import { useRef, useEffect } from 'react';
 
 // ═══════════════════════════════════════════════════════════
 // CONFIGURATION CONSTANTS
 // ═══════════════════════════════════════════════════════════
 
 const DEFAULT_DEDUPING_INTERVAL = 60000; // 60 seconds (1 minute)
-const ADMIN_DEDUPING_INTERVAL = 5000;     // 5 seconds for admin pages
-const HEAVY_HOOK_DEDUPING_INTERVAL_MIN = 300000;  // 5 minutes
-const HEAVY_HOOK_DEDUPING_INTERVAL_MAX = 600000;  // 10 minutes
+const ADMIN_DEDUPING_INTERVAL = 5000; // 5 seconds for admin pages
+const HEAVY_HOOK_DEDUPING_INTERVAL_MIN = 300000; // 5 minutes
+const HEAVY_HOOK_DEDUPING_INTERVAL_MAX = 600000; // 10 minutes
 
-// ═══════════════════════════════════════════════════════════
-// DEBUG MODE
-// ═══════════════════════════════════════════════════════════
+const IS_DEV = process.env.NODE_ENV !== 'production';
+const DEBUG_MODE = IS_DEV || process.env.NEXT_PUBLIC_SWR_DEBUG === 'true';
+const SAFETY_MODE = IS_DEV || process.env.NEXT_PUBLIC_SWR_SAFETY_DEBUG === 'true';
 
-const DEBUG_MODE = process.env.NEXT_PUBLIC_SWR_DEBUG === 'true';
-const SAFETY_MODE = process.env.NEXT_PUBLIC_SWR_SAFETY_DEBUG === 'true';
+// Single shared cache for entire app (public + admin in one cache space)
+// Isolation is by namespaced keys, not separate cache instances.
+const GLOBAL_SWR_CACHE = new Map();
 
-/**
- * Debug logger for SWR operations
- */
-function swrDebugLog(key, trigger, isCacheHit, extra = {}) {
-  if (!DEBUG_MODE) return;
+// Persistent key registry to detect real ownership conflicts.
+// key => { namespace, owners: Map(owner -> { route, lastSeen }), lastSeen }
+const keyRegistry = new Map();
+const REGISTRY_TTL_MS = 15 * 60 * 1000;
 
-  const timestamp = new Date().toISOString();
-  const logData = {
-    key,
-    timestamp,
-    trigger,
-    cacheStatus: isCacheHit ? 'HIT' : 'FETCH',
-    ...extra
-  };
-
-  console.log(`[SWR DEBUG]`, logData);
+function serializeKey(key) {
+  if (key === null || key === undefined) return null;
+  if (typeof key === 'string') return key;
+  if (Array.isArray(key)) return JSON.stringify(key);
+  try {
+    return JSON.stringify(key);
+  } catch {
+    return String(key);
+  }
 }
 
-// ═══════════════════════════════════════════════════════════
-// DUPLICATE KEY SAFEGUARD
-// ═══════════════════════════════════════════════════════════
+function extractNamespaceFromKey(serializedKey, fallbackNamespace = 'public') {
+  if (!serializedKey) return fallbackNamespace;
+  if (serializedKey.startsWith('admin:')) return 'admin';
+  if (serializedKey.startsWith('public:')) return 'public';
+  if (serializedKey.includes('__ns:admin')) return 'admin';
+  if (serializedKey.includes('__ns:public')) return 'public';
+  return fallbackNamespace;
+}
 
-// Track ownership per key to avoid StrictMode false positives
-const keyOwnership = new Map();
-const OWNER_TTL_MS = 2000;
+function scopeKeyForNamespace(key, namespace) {
+  if (key === null || key === undefined) return key;
+
+  if (Array.isArray(key)) {
+    const marker = `__ns:${namespace}`;
+    const lastPart = key[key.length - 1];
+    if (typeof lastPart === 'string' && lastPart.startsWith('__ns:')) return key;
+    return [...key, marker];
+  }
+
+  const serialized = serializeKey(key);
+  if (!serialized) return key;
+  if (serialized.startsWith('admin:') || serialized.startsWith('public:')) return key;
+  return `${namespace}:${serialized}`;
+}
+
+function cleanupRegistry(now = Date.now()) {
+  for (const [key, entry] of keyRegistry.entries()) {
+    if (now - entry.lastSeen > REGISTRY_TTL_MS) {
+      keyRegistry.delete(key);
+    }
+  }
+}
+
+function swrTraceLog(payload) {
+  if (!DEBUG_MODE) return;
+  console.log('[SWR TRACE]', {
+    timestamp: new Date().toISOString(),
+    ...payload,
+  });
+}
 
 /**
- * Checks if a key has been used in the current render cycle
- * @param {string} key - SWR key
- * @returns {boolean} - true if duplicate
+ * Persistent duplicate key guard (namespace + key + owner + route).
+ * This avoids StrictMode false positives caused by render-cycle tracking.
  */
-export function checkDuplicateSWRKey(key, owner = 'unknown') {
+export function checkDuplicateSWRKey({ key, owner = 'unknown-owner', route = 'unknown-route', namespace = 'public' }) {
   if (!SAFETY_MODE || !key) return false;
 
   const now = Date.now();
-  // cleanup old entries
-  for (const [trackedKey, tracked] of keyOwnership.entries()) {
-    if (now - tracked.timestamp > OWNER_TTL_MS) keyOwnership.delete(trackedKey);
+  cleanupRegistry(now);
+
+  const existing = keyRegistry.get(key) || {
+    namespace,
+    owners: new Map(),
+    lastSeen: now,
+  };
+
+  existing.lastSeen = now;
+  existing.namespace = namespace;
+
+  const ownerRecord = existing.owners.get(owner);
+  if (!ownerRecord) {
+    const conflictingOwners = Array.from(existing.owners.keys()).filter((trackedOwner) => trackedOwner !== owner);
+    if (conflictingOwners.length > 0) {
+      const stack = typeof window !== 'undefined' ? new Error().stack?.split('\n').slice(2, 7).join(' | ') : '';
+      console.warn(`[SWR SAFETY] Duplicate key detected with different owners: "${key}"`, stack);
+      console.warn(`[SWR SAFETY] namespace="${namespace}" route="${route}" ownerB="${owner}"`);
+      console.warn(`[SWR SAFETY] ownerA list="${conflictingOwners.join(', ')}"`);
+      console.warn('[SWR SAFETY] Consider combining these hooks or using different keys');
+    }
   }
 
-  const existing = keyOwnership.get(key);
-  if (existing && existing.owner !== owner) {
-    const stack = typeof window !== 'undefined' ? new Error().stack?.split('\n').slice(2, 6).join(' | ') : '';
-    console.warn(`[SWR SAFETY] Duplicate key detected with different owners: "${key}"`, stack);
-    console.warn(`[SWR SAFETY] ownerA="${existing.owner}" ownerB="${owner}"`);
-    return true;
-  }
-  keyOwnership.set(key, { owner, timestamp: now });
+  existing.owners.set(owner, { route, lastSeen: now });
+  keyRegistry.set(key, existing);
+
   return false;
 }
 
 /**
- * Resets the key tracking for a new render cycle
- * Call this at the start of each render
+ * Reset registry manually (kept for diagnostics tooling/tests).
  */
 export function resetSWRKeyTracking() {
-  keyOwnership.clear();
+  keyRegistry.clear();
 }
 
 // ═══════════════════════════════════════════════════════════
 // HOOK-LEVEL OVERRIDE SYSTEM
 // ═══════════════════════════════════════════════════════════
 
-/**
- * Hook-level configuration overrides
- * Each hook can specify custom dedupingInterval and revalidateOnFocus
- */
 export const HOOK_OVERRIDES = {
   // Heavy hooks - long deduping intervals (5-10 minutes)
-  'settings/siteSettings': { dedupingInterval: 300000 },           // 5 min
-  'homepage-reviews': { dedupingInterval: 300000 },                // 5 min
-  'homepage-products-sections': { dedupingInterval: 600000 },      // 10 min
-  'paginated-products': { dedupingInterval: 600000 },              // 10 min
-  'related-': { dedupingInterval: 600000 },                          // 10 min (prefix match)
-  'reviews-': { dedupingInterval: 600000 },                        // 10 min (prefix match)
-  'product-': { dedupingInterval: 60000 },                       // 1 min (can be refreshed)
+  'settings/siteSettings': { dedupingInterval: 300000 }, // 5 min
+  'homepage-reviews': { dedupingInterval: 300000 }, // 5 min
+  'homepage-products-sections': { dedupingInterval: 600000 }, // 10 min
+  'paginated-products': { dedupingInterval: 600000 }, // 10 min
+  'related-': { dedupingInterval: 600000 }, // 10 min (prefix match)
+  'reviews-': { dedupingInterval: 600000 }, // 10 min (prefix match)
+  'product-': { dedupingInterval: 60000 }, // 1 min
 };
 
-/**
- * Gets hook-level override configuration
- * @param {string} key - SWR key
- * @returns {object} - Override config or empty object
- */
+function normalizeKeyForOverride(key) {
+  if (!key) return '';
+  if (key.startsWith('admin:')) return key.slice('admin:'.length);
+  if (key.startsWith('public:')) return key.slice('public:'.length);
+  return key;
+}
+
 export function getHookOverride(key) {
   if (!key) return {};
 
+  const normalizedKey = normalizeKeyForOverride(key);
+
   // Exact match
-  if (HOOK_OVERRIDES[key]) {
-    return HOOK_OVERRIDES[key];
+  if (HOOK_OVERRIDES[normalizedKey]) {
+    return HOOK_OVERRIDES[normalizedKey];
   }
 
   // Prefix match
   for (const [prefix, config] of Object.entries(HOOK_OVERRIDES)) {
-    if (prefix.endsWith('-') && key.startsWith(prefix)) {
+    if (prefix.endsWith('-') && normalizedKey.startsWith(prefix)) {
       return config;
     }
   }
@@ -120,30 +162,37 @@ export function getHookOverride(key) {
   return {};
 }
 
-// ═══════════════════════════════════════════════════════════
-// CUSTOM SWR CONFIGURATION
-// ═══════════════════════════════════════════════════════════
-
-/**
- * Custom fetcher wrapper with debug logging
- */
-function createDebugFetcher(baseFetcher) {
+function createDebugFetcher(baseFetcher, traceContext) {
   return async (key, ...args) => {
     const startTime = performance.now();
 
     try {
       const result = await baseFetcher(key, ...args);
+      const duration = performance.now() - startTime;
 
-      if (DEBUG_MODE) {
-        const duration = performance.now() - startTime;
-        swrDebugLog(key, 'fetch', false, { duration: `${duration.toFixed(2)}ms` });
-      }
+      swrTraceLog({
+        event: 'fetch-success',
+        key: traceContext.key,
+        namespace: traceContext.namespace,
+        owner: traceContext.owner,
+        route: traceContext.route,
+        cacheStatus: 'MISS/FETCH',
+        fetchDurationMs: Number(duration.toFixed(2)),
+      });
 
       return result;
     } catch (error) {
-      if (DEBUG_MODE) {
-        swrDebugLog(key, 'fetch-error', false, { error: error.message });
-      }
+      const duration = performance.now() - startTime;
+      swrTraceLog({
+        event: 'fetch-error',
+        key: traceContext.key,
+        namespace: traceContext.namespace,
+        owner: traceContext.owner,
+        route: traceContext.route,
+        cacheStatus: 'MISS/FETCH',
+        fetchDurationMs: Number(duration.toFixed(2)),
+        error: error?.message || 'unknown-error',
+      });
       throw error;
     }
   };
@@ -155,93 +204,114 @@ function createDebugFetcher(baseFetcher) {
 
 export const SWRProvider = ({ children }) => {
   const pathname = usePathname();
-
-  // Detect if we're in admin section
   const isAdminPage = pathname?.startsWith('/admin') || false;
+  const routeNamespace = isAdminPage ? 'admin' : 'public';
 
-  // Reset when route changes only (not every render)
-  useEffect(() => {
-    resetSWRKeyTracking();
-  }, [pathname]);
-
-  // Base configuration
   const baseConfig = {
     // Global defaults
     dedupingInterval: isAdminPage ? ADMIN_DEDUPING_INTERVAL : DEFAULT_DEDUPING_INTERVAL,
-    revalidateOnFocus: isAdminPage, // Only true for admin pages
+    revalidateOnFocus: isAdminPage,
     revalidateOnReconnect: isAdminPage,
-    shouldRetryOnError: false,      // Disable retry loops
-    keepPreviousData: true,         // Keep old data while fetching
-    errorRetryCount: 0,             // No automatic retries
+    shouldRetryOnError: false,
+    keepPreviousData: true,
+    errorRetryCount: 0,
 
-    // Provider for global state management
-    provider: () => new Map(),
+    // Always use the same cache instance.
+    provider: () => GLOBAL_SWR_CACHE,
 
-    // Global onError handler
-    onError: (error, key) => {
-      if (DEBUG_MODE) {
-        console.error(`[SWR ERROR] Key: ${key}`, error);
-      }
+    onError: (error, key, config) => {
+      const owner = config?.meta?.owner || 'unknown-owner';
+      const route = config?.meta?.route || pathname || 'unknown-route';
+      const namespace = config?.meta?.namespace || extractNamespaceFromKey(key, routeNamespace);
+
+      console.error('[SWR ERROR]', {
+        key,
+        namespace,
+        owner,
+        route,
+        error: error?.message || error,
+      });
     },
 
-    // Global onSuccess handler for debug
     onSuccess: (data, key, config) => {
-      if (DEBUG_MODE) {
-        swrDebugLog(key, 'success', true, { dataSize: JSON.stringify(data).length });
-      }
+      const owner = config?.meta?.owner || 'unknown-owner';
+      const route = config?.meta?.route || pathname || 'unknown-route';
+      const namespace = config?.meta?.namespace || extractNamespaceFromKey(key, routeNamespace);
+
+      swrTraceLog({
+        event: 'cache-hit-or-revalidate-success',
+        key,
+        namespace,
+        owner,
+        route,
+        cacheStatus: GLOBAL_SWR_CACHE.has(key) ? 'HIT' : 'MISS',
+        dataSize: data ? JSON.stringify(data).length : 0,
+      });
     },
 
-    // Apply hook-level overrides
     use: [
-      (useSWRNext) => (key, fetcher, config) => {
-        const hookOverride = getHookOverride(typeof key === 'string' ? key : '');
+      (useSWRNext) => (key, fetcher, config = {}) => {
+        const scopedKey = scopeKeyForNamespace(key, routeNamespace);
+        const serializedKey = serializeKey(scopedKey);
+        const owner = config?.meta?.owner || 'unknown-owner';
+        const route = config?.meta?.route || pathname || 'unknown-route';
+        const namespace = config?.meta?.namespace || extractNamespaceFromKey(serializedKey, routeNamespace);
 
-        // Merge configurations: global < hook-override < inline-config
+        if (serializedKey) {
+          swrTraceLog({
+            event: 'hook-register',
+            key: serializedKey,
+            namespace,
+            owner,
+            route,
+            cacheStatus: GLOBAL_SWR_CACHE.has(serializedKey) ? 'HIT' : 'MISS',
+          });
+
+          checkDuplicateSWRKey({
+            key: serializedKey,
+            owner,
+            route,
+            namespace,
+          });
+        }
+
+        const hookOverride = getHookOverride(typeof serializedKey === 'string' ? serializedKey : '');
+
         const mergedConfig = {
           ...config,
           ...hookOverride,
-          // Allow inline config to override hook overrides
           ...(config?.dedupingInterval !== undefined && { dedupingInterval: config.dedupingInterval }),
           ...(config?.revalidateOnFocus !== undefined && { revalidateOnFocus: config.revalidateOnFocus }),
+          meta: {
+            ...(config?.meta || {}),
+            owner,
+            route,
+            namespace,
+          },
         };
 
-        // Wrap fetcher with debug logging if in debug mode
+        // Duplicate checks are intentionally ONLY in middleware, never in fetcher wrapper.
         const wrappedFetcher = DEBUG_MODE && fetcher
-          ? createDebugFetcher(fetcher)
+          ? createDebugFetcher(fetcher, {
+              key: serializedKey,
+              owner,
+              route,
+              namespace,
+            })
           : fetcher;
 
-        // Reset key tracking before each SWR hook call
-        if (typeof window !== 'undefined' && SAFETY_MODE) {
-          const owner = config?.meta?.owner || 'unknown-owner';
-          checkDuplicateSWRKey(typeof key === 'string' ? key : JSON.stringify(key), owner);
-        }
-
-        return useSWRNext(key, wrappedFetcher, mergedConfig);
-      }
-    ]
+        return useSWRNext(scopedKey, wrappedFetcher, mergedConfig);
+      },
+    ],
   };
 
-  // Admin-specific logging
-  if (DEBUG_MODE && isAdminPage) {
-    console.log('[SWR CONFIG] Admin mode detected - using shorter deduping interval:', ADMIN_DEDUPING_INTERVAL);
-  }
-
-  return (
-    <SWRConfig value={baseConfig}>
-      {children}
-    </SWRConfig>
-  );
+  return <SWRConfig value={baseConfig}>{children}</SWRConfig>;
 };
 
 // ═══════════════════════════════════════════════════════════
 // UTILITY EXPORTS FOR HOOKS
 // ═══════════════════════════════════════════════════════════
 
-/**
- * Helper to create SWR config for heavy data hooks
- * @param {number} minutes - Cache duration in minutes (5-10)
- * @returns {SWRConfiguration}
- */
 export function createHeavyHookConfig(minutes = 5) {
   const clampedMinutes = Math.min(Math.max(minutes, 5), 10);
   return {
@@ -251,25 +321,17 @@ export function createHeavyHookConfig(minutes = 5) {
   };
 }
 
-/**
- * Helper to create SWR config for real-time hooks
- * @returns {SWRConfiguration}
- */
 export function createRealtimeHookConfig() {
   return {
-    dedupingInterval: 5000, // 5 seconds
+    dedupingInterval: 5000,
     revalidateOnFocus: true,
-    refreshInterval: 30000,   // Auto-refresh every 30 seconds
+    refreshInterval: 30000,
   };
 }
 
-/**
- * Helper to create SWR config for admin hooks
- * @returns {SWRConfiguration}
- */
 export function createAdminHookConfig() {
   return {
-    dedupingInterval: 5000,  // 5 seconds
+    dedupingInterval: 5000,
     revalidateOnFocus: true,
     revalidateOnReconnect: true,
   };
