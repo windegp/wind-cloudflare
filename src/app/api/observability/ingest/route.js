@@ -11,7 +11,6 @@
 import { addEvent, getPipelineMetrics } from '@/lib/observabilityBuffer';
 
 export const dynamic = 'force-dynamic';
-export const runtime = 'edge';
 
 /**
  * Validates an incoming event

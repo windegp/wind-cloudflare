@@ -9,7 +9,6 @@
 import { getPipelineMetrics, getEvents } from '@/lib/observabilityBuffer';
 
 export const dynamic = 'force-dynamic';
-export const runtime = 'edge';
 
 const HEARTBEAT_INTERVAL = 30000; // 30s heartbeat
 const UPDATE_INTERVAL = 1000; // 1s updates
