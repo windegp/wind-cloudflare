@@ -1,64 +1,21 @@
 import { NextResponse } from 'next/server';
 import { getDb } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore/lite";
-import { kvGet, kvSet, kvFirstFetch, TTL, getStaleThresholdForKey } from '@/lib/kv-cache';
+import { kvGet, kvSet } from '@/lib/kv-cache';
 
 export const dynamic = 'force-dynamic';
 
-const CACHE_KEY = 'homepage_data_v2'; // v2 for TTL support
+const CACHE_KEY = 'homepage_data_v1';
 
 export async function GET() {
-  // 🚀 KV-first fetch with stale-while-revalidate (TTL: 300s, Stale: 600s)
-  const result = await kvFirstFetch(
-    CACHE_KEY,
-    async () => fetchHomepageData(),
-    TTL.HOMEPAGE_DATA,
-    getStaleThresholdForKey(CACHE_KEY),
-    'medium'
-  );
-
-  // Log cache status
-  const isHit = result.source === 'cache' || result.source === 'cache-stale';
-  console.log(`[KV ${isHit ? 'HIT' : 'MISS'}] homepage: ${result.source}${result.isStale ? ' (stale)' : ''}`);
-
-  // Return cached/stale data immediately
-  if (isHit) {
+  // 1. جرب KV أولاً
+  const cached = await kvGet(CACHE_KEY);
+  if (cached) {
     return NextResponse.json(
-      { 
-        success: true, 
-        source: result.source, 
-        data: result.data,
-        isStale: result.isStale 
-      },
-      { 
-        headers: { 
-          'X-Cache': result.isStale ? 'HIT-STALE' : 'HIT',
-          'X-Cache-TTL': String(TTL.HOMEPAGE_DATA)
-        } 
-      }
+      { success: true, source: 'cache', data: cached },
+      { headers: { 'X-Cache': 'HIT' } }
     );
   }
-
-  // Firestore miss - data already fetched by kvFirstFetch
-  return NextResponse.json(
-    { 
-      success: true, 
-      source: 'firebase', 
-      data: result.data 
-    },
-    { 
-      headers: { 
-        'X-Cache': 'MISS',
-        'X-Cache-TTL': String(TTL.HOMEPAGE_DATA)
-      } 
-    }
-  );
-}
-
-/**
- * Fetches homepage data from Firestore
- */
-async function fetchHomepageData() {
 
   // 2. جيب من Firebase
   try {
@@ -116,10 +73,15 @@ async function fetchHomepageData() {
       hero: heroSnap.exists() ? heroSnap.data() : { slides: [], categories: [] }
     };
 
-    return firebaseData;
+    // 3. خزّن في KV
+    await kvSet(CACHE_KEY, firebaseData);
+
+    return NextResponse.json(
+      { success: true, source: 'firebase', data: firebaseData },
+      { headers: { 'X-Cache': 'MISS' } }
+    );
 
   } catch (error) {
-    console.error('[API Homepage] Error fetching:', error);
-    throw error;
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

@@ -7,17 +7,12 @@ import { useRouter } from 'next/navigation';
 import { Users, Target, Search, Trash2, AlertTriangle, X, ChevronLeft, ChevronRight, Mail, ShoppingCart, Download, Crown, UserMinus, Monitor, Archive, Layers } from '@/components/icons-extra';
 // 🔥 1. استدعاء SWR
 import useSWR from 'swr';
-// 🔥 حماية الكوتا
-import { kvGet, kvSet, kvDelete, TTL } from '@/lib/kv-cache';
-import { logRead } from '@/lib/firestoreQuota';
 
 export const dynamic = 'force-dynamic';
 
 const fixOldData = async () => {
   const db = getDb();
-  // 🔥 حماية الكوتا: limit 20
-  const snap = await getDocs(query(collection(db, "Customers"), limit(20)));
-  logRead('fixOldData', 'Customers', snap.docs.length, 'firestore');
+  const snap = await getDocs(collection(db, "Customers"));
   const batch = writeBatch(db);
   let count = 0;
 
@@ -75,23 +70,13 @@ export default function CustomersPage() {
   // ==========================================
   // 🔥 2. دالة الجلب الأساسية لـ SWR
   // ==========================================
-  const CACHE_KEY_PREFIX = 'admin_customers';
-  const CACHE_VERSION = 'v2'; // For TTL support
-  const MAX_EXPORT_ITERATIONS = 50; // Safety limit for export loops
-
-const fetcher = async (tabKey) => {
+  const fetcher = async (tabKey) => {
     const db = getDb();
-    const tabSource = tabKey[1];
-    const cacheKey = `${CACHE_KEY_PREFIX}_${tabSource}_${CACHE_VERSION}`;
-    
-    // 🚀 محاولة KV cache أولاً
-    const cached = await kvGet(cacheKey);
-    if (cached && Array.isArray(cached)) {
-        logRead('fetcher', 'Customers', cached.length, 'cache');
-        return cached;
-    }
-    
     let q;
+    
+    // tabKey سيكون عبارة عن مصفوفة ['customers', 'wind'] مثلاً
+    const tabSource = tabKey[1];
+
     if (tabSource === 'wind') {
       q = query(collection(db, "Customers"), where("data_source", "==", "WIND_Web"), limit(fetchLimit));
     } else if (tabSource === 'shopify') {
@@ -101,7 +86,6 @@ const fetcher = async (tabKey) => {
     }
 
     const customersSnap = await getDocs(q);
-    logRead('fetcher', 'Customers', customersSnap.docs.length, 'firestore');
     const customersMap = new Map();
 
     customersSnap.docs.forEach(doc => {
@@ -149,9 +133,6 @@ const fetcher = async (tabKey) => {
     // تحديث حالة Pagination
     setLastVisible(customersSnap.docs[customersSnap.docs.length - 1] || null);
     setHasMore(customersSnap.docs.length === fetchLimit);
-    
-    // 💾 تخزين في KV مع TTL 2 دقيقة
-    await kvSet(cacheKey, parsedArray, TTL.ADMIN_MEDIUM);
     
     return parsedArray;
   };
@@ -284,7 +265,6 @@ const fetcher = async (tabKey) => {
           if (cEmail) {
             batch.delete(doc(db, "Orders", `DRAFT-${cEmail}`));
             const snapEmail = await getDocs(query(collection(db, "Orders"), where("Email", "==", cEmail), limit(1)));
-            logRead('handleDeleteSelected', 'Orders', snapEmail.docs.length, 'firestore');
             snapEmail.docs.forEach(d => {
               const oData = d.data();
               if (oData['Financial Status'] !== 'abandoned') {
@@ -298,7 +278,6 @@ const fetcher = async (tabKey) => {
           if (cPhone) {
             batch.delete(doc(db, "Orders", `DRAFT-${cPhone}`));
             const snapPhone = await getDocs(query(collection(db, "Orders"), where("Phone", "==", cPhone), limit(1)));
-            logRead('handleDeleteSelected', 'Orders', snapPhone.docs.length, 'firestore');
             snapPhone.docs.forEach(d => {
               const oData = d.data();
               if (oData['Financial Status'] !== 'abandoned') {
@@ -324,15 +303,9 @@ const fetcher = async (tabKey) => {
 
       await batch.commit();
 
-      // 🗑️ مسح KV cache بعد الحذف
-      await Promise.all([
-        kvDelete(`${CACHE_KEY_PREFIX}_wind_${CACHE_VERSION}`),
-        kvDelete(`${CACHE_KEY_PREFIX}_shopify_${CACHE_VERSION}`),
-        kvDelete(`${CACHE_KEY_PREFIX}_all_${CACHE_VERSION}`)
-      ]);
-
-      // حذف محلي سريع للبيانات
+      // حذف محلي سريع للبيانات لتجنب استدعاء SWR مرة أخرى
       setAdditionalCustomers(prev => prev.filter(c => !selectedCustomers.includes(c.id)));
+      // Note: Updating SWR cache manually via mutate is ideal, but for simplicity here we rely on the component state.
       
       setSelectedCustomers([]);
       setShowDeleteModal(false);
@@ -352,82 +325,52 @@ const fetcher = async (tabKey) => {
 
     try {
       const db = getDb();
-      let allExportData = [];
-      let lastDoc = null;
-      let fetchMore = true;
-      let iterationCount = 0;
-      
-      // 🔥 حماية الكوتا: pagination مع limit 20 و max 50 iterations
-      while (fetchMore && iterationCount < MAX_EXPORT_ITERATIONS) {
-        iterationCount++;
-        
-        let constraints = [
-          collection(db, "Customers"),
-          limit(20) // ✅ limit 20 per page
-        ];
-        
-        if (activeTab === 'wind') {
-          constraints.push(where("data_source", "==", "WIND_Web"));
-        } else if (activeTab === 'shopify') {
-          constraints.push(where("data_source", "==", "Shopify_Import"));
-        }
-        
-        if (lastDoc) {
-          constraints.push(startAfter(lastDoc));
-        }
-        
-        const q = query(...constraints);
-        const snap = await getDocs(q);
-        logRead('exportToExcelForAds', 'Customers', snap.docs.length, 'firestore');
-        
-        if (snap.empty) {
-          fetchMore = false;
-        } else {
-          // Process this batch
-          snap.docs.forEach(doc => {
-            const c = doc.data();
-            const totalOrders = Number(c['Total Orders'] || 0);
-            const dbSegments = c.segments || [];
-            
-            let calculatedSegments = ['all'];
-            if (c.Email) calculatedSegments.push('Email_Subscriber');
-            
-            if (totalOrders === 0) {
-              calculatedSegments.push('Potential_Customer');
-              if (c.hasAbandoned === true || dbSegments.includes('Abandoned_Checkout')) {
-                calculatedSegments.push('Abandoned_Checkout');
-              }
-            } else if (totalOrders === 1) {
-              calculatedSegments.push('Purchased_Once');
-            } else if (totalOrders > 1) {
-              calculatedSegments.push('VIP_Customer');
-              calculatedSegments.push('Purchased_Once');
-            }
+      let q;
 
-            if (activeSegment === 'all' || calculatedSegments.includes(activeSegment)) {
-              allExportData.push({ ...c, calculatedOrderCount: totalOrders, calculatedSegments });
-            }
-          });
-          
-          // Update pagination state
-          lastDoc = snap.docs[snap.docs.length - 1];
-          
-          // Stop if we got less than 20 docs
-          if (snap.docs.length < 20) {
-            fetchMore = false;
+      if (activeTab === 'wind') {
+        q = query(collection(db, "Customers"), where("data_source", "==", "WIND_Web"));
+      } else if (activeTab === 'shopify') {
+        q = query(collection(db, "Customers"), where("data_source", "==", "Shopify_Import"));
+      } else {
+        q = collection(db, "Customers");
+      }
+
+      const snap = await getDocs(q);
+      let exportData = [];
+
+      snap.docs.forEach(doc => {
+        const c = doc.data();
+        const totalOrders = Number(c['Total Orders'] || 0);
+        const dbSegments = c.segments || [];
+        
+        let calculatedSegments = ['all'];
+        if (c.Email) calculatedSegments.push('Email_Subscriber');
+        
+        if (totalOrders === 0) {
+          calculatedSegments.push('Potential_Customer');
+          if (c.hasAbandoned === true || dbSegments.includes('Abandoned_Checkout')) {
+            calculatedSegments.push('Abandoned_Checkout');
           }
+        } else if (totalOrders === 1) {
+          calculatedSegments.push('Purchased_Once');
+        } else if (totalOrders > 1) {
+          calculatedSegments.push('VIP_Customer');
+          calculatedSegments.push('Purchased_Once');
         }
-      } // End while loop
-      
-      // Check if we have data to export
-      if (allExportData.length === 0) {
+
+        if (activeSegment === 'all' || calculatedSegments.includes(activeSegment)) {
+          exportData.push({ ...c, calculatedOrderCount: totalOrders, calculatedSegments });
+        }
+      });
+
+      if (exportData.length === 0) {
         alert(`لا يوجد عملاء في شريحة (${activeSegment}) لتصديرهم.`);
         setIsExporting(false);
         return;
       }
 
       const headers = ["Email,Phone,FirstName,LastName,City,State,Zip,Country,Value,Currency,OrderCount,LastOrderStatus,Source,Tags"];
-      const rows = allExportData.map(c => {
+      const rows = exportData.map(c => {
         const email = (c.Email || c.email || '').toString().trim().toLowerCase();
         const phone = (c.Phone || c['Default Address Phone'] || '').toString().replace(/[^0-9+]/g, '');
         const firstName = c['First Name'] ? c['First Name'].toString().trim() : '';

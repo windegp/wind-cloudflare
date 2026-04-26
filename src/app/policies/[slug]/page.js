@@ -5,12 +5,6 @@ import { useParams, usePathname } from 'next/navigation';
 import { usePageReady, useGlobalLoader } from "@/context/GlobalLoaderContext";
 import { getDb } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore/lite";
-// 🔥 حماية الكوتا
-import { kvGet, kvSet, kvDelete, TTL } from '@/lib/kv-cache';
-import { logRead } from '@/lib/firestoreQuota';
-
-const POLICIES_CACHE_PREFIX = 'storefront_policy';
-const CACHE_VERSION = 'v2'; // For TTL support
 
 export default function DynamicPolicyPage() {
   const { slug } = useParams();
@@ -23,26 +17,10 @@ export default function DynamicPolicyPage() {
   useEffect(() => {
     const fetchPolicy = async () => {
       try {
-        const cacheKey = `${POLICIES_CACHE_PREFIX}_${slug}_${CACHE_VERSION}`;
-        
-        // 🚀 محاولة KV cache أولاً
-        const cached = await kvGet(cacheKey);
-        if (cached) {
-          setData(cached);
-          logRead('fetchPolicy', 'Policies', 1, 'cache');
-          setLoading(false);
-          return;
-        }
-        
         const docRef = doc(getDb(), "Policies", slug);
         const docSnap = await getDoc(docRef);
-        logRead('fetchPolicy', 'Policies', 1, 'firestore');
-        
         if (docSnap.exists()) {
-          const policyData = docSnap.data();
-          setData(policyData);
-          // 💾 تخزين في KV مع TTL 5 دقائق
-          await kvSet(cacheKey, policyData, TTL.STOREFRONT_LONG);
+          setData(docSnap.data());
         }
       } catch (err) { console.error(err); }
       finally { setLoading(false); }

@@ -3,12 +3,10 @@ import { useEffect, useState, useRef } from "react";
 import { useCart } from "../../context/CartContext";
 import Link from "next/link";
 import { ShoppingBag, Trash2, X, Plus, ZoomIn, Loader2, Minus } from '@/components/icons-extra';
-// ❌ REMOVED: All Firestore imports - Cart uses ONLY localStorage
-// import { getDb } from "../../lib/firebase";
-// import { doc, getDoc, collection, query, where, getDocs, documentId, limit } from "firebase/firestore/lite";
+import { getDb } from "../../lib/firebase";
+import { doc, getDoc, collection, query, where, getDocs, documentId } from "firebase/firestore/lite";
 import { products as staticProducts } from "../../lib/products";
-import QuickViewModal from "@/components/QuickViewModal";
-// ✅ KV API only - NO direct Firestore reads in CartDrawer 
+import QuickViewModal from "@/components/QuickViewModal"; 
 
 export default function CartDrawer() {
   const { cartItems, isCartOpen, toggleCart, removeFromCart, updateQty, subtotal } = useCart();
@@ -56,34 +54,37 @@ export default function CartDrawer() {
           if (sp && !fetchedProducts.some(fp => fp.id === sp.id)) fetchedProducts.push(sp);
         });
 
-        // 2. 🛡️ جلب المنتجات الناقصة من KV API فقط (NO Firestore reads in Cart)
+        // 2. 🛡️ جلب المنتجات الناقصة من فايربيز في قراءة واحدة (Batch Fetch)
+        // قص العدد لـ 10 بس (لأننا محتاجين 6 بس للعرض) عشان حماية الـ Limits
         const missingHandles = handles
           .filter(h => !fetchedProducts.some(fp => fp.id.toString() === h || fp.handle === h))
-          .slice(0, 10); // ✅ limit 10
+          .slice(0, 10);
 
         if (missingHandles.length > 0) {
-          // 🚀 استخدام API المؤقت بالكاش فقط - لا قراءات مباشرة من فايربيز
-          try {
-            // Try to fetch from product API for each missing handle
-            const productPromises = missingHandles.map(async (handle) => {
-              try {
-                const res = await fetch(`/api/product/${handle}`);
-                if (res.ok) {
-                  const data = await res.json();
-                  if (data?.id && !cartIdsAndHandles.includes(data.id)) {
-                    return data;
-                  }
-                }
-              } catch (e) {
-                console.error(`[Cart] Failed to fetch product ${handle}:`, e);
-              }
-              return null;
-            });
+          const db = getDb();
+          
+          // أ. البحث عن طريق الـ ID (العملية الأسرع)
+          const qById = query(collection(db, "products"), where(documentId(), "in", missingHandles));
+          const snapById = await getDocs(qById);
+          
+          snapById.docs.forEach(ds => {
+            if (!cartIdsAndHandles.includes(ds.id)) {
+              fetchedProducts.push({ id: ds.id, ...ds.data() });
+            }
+          });
 
-            const fetchedFromAPI = (await Promise.all(productPromises)).filter(Boolean);
-            fetchedProducts.push(...fetchedFromAPI);
-          } catch (error) {
-            console.error('[Cart] Error fetching suggestions from API:', error);
+          // ب. البحث عن طريق خانة الـ Handle للمنتجات اللي لسه مجاتش
+          const foundIds = snapById.docs.map(d => d.id);
+          const stillMissing = missingHandles.filter(h => !foundIds.includes(h));
+          
+          if (stillMissing.length > 0) {
+            const qByField = query(collection(db, "products"), where("handle", "in", stillMissing));
+            const snapByField = await getDocs(qByField);
+            snapByField.docs.forEach(ds => {
+              if (!cartIdsAndHandles.includes(ds.id)) {
+                fetchedProducts.push({ id: ds.id, ...ds.data() });
+              }
+            });
           }
         }
 

@@ -1,31 +1,10 @@
 "use client";
-import useSWR, { mutate } from 'swr';
+import useSWR from 'swr';
 import { getDb } from '@/lib/firebase';
 import { 
   collection, getDocs, doc, getDoc, query, limit, 
-  orderBy, where, startAfter, documentId, getCountFromServer
+  orderBy, where, startAfter, documentId
 } from 'firebase/firestore/lite';
-// Note: SWR configuration is now handled by SWRProvider middleware
-// Import these helpers if you need inline overrides:
-// import { createHeavyHookConfig, createAdminHookConfig } from '@/components/SWRProvider';
-
-// ═══════════════════════════════════════════════════════════
-// SESSION CACHE INTEGRATION
-// ═══════════════════════════════════════════════════════════
-import {
-  smartFetch,
-  SESSION_CACHE_KEYS,
-  invalidateProductCache,
-  invalidateProductStatsCache,
-  invalidateHomepageCache
-} from '@/lib/session-cache';
-
-// Re-export cache invalidation functions for components
-export { 
-  invalidateProductCache, 
-  invalidateProductStatsCache, 
-  invalidateHomepageCache 
-};
 
 // =========================================================
 // 1. Fetchers (المصانع الخلفية اللي بتكلم الفايربيز)
@@ -46,7 +25,7 @@ const fetchCollection = async ([path, limitCount, orderField, orderDir]) => {
   if (orderField) {
     q = query(q, orderBy(orderField, orderDir || 'asc'));
   }
-  // حماية إجبارية: لو محدش بعت Limit، الفايربيز هيسحب 20 بس كحد أقصى عشان الكوتا
+  // 🛡️ حماية إجبارية: لو محدش بعت Limit، الفايربيز هيسحب 20 بس كحد أقصى عشان الكوتا
   q = query(q, limit(limitCount || 20)); 
 
   const snap = await getDocs(q);
@@ -107,7 +86,7 @@ const fetchHomepageReviews = async () => {
 };
 
 // مصنع جلب منتجات الأقسام الأربعة (Legendary Batch Fetching - قراءة واحدة فقط للمنتجات)
-const fetchHomepageProductsSectionsFetcher = async () => {
+const fetchHomepageProductsSections = async () => {
   const db = getDb();
   
   const getCurrentWeekString = () => {
@@ -218,9 +197,17 @@ const fetchHomepageProductsSectionsFetcher = async () => {
   }
 };
 
+// =========================================================
+// 2. Custom Hooks (الخطافات الجاهزة للاستخدام في أي صفحة)
+// =========================================================
+
 // هوك الإعدادات (مقفل الكوتا بالكامل)
 export const useSiteSettings = () => {
-  return useSWR('settings/siteSettings', fetchDoc);
+  return useSWR('settings/siteSettings', fetchDoc, {
+    dedupingInterval: 300000, // 5 دقائق كاش (mutate() بيجبر الريفريش فوراً)
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false
+  });
 };
 
 // هوك قائمة المنتجات (بنمررله العدد المطلوب)
@@ -228,79 +215,36 @@ export const useProductsList = (limitCount = 20) => {
   return useSWR(['products', limitCount, 'title', 'asc'], fetchCollection);
 };
 
-// هوك تقييمات الصفحة الرئيسية (SWR + Session Cache)
-// Cache key: wind_homepage_reviews
+// هوك تقييمات الصفحة الرئيسية (مقفل الكوتا بالكامل)
 export const useHomepageReviews = () => {
-  const cacheKey = SESSION_CACHE_KEYS.HOMEPAGE_REVIEWS;
-  const swrKey = 'homepage-reviews-bundle';
-
-  const fetcherWithSessionCache = async (key, { mutate }) => {
-    const fetchFn = async () => {
-      // 1. Try KV API first
-      try {
-        const res = await fetch('/api/homepage-reviews');
-        if (res.ok) {
-          const data = await res.json();
-          if (data.reviews) return data;
-        }
-      } catch (e) {
-        console.error("WIND Homepage Reviews API Error:", e);
-      }
-
-      // 2. Fallback to Firestore
-      return fetchHomepageReviews();
-    };
-
-    // Use smart fetch with session cache + SWR sync
-    const result = await smartFetch(
-      cacheKey, 
-      fetchFn, 
-      () => mutate(),  // Background refresh
-      (data) => mutate(data, false)  // Sync cache with SWR
-    );
-
-    return result.data;
-  };
-
-  return useSWR(swrKey, fetcherWithSessionCache);
+  return useSWR('homepage-reviews', fetchHomepageReviews, {
+    dedupingInterval: 300000, // 5 دقائق كاش (mutate() بيجبر الريفريش فوراً)
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false
+  });
 };
 
-// هوك الأقسام الأربعة (SWR + Session Cache)
-// Cache key: wind_homepage_sections
-// Uses KV API first, then session cache, then Firestore fallback
+// هوك الأقسام الأربعة (يقرأ من KV Cache لحماية الكوتا)
 export const useHomepageProductsSections = () => {
-  const cacheKey = SESSION_CACHE_KEYS.HOMEPAGE_SECTIONS;
-  const swrKey = 'homepage-sections-bundle';
-
-  const fetcherWithSessionCache = async (key, { mutate }) => {
-    const fetchFn = async () => {
-      // 1. Try KV API first (fastest)
-      try {
-        const res = await fetch('/api/homepage');
-        if (res.ok) {
-          const result = await res.json();
-          if (result.success) return result.data;
-        }
-      } catch (e) {
-        console.error("WIND Homepage API Error:", e);
+  const fetcherWithCache = async () => {
+    try {
+      // محاولة القراءة من الـ KV API أولاً
+      const res = await fetch('/api/homepage');
+      if (res.ok) {
+        const result = await res.json();
+        if (result.success) return result.data;
       }
-
-      // 2. Fallback to Firestore
-      return fetchHomepageProductsSectionsFetcher();
-    };
-
-    // Use smart fetch with session cache + SWR sync
-    const result = await smartFetch(
-      cacheKey, 
-      fetchFn, 
-      () => mutate(),  // Background refresh
-      (data) => mutate(data, false)  // Sync cache with SWR
-    );
-
-    return result.data;
+    } catch (e) {
+      console.error("WIND Cache Fetch Error:", e);
+    }
+    // Fallback: لو الكاش مش متاح، يروح لفايربيز مباشرة
+    return fetchHomepageProductsSections();
   };
 
-  return useSWR(swrKey, fetcherWithSessionCache);
+  return useSWR('homepage-products-sections', fetcherWithCache, {
+    revalidateOnFocus: true, // السماح بالتحديث عند العودة للصفحة
+    dedupingInterval: 5000   // منع التكرار لمدة 5 ثواني فقط بدل ساعة
+  });
 };
 
 // هوك جلب منتجات القسم مع Pagination لدعم التصفح اللانهائي
@@ -330,55 +274,38 @@ export const usePaginatedProducts = (categorySlug, limitCount = 10, lastVisibleD
     };
   };
 
-  return useSWR(`paginated-products-${categorySlug}-${lastVisibleDoc?.id || 'start'}`, fetcher);
+  // مفتاح SWR فريد يعتمد على القسم ومكان التوقف (lastVisibleDoc)
+  return useSWR(`paginated-products-${categorySlug}-${lastVisibleDoc?.id || 'start'}`, fetcher, {
+    revalidateOnFocus: false,
+    dedupingInterval: 600000, // كاش 10 دقائق
+  });
 };
-
-// هوك جلب تفاصيل منتج واحد (SWR + Session Cache)
-// Cache key: wind_product_${id}
-// - Fresh (< 60s): return immediately
-// - Stale (60s-5min): return + revalidate in background
-// - Expired (> 5min): fetch fresh
+// 🚀 هوك جلب تفاصيل منتج واحد (SWR)
 export const useProduct = (id) => {
-  const cacheKey = id ? SESSION_CACHE_KEYS.PRODUCT(id) : null;
-  const swrKey = id ? `product-${id}` : null;
-
-  // Fetcher that uses session cache + API + Firestore fallback
-  const fetcherWithSessionCache = async (key, { mutate }) => {
+  const fetcherWithCache = async () => {
     if (!id) return null;
-
-    const fetchFn = async () => {
-      // 1. Try KV API first
-      try {
-        const res = await fetch(`/api/product/${id}`);
+    try {
+      // جيب من KV Cache عبر API
+      const res = await fetch(`/api/product/${id}`);
       if (res.ok) {
-          const result = await res.json();
-          if (result?.id) return result;
-        }
-      } catch (e) {
-        console.error("WIND Product API Error:", e);
+        const result = await res.json();
+        if (result?.id) return result;
       }
-
-      // 2. Fallback to Firestore
-      const db = getDb();
-      const snap = await getDoc(doc(db, "products", id));
-      return snap.exists() ? { id: snap.id, ...snap.data() } : null;
-    };
-
-    // Use smart fetch with session cache + SWR sync
-    const result = await smartFetch(
-      cacheKey, 
-      fetchFn, 
-      () => mutate(),  // Background refresh
-      (data) => mutate(data, false)  // Sync cache with SWR
-    );
-
-    return result.data;
+    } catch (e) {
+      console.error("WIND Product Cache Error:", e);
+    }
+    // Fallback لفايربيز
+    const db = getDb();
+    const snap = await getDoc(doc(db, "products", id));
+    return snap.exists() ? { id: snap.id, ...snap.data() } : null;
   };
-
-  return useSWR(swrKey, fetcherWithSessionCache);
+  return useSWR(id ? `product-${id}` : null, fetcherWithCache, {
+    revalidateOnFocus: false,
+    dedupingInterval: 60000
+  });
 };
 
-// هوك جلب المنتجات ذات الصلة (النسخة الكاملة والمطابقة لمنطقك الأصلي)
+// 🚀 هوك جلب المنتجات ذات الصلة (النسخة الكاملة والمطابقة لمنطقك الأصلي)
 export const useRelatedProducts = (product) => {
   const fetcher = async () => {
     if (!product?.id) return [];
@@ -398,10 +325,10 @@ export const useRelatedProducts = (product) => {
 
     // 2. لو مفيش، جلب عن طريق الـ Collections (Array-contains)
     if (related.length === 0) {
-      // التعديل هنا: خليناه يقرأ من collections
+      // 🔥 التعديل هنا: خليناه يقرأ من collections
       const fbRefValue = (Array.isArray(product.collections) && product.collections[0]) || product.category;
       if (fbRefValue) {
-        // التعديل هنا: البحث في حقل collections
+        // 🔥 التعديل هنا: البحث في حقل collections
         const qCat = query(productsRef, where("collections", "array-contains", fbRefValue), limit(6));
         const snap = await getDocs(qCat);
         snap.forEach(d => {
@@ -421,10 +348,17 @@ export const useRelatedProducts = (product) => {
 
     return Array.from(new Map(related.map(item => [item.id, item])).values()).slice(0, 5);
   };
-  return useSWR(product?.id ? `related-${product.id}` : null, fetcher);
+
+  return useSWR(product?.id ? `related-${product.id}` : null, fetcher, {
+    dedupingInterval: 600000, // 10 دقائق كاش
+    revalidateOnFocus: false
+  });
 };
+// هوك جلب تقييمات المنتج (3 تقييمات فقط في المرة)
 
 // هوك جلب تقييمات المنتج (3 تقييمات فقط في المرة)
+
+// النسخة النهائية المفلترة والمحمية من الكوتا
 export const usePaginatedReviews = (productHandle, lastVisibleDoc = null, filter = "all") => {
   const fetcher = async () => {
     if (!productHandle) return { reviews: [], lastDoc: null };
@@ -452,80 +386,9 @@ export const usePaginatedReviews = (productHandle, lastVisibleDoc = null, filter
       lastDoc: snap.docs[snap.docs.length - 1] || null
     };
   };
-  return useSWR(productHandle ? `reviews-${productHandle}-${filter}-${lastVisibleDoc?.id || 'start'}` : null, fetcher);
-};
 
-// ═══════════════════════════════════════════════════════════
-// PRODUCT STATS HOOK (with session cache + invalidation)
-// ═══════════════════════════════════════════════════════════
-
-// Cache key: wind_stats_${handle}
-// IMPORTANT: Clear this cache after new review using invalidateProductStatsCache(handle)
-export const useProductStats = (handle) => {
-  const cacheKey = handle ? SESSION_CACHE_KEYS.PRODUCT_STATS(handle) : null;
-  const swrKey = handle ? `product-stats-${handle}` : null;
-
-  const fetcherWithSessionCache = async (key, { mutate }) => {
-    if (!handle) return null;
-
-    const fetchFn = async () => {
-      // 1. Try KV API first (product-stats API)
-      try {
-        const res = await fetch(`/api/product-stats?handle=${encodeURIComponent(handle)}`);
-        if (res.ok) {
-          const result = await res.json();
-          if (result.success) return result.data;
-        }
-      } catch (e) {
-        console.error("WIND Product Stats API Error:", e);
-      }
-
-      // 2. Fallback: Calculate from Firestore
-      const db = getDb();
-      const statsRef = doc(db, "ProductStats", handle);
-      const statsSnap = await getDoc(statsRef);
-
-      if (statsSnap.exists()) {
-        const data = statsSnap.data();
-        return {
-          averageRating: data.totalCount ? (data.totalRatingSum / data.totalCount).toFixed(1) : "5.0",
-          reviewCount: data.totalCount || 0,
-          likesCount: data.likesCount || 0,
-          ...data
-        };
-      }
-
-      // 3. Calculate on the fly from reviews
-      const reviewsQuery = query(
-        collection(db, "Reviews"),
-        where("productHandle", "==", handle),
-        where("status", "==", "published")
-      );
-      const reviewsSnap = await getDocs(reviewsQuery);
-      const reviews = reviewsSnap.docs.map(d => d.data());
-
-      if (reviews.length === 0) {
-        return { averageRating: "5.0", reviewCount: 0, likesCount: 0 };
-      }
-
-      const totalRating = reviews.reduce((sum, r) => sum + (r.rating || 5), 0);
-      return {
-        averageRating: (totalRating / reviews.length).toFixed(1),
-        reviewCount: reviews.length,
-        likesCount: 0
-      };
-    };
-
-    // Use smart fetch with session cache + SWR sync
-    const result = await smartFetch(
-      cacheKey, 
-      fetchFn, 
-      () => mutate(),  // Background refresh
-      (data) => mutate(data, false)  // Sync cache with SWR
-    );
-
-    return result.data;
-  };
-
-  return useSWR(swrKey, fetcherWithSessionCache);
+  return useSWR(productHandle ? `reviews-${productHandle}-${filter}-${lastVisibleDoc?.id || 'start'}` : null, fetcher, {
+    dedupingInterval: 600000,
+    revalidateOnFocus: false
+  });
 };

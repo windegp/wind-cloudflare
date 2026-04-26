@@ -3,16 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { getDb } from "@/lib/firebase";
-import { doc, getDoc, collection, query, where, getDocs, limit } from "firebase/firestore/lite";
+import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore/lite";
 import { ArrowRight, Package, User, MapPin, Printer } from '@/components/icons-extra';
-// 🔥 حماية الكوتا
-import { kvGet, kvSet, kvDelete, TTL } from '@/lib/kv-cache';
-import { logRead } from '@/lib/firestoreQuota';
 
 export const dynamic = 'force-dynamic';
-
-const ORDER_CACHE_PREFIX = 'admin_order_detail';
-const CACHE_VERSION = 'v2'; // For TTL support
 
 export default function OrderDetailsPage() {
   const { id } = useParams();
@@ -24,27 +18,16 @@ export default function OrderDetailsPage() {
 
   const fetchOrderDetails = async () => {
     try {
-      const cacheKey = `${ORDER_CACHE_PREFIX}_${id}_${CACHE_VERSION}`;
-      
-      // 🚀 محاولة KV cache أولاً
-      const cached = await kvGet(cacheKey);
-      if (cached && cached.order) {
-        setOrder(cached.order);
-        setProductsList(cached.productsList || []);
-        logRead('fetchOrderDetails', 'Orders+products', 1 + (cached.productsList?.length || 0), 'cache');
-        return;
-      }
-      
       const db = getDb();
       const decodedId = decodeURIComponent(id).trim();
       
+      // 🔥 الحل السحري: لو الأوردر WIND أو سلة متروكة مش هنحط شباك، لو شوبيفاي هنحط الشباك
       let orderIdToFetch = decodedId;
       if (!decodedId.startsWith('WIND') && !decodedId.startsWith('DRAFT') && !decodedId.startsWith('#')) {
         orderIdToFetch = `#${decodedId}`;
       }
 
       const docSnap = await getDoc(doc(db, "Orders", orderIdToFetch));
-      logRead('fetchOrderDetails', 'Orders', 1, 'firestore');
       
       if (docSnap.exists()) {
         const orderData = docSnap.data();
@@ -52,31 +35,24 @@ export default function OrderDetailsPage() {
 
         const isWind = orderData.data_source === 'WIND_Web';
 
-        let finalProductsList = [];
-        
         if (isWind) {
-          finalProductsList = orderData.lineItems || [];
-          setProductsList(finalProductsList);
+          // داتا WIND بتيجي جاهزة بالصور والأسماء والمقاسات، مفيش داعي ندور!
+          setProductsList(orderData.lineItems || []);
         } else {
-          // داتا شوبيفاي القديمة - مع limit 1
+          // داتا شوبيفاي القديمة اللي بتحتاج ندور على الصور
           const items = orderData.lineItems || [];
           const itemsWithImages = await Promise.all(items.map(async (item) => {
             const baseName = item.name.split(' - ')[0].trim(); 
-            const pQ = query(collection(db, "products"), where("title", "==", baseName), limit(1));
+            const pQ = query(collection(db, "products"), where("title", "==", baseName));
             const pSnap = await getDocs(pQ);
-            logRead('fetchOrderDetails', 'products', pSnap.docs.length, 'firestore');
             let img = null;
             if (!pSnap.empty) {
               img = pSnap.docs[0].data().images?.[0]; 
             }
             return { ...item, image: img, baseName };
           }));
-          finalProductsList = itemsWithImages;
           setProductsList(itemsWithImages);
         }
-        
-        // 💾 تخزين في KV مع TTL 2 دقيقة
-        await kvSet(cacheKey, { order: orderData, productsList: finalProductsList }, TTL.ADMIN_MEDIUM);
       }
     } catch (e) { console.error(e); } finally { setLoading(false); }
   };
