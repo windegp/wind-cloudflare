@@ -16,7 +16,7 @@ export default function HomeSectionsMainContent() {
   const { signalPageReady } = usePageReady();
 
   // 1. جلب التنسيق (Layout) والهيرو من ال API عبر ال KV cache
-  const { data: homepageData, isLoading: isHomepageLoading } = useSWR('homepage/data', async () => {
+  const { data: homepageData, isLoading: isHomepageLoading } = useSWR('homepage/layout-hero', async () => {
     const response = await fetch("/api/homepage");
     const result = await response.json();
     if (!result.success) {

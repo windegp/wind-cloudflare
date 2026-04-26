@@ -232,7 +232,7 @@ export const useProductsList = (limitCount = 20) => {
 // Cache key: wind_homepage_reviews
 export const useHomepageReviews = () => {
   const cacheKey = SESSION_CACHE_KEYS.HOMEPAGE_REVIEWS;
-  const swrKey = 'homepage-reviews';
+  const swrKey = 'homepage-reviews-bundle';
 
   const fetcherWithSessionCache = async (key, { mutate }) => {
     const fetchFn = async () => {
@@ -270,7 +270,7 @@ export const useHomepageReviews = () => {
 // Uses KV API first, then session cache, then Firestore fallback
 export const useHomepageProductsSections = () => {
   const cacheKey = SESSION_CACHE_KEYS.HOMEPAGE_SECTIONS;
-  const swrKey = 'homepage-products-sections';
+  const swrKey = 'homepage-sections-bundle';
 
   const fetcherWithSessionCache = async (key, { mutate }) => {
     const fetchFn = async () => {
