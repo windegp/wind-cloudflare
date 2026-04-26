@@ -1,24 +1,40 @@
 import { getDb } from "@/lib/firebase"; 
 import { collection, getDocs, query, limit } from "firebase/firestore/lite";
 import { products as staticProducts } from "@/lib/products";
+// 🔥 حماية الكوتا
+import { kvGet, kvSet, TTL } from "@/lib/kv-cache";
+import { logRead } from "@/lib/firestoreQuota";
 
 // 🔥 الدرع الواقي: Cloudflare CDN هيحفظ الخريطة لمدة 24 ساعة (86400 ثانية)
 // شيلنا سطر الـ edge عشان بيعمل تعارض مع مكتبة فايربيز أثناء الـ Build
 export const revalidate = 86400;
 
+const SITEMAP_CACHE_KEY = 'sitemap_products_v2'; // v2 for TTL
+
 export default async function sitemap() {
   const baseUrl = "https://www.windeg.com";
-  const db = getDb();
-
-  // 1. جلب المنتجات من Firebase (🛡️ مع حماية الكوتا بحد أقصى 1000 منتج)
+  
+  // 🚀 محاولة KV cache أولاً
   let fbProducts = [];
   try {
-    const q = query(collection(db, "products"), limit(1000));
-    const querySnapshot = await getDocs(q);
-    fbProducts = querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    const cached = await kvGet(SITEMAP_CACHE_KEY);
+    if (cached && Array.isArray(cached)) {
+      fbProducts = cached;
+      logRead('sitemap', 'products', cached.length, 'cache');
+    } else {
+      // 🔥 جلب من Firestore مع limit 20 (وليس 1000!)
+      const db = getDb();
+      const q = query(collection(db, "products"), limit(20)); // ✅ limit 20
+      const querySnapshot = await getDocs(q);
+      fbProducts = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      
+      // 💾 تخزين في KV مع TTL 24 ساعة
+      await kvSet(SITEMAP_CACHE_KEY, fbProducts, TTL.SITEMAP);
+      logRead('sitemap', 'products', fbProducts.length, 'firestore');
+    }
   } catch (error) {
     console.error("Error fetching products for sitemap:", error);
   }

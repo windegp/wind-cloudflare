@@ -4,7 +4,10 @@ import { useEffect, useState } from 'react';
 import { getDb } from "@/lib/firebase";
 import { collection, getDocs, query, orderBy, limit, startAfter, doc, deleteDoc, updateDoc, increment, documentId } from "firebase/firestore/lite";
 // 🔥 1. أضفنا useRouter بدل Link لقتل الـ Prefetch
-import { useRouter } from 'next/navigation'; 
+import { useRouter } from 'next/navigation';
+// 🔥 حماية الكوتا
+import { kvGet, kvSet, kvDelete, TTL } from '@/lib/kv-cache';
+import { logRead } from '@/lib/firestoreQuota'; 
 import { Plus, Edit, Trash2, Package, Search, Filter, Monitor, Archive, Layers, ChevronLeft, ChevronRight, AlertTriangle, X, Download, Eye, Calendar, Users, Activity, TrendingUp, ShoppingCart, ArrowRight, ArrowLeft, MapPin, Phone, ShoppingBag, ChevronDown, ChevronUp, Menu, Settings, Target, Mail, Crown, UserMinus, Database, Layout, MonitorSmartphone, LinkIcon, FolderTree, CheckSquare, Square, ExternalLink, Save, Loader2, ImageIcon, PackageSearch, Box, AlertCircle, Tag } from '@/components/icons-extra';
 
 export const dynamic = 'force-dynamic';
@@ -34,15 +37,32 @@ export default function ProductsList() {
     }
   }, []);
 
+  const CACHE_KEY = 'admin_products_list_v2'; // v2 for TTL support
+  const CACHE_VERSION = 'v2';
+
   const fetchProducts = async (loadMore = false) => {
     try {
       setIsLoading(true);
+      
+      // 🚀 محاولة KV cache أولاً (فقط للتحميل الأول)
+      if (!loadMore && products.length === 0) {
+        const cached = await kvGet(CACHE_KEY);
+        if (cached && Array.isArray(cached)) {
+          setProducts(cached);
+          logRead('fetchProducts', 'products', cached.length, 'cache');
+          setIsLoading(false);
+          // تحديث الكاش في الخلفية
+          refreshProductsInBackground();
+          return;
+        }
+      }
+      
       const db = getDb();
       
       let q = query(
         collection(db, "products"),
         orderBy(documentId()),
-        limit(itemsPerPage)
+        limit(itemsPerPage) // ✅ limit 20
       );
       
       if (loadMore && lastVisible) {
@@ -50,6 +70,7 @@ export default function ProductsList() {
       }
       
       const querySnapshot = await getDocs(q);
+      logRead('fetchProducts', 'products', querySnapshot.docs.length, 'firestore');
       const newProducts = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const newLastVisible = querySnapshot.docs[querySnapshot.docs.length - 1] || null;
       const newHasMore = querySnapshot.docs.length === itemsPerPage;
@@ -71,6 +92,11 @@ export default function ProductsList() {
       globalProductsCache.lastVisible = newLastVisible;
       globalProductsCache.hasMore = newHasMore;
       globalProductsCache.isLoaded = true;
+      
+      // 💾 تخزين في KV مع TTL 2 دقيقة
+      if (!loadMore) {
+        await kvSet(CACHE_KEY, finalProductsList, TTL.ADMIN_MEDIUM);
+      }
       
     } catch (error) {
       console.error("Error fetching products:", error);
@@ -102,12 +128,14 @@ export default function ProductsList() {
       }
 
       // 🔥 6. تحديث الواجهة والذاكرة معاً بعد الحذف بدون إعادة سحب
-      // 🔥 مسح KV Cache للمنتج المحذوف
+      // 🗑️ مسح KV Cache
+      await kvDelete(CACHE_KEY);
+      
       try {
         await fetch('/api/revalidate', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ type: 'product', id: id }) // استخدم المتغير id الصح
+  body: JSON.stringify({ type: 'product', id: id })
 });
       } catch {}
 

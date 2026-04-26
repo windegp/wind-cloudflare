@@ -1,7 +1,7 @@
-// product/[id]/route.js - الكود الصح النهائي
+// product/[id]/route.js - مع TTL محدد (120s) و KV-first pattern
 import { getDb } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore/lite";
-import { kvGet, kvSet } from '@/lib/kv-cache';
+import { kvFirstFetch, TTL, getStaleThresholdForKey } from '@/lib/kv-cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,33 +9,52 @@ export async function GET(request, { params }) {
   const { id } = await params;
   if (!id) return Response.json({ error: 'id required' }, { status: 400 });
 
-  const cacheKey = `product_${id}`;
+  const cacheKey = `product_${id}_v2`; // v2 for TTL support
 
-  // 1. جرب KV أولاً
-  const cached = await kvGet(cacheKey);
-  if (cached) {
-    return Response.json(cached, { headers: { 'X-Cache': 'HIT' } });
+  // KV-first fetch with stale-while-revalidate (TTL: 120s, Stale: 240s)
+  const result = await kvFirstFetch(
+    cacheKey,
+    async () => fetchProduct(id),
+    TTL.PRODUCT,
+    getStaleThresholdForKey(cacheKey),
+    'high' // High priority - products change frequently
+  );
+
+  // Log cache status
+  const isHit = result.source === 'cache' || result.source === 'cache-stale';
+  console.log(`[KV ${isHit ? 'HIT' : 'MISS'}] product_${id}: ${result.source}${result.isStale ? ' (stale)' : ''}`);
+
+  // Return data (cached, stale, or fresh)
+  return Response.json(
+    result.data,
+    { 
+      headers: { 
+        'X-Cache': result.isStale ? 'HIT-STALE' : (isHit ? 'HIT' : 'MISS'),
+        'X-Cache-TTL': String(TTL.PRODUCT),
+        'X-Cache-Source': result.source
+      } 
+    }
+  );
+}
+
+/**
+ * Fetches product from Firestore
+ */
+async function fetchProduct(id) {
+  const db = getDb();
+  const snap = await getDoc(doc(db, "products", id));
+  
+  if (!snap.exists()) {
+    const error = new Error('Product not found');
+    error.status = 404;
+    throw error;
   }
 
-  // 2. Firebase fallback
-  try {
-    const db = getDb();
-    const snap = await getDoc(doc(db, "products", id));
-    if (!snap.exists()) return Response.json(null, { status: 404 });
+  const data = snap.data();
+  
+  // تحويل Timestamps لـ strings (Firebase requirement)
+  if (data.createdAt?.toDate) data.createdAt = data.createdAt.toDate().toISOString();
+  if (data.updatedAt?.toDate) data.updatedAt = data.updatedAt.toDate().toISOString();
 
-    const data = snap.data();
-    // تحويل Timestamps لـ strings (Firebase requirement)
-    if (data.createdAt?.toDate) data.createdAt = data.createdAt.toDate().toISOString();
-    if (data.updatedAt?.toDate) data.updatedAt = data.updatedAt.toDate().toISOString();
-
-    const product = { id: snap.id, ...data };
-
-    // 3. خزّن في KV - الداتا خام بدون أي formatting ✅
-    await kvSet(cacheKey, product);
-
-    return Response.json(product, { headers: { 'X-Cache': 'MISS' } });
-
-  } catch (error) {
-    return Response.json({ error: error.message }, { status: 500 });
-  }
+  return { id: snap.id, ...data };
 }

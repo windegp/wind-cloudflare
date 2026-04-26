@@ -6,6 +6,9 @@ import { collection, query, getDocs, deleteDoc, doc, writeBatch, orderBy, update
 import Papa from 'papaparse';
 import { mutate } from 'swr';
 import { Star, Upload, Plus, MessageSquare, CheckCircle, X, Trash2, Calendar, Save, Heart, Eye, Loader2 } from '@/components/icons-extra';
+// 🔥 حماية الكوتا
+import { kvGet, kvSet, kvDelete, TTL } from '@/lib/kv-cache';
+import { logRead } from '@/lib/firestoreQuota';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,27 +49,69 @@ export default function ReviewsAdminPage() {
     fetchData();
   }, []);
 
+  const FETCH_LIMIT = 20; // ✅ حماية الكوتا - حد أقصى 20
+  const CACHE_VERSION = 'v2'; // For TTL support
+  
   const fetchData = async () => {
     setLoading(true);
     const db = getDb();
     try {
-      // 🔥 إلغاء كاش المتصفح نهائياً لصفحة الأدمن لضمان رؤية التقييمات الجديدة فوراً بعد الـ Refresh
-      const [pSnap, sSnap] = await Promise.all([
-        getDocs(query(collection(db, "products"), limit(1000))),
-        getDocs(query(collection(db, "ProductStats"), limit(1000)))
+      // 🔥 حماية الكوتا: KV-first pattern
+      const CACHE_KEYS = {
+        products: `admin_reviews_products_${CACHE_VERSION}`,
+        stats: `admin_reviews_stats_${CACHE_VERSION}`,
+        reviews: `admin_reviews_list_${CACHE_VERSION}`
+      };
+      
+      // 🚀 محاولة جلب من KV cache أولاً
+      const [cachedProducts, cachedStats, cachedReviews] = await Promise.all([
+        kvGet(CACHE_KEYS.products),
+        kvGet(CACHE_KEYS.stats),
+        kvGet(CACHE_KEYS.reviews)
       ]);
-      const pDocs = pSnap.docs.map(doc => ({ id: doc.id, ...doc.data(), handle: doc.data().handle || doc.id }));
-      const statsMap = {};
-      sSnap.docs.forEach(doc => { statsMap[doc.id] = doc.data(); });
+      
+      let pDocs = cachedProducts;
+      let statsMap = cachedStats;
+      let rDocs = cachedReviews;
+      
+      // لو مفيش cache، جلب من Firestore
+      if (!pDocs || !statsMap) {
+        const [pSnap, sSnap] = await Promise.all([
+          getDocs(query(collection(db, "products"), limit(FETCH_LIMIT))),
+          getDocs(query(collection(db, "ProductStats"), limit(FETCH_LIMIT)))
+        ]);
+        pDocs = pSnap.docs.map(doc => ({ id: doc.id, ...doc.data(), handle: doc.data().handle || doc.id }));
+        statsMap = {};
+        sSnap.docs.forEach(doc => { statsMap[doc.id] = doc.data(); });
+        
+        // 💾 تخزين في KV مع TTL 2 دقيقة
+        await Promise.all([
+          kvSet(CACHE_KEYS.products, pDocs, TTL.ADMIN_MEDIUM),
+          kvSet(CACHE_KEYS.stats, statsMap, TTL.ADMIN_MEDIUM)
+        ]);
+        
+        logRead('fetchData', 'products+stats', pDocs.length + sSnap.docs.length, 'firestore');
+      } else {
+        logRead('fetchData', 'products+stats', pDocs.length + Object.keys(statsMap).length, 'cache');
+      }
+      
+      if (!rDocs) {
+        const rQuery = query(collection(db, "Reviews"), orderBy("date", "desc"), limit(FETCH_LIMIT));
+        const rSnap = await getDocs(rQuery);
+        rDocs = rSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        // 💾 تخزين في KV مع TTL 1 دقيقة (التقييمات تتغير كتير)
+        await kvSet(CACHE_KEYS.reviews, rDocs, TTL.ADMIN_SHORT);
+        logRead('fetchData', 'reviews', rDocs.length, 'firestore');
+      } else {
+        logRead('fetchData', 'reviews', rDocs.length, 'cache');
+      }
+      
       setProducts(pDocs);
       setProductStats(statsMap);
       const likesState = {};
       pDocs.forEach(p => likesState[p.id] = p.likesCount);
       setEditingLikes(likesState);
-      
-      const rQuery = query(collection(db, "Reviews"), orderBy("date", "desc"), limit(20));
-      const rSnap = await getDocs(rQuery);
-      setReviews(rSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setReviews(rDocs);
     } catch (err) { 
       console.error("Fetch Error:", err); 
     } finally {
@@ -76,17 +121,28 @@ export default function ReviewsAdminPage() {
   const fetchProducts = async () => {
     try {
       const db = getDb();
-      // 🔥 وضع صمام أمان (Limit 1000) لمنع استنزاف الكوتا
-      const q = query(collection(db, "products"), limit(1000));
+      // 🔥 حماية الكوتا: KV-first + limit 20
+      const CACHE_KEY = `admin_reviews_products_${CACHE_VERSION}`;
+      const cached = await kvGet(CACHE_KEY);
+      
+      if (cached && Array.isArray(cached)) {
+        setProducts(cached);
+        logRead('fetchProducts', 'products', cached.length, 'cache');
+        return;
+      }
+      
+      // 🔥 جلب من Firestore مع limit 20 (وليس 1000!)
+      const q = query(collection(db, "products"), limit(FETCH_LIMIT));
       const [pSnap, sSnap] = await Promise.all([
         getDocs(q),
-        getDocs(query(collection(db, "ProductStats"), limit(1000)))
+        getDocs(query(collection(db, "ProductStats"), limit(FETCH_LIMIT)))
       ]);
       
       // بناء map للـ ProductStats
       const statsMap = {};
       sSnap.docs.forEach(doc => { statsMap[doc.id] = doc.data(); });
       
+      // 💾 تخزين في KV
       const docs = pSnap.docs.map(doc => {
         const data = doc.data();
         const handle = data.handle || data.seo?.handle || doc.id;
@@ -104,6 +160,9 @@ export default function ReviewsAdminPage() {
         };
       });
       setProducts(docs);
+      // 💾 تخزين في KV مع TTL 2 دقيقة
+      await kvSet(CACHE_KEY, docs, TTL.ADMIN_MEDIUM);
+      logRead('fetchProducts', 'products', docs.length, 'firestore');
       
       // تهيئة حالة الإعجابات
       const likesState = {};
@@ -117,11 +176,25 @@ export default function ReviewsAdminPage() {
   const fetchReviews = async () => {
     try {
       const db = getDb();
-      // سحب آخر 20 تقييم فقط بدل الكل
-      const q = query(collection(db, "Reviews"), orderBy("date", "desc"), limit(20)); 
+      const CACHE_KEY = `admin_reviews_list_${CACHE_VERSION}`;
+      
+      // 🚀 محاولة KV cache أولاً
+      const cached = await kvGet(CACHE_KEY);
+      if (cached && Array.isArray(cached)) {
+        setReviews(cached);
+        logRead('fetchReviews', 'reviews', cached.length, 'cache');
+        return;
+      }
+      
+      // 🔥 جلب من Firestore مع limit 20
+      const q = query(collection(db, "Reviews"), orderBy("date", "desc"), limit(FETCH_LIMIT)); 
       const snap = await getDocs(q);
       const docs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      // 💾 تخزين في KV مع TTL 1 دقيقة
+      await kvSet(CACHE_KEY, docs, TTL.ADMIN_SHORT);
       setReviews(docs);
+      logRead('fetchReviews', 'reviews', docs.length, 'firestore');
     } catch (err) {
       console.error("Error fetching reviews:", err);
     }
@@ -526,10 +599,11 @@ export default function ReviewsAdminPage() {
       const db = getDb();
       
       // ═══════════════════════════════════════════════════════════
-      // PHASE 1: إعادة حساب الإحصائيات من Reviews (المنطق القديم)
+      // PHASE 1: إعادة حساب الإحصائيات من Reviews (مع limit 20)
       // ═══════════════════════════════════════════════════════════
-      const reviewsSnap = await getDocs(query(collection(db, "Reviews")));
+      const reviewsSnap = await getDocs(query(collection(db, "Reviews"), limit(FETCH_LIMIT)));
       const allReviews = reviewsSnap.docs.map(d => d.data());
+      logRead('recalculateAllProductStats', 'reviews', allReviews.length, 'firestore');
 
       const statsMap = {};
       allReviews.forEach(rev => {
@@ -542,12 +616,13 @@ export default function ReviewsAdminPage() {
       });
 
       // ═══════════════════════════════════════════════════════════
-      // PHASE 2: جلب ProductStats + إنشاء lookup للـ handle → doc.id
+      // PHASE 2: جلب ProductStats + إنشاء lookup للـ handle → doc.id (مع limit 20)
       // ═══════════════════════════════════════════════════════════
       const [pSnap, sSnap] = await Promise.all([
-        getDocs(query(collection(db, "products"), limit(1000))),
-        getDocs(query(collection(db, "ProductStats"), limit(1000)))
+        getDocs(query(collection(db, "products"), limit(FETCH_LIMIT))),
+        getDocs(query(collection(db, "ProductStats"), limit(FETCH_LIMIT)))
       ]);
+      logRead('recalculateAllProductStats', 'products+stats', pSnap.docs.length + sSnap.docs.length, 'firestore');
 
       // بناء map: handle → productId
       const productIdMap = {};
@@ -613,6 +688,14 @@ export default function ReviewsAdminPage() {
       // PHASE 5: تحديث الواجهة والـ Cache
       // ═══════════════════════════════════════════════════════════
       localStorage.removeItem("wind_admin_data_cache");
+      
+      // 🗑️ مسح KV cache لإعادة الجلب بالبيانات الجديدة
+      await Promise.all([
+        kvDelete(`admin_reviews_products_${CACHE_VERSION}`),
+        kvDelete(`admin_reviews_stats_${CACHE_VERSION}`),
+        kvDelete(`admin_reviews_list_${CACHE_VERSION}`)
+      ]);
+      
       await fetchData();
       
       const syncedCount = Object.keys(productStatsMap).filter(h => productIdMap[h]).length;

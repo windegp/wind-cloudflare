@@ -4,46 +4,81 @@ import { getDb } from "@/lib/firebase";
 import { doc, getDoc, setDoc, collection, getDocs, query, limit } from "firebase/firestore/lite";
 // 🔥 1. استيراد SWR السحري
 import useSWR, { mutate } from 'swr';
+// 🔥 حماية الكوتا
+import { kvGet, kvSet, kvDelete, TTL } from '@/lib/kv-cache';
+import { logRead } from '@/lib/firestoreQuota';
 
 export const dynamic = 'force-dynamic';
 
-// 🔥 2. دوال الجلب المعزولة لـ SWR
+// 🔥 2. دوال الجلب المعزولة لـ SWR - مع KV cache و TTL
+const CONFIG_CACHE_KEY = 'admin_home_config_v2'; // v2 for TTL
+const PICKER_CACHE_KEY = 'admin_picker_data_v2'; // v2 for TTL
+const CACHE_VERSION = 'v2';
+const FETCH_LIMIT = 20; // ✅ حماية الكوتا
+
 const fetchHomeConfig = async () => {
+  // 🚀 محاولة KV cache أولاً
+  const cached = await kvGet(CONFIG_CACHE_KEY);
+  if (cached && cached.layout) {
+    logRead('fetchHomeConfig', 'homepage', 2, 'cache');
+    return cached;
+  }
+  
   const db = getDb();
   const layoutRef = doc(db, "homepage", "layout_config");
   const layoutSnap = await getDoc(layoutRef);
   
   const heroRef = doc(db, "homepage", "main-hero");
   const heroSnap = await getDoc(heroRef);
-
-  return {
+  
+  const data = {
     layout: layoutSnap.exists() ? layoutSnap.data() : { sections: [] },
     hero: heroSnap.exists() ? heroSnap.data() : { slides: [], categories: [] }
   };
+  
+  // 💾 تخزين في KV مع TTL 5 دقائق (config أقل تغيراً)
+  await kvSet(CONFIG_CACHE_KEY, data, TTL.ADMIN_LONG);
+  logRead('fetchHomeConfig', 'homepage', 2, 'firestore');
+
+  return data;
 };
 
 const fetchPickerData = async () => {
+  // 🚀 محاولة KV cache أولاً
+  const cached = await kvGet(PICKER_CACHE_KEY);
+  if (cached && cached.products && cached.collections) {
+    logRead('fetchPickerData', 'products+collections', 
+      cached.products.length + cached.collections.length, 'cache');
+    return cached;
+  }
+  
   const db = getDb();
   let products = [];
   let collections = [];
   
   try {
+    // 🔥 حماية الكوتا: limit 20 (وليس 1000!)
     const productsRef = collection(db, "products"); 
-    // 🔥 صمام أمان موحد (1000) يضمن ظهور كل منتجاتك (كان 65 وبيخفي بعض المنتجات)
-    const productsQuery = query(productsRef, limit(1000)); 
+    const productsQuery = query(productsRef, limit(FETCH_LIMIT)); 
     const productsSnap = await getDocs(productsQuery);
     products = productsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
     const collectionsRef = collection(db, "collections"); 
-    // 🔥 صمام أمان موحد (1000) يضمن ظهور كل أقسامك
-    const collectionsQuery = query(collectionsRef, limit(1000));
+    const collectionsQuery = query(collectionsRef, limit(FETCH_LIMIT));
     const collectionsSnap = await getDocs(collectionsQuery);
     collections = collectionsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    
+    logRead('fetchPickerData', 'products+collections', 
+      productsSnap.docs.length + collectionsSnap.docs.length, 'firestore');
   } catch (err) { 
-    console.error("WIND Quota Guard: Picker data fetched with limits.", err); 
+    console.error("WIND Quota Guard: Picker data fetch error.", err); 
   }
   
-  return { products, collections };
+  const data = { products, collections };
+  // 💾 تخزين في KV مع TTL 2 دقيقة
+  await kvSet(PICKER_CACHE_KEY, data, TTL.ADMIN_MEDIUM);
+  
+  return data;
 };
 
 // ============================================================================
@@ -443,6 +478,10 @@ export default function HomeManagerPage() {
       
       //  update SWR cache after save
       mutate('home-config');
+      
+      // 🗑️ مسح KV cache الخاص بالأدمن لإعادة الجلب
+      await kvDelete(CONFIG_CACHE_KEY);
+      await kvDelete(PICKER_CACHE_KEY);
       
       //  Clear KV cache so visitors see updates
       try {
