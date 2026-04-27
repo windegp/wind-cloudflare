@@ -267,9 +267,35 @@ export const usePaginatedProducts = (categorySlug, limitCount = 10, lastVisibleD
     }
 
     const snap = await getDocs(q);
+    const products = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    
+    // 🔥 Batch fetch all stats in one request to eliminate ProductCard request storm
+    if (products.length > 0) {
+      try {
+        const handles = products.map(p => p.handle || p.id).filter(Boolean);
+        if (handles.length > 0) {
+          const statsRes = await fetch(`/api/product-stats-batch?handles=${encodeURIComponent(handles.join(','))}`);
+          if (statsRes.ok) {
+            const { stats } = await statsRes.json();
+            // Enrich products with stats
+            products.forEach(p => {
+              const handle = p.handle || p.id;
+              const stat = stats[handle];
+              if (stat) {
+                p.reviewsCount = stat.count;
+                p.rating = stat.rating;
+              }
+            });
+          }
+        }
+      } catch (e) {
+        console.error("WIND: Batch stats fetch failed", e);
+        // Continue without stats - ProductCard will fallback to individual fetch if needed
+      }
+    }
     
     return {
-      products: snap.docs.map(d => ({ id: d.id, ...d.data() })),
+      products,
       lastDoc: snap.docs[snap.docs.length - 1] || null 
     };
   };

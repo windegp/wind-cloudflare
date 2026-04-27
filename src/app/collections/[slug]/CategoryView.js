@@ -66,7 +66,32 @@ export default function CategoryView({ initialSlug, initialCategoryData }) {
 
       const q = query(baseQ, startAfter(lastDoc), limit(PAGE_SIZE));
       const snap = await getDocs(q);
-      const newItems = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      let newItems = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      // 🔥 Batch fetch stats for new products to prevent request storm
+      if (newItems.length > 0) {
+        try {
+          const handles = newItems.map(p => p.handle || p.id).filter(Boolean);
+          if (handles.length > 0) {
+            const statsRes = await fetch(`/api/product-stats-batch?handles=${encodeURIComponent(handles.join(','))}`);
+            if (statsRes.ok) {
+              const { stats } = await statsRes.json();
+              // Enrich new items with stats
+              newItems = newItems.map(p => {
+                const handle = p.handle || p.id;
+                const stat = stats[handle];
+                if (stat) {
+                  return { ...p, reviewsCount: stat.count, rating: stat.rating };
+                }
+                return p;
+              });
+            }
+          }
+        } catch (e) {
+          console.error("WIND: Batch stats fetch failed for more products", e);
+          // Continue without stats - ProductCard will fallback if needed
+        }
+      }
 
       setProducts(prev => [...prev, ...newItems]);
       setLastDoc(snap.docs[snap.docs.length - 1] || null);
