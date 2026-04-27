@@ -40,6 +40,8 @@ export async function GET() {
       if (allProductIds.length > 0) {
         const uniqueIds = [...new Set(allProductIds)];
         const { getDocs, collection, query, where, documentId } = await import('firebase/firestore/lite');
+
+        // Fetch product prices
         const productsSnap = await getDocs(
           query(collection(db, "products"), where(documentId(), "in", uniqueIds.slice(0, 30)))
         );
@@ -51,15 +53,33 @@ export async function GET() {
           };
         });
 
+        // Fetch review stats from ProductStats
+        const statsSnap = await getDocs(
+          query(collection(db, "ProductStats"), where(documentId(), "in", uniqueIds.slice(0, 30)))
+        );
+        const statsMap = {};
+        statsSnap.docs.forEach(d => {
+          const data = d.data();
+          const total = data.totalCount || 0;
+          statsMap[d.id] = {
+            reviewsCount: total,
+            rating: total > 0 ? parseFloat((data.totalRatingSum / total).toFixed(1)) : 5
+          };
+        });
+
         layoutData.sections = layoutData.sections.map(section => {
           const items = section.data?.cards || section.data?.products || [];
           if (items.length === 0) return section;
           const updatedItems = items.map(item => {
-            if (!item.productId || !pricesMap[item.productId]) return item;
+            if (!item.productId) return item;
+            const priceData = pricesMap[item.productId] || {};
+            const statsData = statsMap[item.productId] || {};
             return {
               ...item,
-              price: pricesMap[item.productId].price || item.price,
-              compareAtPrice: pricesMap[item.productId].compareAtPrice || item.compareAtPrice
+              price: priceData.price || item.price,
+              compareAtPrice: priceData.compareAtPrice || item.compareAtPrice,
+              reviewsCount: statsData.reviewsCount ?? item.reviewsCount ?? 0,
+              rating: statsData.rating ?? item.rating ?? 5
             };
           });
           if (section.data?.cards) return { ...section, data: { ...section.data, cards: updatedItems } };
