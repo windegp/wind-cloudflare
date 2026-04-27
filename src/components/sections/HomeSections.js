@@ -1651,8 +1651,7 @@ export const CustomerReviewsSection = ({ data, bundle }) => {
           {reviews.map((review, index) => {
             // 🔥 حماية WIND: تأمين جميع الحقول لمنع الـ Crash
             const productData = allProducts[review?.productHandle] || null;
-            // 🔥 Skip orphaned reviews (reviews for deleted products)
-            if (!productData) return null;
+            const isOrphanReview = !productData;
             const safeText = review?.text || "";
             const isEnglish = /^[a-zA-Z]/.test(safeText);
             const isExpanded = expandedReviews[review?.id || index];
@@ -1720,22 +1719,34 @@ export const CustomerReviewsSection = ({ data, bundle }) => {
                   style={{ transitionDelay: isActive ? '400ms' : '0ms' }}
                 >
 
-                  <button onClick={() => handleOpenQuickView(productData)} className="cursor-pointer w-14 h-18 md:w-16 md:h-20 rounded-[1px] border border-[#EEEEEE] overflow-hidden bg-white flex-none hover:opacity-80 transition-opacity">
+                  <button
+                    onClick={() => !isOrphanReview && handleOpenQuickView(productData)}
+                    disabled={isOrphanReview}
+                    className={`w-14 h-18 md:w-16 md:h-20 rounded-[1px] border border-[#EEEEEE] overflow-hidden bg-white flex-none transition-opacity ${isOrphanReview ? 'cursor-default opacity-60' : 'cursor-pointer hover:opacity-80'}`}
+                  >
                     {productData?.mainImage ? (
                       <img src={productData.mainImage} alt="Product" className="w-full h-full object-cover" />
                     ) : (
-                      <div className="w-full h-full bg-[#FAFAFA] flex items-center justify-center text-[8px] text-gray-300 font-bold uppercase">WIND</div>
+                      <div className="w-full h-full bg-[#FAFAFA] flex items-center justify-center text-[8px] text-gray-300 font-bold uppercase">
+                        {isOrphanReview ? "—" : "WIND"}
+                      </div>
                     )}
                   </button>
 
-                  <button
-                    onClick={() => handleOpenQuickView(productData)}
-                    className="group border-b border-[#CCCCCC] hover:border-[#1A1A1A] pb-0.5 transition-colors cursor-pointer"
-                  >
-                    <span className={`text-[#1A1A1A] font-bold line-clamp-1 ${isEnglish ? 'text-[12px] md:text-[14px] font-sans' : 'text-[13px] md:text-[15px] font-tajawal'}`}>  
-                      {productData?.title || "Wind Exclusive Piece"}
+                  {isOrphanReview ? (
+                    <span className={`text-[#666666] font-bold line-clamp-1 ${isEnglish ? 'text-[12px] md:text-[14px] font-sans' : 'text-[13px] md:text-[15px] font-tajawal'}`}>
+                      {isEnglish ? "General Review" : "تقييم عام"}
                     </span>
-                  </button>
+                  ) : (
+                    <button
+                      onClick={() => handleOpenQuickView(productData)}
+                      className="group border-b border-[#CCCCCC] hover:border-[#1A1A1A] pb-0.5 transition-colors cursor-pointer"
+                    >
+                      <span className={`text-[#1A1A1A] font-bold line-clamp-1 ${isEnglish ? 'text-[12px] md:text-[14px] font-sans' : 'text-[13px] md:text-[15px] font-tajawal'}`}>
+                        {productData?.title || "Wind Exclusive Piece"}
+                      </span>
+                    </button>
+                  )}
 
                 </div>
               </div>
