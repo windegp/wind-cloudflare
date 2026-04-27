@@ -303,7 +303,7 @@ export const usePaginatedProducts = (categorySlug, limitCount = 10, lastVisibleD
   // مفتاح SWR فريد يعتمد على القسم ومكان التوقف (lastVisibleDoc)
   return useSWR(`paginated-products-${categorySlug}-${lastVisibleDoc?.id || 'start'}`, fetcher, {
     revalidateOnFocus: false,
-    dedupingInterval: 600000, // كاش 10 دقائق
+    dedupingInterval: 300000, // كاش 5 دقائق
   });
 };
 // 🚀 هوك جلب تفاصيل منتج واحد (SWR)
@@ -327,7 +327,7 @@ export const useProduct = (id) => {
   };
   return useSWR(id ? `product-${id}` : null, fetcherWithCache, {
     revalidateOnFocus: false,
-    dedupingInterval: 60000
+    dedupingInterval: 300000 // 5 دقائق كاش
   });
 };
 
@@ -376,7 +376,7 @@ export const useRelatedProducts = (product) => {
   };
 
   return useSWR(product?.id ? `related-${product.id}` : null, fetcher, {
-    dedupingInterval: 600000, // 10 دقائق كاش
+    dedupingInterval: 300000, // 5 دقائق كاش
     revalidateOnFocus: false
   });
 };
@@ -414,7 +414,7 @@ export const usePaginatedReviews = (productHandle, lastVisibleDoc = null, filter
   };
 
   return useSWR(productHandle ? `reviews-${productHandle}-${filter}-${lastVisibleDoc?.id || 'start'}` : null, fetcher, {
-    dedupingInterval: 600000,
+    dedupingInterval: 300000, // 5 دقائق كاش
     revalidateOnFocus: false
   });
 };

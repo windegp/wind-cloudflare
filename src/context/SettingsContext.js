@@ -20,7 +20,7 @@ export const SettingsProvider = ({ children }) => {
     return result.success ? result.data : null;
   }, {
     revalidateOnFocus: isAdmin, // تحديث بمجرد رجوعك لتبويب الأدمن
-    dedupingInterval: isAdmin ? 5000 : 60000,
+    dedupingInterval: isAdmin ? 5000 : 300000,
   });
 
   // 🔥 2. عداد الزوار (من كودك الأصلي - مُحسن)
