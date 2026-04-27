@@ -1,5 +1,14 @@
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 
+// TTL constants for different data types
+export const KV_TTL = {
+  HOMEPAGE: 86400,      // 24 hours
+  PRODUCT: 86400,       // 24 hours
+  COLLECTION: 43200,    // 12 hours
+  REVIEWS: 3600,        // 1 hour
+  SETTINGS: 86400       // 24 hours
+};
+
 export async function getKV() {
   try {
     const ctx = await getCloudflareContext({ async: true });
