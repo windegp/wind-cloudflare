@@ -1,4 +1,4 @@
-import { kvGet, kvSet } from '@/lib/kv-cache';
+import { kvGet, kvSet, kvDelete } from '@/lib/kv-cache';
 
 /**
  * API route to acquire write guard (cross-tab)
