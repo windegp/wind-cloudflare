@@ -242,8 +242,8 @@ export const useHomepageProductsSections = () => {
   };
 
   return useSWR('homepage-products-sections', fetcherWithCache, {
-    revalidateOnFocus: true, // السماح بالتحديث عند العودة للصفحة
-    dedupingInterval: 5000   // منع التكرار لمدة 5 ثواني فقط بدل ساعة
+    revalidateOnFocus: false, // يمنع سحب الداتا لما الزائر يروح لتاب تاني ويرجع
+    dedupingInterval: 300000   // 5 دقايق كاش (mutate() بيجبر الريفريش فوراً)
   });
 };
 
