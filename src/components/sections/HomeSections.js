@@ -1651,6 +1651,8 @@ export const CustomerReviewsSection = ({ data, bundle }) => {
           {reviews.map((review, index) => {
             // 🔥 حماية WIND: تأمين جميع الحقول لمنع الـ Crash
             const productData = allProducts[review?.productHandle] || null;
+            // 🔥 Skip orphaned reviews (reviews for deleted products)
+            if (!productData) return null;
             const safeText = review?.text || "";
             const isEnglish = /^[a-zA-Z]/.test(safeText);
             const isExpanded = expandedReviews[review?.id || index];

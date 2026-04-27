@@ -47,7 +47,9 @@ export async function GET() {
     }
 
     // ✅ Bug Fix: result كانت مش معرّفة
-    const result = { reviews: fetchedReviews, products: productsMap };
+    // 🔥 Filter out orphaned reviews (reviews for deleted products)
+    const validReviews = fetchedReviews.filter(r => productsMap[r.productHandle]);
+    const result = { reviews: validReviews, products: productsMap };
 
     // 3. خزّن في KV
     await kvSet(CACHE_KEY, result);

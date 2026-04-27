@@ -78,7 +78,9 @@ const fetchHomepageReviews = async () => {
       }
     }
 
-    return { reviews: fetchedReviews, products: productsMap };
+    // 🔥 Filter out orphaned reviews (reviews for deleted products)
+    const validReviews = fetchedReviews.filter(r => productsMap[r.productHandle]);
+    return { reviews: validReviews, products: productsMap };
   } catch (error) {
     console.error("WIND Error fetching homepage reviews:", error);
     return { reviews: [], products: {} };
