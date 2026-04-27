@@ -1,4 +1,4 @@
-import { kvGet, kvSet } from '@/lib/kv-cache';
+import { kvGet, kvDelete } from '@/lib/kv-cache';
 
 /**
  * API route to check if an operation has been executed (idempotency check)
@@ -18,7 +18,7 @@ export async function POST(request) {
     if (data && data.executed) {
       // Check if expired
       if (data.expiresAt && data.expiresAt < Date.now()) {
-        await kvSet(kvKey, null); // Clear expired entry
+        await kvDelete(kvKey); // Clear expired entry
         return Response.json({ executed: false });
       }
       return Response.json({ executed: true });

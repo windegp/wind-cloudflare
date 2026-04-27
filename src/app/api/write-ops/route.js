@@ -26,7 +26,7 @@ export async function POST(request) {
       
       if (data && data.executed) {
         if (data.expiresAt && data.expiresAt < Date.now()) {
-          await kvSet(kvKey, null);
+          await kvDelete(kvKey);
           return Response.json({ executed: false });
         }
         return Response.json({ executed: true });
@@ -66,7 +66,7 @@ export async function POST(request) {
       
       if (data && data.inProgress) {
         if (data.expiresAt && data.expiresAt < Date.now()) {
-          await kvSet(kvKey, null);
+          await kvDelete(kvKey);
           return Response.json({ inProgress: false });
         }
         return Response.json({ inProgress: true });
@@ -87,7 +87,7 @@ export async function POST(request) {
       const existing = await kvGet(kvKey);
       if (existing && existing.inProgress) {
         if (existing.expiresAt && existing.expiresAt < Date.now()) {
-          await kvSet(kvKey, null);
+          await kvDelete(kvKey);
         } else {
           return Response.json({ 
             success: false, 
@@ -113,7 +113,7 @@ export async function POST(request) {
       }
       
       const kvKey = `write_guard_${key}`;
-      await kvSet(kvKey, null);
+      await kvDelete(kvKey);
       return Response.json({ success: true });
     }
     

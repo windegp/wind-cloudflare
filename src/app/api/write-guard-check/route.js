@@ -1,4 +1,4 @@
-import { kvGet } from '@/lib/kv-cache';
+import { kvGet, kvDelete } from '@/lib/kv-cache';
 
 /**
  * API route to check if a write operation is in progress (cross-tab)
@@ -17,7 +17,7 @@ export async function POST(request) {
     if (data && data.inProgress) {
       // Check if expired
       if (data.expiresAt && data.expiresAt < Date.now()) {
-        await kvSet(kvKey, null);
+        await kvDelete(kvKey);
         return Response.json({ inProgress: false });
       }
       return Response.json({ inProgress: true });

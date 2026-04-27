@@ -8,7 +8,7 @@
  * 4. Detection of multiple reads per render
  */
 
-import { kvGet, kvSet, kvDelete, TTL, kvFirstFetch, CACHE_PRIORITY } from './kv-cache';
+import { kvGet, kvSet, kvDelete } from './kv-cache';
 
 // ═══════════════════════════════════════════════════════════
 // CONFIGURATION
@@ -17,7 +17,6 @@ import { kvGet, kvSet, kvDelete, TTL, kvFirstFetch, CACHE_PRIORITY } from './kv-
 const MAX_QUERY_LIMIT = 20; // Hard limit for all collection queries
 const READ_LOG_KEY = 'wind_firestore_reads';
 const WARN_THRESHOLD = 2; // Warn if more than 2 reads per function
-const CACHE_VERSION = 'v2'; // Version for all cache keys
 
 // Quota alert thresholds (reads per minute)
 const QUOTA_ALERT_THRESHOLDS = {
@@ -244,73 +243,6 @@ export function getReadStats() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// KV-FIRST FETCH PATTERN
-// ═══════════════════════════════════════════════════════════
-
-/**
- * Fetches a single document with KV-first pattern
- * @param {string} cacheKey - KV cache key
- * @param {Function} fetchFn - Async function to fetch from Firestore
- * @param {string} functionName - For logging
- * @param {string} collectionName - For logging
- * @returns {Promise<{data: any, source: string}>}
- */
-export async function kvFirstFetchWithLog(cacheKey, fetchFn, functionName, collectionName, ttl = TTL.ADMIN_MEDIUM) {
-  // Use the improved kvFirstFetch from kv-cache with stampede protection
-  const result = await kvFirstFetch(cacheKey, fetchFn, ttl);
-  
-  // Log the read
-  if (result.source === 'cache') {
-    logRead(functionName, collectionName, 1, 'cache');
-  } else {
-    logRead(functionName, collectionName, 1, 'firestore');
-    checkReadThreshold(functionName);
-  }
-  
-  return result;
-}
-
-/**
- * Fetches a collection with KV-first pattern and enforced limit
- * @param {string} cacheKey - KV cache key
- * @param {Function} fetchFn - Async function that returns {docs: [], hasMore: boolean}
- * @param {string} functionName - For logging
- * @param {string} collectionName - For logging
- * @param {number} limit - Max documents (default: 20, max: 20)
- * @returns {Promise<{docs: any[], hasMore: boolean, source: string}>}
- */
-export async function kvFirstFetchCollection(cacheKey, fetchFn, functionName, collectionName, limit = 20) {
-  // Enforce hard limit
-  const enforcedLimit = Math.min(limit, MAX_QUERY_LIMIT);
-  
-  // 1. Try KV cache first
-  const cached = await kvGet(cacheKey);
-  if (cached && Array.isArray(cached.docs)) {
-    logRead(functionName, collectionName, cached.docs.length, 'cache');
-    return { ...cached, source: 'cache' };
-  }
-
-  // 2. Fetch from Firestore
-  const result = await fetchFn(enforcedLimit);
-  
-  // Validate limit wasn't exceeded
-  if (result.docs && result.docs.length > MAX_QUERY_LIMIT) {
-    console.warn(`⚠️ [LIMIT EXCEEDED] ${functionName} returned ${result.docs.length} docs. Truncating to ${MAX_QUERY_LIMIT}.`);
-    result.docs = result.docs.slice(0, MAX_QUERY_LIMIT);
-  }
-  
-  // 3. Store in KV if successful with TTL
-  if (result.docs) {
-    await kvSet(cacheKey, result, TTL.ADMIN_MEDIUM);
-  }
-  
-  logRead(functionName, collectionName, result.docs?.length || 0, 'firestore');
-  checkReadThreshold(functionName);
-  
-  return { ...result, source: 'firestore' };
-}
-
-// ═══════════════════════════════════════════════════════════
 // ADMIN-SPECIFIC FETCH (NO CACHE)
 // ═══════════════════════════════════════════════════════════
 
@@ -368,51 +300,5 @@ export function enforceQueryLimit(constraints) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// REACT HOOK FOR READ TRACKING
+// END OF MODULE
 // ═══════════════════════════════════════════════════════════
-
-/**
- * Hook to track reads in a component
- * @param {string} componentName - Name for logging
- * @returns {{trackRead: Function, stats: Object}}
- */
-export function useReadTracker(componentName) {
-  const readsRef = useRef([]);
-  
-  const trackRead = (collection, docCount = 1, source = 'firestore') => {
-    logRead(componentName, collection, docCount, source);
-    readsRef.current.push({ collection, docCount, source, time: Date.now() });
-    
-    if (readsRef.current.length > WARN_THRESHOLD) {
-      console.warn(`⚠️ [${componentName}] Multiple reads detected: ${readsRef.current.length}`);
-    }
-  };
-  
-  const getStats = () => ({
-    total: readsRef.current.length,
-    firestoreReads: readsRef.current.filter(r => r.source === 'firestore').length,
-    cacheHits: readsRef.current.filter(r => r.source === 'cache').length
-  });
-  
-  return { trackRead, stats: getStats() };
-}
-
-// ═══════════════════════════════════════════════════════════
-// VERSION HELPERS
-// ═══════════════════════════════════════════════════════════
-
-/**
- * Returns a versioned cache key
- * @param {string} baseKey - Base cache key
- * @returns {string} - Versioned key
- */
-export function getVersionedKey(baseKey) {
-  return `${baseKey}_${CACHE_VERSION}`;
-}
-
-/**
- * Returns cache version for external use
- */
-export function getCacheVersion() {
-  return CACHE_VERSION;
-}

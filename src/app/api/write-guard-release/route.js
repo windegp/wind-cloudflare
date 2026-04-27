@@ -1,4 +1,4 @@
-import { kvSet } from '@/lib/kv-cache';
+import { kvDelete } from '@/lib/kv-cache';
 
 /**
  * API route to release write guard (cross-tab)
@@ -12,7 +12,7 @@ export async function POST(request) {
     }
     
     const kvKey = `write_guard_${key}`;
-    await kvSet(kvKey, null);
+    await kvDelete(kvKey);
     
     return Response.json({ success: true });
   } catch (error) {

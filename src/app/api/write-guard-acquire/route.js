@@ -19,7 +19,7 @@ export async function POST(request) {
     if (existing && existing.inProgress) {
       // Check if expired
       if (existing.expiresAt && existing.expiresAt < Date.now()) {
-        await kvSet(kvKey, null);
+        await kvDelete(kvKey);
       } else {
         return Response.json({ 
           success: false, 
