@@ -4,7 +4,7 @@
 // Global cart state management using React Context API
 // Single source of truth for cart data
 // ============================================
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { calculateSubtotal, calculateShipping, calculateAllTotals, validatePromoCode } from '@/lib/cartCalculations';
 
 const CartContext = createContext();
@@ -24,17 +24,17 @@ export function CartProvider({ children }) {
   // CART OPERATIONS
   // ============================================
   
-  const toggleCart = () => setIsCartOpen(!isCartOpen);
-  const openCart = () => setIsCartOpen(true);
-  const closeCart = () => setIsCartOpen(false);
+  const toggleCart = useCallback(() => setIsCartOpen(prev => !prev), []);
+  const openCart = useCallback(() => setIsCartOpen(true), []);
+  const closeCart = useCallback(() => setIsCartOpen(false), []);
 
-  const clearCart = () => {
+  const clearCart = useCallback(() => {
     setCartItems([]);
     setAppliedPromo("");
     localStorage.removeItem('wind_cart');
-  };
+  }, []);
 
-  const addToCart = (product) => {
+  const addToCart = useCallback((product) => {
     setCartItems((prev) => {
       // المهم: مطابقة المنتجات بناءً على الـ id والمقاس واللون
       const exist = prev.find(
@@ -62,9 +62,9 @@ export function CartProvider({ children }) {
       return [...prev, { ...product, qty: quantityToAdd }];
     });
     openCart();
-  };
+  }, [openCart]);
 
-  const updateQty = (id, selectedSize, delta, selectedColor) => {
+  const updateQty = useCallback((id, selectedSize, delta, selectedColor) => {
     setCartItems((prev) =>
       prev.map((item) => {
         // Important: Color must also match for quantity updates
@@ -78,9 +78,9 @@ export function CartProvider({ children }) {
         return item;
       })
     );
-  };
+  }, []);
 
-  const removeFromCart = (id, selectedSize, selectedColor) => {
+  const removeFromCart = useCallback((id, selectedSize, selectedColor) => {
     setCartItems((prev) =>
       prev.filter((item) => {
         // Important: Color must also match for removal
@@ -90,7 +90,7 @@ export function CartProvider({ children }) {
         return !(item.id === id && item.selectedSize === selectedSize && matchColor);
       })
     );
-  };
+  }, []);
 
   // ============================================
   // CALCULATIONS
@@ -102,7 +102,7 @@ export function CartProvider({ children }) {
   // ============================================
   // PROMO CODE HANDLING
   // ============================================
-  const applyPromoCode = (code) => {
+  const applyPromoCode = useCallback((code) => {
     const result = validatePromoCode(code);
     if (result.isValid) {
       setAppliedPromo(result.code);
@@ -113,7 +113,7 @@ export function CartProvider({ children }) {
       setDiscountError(result.message);
       return { success: false, message: result.message };
     }
-  };
+  }, []);
 
   // ============================================
   // PERSISTENCE
@@ -138,24 +138,27 @@ export function CartProvider({ children }) {
     localStorage.setItem('wind_cart', JSON.stringify(cartItems));
   }, [cartItems]);
 
+  // Memoize context value to prevent unnecessary re-renders
+  const contextValue = useMemo(() => ({
+    cartItems,
+    addToCart,
+    removeFromCart,
+    updateQty,
+    clearCart,
+    isCartOpen,
+    toggleCart,
+    openCart,
+    closeCart,
+    subtotal,
+    shipping,
+    total,
+    appliedPromo,
+    applyPromoCode,
+    discountError
+  }), [cartItems, addToCart, removeFromCart, updateQty, clearCart, isCartOpen, toggleCart, openCart, closeCart, subtotal, shipping, total, appliedPromo, applyPromoCode, discountError]);
+
   return (
-    <CartContext.Provider value={{ 
-      cartItems, 
-      addToCart, 
-      removeFromCart, 
-      updateQty,
-      clearCart, 
-      isCartOpen, 
-      toggleCart, 
-      openCart, 
-      closeCart,
-      subtotal,
-      shipping,
-      total,
-      appliedPromo,
-      applyPromoCode,
-      discountError
-    }}>
+    <CartContext.Provider value={contextValue}>
       {children}
     </CartContext.Provider>
   );

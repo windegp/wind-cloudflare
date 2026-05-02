@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 // 🔥 1. استدعاء getRtdb 
 import { getRtdb } from "@/lib/firebase";
 // 🔥 2. استدعاء دوال RTDB
@@ -10,9 +10,13 @@ import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
 
+// Performance guard: maximum sessions to render at once (prevents UI freeze with high traffic)
+const MAX_DISPLAYED_SESSIONS = 50;
+
 export default function LiveViewPage() {
   const [sessions, setSessions] = useState([]);
   const [lastUpdate, setLastUpdate] = useState(new Date());
+  const [showAllSessions, setShowAllSessions] = useState(false);
 
   useEffect(() => {
     let unsubscribe = null;
@@ -65,7 +69,8 @@ export default function LiveViewPage() {
             }
           });
           activeSessions.sort((a, b) => (b._lastActiveComputed || 0) - (a._lastActiveComputed || 0));
-          setSessions(activeSessions);
+          // Performance optimization: limit state to prevent memory pressure on high traffic
+          setSessions(activeSessions.slice(0, MAX_DISPLAYED_SESSIONS * 2)); // Store 2x for toggle buffer
         } else {
           setSessions([]);
         }
@@ -83,14 +88,18 @@ export default function LiveViewPage() {
     };
   }, []);
 
+  // Performance optimization: slice displayed sessions to prevent render blocking
+  const displayedSessions = showAllSessions ? sessions : sessions.slice(0, MAX_DISPLAYED_SESSIONS);
+  const hasMoreSessions = sessions.length > MAX_DISPLAYED_SESSIONS;
+
   // باقي الكود كما هو بدون أي تغيير في الواجهة
-  const stats = {
+  const stats = useMemo(() => ({
     browsing: sessions.filter(s => s.status === 'browsing').length,
     activeCarts: sessions.filter(s => s.status === 'active_cart').length,
     checkout: sessions.filter(s => s.status === 'checkout').length,
     purchased: sessions.filter(s => s.status === 'purchased').length,
     totalCartValue: sessions.reduce((acc, s) => acc + (s.cartValue || 0), 0)
-  };
+  }), [sessions]);
 
   return (
     <div className="min-h-screen bg-[#f4f6f8] text-[#202223] p-4 sm:p-8 font-sans" dir="rtl">
@@ -115,7 +124,7 @@ export default function LiveViewPage() {
           <div className="flex items-center gap-6 bg-gray-50 px-6 py-3 rounded-xl border border-gray-100">
             <div>
               <p className="text-xs text-gray-500 font-bold mb-0.5">الزوار النشطون</p>
-              <p className="text-3xl font-black text-[#008060]">{sessions.length}</p>
+              <p className="text-3xl font-black text-[#008060]">{sessions.length}{hasMoreSessions && '+'}</p>
             </div>
             <div className="w-px h-10 bg-gray-200"></div>
             <div>
@@ -167,11 +176,19 @@ export default function LiveViewPage() {
         {/* Activity List */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col min-h-[400px]">
           <div className="p-5 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
-            <h2 className="text-base font-bold flex items-center gap-2"><Activity size={18} className="text-gray-500" /> سجل نشاط الزوار</h2>
+            <h2 className="text-base font-bold flex items-center gap-2"><Activity size={18} className="text-gray-500" /> سجل نشاط الزوار {hasMoreSessions && <span className="text-xs font-normal text-gray-400">(عرض {displayedSessions.length} من {sessions.length})</span>}</h2>
+            {hasMoreSessions && (
+              <button
+                onClick={() => setShowAllSessions(!showAllSessions)}
+                className="text-xs font-bold text-[#008060] hover:text-[#006e52] transition-colors px-3 py-1.5 bg-green-50 rounded-lg border border-green-200"
+              >
+                {showAllSessions ? 'إظهار أقل' : 'إظهار الكل'}
+              </button>
+            )}
           </div>
           
           <div className="flex-1 p-5">
-            {sessions.length === 0 ? (
+            {displayedSessions.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-gray-400 py-12">
                 <Globe size={48} className="mb-4 text-gray-200" />
                 <p className="font-bold">لا يوجد زوار نشطون في هذه اللحظة</p>
@@ -179,7 +196,7 @@ export default function LiveViewPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {sessions.map(session => (
+                {displayedSessions.map(session => (
                   <div key={session.id} className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow flex items-center justify-between">
                     <div className="flex items-center gap-4">
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${

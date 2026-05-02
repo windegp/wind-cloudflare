@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { getRtdb } from "@/lib/firebase"; 
 import { useSettings } from "@/context/SettingsContext"; // 🔥 الربط مع الكونتكس الموفر
 // 🔥 استدعاء دوال الـ Realtime Database
@@ -15,14 +15,17 @@ export default function Dashboard() {
   const [liveVisitors, setLiveVisitors] = useState(0);
 
   // استخراج الأرقام من وثيقة الإعدادات المركزية - Safe property access for legacy browsers
-  const counters = (settings && settings.counters) || {};
-  const stats = {
-    products: counters.products || 0,
-    orders: counters.orders || 0,
-    sales: counters.sales || 0,
-    customers: counters.customers || 0,
-    visitors: counters.visitors || 0 // 🔥 الحقل الجديد
-  };
+  // Memoized to prevent recalculation on every render
+  const stats = useMemo(() => {
+    const counters = (settings && settings.counters) || {};
+    return {
+      products: counters.products || 0,
+      orders: counters.orders || 0,
+      sales: counters.sales || 0,
+      customers: counters.customers || 0,
+      visitors: counters.visitors || 0 // 🔥 الحقل الجديد
+    };
+  }, [settings]);
 
   // 🔥 [تعديل الحماية] جلب الزوار النشطين بذكاء لمنع استنزاف الكوتا وقت الخمول
   useEffect(() => {
