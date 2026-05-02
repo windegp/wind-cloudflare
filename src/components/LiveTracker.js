@@ -45,6 +45,7 @@ export default function LiveTracker() {
         itemsCount: cartItems?.length || 0,
         status: status,
         lastActive: serverTimestamp(),
+        lastActiveClient: Date.now(), // 🛡️ Fallback for safe timestamp handling
         device: window.innerWidth < 768 ? 'Mobile' : 'Desktop'
       });
 

@@ -27,6 +27,26 @@ export default function LiveViewPage() {
 
     const liveSessionsRef = ref(rtdb, 'LiveSessions');
 
+   // 🛡️ Safe timestamp helper (production-safe)
+const getValidTimestamp = (session) => {
+  if (!session) return 0;
+
+  const serverTime = session.lastActive;
+  const clientTime = session.lastActiveClient;
+
+  // Prefer server timestamp when resolved
+  if (Number.isFinite(serverTime) && serverTime > 0) {
+    return serverTime;
+  }
+
+  // Fallback to client timestamp
+  if (Number.isFinite(clientTime) && clientTime > 0) {
+    return clientTime;
+  }
+
+  return 0;
+};
+
     // دالة تشغيل المراقبة (فتح الخط)
     const startListening = () => {
       if (unsubscribe) return; // الخط مفتوح بالفعل
@@ -38,12 +58,12 @@ export default function LiveViewPage() {
           const activeSessions = [];
           Object.keys(data).forEach(key => {
             const session = data[key];
-            const lastActive = session.lastActive || 0; 
+            const lastActive = getValidTimestamp(session);
             if (now - lastActive < 900000) { 
-              activeSessions.push({ id: key, ...session });
+              activeSessions.push({ id: key, ...session, _lastActiveComputed: lastActive });
             }
           });
-          activeSessions.sort((a, b) => (b.lastActive || 0) - (a.lastActive || 0));
+          activeSessions.sort((a, b) => (b._lastActiveComputed || 0) - (a._lastActiveComputed || 0));
           setSessions(activeSessions);
         } else {
           setSessions([]); 
@@ -65,13 +85,14 @@ export default function LiveViewPage() {
     // 1. تشغيل المراقبة فوراً لما تفتح الصفحة
     startListening();
 
-    // 2. 🪄 السحر المطلق: حساس نشاط التاب (Tab Visibility)
+    // 2. 🪄 حساس نشاط التاب (Tab Visibility) - Keep connection alive for instant updates on return
     const handleVisibilityChange = () => {
-      if (document.hidden) {
-        stopListening(); // لو التاب مخفي (في الخلفية) -> اقفل الخط ووفر الكوتا
-      } else {
-        startListening(); // لو الأدمن رجع للتاب -> افتح الخط وهات أحدث داتا
+      if (!document.hidden) {
+        // Admin returned to tab - ensure fresh data by triggering a re-check
+        // Note: onValue automatically syncs latest data when tab becomes visible
+        setLastUpdate(new Date());
       }
+      // Removed: stopListening() on hidden - keep connection for instant updates
     };
 
     // مراقبة حركة التاب

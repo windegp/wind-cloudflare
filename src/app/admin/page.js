@@ -39,7 +39,11 @@ export default function Dashboard() {
             const now = Date.now();
             let activeCount = 0;
             Object.values(data).forEach(session => {
-              const lastActive = session.lastActive || 0;
+              // 🛡️ Safe timestamp: use serverTimestamp() if resolved, else fallback to client timestamp
+              let lastActive = session.lastActive;
+              if (typeof lastActive !== 'number' || lastActive <= 0) {
+                lastActive = session.lastActiveClient || 0;
+              }
               if (now - lastActive < 900000) { // 15 دقيقة
                 activeCount++;
               }
@@ -66,13 +70,13 @@ export default function Dashboard() {
     // 1. تشغيل المراقبة فوراً لو التاب نشط
     if (!document.hidden) startListening();
 
-    // 2. 🪄 حساس نشاط التاب (Tab Visibility) لغلق المحبس أوتوماتيكياً
+    // 2. 🪄 حساس نشاط التاب - Keep listening for instant updates on return
     const handleVisibilityChange = () => {
-      if (document.hidden) {
-        stopListening(); // الأدمن مش باصص ع الصفحة؟ اقفل الخط فوراً
-      } else {
-        startListening(); // الأدمن رجع؟ افتح الخط وهات الداتا
+      if (!document.hidden) {
+        // Admin returned to tab - onValue automatically syncs latest data
+        // No need to stop/start, Firebase handles reconnection seamlessly
       }
+      // Removed aggressive stopListening() - connection stays alive for real-time updates
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
