@@ -39,11 +39,19 @@ export default function Dashboard() {
             const now = Date.now();
             let activeCount = 0;
             Object.values(data).forEach(session => {
-              // 🛡️ Safe timestamp: use serverTimestamp() if resolved, else fallback to client timestamp
+              // 🛡️ FIXED: Safe timestamp handling with Date.now() fallback
               let lastActive = session.lastActive;
-              if (typeof lastActive !== 'number' || lastActive <= 0) {
-                lastActive = session.lastActiveClient || 0;
+
+              // Guard 1: serverTime must be valid number (not object placeholder)
+              if (typeof lastActive !== 'number' || !Number.isFinite(lastActive) || lastActive <= 0) {
+                // Guard 2: fallback to client timestamp
+                lastActive = session.lastActiveClient;
+                if (typeof lastActive !== 'number' || !Number.isFinite(lastActive) || lastActive <= 0) {
+                  // Guard 3: use NOW to prevent filtering bug (don't return 0!)
+                  lastActive = Date.now();
+                }
               }
+
               if (now - lastActive < 900000) { // 15 دقيقة
                 activeCount++;
               }

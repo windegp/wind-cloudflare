@@ -59,24 +59,26 @@ export default function LiveViewPage() {
       return;
     }
 
-    // 🛡️ Safe timestamp helper (production-safe)
+    // 🛡️ Safe timestamp helper - FIXED for Firebase serverTimestamp
     const getValidTimestamp = (session) => {
-      if (!session) return 0;
+      if (!session) return Date.now(); // Never return 0 - prevents filtering bugs
 
       const serverTime = session.lastActive;
       const clientTime = session.lastActiveClient;
 
-      // Prefer server timestamp when resolved
-      if (Number.isFinite(serverTime) && serverTime > 0) {
+      // Guard 1: Check if serverTime is a valid number (not object placeholder, not undefined)
+      if (typeof serverTime === "number" && Number.isFinite(serverTime) && serverTime > 0) {
         return serverTime;
       }
 
-      // Fallback to client timestamp
-      if (Number.isFinite(clientTime) && clientTime > 0) {
+      // Guard 2: Fallback to client timestamp
+      if (typeof clientTime === "number" && Number.isFinite(clientTime) && clientTime > 0) {
         return clientTime;
       }
 
-      return 0;
+      // Guard 3: If both invalid (e.g., serverTimestamp still resolving), use NOW
+      // This prevents sessions from being filtered out due to timestamp bugs
+      return Date.now();
     };
 
     // STEP 4: Verify Listener Attachment
@@ -110,9 +112,12 @@ export default function LiveViewPage() {
             Object.keys(data).forEach(key => {
               const session = data[key];
               const lastActive = getValidTimestamp(session);
-              console.log(`[DEBUG] Session ${key}: lastActive=${lastActive}, age=${now - lastActive}ms`);
+              const ageMs = now - lastActive;
+              const ageMin = Math.floor(ageMs / 60000);
+              console.log(`[DEBUG] Session ${key}: lastActive=${lastActive}, age=${ageMs}ms (${ageMin}min)`);
+              // FIXED: Back to 15 minutes (900000ms) - timestamp bug resolved
               if (now - lastActive < 900000) {
-                activeSessions.push({ id: key, ...session, _lastActiveComputed: lastActive });
+                activeSessions.push({ id: key, ...session, _lastActiveComputed: lastActive, _ageMinutes: ageMin });
               }
             });
             console.log("[DEBUG] Active sessions after filter:", activeSessions.length);
@@ -312,6 +317,11 @@ export default function LiveViewPage() {
                         <div className="flex items-center gap-2 mb-0.5">
                           <span className="text-xs font-bold px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md" dir="ltr">{session.id.replace('sess_', 'Vis-')}</span>
                           <span className="text-[10px] font-bold text-gray-400 border border-gray-200 px-1.5 py-0.5 rounded">{session.device || 'Web'}</span>
+                          {session._ageMinutes !== undefined && (
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${session._ageMinutes < 15 ? 'bg-green-100 text-green-700' : session._ageMinutes < 60 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
+                              {session._ageMinutes}m ago
+                            </span>
+                          )}
                         </div>
                         <p className="text-xs text-gray-500 max-w-[180px] sm:max-w-[250px] truncate" dir="ltr">{session.path}</p>
                       </div>
