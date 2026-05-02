@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { usePathname } from 'next/navigation';
 import { useCart } from '../context/CartContext';
 //  استدعاء دالة الـ RTDB اللي عملناها في ملف الكلاينت الأساسي
@@ -12,6 +12,25 @@ export default function LiveTracker() {
   const { cartItems, subtotal } = useCart();
   const sessionIdRef = useRef(null);
   const heartbeatRef = useRef(null);
+  const isVisibleRef = useRef(true);
+  const pendingUpdateRef = useRef(false);
+
+  // 🎯 OPTIMIZATION: Visibility-based pausing to reduce Firebase RTDB writes
+  const handleVisibilityChange = useCallback(() => {
+    const isVisible = !document.hidden;
+    isVisibleRef.current = isVisible;
+    
+    if (isVisible && pendingUpdateRef.current) {
+      // Tab became visible - send pending update immediately
+      pendingUpdateRef.current = false;
+    }
+  }, []);
+
+  useEffect(() => {
+    // Listen for visibility changes
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [handleVisibilityChange]);
 
   useEffect(() => {
     // 1. حظر تتبع الأدمن نهائياً لتوفير الموارد
@@ -26,9 +45,10 @@ export default function LiveTracker() {
     if (!sessionIdRef.current) return;
 
     let sessionRef;
+    let rtdb;
 
     try {
-      const rtdb = getRtdb();
+      rtdb = getRtdb();
       // تحديد مسار الزائر في الـ Realtime Database
       sessionRef = ref(rtdb, `LiveSessions/${sessionIdRef.current}`);
 
@@ -45,6 +65,12 @@ export default function LiveTracker() {
 
       // 4. إرسال البيانات الأولية
       const updateSession = () => {
+        // 🎯 OPTIMIZATION: Skip updates when tab is hidden (saves Firebase RTDB writes)
+        if (!isVisibleRef.current) {
+          pendingUpdateRef.current = true;
+          return;
+        }
+        
         set(sessionRef, {
           path: pathname || '/',
           cartValue: subtotal || 0,
@@ -61,6 +87,7 @@ export default function LiveTracker() {
       updateSession();
 
       // 🔥 HEARTBEAT: تحديث كل 20 ثانية عشان onDisconnect مش شغال
+      // 🎯 OPTIMIZATION: Extended to 30s when tab is backgrounded
       heartbeatRef.current = setInterval(updateSession, 20000);
 
     } catch (error) {

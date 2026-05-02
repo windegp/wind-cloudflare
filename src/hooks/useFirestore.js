@@ -7,6 +7,29 @@ import {
 } from 'firebase/firestore/lite';
 
 // =========================================================
+// 🎯 OPTIMIZATION: Request Deduplication Layer
+// Prevents duplicate Firebase calls across re-renders
+// =========================================================
+const inFlightRequests = new Map();
+
+const dedupedFetch = async (key, fetchFn) => {
+  // If there's already an in-flight request with this key, return its promise
+  if (inFlightRequests.has(key)) {
+    return inFlightRequests.get(key);
+  }
+  
+  // Create new request
+  const promise = fetchFn().finally(() => {
+    // Clean up after request completes (success or error)
+    setTimeout(() => inFlightRequests.delete(key), 0);
+  });
+  
+  // Store the promise for deduplication
+  inFlightRequests.set(key, promise);
+  return promise;
+};
+
+// =========================================================
 // 1. Fetchers (المصانع الخلفية اللي بتكلم الفايربيز)
 // =========================================================
 

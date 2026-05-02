@@ -17,6 +17,10 @@ let globalProductsCache = {
   isLoaded: false
 };
 
+// 🎯 OPTIMIZATION: Virtualization for large tables - limits rendered rows to prevent UI freeze
+const VIRTUALIZATION_THRESHOLD = 100; // Start virtualizing after 100 products
+const VIRTUALIZATION_PAGE_SIZE = 50;  // Render 50 products at a time
+
 export default function ProductsList() {
   const router = useRouter(); // 🔥 تعريف الـ Router
   
@@ -25,6 +29,10 @@ export default function ProductsList() {
   const [lastVisible, setLastVisible] = useState(globalProductsCache.lastVisible);
   const [hasMore, setHasMore] = useState(globalProductsCache.hasMore);
   const [isLoading, setIsLoading] = useState(false);
+  
+  // 🎯 OPTIMIZATION: Virtualization state for large tables
+  const [displayLimit, setDisplayLimit] = useState(VIRTUALIZATION_PAGE_SIZE);
+  const [searchQuery, setSearchQuery] = useState("");
   const itemsPerPage = 20;
 
   useEffect(() => {
@@ -71,6 +79,9 @@ export default function ProductsList() {
       globalProductsCache.lastVisible = newLastVisible;
       globalProductsCache.hasMore = newHasMore;
       globalProductsCache.isLoaded = true;
+      
+      // 🎯 OPTIMIZATION: Reset display limit when loading more
+      setDisplayLimit(VIRTUALIZATION_PAGE_SIZE);
       
     } catch (error) {
       console.error("Error fetching products:", error);
@@ -129,7 +140,19 @@ export default function ProductsList() {
             <h1 className="text-2xl font-black tracking-tight text-[#202223]">المنتجات</h1>
             <p className="text-sm text-gray-500 mt-1">إدارة جميع منتجات متجرك، وتحديث المخزون والأسعار.</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* 🎯 OPTIMIZATION: Search input for large product lists */}
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="بحث في المنتجات..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full sm:w-64 px-4 py-2.5 pr-10 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#008060]/20 focus:border-[#008060]"
+              />
+              <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            </div>
+            
             {/* 🔥 7. استبدال Link بـ button مع router.push لقتل التحميل المسبق */}
             <button 
               onClick={() => router.push('/admin/products/create')}
@@ -166,7 +189,11 @@ export default function ProductsList() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {products.map((product) => {
+                {/* 🎯 OPTIMIZATION: Virtualized rendering for large tables */}
+                {(searchQuery 
+                  ? products.filter(p => p.title && p.title.toLowerCase().includes(searchQuery.toLowerCase()))
+                  : products.slice(0, Math.max(VIRTUALIZATION_PAGE_SIZE, displayLimit))
+                ).map((product) => {
                   
                   const productImages = product.images || [];
                   const displayImage = productImages[0] || product.mainImageUrl || product.image;
@@ -259,6 +286,24 @@ export default function ProductsList() {
                 })}
               </tbody>
             </table>
+            
+            {/* 🎯 OPTIMIZATION: Virtualization controls for large tables */}
+            {!searchQuery && products.length > VIRTUALIZATION_THRESHOLD && displayLimit < products.length && (
+              <div className="p-4 border-t border-gray-100 bg-gray-50/50 text-center">
+                <button
+                  onClick={() => setDisplayLimit(prev => prev + VIRTUALIZATION_PAGE_SIZE)}
+                  className="text-sm font-bold text-[#008060] hover:text-[#006e52] transition-colors px-4 py-2 bg-white border border-green-200 rounded-lg shadow-sm"
+                >
+                  عرض المزيد ({products.length - displayLimit} متبقي)
+                </button>
+              </div>
+            )}
+            
+            {searchQuery && products.filter(p => p.title && p.title.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
+              <div className="p-8 text-center text-gray-500">
+                لا توجد منتجات مطابقة للبحث
+              </div>
+            )}
           </div>
 
           {products.length === 0 && !isLoading && (

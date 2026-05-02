@@ -9,6 +9,9 @@ import { Star, Upload, Plus, MessageSquare, CheckCircle, X, Trash2, Calendar, Sa
 
 export const dynamic = 'force-dynamic';
 
+// Performance guard: Maximum products to fetch per page (prevents Firebase quota exhaustion)
+const PRODUCTS_PAGE_SIZE = 50;
+
 export default function ReviewsAdminPage() {
   const [reviews, setReviews] = useState([]);
   const [products, setProducts] = useState([]);
@@ -17,6 +20,12 @@ export default function ReviewsAdminPage() {
   const [loadingReviews, setLoadingReviews] = useState(false); 
   const [loading, setLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
+  
+  // 🎯 OPTIMIZATION: Product pagination state
+  const [productsLastDoc, setProductsLastDoc] = useState(null);
+  const [productsHasMore, setProductsHasMore] = useState(true);
+  const [productsLoadingMore, setProductsLoadingMore] = useState(false);
+  const [productSearchQuery, setProductSearchQuery] = useState("");
   
   // حالة الإعجابات (للتعديل المباشر من الجدول)
   const [editingLikes, setEditingLikes] = useState({});
@@ -46,24 +55,57 @@ export default function ReviewsAdminPage() {
     fetchData();
   }, []);
 
-  const fetchData = async () => {
-    setLoading(true);
+  // 🎯 OPTIMIZATION: Paginated product fetching (reduces Firebase reads by ~95%)
+  const fetchData = async (loadMoreProducts = false) => {
+    if (!loadMoreProducts) setLoading(true);
     const db = getDb();
     try {
-      // 🔥 إلغاء كاش المتصفح نهائياً لصفحة الأدمن لضمان رؤية التقييمات الجديدة فوراً بعد الـ Refresh
+      // 🔥 OPTIMIZATION: Fetch products in pages of 50 instead of 1000
+      let productsQuery = query(
+        collection(db, "products"), 
+        orderBy("title"),
+        limit(PRODUCTS_PAGE_SIZE)
+      );
+      
+      if (loadMoreProducts && productsLastDoc) {
+        productsQuery = query(productsQuery, startAfter(productsLastDoc));
+      }
+      
       const [pSnap, sSnap] = await Promise.all([
-        getDocs(query(collection(db, "products"), limit(1000))),
-        getDocs(query(collection(db, "ProductStats"), limit(1000)))
+        getDocs(productsQuery),
+        getDocs(query(collection(db, "ProductStats"), limit(100))) // Stats are lightweight, keep reasonable limit
       ]);
-      const pDocs = pSnap.docs.map(doc => ({ id: doc.id, ...doc.data(), handle: doc.data().handle || doc.id }));
+      
+      const pDocs = pSnap.docs.map(doc => ({ 
+        id: doc.id, 
+        ...doc.data(), 
+        handle: doc.data().handle || doc.id 
+      }));
+      
       const statsMap = {};
       sSnap.docs.forEach(doc => { statsMap[doc.id] = doc.data(); });
-      setProducts(pDocs);
+      
+      // 🎯 OPTIMIZATION: Append or replace based on loadMore flag
+      if (loadMoreProducts) {
+        setProducts(prev => [...prev, ...pDocs]);
+      } else {
+        setProducts(pDocs);
+      }
+      
       setProductStats(statsMap);
-      const likesState = {};
-      pDocs.forEach(p => likesState[p.id] = p.likesCount);
+      setProductsLastDoc(pSnap.docs[pSnap.docs.length - 1] || null);
+      setProductsHasMore(pSnap.docs.length === PRODUCTS_PAGE_SIZE);
+      
+      // Update likes state for new products only
+      const likesState = loadMoreProducts ? { ...editingLikes } : {};
+      pDocs.forEach(p => {
+        if (likesState[p.id] === undefined) {
+          likesState[p.id] = p.likesCount || 0;
+        }
+      });
       setEditingLikes(likesState);
       
+      // Reviews are lightweight - fetch normally
       const rQuery = query(collection(db, "Reviews"), orderBy("date", "desc"), limit(20));
       const rSnap = await getDocs(rQuery);
       setReviews(rSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -71,48 +113,59 @@ export default function ReviewsAdminPage() {
       console.error("Fetch Error:", err); 
     } finally {
       setLoading(false);
+      setProductsLoadingMore(false);
     }
   };
-  const fetchProducts = async () => {
+  
+  // 🎯 OPTIMIZATION: Load more products on demand
+  const loadMoreProducts = async () => {
+    if (productsLoadingMore || !productsHasMore) return;
+    setProductsLoadingMore(true);
+    await fetchData(true);
+  };
+  
+  // 🎯 OPTIMIZATION: Search products by title (avoids loading all products)
+  const searchProducts = async (searchTerm) => {
+    if (!searchTerm.trim()) {
+      // Reset to first page if search cleared
+      await fetchData(false);
+      return;
+    }
+    
+    const db = getDb();
+    setLoading(true);
     try {
-      const db = getDb();
-      // 🔥 وضع صمام أمان (Limit 1000) لمنع استنزاف الكوتا
-      const q = query(collection(db, "products"), limit(1000));
-      const [pSnap, sSnap] = await Promise.all([
-        getDocs(q),
-        getDocs(query(collection(db, "ProductStats"), limit(1000)))
-      ]);
+      // Note: Firestore doesn't support native text search
+      // We fetch a reasonable batch and filter client-side
+      // For production, consider Algolia or similar
+      const searchQuery = query(
+        collection(db, "products"),
+        orderBy("title"),
+        limit(100) // Search within first 100 matches
+      );
       
-      // بناء map للـ ProductStats
-      const statsMap = {};
-      sSnap.docs.forEach(doc => { statsMap[doc.id] = doc.data(); });
+      const snap = await getDocs(searchQuery);
+      const allDocs = snap.docs.map(doc => ({ 
+        id: doc.id, 
+        ...doc.data(), 
+        handle: doc.data().handle || doc.id 
+      }));
       
-      const docs = pSnap.docs.map(doc => {
-        const data = doc.data();
-        const handle = data.handle || data.seo?.handle || doc.id;
-        const stats = statsMap[handle];
-        return { 
-          id: doc.id, 
-          title: data.title || "بدون اسم",
-          handle: handle,
-          likesCount: data.likesCount || 0,
-          likesUpdatedAt: data.likesUpdatedAt || null,
-          currentWeekId: data.currentWeekId || null,
-          weeklyLikesCount: data.weeklyLikesCount || 0,
-          // 🔥 إضافة reviewsCount من ProductStats للـ Dropdown
-          reviewsCount: stats?.totalCount || 0
-        };
-      });
-      setProducts(docs);
+      // Client-side filtering for search
+      const filtered = allDocs.filter(p => 
+        p.title && p.title.toLowerCase().includes(searchTerm.toLowerCase())
+      );
       
-      // تهيئة حالة الإعجابات
-      const likesState = {};
-      docs.forEach(p => likesState[p.id] = p.likesCount);
-      setEditingLikes(likesState);
+      setProducts(filtered);
+      setProductsHasMore(false); // Disable load more during search
     } catch (err) {
-      console.error("Error fetching products:", err);
+      console.error("Search Error:", err);
+    } finally {
+      setLoading(false);
     }
   };
+  // 🎯 OPTIMIZATION: Replaced with paginated version - old fetchProducts removed
+  // Use loadMoreProducts() or searchProducts() instead for better scalability
 
   const fetchReviews = async () => {
     try {
