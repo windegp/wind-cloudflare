@@ -115,8 +115,8 @@ export default function LiveViewPage() {
               const ageMs = now - lastActive;
               const ageMin = Math.floor(ageMs / 60000);
               console.log(`[DEBUG] Session ${key}: lastActive=${lastActive}, age=${ageMs}ms (${ageMin}min)`);
-              // FIXED: Back to 15 minutes (900000ms) - timestamp bug resolved
-              if (now - lastActive < 900000) {
+              // EXTENDED: 2 hours (7200000ms) to show visitors despite onDisconnect issues
+              if (now - lastActive < 7200000) {
                 activeSessions.push({ id: key, ...session, _lastActiveComputed: lastActive, _ageMinutes: ageMin });
               }
             });

@@ -52,7 +52,8 @@ export default function Dashboard() {
                 }
               }
 
-              if (now - lastActive < 900000) { // 15 دقيقة
+              // EXTENDED: 2 hours (7200000ms) - onDisconnect not working properly
+              if (now - lastActive < 7200000) {
                 activeCount++;
               }
             });
