@@ -35,11 +35,12 @@ export default function LiveViewPage() {
       const serverTime = session.lastActive;
       const clientTime = session.lastActiveClient;
 
-      if (typeof serverTime === "number" && Number.isFinite(serverTime) && serverTime > 0) {
+      // Using global isFinite with type check for legacy browser compatibility (Chrome < 47, IE)
+      if (typeof serverTime === "number" && isFinite(serverTime) && serverTime > 0) {
         return serverTime;
       }
 
-      if (typeof clientTime === "number" && Number.isFinite(clientTime) && clientTime > 0) {
+      if (typeof clientTime === "number" && isFinite(clientTime) && clientTime > 0) {
         return clientTime;
       }
 

@@ -1,6 +1,14 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // ============================================
+  // 🌐 LEGACY BROWSER COMPATIBILITY
+  // ============================================
+  transpilePackages: ['firebase', '@firebase/app', '@firebase/firestore', 'swr'],
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production',
+  },
+
+  // ============================================
   // 🖼️ IMAGE OPTIMIZATION CONFIGURATION
   // ============================================
   images: {

@@ -62,7 +62,8 @@ const fetchHomepageReviews = async () => {
       snapProducts.docs.forEach(doc => {
         const pData = doc.data();
         const h = pData.handle || doc.id;
-        productsMap[h] = { ...pData, id: doc.id, mainImage: pData.images?.[0] || pData.image || "" };
+        const images = pData.images || [];
+        productsMap[h] = { ...pData, id: doc.id, mainImage: images[0] || pData.image || "" };
       });
       
       // لو لسه في منتجات ناقصة، نبحث عنها مرة واحدة فقط
@@ -73,7 +74,8 @@ const fetchHomepageReviews = async () => {
         snapByHandle.docs.forEach(doc => {
           const pData = doc.data();
           const h = pData.handle || doc.id;
-          productsMap[h] = { ...pData, id: doc.id, mainImage: pData.images?.[0] || pData.image || "" };
+          const images = pData.images || [];
+        productsMap[h] = { ...pData, id: doc.id, mainImage: images[0] || pData.image || "" };
         });
       }
     }
@@ -162,9 +164,10 @@ const fetchHomepageProductsSections = async () => {
     const topRatedAllTime = topAllTimeHandles.map(handle => {
       const product = productsMap[handle];
       if (!product) return null;
-      const stats = topStatsIdsSnap.docs.find(s => s.id === handle)?.data();
-      const avg = stats?.totalCount ? (stats.totalRatingSum / stats.totalCount).toFixed(1) : "5.0";
-      return { ...product, allTimeAvg: avg, allTimeCount: stats?.totalCount || 0 };
+      const statsDoc = topStatsIdsSnap.docs.find(s => s.id === handle);
+      const stats = statsDoc ? statsDoc.data() : null;
+      const avg = stats && stats.totalCount ? (stats.totalRatingSum / stats.totalCount).toFixed(1) : "5.0";
+      return { ...product, allTimeAvg: avg, allTimeCount: (stats && stats.totalCount) || 0 };
     }).filter(Boolean);
 
     // بناء المنتجات الأعلى تقييماً (أسبوعياً)
@@ -303,7 +306,8 @@ export const usePaginatedProducts = (categorySlug, limitCount = 10, lastVisibleD
   };
 
   // مفتاح SWR فريد يعتمد على القسم ومكان التوقف (lastVisibleDoc)
-  return useSWR(`paginated-products-${categorySlug}-${lastVisibleDoc?.id || 'start'}`, fetcher, {
+  const lastDocId = lastVisibleDoc ? lastVisibleDoc.id : 'start';
+  return useSWR(`paginated-products-${categorySlug}-${lastDocId}`, fetcher, {
     revalidateOnFocus: false,
     dedupingInterval: 300000, // كاش 5 دقائق
   });
@@ -317,7 +321,7 @@ export const useProduct = (id) => {
       const res = await fetch(`/api/product/${id}`);
       if (res.ok) {
         const result = await res.json();
-        if (result?.id) return result;
+        if (result && result.id) return result;
       }
     } catch (e) {
       console.error("WIND Product Cache Error:", e);
@@ -336,13 +340,13 @@ export const useProduct = (id) => {
 // 🚀 هوك جلب المنتجات ذات الصلة (النسخة الكاملة والمطابقة لمنطقك الأصلي)
 export const useRelatedProducts = (product) => {
   const fetcher = async () => {
-    if (!product?.id) return [];
+    if (!product || !product.id) return [];
     const db = getDb();
     const productsRef = collection(db, "products");
     let related = [];
 
     // 1. جلب عن طريق الـ Metafields (الـ Handles اليدوية)
-    const pageHandlesStr = product.metafields?.pageCrossSellHandles;
+    const pageHandlesStr = product.metafields && product.metafields.pageCrossSellHandles;
     if (pageHandlesStr && pageHandlesStr.trim() !== "") {
       const handlesArray = pageHandlesStr.split(',').map(h => h.trim()).filter(Boolean);
       const docsSnaps = await Promise.all(handlesArray.map(h => getDoc(doc(db, "products", h))));
@@ -377,7 +381,8 @@ export const useRelatedProducts = (product) => {
     return Array.from(new Map(related.map(item => [item.id, item])).values()).slice(0, 5);
   };
 
-  return useSWR(product?.id ? `related-${product.id}` : null, fetcher, {
+  const productId = product && product.id ? product.id : null;
+  return useSWR(productId ? `related-${productId}` : null, fetcher, {
     dedupingInterval: 300000, // 5 دقائق كاش
     revalidateOnFocus: false
   });
@@ -415,7 +420,8 @@ export const usePaginatedReviews = (productHandle, lastVisibleDoc = null, filter
     };
   };
 
-  return useSWR(productHandle ? `reviews-${productHandle}-${filter}-${lastVisibleDoc?.id || 'start'}` : null, fetcher, {
+  const reviewDocId = lastVisibleDoc && lastVisibleDoc.id ? lastVisibleDoc.id : 'start';
+  return useSWR(productHandle ? `reviews-${productHandle}-${filter}-${reviewDocId}` : null, fetcher, {
     dedupingInterval: 300000, // 5 دقائق كاش
     revalidateOnFocus: false
   });

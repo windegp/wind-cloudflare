@@ -9,7 +9,7 @@ const SettingsContext = createContext();
 
 export const SettingsProvider = ({ children }) => {
   const pathname = usePathname();
-  const isAdmin = pathname?.startsWith('/admin');
+  const isAdmin = pathname && pathname.startsWith('/admin');
 
   // 🔥 تعديل WIND: تقليل الكاش للأدمن لضمان رؤية العدادات (الزوار والتقييمات) لحظياً
   const { data: settings, isLoading, mutate } = useSWR('site-settings', async () => {

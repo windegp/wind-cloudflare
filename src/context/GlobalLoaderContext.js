@@ -24,7 +24,7 @@ export function GlobalLoaderProvider({ children }) {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" });
     
     // 🔥 الحل الجذري للأدمن وصفحة الدفع: اقتل اللودر فوراً ليظهر المحتوى بأقصى سرعة
-    if (pathname?.startsWith("/admin") || pathname?.includes("/checkout")) {
+    if ((pathname && pathname.startsWith("/admin")) || (pathname && pathname.includes("/checkout"))) {
       setIsVisible(false);
       setIsReceding(false);
       setPageReady(true);
@@ -42,7 +42,7 @@ export function GlobalLoaderProvider({ children }) {
     }, 0);
 
     // Detect if navigating to Kashier Payment Gateway
-    const isKashierPayment = pathname?.includes("kashier") || pathname?.includes("checkout");
+    const isKashierPayment = (pathname && pathname.includes("kashier")) || (pathname && pathname.includes("checkout"));
     setLoaderType(isKashierPayment ? "secure-vault" : "standard");
 
     // Fail-safe timeout: Force recede after 8 seconds regardless of pageReady

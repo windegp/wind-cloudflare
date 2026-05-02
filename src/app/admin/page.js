@@ -14,14 +14,15 @@ export default function Dashboard() {
   const { settings } = useSettings(); // سحب البيانات المجمعة من الكونتكس (0 قراءة إضافية)
   const [liveVisitors, setLiveVisitors] = useState(0);
 
-  // استخراج الأرقام من وثيقة الإعدادات المركزية
+  // استخراج الأرقام من وثيقة الإعدادات المركزية - Safe property access for legacy browsers
+  const counters = (settings && settings.counters) || {};
   const stats = {
-  products: settings?.counters?.products || 0,
-  orders: settings?.counters?.orders || 0,
-  sales: settings?.counters?.sales || 0,
-  customers: settings?.counters?.customers || 0,
-  visitors: settings?.counters?.visitors || 0 // 🔥 الحقل الجديد
-};
+    products: counters.products || 0,
+    orders: counters.orders || 0,
+    sales: counters.sales || 0,
+    customers: counters.customers || 0,
+    visitors: counters.visitors || 0 // 🔥 الحقل الجديد
+  };
 
   // 🔥 [تعديل الحماية] جلب الزوار النشطين بذكاء لمنع استنزاف الكوتا وقت الخمول
   useEffect(() => {
@@ -43,10 +44,11 @@ export default function Dashboard() {
               let lastActive = session.lastActive;
 
               // Guard 1: serverTime must be valid number (not object placeholder)
-              if (typeof lastActive !== 'number' || !Number.isFinite(lastActive) || lastActive <= 0) {
+              // Using global isFinite with type check for legacy browser compatibility
+              if (typeof lastActive !== 'number' || !isFinite(lastActive) || lastActive <= 0) {
                 // Guard 2: fallback to client timestamp
                 lastActive = session.lastActiveClient;
-                if (typeof lastActive !== 'number' || !Number.isFinite(lastActive) || lastActive <= 0) {
+                if (typeof lastActive !== 'number' || !isFinite(lastActive) || lastActive <= 0) {
                   // Guard 3: use NOW to prevent filtering bug (don't return 0!)
                   lastActive = Date.now();
                 }

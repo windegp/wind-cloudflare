@@ -28,10 +28,11 @@ export async function GET() {
     const layoutData = layoutSnap.exists() ? layoutSnap.data() : { sections: [] };
 
     // Price Enrichment
-    if (layoutData.sections?.length > 0) {
+    if (layoutData.sections && layoutData.sections.length > 0) {
       const allProductIds = [];
       layoutData.sections.forEach(section => {
-        const items = section.data?.cards || section.data?.products || [];
+        const sectionData = section.data || {};
+        const items = sectionData.cards || sectionData.products || [];
         items.forEach(item => {
           if (item.productId) allProductIds.push(item.productId);
         });
@@ -68,7 +69,8 @@ export async function GET() {
         });
 
         layoutData.sections = layoutData.sections.map(section => {
-          const items = section.data?.cards || section.data?.products || [];
+          const sectionData = section.data || {};
+          const items = sectionData.cards || sectionData.products || [];
           if (items.length === 0) return section;
           const updatedItems = items.map(item => {
             if (!item.productId) return item;
@@ -78,12 +80,12 @@ export async function GET() {
               ...item,
               price: priceData.price || item.price,
               compareAtPrice: priceData.compareAtPrice || item.compareAtPrice,
-              reviewsCount: statsData.reviewsCount ?? item.reviewsCount ?? 0,
-              rating: statsData.rating ?? item.rating ?? 5
+              reviewsCount: (statsData.reviewsCount != null ? statsData.reviewsCount : (item.reviewsCount != null ? item.reviewsCount : 0)),
+              rating: (statsData.rating != null ? statsData.rating : (item.rating != null ? item.rating : 5))
             };
           });
-          if (section.data?.cards) return { ...section, data: { ...section.data, cards: updatedItems } };
-          return { ...section, data: { ...section.data, products: updatedItems } };
+          if (sectionData.cards) return { ...section, data: { ...sectionData, cards: updatedItems } };
+          return { ...section, data: { ...sectionData, products: updatedItems } };
         });
       }
     }

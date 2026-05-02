@@ -36,21 +36,30 @@ export default function CartDrawer() {
       try {
         let handles = [];
         cartItems.forEach(item => {
-          const crossSells = item.metafields?.cartCrossSellHandles;
+          const metafields = item.metafields || {};
+          const crossSells = metafields.cartCrossSellHandles;
           if (crossSells && typeof crossSells === 'string') {
             handles.push(...crossSells.split(',').map(h => h.trim()).filter(Boolean));
           }
         });
 
         handles = [...new Set(handles)]; // مسح التكرار
-        const cartIdsAndHandles = cartItems.flatMap(item => [item.id.toString(), item.handle, item.seo?.handle]).filter(Boolean);
+        // Safe flatMap alternative for legacy browsers: use map + flat
+        const cartIdsAndHandles = cartItems.map(item => [
+          item.id.toString(), 
+          item.handle, 
+          (item.seo && item.seo.handle) || null
+        ]).flat().filter(Boolean);
         handles = handles.filter(h => !cartIdsAndHandles.includes(h));
 
         let fetchedProducts = [];
         
         // 1. البحث في الملف الستاتيك (صفر كوتا)
         handles.forEach(h => {
-          const sp = staticProducts.find(p => p.id.toString() === h || p.handle === h || p.seo?.handle === h);
+          const sp = staticProducts.find(p => {
+            const seoHandle = (p.seo && p.seo.handle) || null;
+            return p.id.toString() === h || p.handle === h || seoHandle === h;
+          });
           if (sp && !fetchedProducts.some(fp => fp.id === sp.id)) fetchedProducts.push(sp);
         });
 

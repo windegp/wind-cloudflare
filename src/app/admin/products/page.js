@@ -168,8 +168,10 @@ export default function ProductsList() {
               <tbody className="divide-y divide-gray-100">
                 {products.map((product) => {
                   
-                  const displayImage = product.images?.[0] || product.mainImageUrl || product.image;
-                  const displayPrice = product.price || (product.variants && product.variants[0]?.price) || "0";
+                  const productImages = product.images || [];
+                  const displayImage = productImages[0] || product.mainImageUrl || product.image;
+                  const firstVariant = (product.variants && product.variants[0]) || {};
+                  const displayPrice = product.price || firstVariant.price || "0";
                   
                   let displayCategory = 'عام';
                   if (product.type) displayCategory = product.type;
@@ -177,7 +179,8 @@ export default function ProductsList() {
                   else if (product.collections) displayCategory = product.collections;
                   else if (Array.isArray(product.categories) && product.categories.length > 0) displayCategory = product.categories.join('، ');
 
-                  const displayStock = product.inventory_quantity ?? product.stock ?? "متوفر";
+                  // Safe nullish coalescing alternative for legacy browser compatibility
+                  const displayStock = (product.inventory_quantity != null ? product.inventory_quantity : (product.stock != null ? product.stock : "متوفر"));
                   const status = product.status || 'active'; 
 
                   return (

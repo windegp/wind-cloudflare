@@ -1,4 +1,6 @@
-import "./globals.css"; 
+import "./globals.css";
+// Polyfills for legacy browser compatibility (must load before React)
+import "../lib/polyfills";
 import { CartProvider } from "../context/CartContext";
 import { GlobalLoaderProvider } from "../context/GlobalLoaderContext";
 import { SettingsProvider } from "../context/SettingsContext";

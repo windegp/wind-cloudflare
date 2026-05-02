@@ -19,8 +19,9 @@ export function middleware(request) {
     return NextResponse.next();
   }
 
-  // 3. فحص الوصول (Cookie Check)
-  const hasAccess = request.cookies.get('wind_site_access')?.value === 'granted';
+  // 3. فحص الوصول (Cookie Check) - Safe property access for legacy browser compatibility
+  const accessCookie = request.cookies.get('wind_site_access');
+  const hasAccess = accessCookie && accessCookie.value === 'granted';
 
   // 4. إذا كان لديه صلاحية، يسمح له بالمرور
   if (hasAccess) {

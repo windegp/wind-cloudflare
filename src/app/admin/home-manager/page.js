@@ -29,14 +29,14 @@ const fetchPickerData = async () => {
   
   try {
     const productsRef = collection(db, "products"); 
-    // 🔥 صمام أمان موحد (1000) يضمن ظهور كل منتجاتك (كان 65 وبيخفي بعض المنتجات)
-    const productsQuery = query(productsRef, limit(1000)); 
+    // 🔥 صمام أمان موحد (500) - توازن بين إظهار كل المنتجات وضمان الأداء
+    const productsQuery = query(productsRef, limit(500)); 
     const productsSnap = await getDocs(productsQuery);
     products = productsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
     const collectionsRef = collection(db, "collections"); 
-    // 🔥 صمام أمان موحد (1000) يضمن ظهور كل أقسامك
-    const collectionsQuery = query(collectionsRef, limit(1000));
+    // 🔥 صمام أمان موحد (500) - توازن بين إظهار كل الأقسام وضمان الأداء
+    const collectionsQuery = query(collectionsRef, limit(500));
     const collectionsSnap = await getDocs(collectionsQuery);
     collections = collectionsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   } catch (err) { 

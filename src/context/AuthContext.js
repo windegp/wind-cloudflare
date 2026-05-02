@@ -37,8 +37,11 @@ export const AuthProvider = ({ children }) => {
     return () => unsubscribe();
   }, []);
 
+  // Safe role check for legacy browser compatibility
+  const isAdmin = userData && userData.role === 'admin';
+  
   return (
-    <AuthContext.Provider value={{ user, userData, loading, isAdmin: userData?.role === 'admin' }}>
+    <AuthContext.Provider value={{ user, userData, loading, isAdmin }}>
       {children}
     </AuthContext.Provider>
   );
