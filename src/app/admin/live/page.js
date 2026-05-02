@@ -27,15 +27,25 @@ export default function LiveViewPage() {
 
     const liveSessionsRef = ref(rtdb, 'LiveSessions');
 
-   // 🛡️ Safe timestamp helper: handles serverTimestamp() placeholder and falls back to client timestamp 
-    const getValidTimestamp = (session) => {
-      const serverTime = session.lastActive;
-      // If serverTime is a valid number (resolved), use it; otherwise fallback to client timestamp
-      if (typeof serverTime === 'number' && serverTime > 0) return serverTime;
-      const clientTime = session.lastActiveClient;
-      if (typeof clientTime === 'number' && clientTime > 0) return clientTime;
-      return 0; // Fallback for very old sessions without timestamps
-    };
+   // 🛡️ Safe timestamp helper (production-safe)
+const getValidTimestamp = (session) => {
+  if (!session) return 0;
+
+  const serverTime = session.lastActive;
+  const clientTime = session.lastActiveClient;
+
+  // Prefer server timestamp when resolved
+  if (Number.isFinite(serverTime) && serverTime > 0) {
+    return serverTime;
+  }
+
+  // Fallback to client timestamp
+  if (Number.isFinite(clientTime) && clientTime > 0) {
+    return clientTime;
+  }
+
+  return 0;
+};
 
     // دالة تشغيل المراقبة (فتح الخط)
     const startListening = () => {
