@@ -36,6 +36,7 @@ export async function GET(request) {
     const counters = settingsSnap.exists() ? (settingsSnap.data().counters || {}) : {};
     
     const totalVisitors = Number(counters.visitors) || 0;
+    const todayVisitors = Number(counters.todayVisitors) || 0;
     const totalOrders = Number(counters.orders) || 0;
     const totalSales = Number(counters.sales) || 0;
     const totalCustomersCount = Number(counters.customers) || 0;
@@ -134,9 +135,8 @@ export async function GET(request) {
     if (period === 'all') {
       visitorsForPeriod = totalVisitors;
     } else if (period === 'today') {
-      // 🔥 FIX: الزوار الحقيقيين لليوم = المتوسط اليومي للجدد
-      // دا هيزيد مع الوقت كل ما counters.visitors يزيد
-      visitorsForPeriod = Math.max(0, Math.round(dailyNewVisitor));
+      // 🔥 FIX: الزوار الحقيقيين لليوم = todayVisitors من العداد (يتحدث لحظياً)
+      visitorsForPeriod = todayVisitors;
     } else if (period === 'custom') {
       const isOverlappingHistorical = filterStartMs <= FEB_28_MS && filterEndMs >= DEC_START_MS;
       const isFullyAfterFeb = filterStartMs > FEB_28_MS;

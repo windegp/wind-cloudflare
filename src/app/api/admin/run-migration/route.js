@@ -79,23 +79,22 @@ export async function GET(request) {
     const currentCounters = settingsSnap.exists() ? (settingsSnap.data().counters || {}) : {};
     totalVisitors = currentCounters.visitors || 0;
 
+    // تحديد تاريخ النهارده لإعداد todayVisitors
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const todayDate = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+
     // ==========================================
     // 4. تحديث العدادات في Firebase
     // ==========================================
-    const updatedCounters = {
-      "counters.orders": totalOrders,
-      "counters.sales": totalSales,
-      "counters.customers": totalCustomers,
-      "counters.products": currentCounters.products || 0,
-      "counters.visitors": totalVisitors
-    };
-
     await setDoc(doc(db, "settings", "siteSettings"), { counters: {
       orders: totalOrders,
       sales: totalSales,
       customers: totalCustomers,
       products: currentCounters.products || 0,
-      visitors: totalVisitors
+      visitors: totalVisitors,
+      todayDate: todayDate,
+      todayVisitors: 0
     }}, { merge: true });
 
     // محاولة تحديث الـ KV cache (تتجاهل الأخطاء في dev mode)
@@ -106,10 +105,11 @@ export async function GET(request) {
         sales: totalSales,
         customers: totalCustomers,
         products: currentCounters.products || 0,
-        visitors: totalVisitors
+        visitors: totalVisitors,
+        todayDate: todayDate,
+        todayVisitors: 0
       }});
     } catch (kvErr) {
-      // KV غير متاح — هذا متوقع في وضع التطوير
       console.log("KV cache update skipped (not available)");
     }
 
