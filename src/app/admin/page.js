@@ -1,9 +1,9 @@
 "use client";
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { getRtdb, getDb } from "@/lib/firebase";
+import { getRtdb } from "@/lib/firebase";
 import { useSettings } from "@/context/SettingsContext";
 import { ref, onValue } from "firebase/database";
-import { collection, query, where, getDocs, orderBy, limit } from "firebase/firestore/lite";
+// firestore imports moved to dynamic fetch inside useEffect
 import { Package, TrendingUp, ShoppingCart, Users, Activity, Calendar, ChevronDown, Eye } from '@/components/icons-extra';
 import { useRouter } from 'next/navigation';
 
@@ -27,6 +27,8 @@ export default function Dashboard() {
     if (ordersLoaded) return;
     const fetchRecent = async () => {
       try {
+        const { getDb } = await import("@/lib/firebase");
+        const { collection, query, orderBy, limit, getDocs } = await import("firebase/firestore/lite");
         const db = getDb();
         const q = query(
           collection(db, "Orders"),
