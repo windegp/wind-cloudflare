@@ -6,8 +6,6 @@ import { useSettings } from "@/context/SettingsContext"; // 🔥 الربط مع
 import { ref, onValue } from "firebase/database"; 
 import { Package, TrendingUp, ShoppingCart, Users, Activity, Calendar, ChevronDown, Eye } from '@/components/icons-extra';
 import { useRouter } from 'next/navigation';
-import dynamicImport from 'next/dynamic';
-const PeriodStats = dynamicImport(() => import('@/app/admin/components/PeriodStats'), { ssr: false });
 
 export const dynamic = 'force-dynamic';
 
@@ -141,8 +139,6 @@ export default function Dashboard() {
           {liveVisitors}
         </div>
       </div>
-
-      <PeriodStats totalVisitors={stats.visitors || 30000} />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between h-32">
