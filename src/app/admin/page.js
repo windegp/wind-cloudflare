@@ -1,10 +1,10 @@
 "use client";
-import { useEffect, useState, useMemo } from 'react';
-import { getRtdb } from "@/lib/firebase"; 
-import { useSettings } from "@/context/SettingsContext"; // 🔥 الربط مع الكونتكس الموفر
-// 🔥 استدعاء دوال الـ Realtime Database
-import { ref, onValue } from "firebase/database"; 
-import { Package, TrendingUp, ShoppingCart, Users, Activity, Calendar, ChevronDown, Eye } from '@/components/icons-extra';
+import { useEffect, useState, useMemo, useCallback } from 'react';
+import { getRtdb, getDb } from "@/lib/firebase";
+import { useSettings } from "@/context/SettingsContext";
+import { ref, onValue } from "firebase/database";
+import { collection, query, where, getDocs, orderBy, limit } from "firebase/firestore/lite";
+import { Package, TrendingUp, ShoppingCart, Users, Activity, Calendar, ChevronDown, Eye, BarChart2 } from '@/components/icons-extra';
 import { useRouter } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
@@ -13,6 +13,144 @@ export default function Dashboard() {
   const router = useRouter();
   const { settings } = useSettings(); // سحب البيانات المجمعة من الكونتكس (0 قراءة إضافية)
   const [liveVisitors, setLiveVisitors] = useState(0);
+
+  // --- بيانات الطلبات للفلترة الزمنية ---
+  const [recentOrders, setRecentOrders] = useState([]);
+  const [ordersLoaded, setOrdersLoaded] = useState(false);
+  const [activePeriod, setActivePeriod] = useState('this_month');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const [showCustom, setShowCustom] = useState(false);
+
+  // جلب آخر 500 طلب مرة واحدة فقط (لا يؤثر على counters أو tabs الطلبات)
+  useEffect(() => {
+    if (ordersLoaded) return;
+    const fetchRecent = async () => {
+      try {
+        const db = getDb();
+        const q = query(
+          collection(db, "Orders"),
+          orderBy("Created at", "desc"),
+          limit(500)
+        );
+        const snap = await getDocs(q);
+        const docs = snap.docs.map(d => d.data());
+        setRecentOrders(docs);
+        setOrdersLoaded(true);
+      } catch (e) {
+        console.error("Dashboard orders fetch:", e);
+        setOrdersLoaded(true);
+      }
+    };
+    fetchRecent();
+  }, [ordersLoaded]);
+
+  // تحويل "Created at" string لـ Date بأمان
+  const parseOrderDate = useCallback((str) => {
+    if (!str) return null;
+    const s = str.replace(/ \+\d{4}$/, '').trim();
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  }, []);
+
+  // حساب نطاق التاريخ حسب الفترة المختارة
+  const getPeriodRange = useCallback((period) => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    if (period === 'this_month') return [new Date(y, m, 1), new Date(y, m + 1, 0, 23, 59, 59)];
+    if (period === 'last_month') return [new Date(y, m - 1, 1), new Date(y, m, 0, 23, 59, 59)];
+    if (period === 'dec_feb') return [new Date(2025, 11, 1), new Date(2026, 1, 28, 23, 59, 59)];
+    if (period === 'all') return [new Date(2019, 0, 1), new Date(2030, 0, 1)];
+    return null;
+  }, []);
+
+  // حساب إحصائيات الفترة المختارة من الطلبات المجلوبة
+  const periodStats = useMemo(() => {
+    if (!recentOrders.length) return null;
+
+    let from, to;
+    if (activePeriod === 'custom' && customFrom && customTo) {
+      from = new Date(customFrom);
+      to = new Date(customTo + 'T23:59:59');
+    } else {
+      const range = getPeriodRange(activePeriod);
+      if (!range) return null;
+      [from, to] = range;
+    }
+
+    const filtered = recentOrders.filter(o => {
+      if (o['Financial Status'] === 'deleted') return false;
+      const isAbandoned = o['Financial Status'] === 'abandoned' ||
+        o['Financial Status'] === 'pending_payment' ||
+        (o.Name && o.Name.startsWith('DRAFT-'));
+      if (isAbandoned) return false;
+      const d = parseOrderDate(o['Created at']);
+      return d && d >= from && d <= to;
+    });
+
+    // الفترة السابقة للمقارنة
+    const span = to - from;
+    const prevFrom = new Date(from.getTime() - span);
+    const prevTo = new Date(from.getTime() - 1);
+    const prevFiltered = recentOrders.filter(o => {
+      if (o['Financial Status'] === 'deleted') return false;
+      const isAbandoned = o['Financial Status'] === 'abandoned' ||
+        o['Financial Status'] === 'pending_payment' ||
+        (o.Name && o.Name.startsWith('DRAFT-'));
+      if (isAbandoned) return false;
+      const d = parseOrderDate(o['Created at']);
+      return d && d >= prevFrom && d <= prevTo;
+    });
+
+    const paidOrders = filtered.filter(o =>
+      o['Financial Status'] === 'paid' || o['Financial Status'] === 'fulfilled'
+    );
+    const totalSales = paidOrders.reduce((s, o) => s + Number(o.Total || 0), 0);
+    const aov = paidOrders.length > 0 ? Math.round(totalSales / paidOrders.length) : 0;
+    const uniqueEmails = new Set(
+      filtered.map(o => (o.Email || '').toLowerCase()).filter(Boolean)
+    );
+    const paidRate = filtered.length > 0
+      ? Math.round((paidOrders.length / filtered.length) * 100)
+      : 0;
+
+    // معدل التحويل: طلبات ÷ زوار الفترة (تقديري بناء على نسبة الأيام)
+    const days = Math.max(1, Math.round(span / (1000 * 60 * 60 * 24)));
+    const totalVisitors = stats.visitors || 30000;
+    const periodVisitors = Math.round((days / 90) * totalVisitors);
+    const cr = periodVisitors > 0
+      ? ((filtered.length / periodVisitors) * 100).toFixed(1)
+      : '—';
+
+    // مقارنة بالفترة السابقة
+    const prevSales = prevFiltered
+      .filter(o => o['Financial Status'] === 'paid' || o['Financial Status'] === 'fulfilled')
+      .reduce((s, o) => s + Number(o.Total || 0), 0);
+    const diffOrders = filtered.length - prevFiltered.length;
+    const diffSales = Math.round(totalSales - prevSales);
+
+    return {
+      orders: filtered.length,
+      sales: Math.round(totalSales),
+      aov,
+      customers: uniqueEmails.size,
+      paidRate,
+      cr,
+      periodVisitors,
+      diffOrders,
+      diffSales,
+      hasPrev: prevFiltered.length > 0,
+    };
+  }, [recentOrders, activePeriod, customFrom, customTo, getPeriodRange, parseOrderDate, stats.visitors]);
+
+  const periodLabel = {
+    this_month: 'هذا الشهر',
+    last_month: 'الشهر الماضي',
+    dec_feb: 'ديسمبر – فبراير',
+    all: 'كل الوقت',
+    custom: 'فترة مخصصة',
+  };
 
   // استخراج الأرقام من وثيقة الإعدادات المركزية - Safe property access for legacy browsers
   // Memoized to prevent recalculation on every render
@@ -104,6 +242,112 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto font-sans" dir="rtl">
+
+      {/* فلتر الفترة الزمنية */}
+      <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 flex flex-wrap items-center gap-2 shadow-sm">
+        <BarChart2 size={16} className="text-gray-400 shrink-0" />
+        {['this_month','last_month','dec_feb','all','custom'].map(p => (
+          <button
+            key={p}
+            onClick={() => {
+              setActivePeriod(p);
+              setShowCustom(p === 'custom');
+            }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              activePeriod === p
+                ? 'bg-[#008060] text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            {periodLabel[p]}
+          </button>
+        ))}
+        {showCustom && (
+          <div className="flex items-center gap-2 mt-2 w-full sm:w-auto sm:mt-0">
+            <input
+              type="date"
+              value={customFrom}
+              onChange={e => setCustomFrom(e.target.value)}
+              className="text-xs border border-gray-300 rounded-lg px-2 py-1.5 outline-none focus:border-[#008060]"
+            />
+            <span className="text-xs text-gray-400">إلى</span>
+            <input
+              type="date"
+              value={customTo}
+              onChange={e => setCustomTo(e.target.value)}
+              className="text-xs border border-gray-300 rounded-lg px-2 py-1.5 outline-none focus:border-[#008060]"
+            />
+          </div>
+        )}
+      </div>
+
+      {/* كروت إحصائيات الفترة */}
+      {periodStats && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {[
+            {
+              label: 'الطلبات',
+              value: periodStats.orders.toLocaleString(),
+              sub: periodStats.hasPrev
+                ? `${periodStats.diffOrders >= 0 ? '+' : ''}${periodStats.diffOrders} من السابق`
+                : null,
+              subColor: periodStats.diffOrders >= 0 ? 'text-green-600' : 'text-red-500',
+            },
+            {
+              label: 'المبيعات',
+              value: periodStats.sales.toLocaleString() + ' EGP',
+              sub: periodStats.hasPrev
+                ? `${periodStats.diffSales >= 0 ? '+' : ''}${periodStats.diffSales.toLocaleString()} EGP`
+                : null,
+              subColor: periodStats.diffSales >= 0 ? 'text-green-600' : 'text-red-500',
+            },
+            {
+              label: 'متوسط الطلب',
+              value: periodStats.aov.toLocaleString() + ' EGP',
+              sub: 'لكل طلب مدفوع',
+              subColor: 'text-gray-400',
+            },
+            {
+              label: 'معدل التحويل',
+              value: periodStats.cr + '%',
+              sub: `${periodStats.orders} ÷ ${periodStats.periodVisitors.toLocaleString()} زيارة`,
+              subColor: 'text-gray-400',
+            },
+            {
+              label: 'عملاء فريدون',
+              value: periodStats.customers.toLocaleString(),
+              sub: 'إيميل غير مكرر',
+              subColor: 'text-gray-400',
+            },
+            {
+              label: 'نسبة الإتمام',
+              value: periodStats.paidRate + '%',
+              sub: 'من إجمالي الطلبات',
+              subColor: 'text-gray-400',
+            },
+          ].map(card => (
+            <div key={card.label} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+              <p className="text-xs text-gray-500 mb-1">{card.label}</p>
+              <p className="text-lg font-bold text-[#202223] leading-tight">{card.value}</p>
+              {card.sub && (
+                <p className={`text-[10px] mt-1 font-medium ${card.subColor}`}>{card.sub}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!periodStats && ordersLoaded && (
+        <div className="bg-white border border-gray-200 rounded-xl p-4 text-center text-xs text-gray-400 shadow-sm">
+          لا توجد طلبات في هذه الفترة
+        </div>
+      )}
+
+      {!ordersLoaded && (
+        <div className="bg-white border border-gray-200 rounded-xl p-4 text-center text-xs text-gray-400 shadow-sm animate-pulse">
+          جاري حساب إحصائيات الفترة...
+        </div>
+      )}
       
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-2">
         <h2 className="text-xl font-bold text-[#202223]">نظرة عامة (Overview)</h2>
