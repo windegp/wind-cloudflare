@@ -146,8 +146,9 @@ export async function GET(request) {
         visitorsForPeriod = await countUniqueCustomersByDate(db, dateFilterStart, filterEndMs);
       }
     } else {
-      // week, month: استعلام حقيقي من Customers
-      visitorsForPeriod = await countUniqueCustomersByDate(db, dateFilterStart, filterEndMs);
+      // week, month, last_month: استعلام حقيقي من Customers + اليوم
+      const historicalVisitors = await countUniqueCustomersByDate(db, dateFilterStart, filterEndMs);
+      visitorsForPeriod = historicalVisitors + todayVisitors;
     }
 
     // ==========================================
@@ -192,14 +193,16 @@ export async function GET(request) {
     }
 
     // ==========================================
-    // 5. حساب العملاء
+    // 5. حساب العملاء — استعلام حقيقي
     // ==========================================
+    // "العميل" الحقيقي: عنده إيميل OR هاتف OR اشترى OR ترك سلة
+    // مش كل زائر anonymous
     let totalCustomers = 0;
 
     if (period === 'all') {
       totalCustomers = totalCustomersCount;
-    } else {
-      totalCustomers = visitorsForPeriod;
+    } else if (dateFilterStart && dateFilterEnd) {
+      totalCustomers = await countRealCustomersByDate(db, dateFilterStart, filterEndMs);
     }
 
     // ==========================================
@@ -256,7 +259,7 @@ async function countUniqueCustomersByDate(db, dateFilterStart, filterEndMs) {
       collection(db, "Customers"),
       where("last_active", ">=", dateFilterStart)
     ));
-    const uniqueCustomers = new Map();
+    const uniqueVisitors = new Map();
     for (const d of customersSnap.docs) {
       try {
         const c = d.data();
@@ -266,10 +269,50 @@ async function countUniqueCustomersByDate(db, dateFilterStart, filterEndMs) {
         const email = (c.Email || c.email || '').toLowerCase().trim();
         const phone = String(c.Phone || c['Default Address Phone'] || '').replace(/[^0-9]/g, '');
         const uniqueId = email || phone || d.id;
-        if (!uniqueCustomers.has(uniqueId)) uniqueCustomers.set(uniqueId, true);
+        if (!uniqueVisitors.has(uniqueId)) uniqueVisitors.set(uniqueId, true);
       } catch (e) { continue; }
     }
-    return uniqueCustomers.size;
+    return uniqueVisitors.size;
+  } catch (qErr) {
+    return 0;
+  }
+}
+
+/**
+ * دالة مساعدة: تحسب عدد العملاء الحقيقيين في فترة زمنية
+ * العميل الحقيقي = عنده إيميل OR هاتف OR عنده طلبات OR ترك سلة
+ * مش مجرد زائر anonymous
+ */
+async function countRealCustomersByDate(db, dateFilterStart, filterEndMs) {
+  try {
+    const customersSnap = await getDocs(query(
+      collection(db, "Customers"),
+      where("last_active", ">=", dateFilterStart)
+    ));
+    const realCustomers = new Map();
+    for (const d of customersSnap.docs) {
+      try {
+        const c = d.data();
+        if (!c) continue;
+        
+        const custDateMs = parseDateToMs(c.last_active);
+        if (isNaN(custDateMs) || custDateMs > filterEndMs) continue;
+        
+        // شرط أن يكون عميل حقيقي: عنده إيميل أو هاتف أو اشترى أو ترك سلة
+        const hasEmail = !!(c.Email || c.email || '').trim();
+        const hasPhone = !!(c.Phone || c['Default Address Phone'] || '').toString().replace(/[^0-9]/g, '');
+        const hasOrders = Number(c['Total Orders'] || 0) > 0;
+        const hasAbandoned = c.hasAbandoned === true || (c.segments && c.segments.includes('Abandoned_Checkout'));
+        
+        if (hasEmail || hasPhone || hasOrders || hasAbandoned) {
+          const email = (c.Email || c.email || '').toLowerCase().trim();
+          const phone = String(c.Phone || c['Default Address Phone'] || '').replace(/[^0-9]/g, '');
+          const uniqueId = email || phone || d.id;
+          if (!realCustomers.has(uniqueId)) realCustomers.set(uniqueId, true);
+        }
+      } catch (e) { continue; }
+    }
+    return realCustomers.size;
   } catch (qErr) {
     return 0;
   }
