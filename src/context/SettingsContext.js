@@ -13,14 +13,12 @@ export const SettingsProvider = ({ children }) => {
 
   // 🔥 تعديل WIND: تقليل الكاش للأدمن لضمان رؤية العدادات (الزوار والتقييمات) لحظياً
   const { data: settings, isLoading, mutate } = useSWR('site-settings', async () => {
-    // للأدمن: نسحب دائماً نسخة جديدة بتخطي الكاش
-    const url = isAdmin ? "/api/site-settings?fresh=true" : "/api/site-settings";
-    const res = await fetch(url);
+    const res = await fetch("/api/site-settings");
     const result = await res.json();
     return result.success ? result.data : null;
   }, {
-    revalidateOnFocus: isAdmin, // تحديث بمجرد رجوعك لتبويب الأدمن
-    dedupingInterval: isAdmin ? 5000 : 300000,
+    revalidateOnFocus: false,
+    dedupingInterval: 300000,
   });
 
   // 🔥 2. عداد الزوار (من كودك الأصلي - مُحسن)

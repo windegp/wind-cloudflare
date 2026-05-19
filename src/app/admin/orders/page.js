@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getDb } from "@/lib/firebase";
 import { collection, query, where, getDocs, doc, writeBatch, orderBy, limit, startAfter, increment } from "firebase/firestore/lite";
 import { useRouter } from 'next/navigation';
@@ -28,7 +28,11 @@ export default function OrdersListPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   
   const [isArchiveVisible, setIsArchiveVisible] = useState(true); // WIND مرئي افتراضياً
-  const [isExporting, setIsExporting] = useState(false); 
+  const [isExporting, setIsExporting] = useState(false);
+
+  // 🔥 In-memory cache للتابات — بيمنع إعادة الجلب لو رجعت لتاب اتجلب قبل كده
+  const tabCacheRef = useRef({});
+  const tabLastVisibleRef = useRef({});
 
   const router = useRouter();
 
@@ -40,6 +44,15 @@ export default function OrdersListPage() {
 
  const fetchOrders = useCallback(async (loadMore = false) => {
     if (isLoading) return;
+
+    // ✅ لو مش loadMore وعندنا cache للتاب ده، استخدمه بدون أي read
+    if (!loadMore && tabCacheRef.current[activeTab]) {
+      setAllRawOrders(tabCacheRef.current[activeTab]);
+      setLastVisible(tabLastVisibleRef.current[activeTab] || null);
+      setHasMore(false);
+      return;
+    }
+
     setIsLoading(true);
     try {
       const db = getDb();
@@ -65,12 +78,15 @@ export default function OrdersListPage() {
       const querySnapshot = await getDocs(q);
       const newDocs = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
 
-      if (loadMore) {
-        setAllRawOrders(prev => [...prev, ...newDocs]);
-      } else {
-        setAllRawOrders(newDocs);
-      }
+      const updatedDocs = loadMore
+        ? [...(tabCacheRef.current[activeTab] || []), ...newDocs]
+        : newDocs;
 
+      // ✅ احفظ في الـ cache
+      tabCacheRef.current[activeTab] = updatedDocs;
+      tabLastVisibleRef.current[activeTab] = querySnapshot.docs[querySnapshot.docs.length - 1] || null;
+
+      setAllRawOrders(updatedDocs);
       setLastVisible(querySnapshot.docs[querySnapshot.docs.length - 1] || null);
       setHasMore(querySnapshot.docs.length === fetchLimit);
 
@@ -185,7 +201,9 @@ export default function OrdersListPage() {
 
       await batch.commit();
 
-      setAllRawOrders(prev => prev.filter(o => !selectedOrders.includes(o.id)));
+      const updated = allRawOrders.filter(o => !selectedOrders.includes(o.id));
+      tabCacheRef.current[activeTab] = updated;
+      setAllRawOrders(updated);
       setSelectedOrders([]);
       setShowDeleteModal(false);
       
