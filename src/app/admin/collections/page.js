@@ -41,23 +41,26 @@ export default function CollectionsPage() {
     const [selectedProducts, setSelectedProducts] = useState([]); 
     const [isProductModalOpen, setIsProductModalOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
-    const [allProducts, setAllProducts] = useState([]); 
+   const [allProducts, setAllProducts] = useState([]); 
     const [isSearching, setIsSearching] = useState(false);
+    const [productsLoaded, setProductsLoaded] = useState(false);
 
     // 🔥 3. استبدال useEffect بـ useSWR (هنا بيحصل السحر والكاش)
     // الكلمة "collections-data" دي مفتاح الكاش، لو موجودة في الذاكرة مش هيسحب من الفايربيز
     const { data: collections, isLoading: loading, error } = useSWR('collections-data', fetchCollections);
 
-    // جلب المنتجات للمودال
+    // جلب المنتجات للمودال — مرة واحدة فقط طول عمر الصفحة
     useEffect(() => {
-        if (!isProductModalOpen) return;
+        if (!isProductModalOpen || productsLoaded) return;
         const fetchAllProducts = async () => {
             setIsSearching(true);
             try {
                 const db = getDb();
-                const q = query(collection(db, "products")); 
+                const { limit: fsLimit } = await import("firebase/firestore/lite");
+                const q = query(collection(db, "products"), fsLimit(200));
                 const snapshot = await getDocs(q);
                 setAllProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                setProductsLoaded(true);
             } catch (error) {
                 console.error("Fetch products error:", error);
             } finally {
@@ -65,7 +68,7 @@ export default function CollectionsPage() {
             }
         };
         fetchAllProducts();
-    }, [isProductModalOpen]);
+    }, [isProductModalOpen, productsLoaded]);
 
     const openEditor = async (collectionItem = null) => {
         if (collectionItem) {

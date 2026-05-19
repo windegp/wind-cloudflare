@@ -38,69 +38,58 @@ export default function OrdersListPage() {
   // أضف هذا الـ State في الأعلى مع الـ States الأخرى
   const [initialLoadDone, setInitialLoadDone] = useState(false);
 
-  const fetchOrders = useCallback(async (loadMore = false) => {
-    // 🛡️ نستخدم الـ State بشكل مباشر جوه الدالة بدون ما نضعها في التبعيات
-    setIsLoading(prev => {
-      if (prev) return true; // لو جاري التحميل فعلاً، اخرج
-      
-      // ابدأ عملية السحب
-      (async () => {
-        try {
-          const db = getDb();
-          const currentLastVisible = loadMore ? lastVisible : null;
+ const fetchOrders = useCallback(async (loadMore = false) => {
+    if (isLoading) return;
+    setIsLoading(true);
+    try {
+      const db = getDb();
+      const currentLastVisible = loadMore ? lastVisible : null;
 
-          let constraints = [
-            collection(db, "Orders"),
-            orderBy("Created at", "desc"),
-            limit(fetchLimit)
-          ];
+      let constraints = [
+        collection(db, "Orders"),
+        orderBy("Created at", "desc"),
+        limit(fetchLimit)
+      ];
 
-          if (activeTab === 'wind') {
-            constraints.push(where("data_source", "==", "WIND_Web"));
-          } else if (activeTab === 'shopify') {
-            constraints.push(where("data_source", "==", "Shopify_Import"));
-          }
+      if (activeTab === 'wind') {
+        constraints.push(where("data_source", "==", "WIND_Web"));
+      } else if (activeTab === 'shopify') {
+        constraints.push(where("data_source", "==", "Shopify_Import"));
+      }
 
-          if (loadMore && currentLastVisible) {
-            constraints.push(startAfter(currentLastVisible));
-          }
-          
-          const q = query(...constraints);
-          console.log(`WIND Quota Guard: Fetching ${activeTab} orders...`);
-          
-          const querySnapshot = await getDocs(q);
-          const newDocs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-          
-          if (loadMore) {
-            setAllRawOrders(prevOrders => [...prevOrders, ...newDocs]);
-          } else {
-            setAllRawOrders(newDocs);
-          }
-          
-          setLastVisible(querySnapshot.docs[querySnapshot.docs.length - 1] || null);
-          setHasMore(querySnapshot.docs.length === fetchLimit);
-          
-        } catch (err) {
-          console.error("WIND Error: Fetch failed", err);
-        } finally {
-          setIsLoading(false); // قفل التحميل
-        }
-      })();
-      
-      return true; // تعيين isLoading لـ true في البداية
-    });
-  }, [activeTab, lastVisible]); // 👈 شيلنا isLoading من هنا نهائياً
+      if (loadMore && currentLastVisible) {
+        constraints.push(startAfter(currentLastVisible));
+      }
+
+      const q = query(...constraints);
+      const querySnapshot = await getDocs(q);
+      const newDocs = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      if (loadMore) {
+        setAllRawOrders(prev => [...prev, ...newDocs]);
+      } else {
+        setAllRawOrders(newDocs);
+      }
+
+      setLastVisible(querySnapshot.docs[querySnapshot.docs.length - 1] || null);
+      setHasMore(querySnapshot.docs.length === fetchLimit);
+
+    } catch (err) {
+      console.error("WIND Error: Fetch failed", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [activeTab, lastVisible, isLoading]);
 
   // ==========================================
   // 🔥 2. التحكم الآمن في التابات (يمنع الـ Loop)
   // ==========================================
-  useEffect(() => { 
-    // السحب يتم فقط لو: الأرشيف مرئي + مفيش داتا + مش بنحمل دلوقتي
-    // 🛡️ ضفنا initialLoadDone عشان يحاول مرة واحدة بس لكل تاب لو الداتا 0
+  useEffect(() => {
     if (isArchiveVisible && allRawOrders.length === 0 && !isLoading) {
-      fetchOrders(false); 
+      fetchOrders(false);
     }
-  }, [activeTab, isArchiveVisible, allRawOrders.length, fetchOrders]); // 👈 شيلنا isLoading من هنا برضه
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, isArchiveVisible]);
 
  const handleTabChange = (tab) => {
     setActiveTab(tab);

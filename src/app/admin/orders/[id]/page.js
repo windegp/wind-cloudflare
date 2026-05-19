@@ -13,6 +13,7 @@ export default function OrderDetailsPage() {
   const router = useRouter();
   const [order, setOrder] = useState(null);
   const [productsList, setProductsList] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => { if (id) fetchOrderDetails(); }, [id]);
 
@@ -38,20 +39,47 @@ export default function OrderDetailsPage() {
         if (isWind) {
           // داتا WIND بتيجي جاهزة بالصور والأسماء والمقاسات، مفيش داعي ندور!
           setProductsList(orderData.lineItems || []);
-        } else {
-          // داتا شوبيفاي القديمة اللي بتحتاج ندور على الصور
+       } else {
+          // داتا شوبيفاي — نستخدم الصورة الـ embedded لو موجودة (0 reads)
+          // وبس لو مفيش صورة خالص نعمل lookup واحد بـ in query
           const items = orderData.lineItems || [];
-          const itemsWithImages = await Promise.all(items.map(async (item) => {
-            const baseName = item.name.split(' - ')[0].trim(); 
-            const pQ = query(collection(db, "products"), where("title", "==", baseName));
-            const pSnap = await getDocs(pQ);
-            let img = null;
-            if (!pSnap.empty) {
-              img = pSnap.docs[0].data().images?.[0]; 
+          
+          const itemsMissingImages = items.filter(item => !item.image);
+          
+          if (itemsMissingImages.length === 0) {
+            // كل المنتجات عندها صور embedded — 0 reads إضافية
+            setProductsList(items.map(item => ({ 
+              ...item, 
+              baseName: item.name.split(' - ')[0].trim() 
+            })));
+          } else {
+            // عمل lookup واحد بـ in query بدل N queries
+            const baseNames = [...new Set(
+              itemsMissingImages.map(item => item.name.split(' - ')[0].trim())
+            )];
+            
+            let imagesMap = {};
+            if (baseNames.length > 0 && baseNames.length <= 10) {
+              const pQ = query(
+                collection(db, "products"), 
+                where("title", "in", baseNames)
+              );
+              const pSnap = await getDocs(pQ);
+              pSnap.docs.forEach(d => {
+                imagesMap[d.data().title] = d.data().images?.[0] || null;
+              });
             }
-            return { ...item, image: img, baseName };
-          }));
-          setProductsList(itemsWithImages);
+            
+            const itemsWithImages = items.map(item => {
+              const baseName = item.name.split(' - ')[0].trim();
+              return { 
+                ...item, 
+                image: item.image || imagesMap[baseName] || null,
+                baseName 
+              };
+            });
+            setProductsList(itemsWithImages);
+          }
         }
       }
     } catch (e) { console.error(e); } finally { setLoading(false); }
