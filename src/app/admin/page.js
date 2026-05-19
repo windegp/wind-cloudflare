@@ -1,10 +1,10 @@
 "use client";
 import { useEffect, useState, useMemo } from 'react';
-import { getRtdb, db } from "@/lib/firebase"; // تم إضافة db لجلب الفايرستور تلقائياً
-import { useSettings } from "@/context/SettingsContext"; // الربط مع الكونتكس الموفر
+import { getRtdb, getDb } from "@/lib/firebase"; // 🛡️ تم التعديل للاستدعاء الفعلي للدوال من ملفك
+import { useSettings } from "@/context/SettingsContext"; 
 import { ref, onValue } from "firebase/database"; 
-// استدعاء دوال الفلترة والاستعلام من Firestore
-import { collection, query, where, getDocs, Timestamp } from "firebase/firestore";
+// استدعاء دوال الفلترة والاستعلام متوافقة مع النسخة الـ Lite
+import { collection, query, where, getDocs, Timestamp } from "firebase/firestore/lite";
 import { Package, TrendingUp, ShoppingCart, Users, Activity, Calendar, ChevronDown, Eye } from '@/components/icons-extra';
 import { useRouter } from 'next/navigation';
 
@@ -12,18 +12,18 @@ export const dynamic = 'force-dynamic';
 
 export default function Dashboard() {
   const router = useRouter();
-  const { settings } = useSettings(); // سحب البيانات المجمعة من الكونتكس (0 قراءة إضافية)
+  const { settings } = useSettings(); 
   const [liveVisitors, setLiveVisitors] = useState(0);
 
   // حالات الفلترة والتحميل
-  const [filter, setFilter] = useState('today'); // الفلتر الافتراضي هو "اليوم"
+  const [filter, setFilter] = useState('today'); 
   const [loading, setLoading] = useState(false);
   const [filteredStats, setFilteredStats] = useState({
     orders: 0,
     sales: 0
   });
 
-  // استخراج الأرقام الكلية من وثيقة الإعدادات المركزية كمرجع أساسي لقائمة "كل الوقت"
+  // استخراج الأرقام الكلية من وثيقة الإعدادات المركزية
   const totalStats = useMemo(() => {
     const counters = (settings && settings.counters) || {};
     return {
@@ -37,7 +37,6 @@ export default function Dashboard() {
 
   // منطق الفلترة الذكي وحساب التواريخ
   useEffect(() => {
-    // إذا اختار المستخدم "كل الوقت"، نعرض له العدادات الجاهزة فوراً بدون استهلاك أي قراءات إضافية
     if (filter === 'all') {
       setFilteredStats({ orders: totalStats.orders, sales: totalStats.sales });
       return;
@@ -49,18 +48,18 @@ export default function Dashboard() {
         const now = new Date();
         let startDate = new Date();
 
-        // تحديد تاريخ البداية بناءً على الفلتر المختار
         if (filter === 'today') {
-          startDate.setHours(0, 0, 0, 0); // من بداية اليوم الساعة 12 صباحاً
+          startDate.setHours(0, 0, 0, 0); 
         } else if (filter === 'week') {
-          startDate.setDate(now.getDate() - 7); // آخر 7 أيام
+          startDate.setDate(now.getDate() - 7); 
         } else if (filter === 'month') {
-          startDate.setMonth(now.getMonth() - 1); // آخر 30 يوم
+          startDate.setMonth(now.getMonth() - 1); 
         }
 
-        // بناء استعلام موجه وموفر لجلب طلبات الفترة المحددة فقط
+        // استدعاء دالة جلب الداتابيز الفعلي getDb() لتمريرها للاستعلام
+        const database = getDb();
         const q = query(
-          collection(db, "orders"),
+          collection(database, "orders"), 
           where("createdAt", ">=", Timestamp.fromDate(startDate))
         );
 
@@ -71,7 +70,7 @@ export default function Dashboard() {
         snapshot.forEach((doc) => {
           const data = doc.data();
           ordersCount++;
-          salesSum += Number(data.totalPrice || 0); // حساب إجمالي مبيعات الفترة برمجياً
+          salesSum += Number(data.totalPrice || 0); 
         });
 
         setFilteredStats({ orders: ordersCount, sales: salesSum });
@@ -85,7 +84,7 @@ export default function Dashboard() {
     fetchFilteredOrders();
   }, [filter, totalStats]);
 
-  // جلب الزوار النشطين بذكاء لمنع استنزاف الكوتا وقت الخمول (Realtime Database)
+  // جلب الزوار النشطين (Realtime Database)
   useEffect(() => {
     let unsubscribe = null;
 
@@ -152,7 +151,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-6 max-w-6xl mx-auto font-sans" dir="rtl">
       
-      {/* عنوان الصفحة والـ Filter الذكي السلس */}
+      {/* عنوان الصفحة والـ Filter */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-2">
         <h2 className="text-xl font-bold text-[#202223]">نظرة عامة (Overview)</h2>
         <div className="relative inline-block w-full sm:w-auto">
@@ -200,7 +199,7 @@ export default function Dashboard() {
       {/* شبكة الإحصائيات والأرقام */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         
-        {/* إجمالي المبيعات (يتأثر بالفلتر) */}
+        {/* إجمالي المبيعات */}
         <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between h-32 relative overflow-hidden">
           {loading && <div className="absolute inset-0 bg-white/50 animate-pulse pointer-events-none" />}
           <div className="flex justify-between items-start mb-2">
@@ -215,7 +214,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* زيارات المتجر الكلية (تأتي مباشرة من التجميع الكلي لتوفير القراءات) */}
+        {/* زيارات المتجر الكلية */}
         <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between h-32">
           <div className="flex justify-between items-start mb-2">
             <h3 className="text-sm font-medium text-gray-600 border-b border-dashed border-gray-300 pb-0.5 cursor-help" title="إجمالي زيارات المتجر">زيارات المتجر</h3>
@@ -229,7 +228,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* إجمالي الطلبات (يتأثر بالفلتر) */}
+        {/* إجمالي الطلبات */}
         <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between h-32 relative overflow-hidden">
           {loading && <div className="absolute inset-0 bg-white/50 animate-pulse pointer-events-none" />}
           <div className="flex justify-between items-start mb-2">
@@ -242,7 +241,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* معدل التحويل الافتراضي للواجهة */}
+        {/* معدل التحويل */}
         <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between h-32">
           <div className="flex justify-between items-start mb-2">
             <h3 className="text-sm font-medium text-gray-600 border-b border-dashed border-gray-300 pb-0.5 cursor-help" title="معدل التحويل">معدل التحويل</h3>
@@ -254,7 +253,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* المنتجات النشطة (تأتي من الكاونتر الثابت لصفر قراءات إضافية) */}
+        {/* المنتجات النشطة */}
         <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between h-32">
           <div className="flex justify-between items-start mb-2">
             <h3 className="text-sm font-medium text-gray-600 border-b border-dashed border-gray-300 pb-0.5 cursor-help" title="المنتجات النشطة">المنتجات النشطة</h3>
