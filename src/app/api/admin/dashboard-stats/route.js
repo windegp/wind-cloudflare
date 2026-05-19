@@ -112,12 +112,13 @@ export async function GET(request) {
     // ==========================================
     // 3. حساب الزوار — استعلام حقيقي لكل فترة
     // ==========================================
-    // القاعدة: جميع الفترات تستعلم real data من Firebase
+    // جميع الفترات تستعلم real data. لا يوجد hardcoded zeros.
+    // إذا مفيش بيانات، الاستعلام يرجع 0 طبيعي.
     // - اليوم: counters.todayVisitors (عداد لحظي)
     // - أمس: counters.yesterdayVisitors (محفوظ من منتصف الليل)
-    // - الأسبوع/الشهر: استعلام حقيقي على Customers حسب last_active
+    // - الأسبوع/الشهر/الشهر الماضي: countUniqueCustomersByDate()
     // - الكل: counters.visitors (30,000 + جديد)
-    // - الشهر الماضي: 0 (المتجر ماكانش شغال)
+    // - فترة مخصصة: الحصة من baseline لو متداخلة مع Dec-Feb، وإلا استعلام حقيقي
     // ==========================================
 
     let visitorsForPeriod = 0;
@@ -128,8 +129,6 @@ export async function GET(request) {
       visitorsForPeriod = todayVisitors;
     } else if (period === 'yesterday') {
       visitorsForPeriod = yesterdayVisitors;
-    } else if (period === 'last_month') {
-      visitorsForPeriod = 0;
     } else if (period === 'custom') {
       // فترة مخصصة: استعلام حقيقي
       const DEC_START_MS = new Date('2025-12-01T00:00:00+02:00').getTime();
@@ -199,10 +198,8 @@ export async function GET(request) {
 
     if (period === 'all') {
       totalCustomers = totalCustomersCount;
-    } else if (period === 'last_month') {
-      totalCustomers = 0;
     } else {
-      totalCustomers = visitorsForPeriod; // same query: unique customers = visitors for this period
+      totalCustomers = visitorsForPeriod;
     }
 
     // ==========================================
