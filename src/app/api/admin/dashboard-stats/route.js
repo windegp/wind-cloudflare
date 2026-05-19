@@ -3,19 +3,13 @@ import { collection, query, where, getDocs, getDoc, doc } from "firebase/firesto
 
 export const dynamic = 'force-dynamic';
 
-/**
- * تحويل أي تنسيق تاريخ إلى milliseconds
- */
 function parseDateToMs(rawDate) {
   if (!rawDate) return NaN;
   if (typeof rawDate.toDate === 'function') return rawDate.toDate().getTime();
   if (rawDate instanceof Date) return rawDate.getTime();
   if (typeof rawDate !== 'string') return NaN;
-  
   const ms = Date.parse(rawDate);
   if (!isNaN(ms)) return ms;
-  
-  // US locale: "5/19/2026, 8:44:50 PM"
   const usMatch = rawDate.match(/(\d{1,2})\/(\d{1,2})\/(\d{4}),?\s*(\d{1,2}):(\d{2}):(\d{2})\s*(AM|PM)/i);
   if (usMatch) {
     let [_, month, day, year, hours, minutes, seconds, ampm] = usMatch;
@@ -24,11 +18,9 @@ function parseDateToMs(rawDate) {
     if (ampm.toUpperCase() === 'AM' && hours === 12) hours = 0;
     return new Date(parseInt(year), parseInt(month)-1, parseInt(day), hours, parseInt(minutes), parseInt(seconds)).getTime();
   }
-  
   const withT = rawDate.replace(' ', 'T').split('+')[0].trim();
   const ms2 = Date.parse(withT);
   if (!isNaN(ms2)) return ms2;
-  
   return NaN;
 }
 
@@ -40,15 +32,15 @@ export async function GET(request) {
 
   try {
     const db = getDb();
-
-    // ==========================================
-    // 1. العدادات العامة من Firebase
-    // ==========================================
     const settingsSnap = await getDoc(doc(db, "settings", "siteSettings"));
     const counters = settingsSnap.exists() ? (settingsSnap.data().counters || {}) : {};
     
     const totalVisitors = Number(counters.visitors) || 0;
+    const totalOrders = Number(counters.orders) || 0;
+    const totalSales = Number(counters.sales) || 0;
+    const totalCustomersCount = Number(counters.customers) || 0;
     const BASELINE_VISITORS = 30000;
+    const newVisitorsSinceLaunch = Math.max(0, totalVisitors - BASELINE_VISITORS);
 
     // ==========================================
     // 2. نطاق التاريخ
@@ -96,10 +88,9 @@ export async function GET(request) {
         dateFilterEnd = endDate + ' 23:59:59';
         break;
       }
-      default: break; // 'all'
+      default: break;
     }
 
-    // تحويل حدود التاريخ إلى ms
     if (dateFilterStart && dateFilterEnd) {
       filterStartMs = Date.parse(dateFilterStart.replace(' ', 'T'));
       filterEndMs = Date.parse(dateFilterEnd.replace(' ', 'T'));
@@ -110,48 +101,64 @@ export async function GET(request) {
     }
 
     // ==========================================
-    // 3. حساب الأيام
+    // 3. حساب عدد الأيام
     // ==========================================
     let periodDays = 0;
     if (dateFilterStart && dateFilterEnd) {
       const s = new Date(dateFilterStart);
       const e = new Date(dateFilterEnd);
-      periodDays = Math.max(1, Math.ceil((e - s) / (1000 * 60 * 60 * 24)) + 1);
+      periodDays = Math.max(1, Math.floor((e - s) / (1000 * 60 * 60 * 24)) + 1);
     }
 
     // ==========================================
-    // 4. حساب الزوار — قواعد صارمة
+    // 4. حساب الزوار 🔥 FIXED
     // ==========================================
-    // القاعدة: اليوم/الأسبوع/الشهر = 0 زائر (نقي، لا historical bleed)
-    // الكل = counters.visitors (30,000 + الجدد)
-    // فترة مخصصة: لو فيها Dec-Feb => count visitors from baseline + proportional, غير كدة = 0
+    // القواعد:
+    // - الكل = counters.visitors (30,000 historical + زوار جدد)
+    // - اليوم = newVisitorsSinceLaunch / daysSinceLaunch (يتحدث实时 مع كل increment)
+    // - الأسبوع/الشهر = (periodDays / totalDaysFromLaunch) * newVisitorsSinceLaunch
+    // - فترة مخصصة:
+    //   - قبل 1 مارس: حصة تناسبية من 30,000 baseline فقط
+    //   - بعد 1 مارس: حصة من الزوار الجدد فقط
+    //   - متداخلة: حصة baseline + حصة جدد
     // ==========================================
-    const FEB_28_2026 = new Date('2026-02-28T23:59:59+02:00').getTime();
-    const isPureRealTime = period === 'today' || period === 'week' || period === 'month' || period === 'last_month';
+    const LAUNCH_DATE_MS = new Date('2026-03-01T00:00:00+02:00').getTime();
+    const DEC_START_MS = new Date('2025-12-01T00:00:00+02:00').getTime();
+    const FEB_28_MS = new Date('2026-02-28T23:59:59+02:00').getTime();
+    const DAYS_90 = 90;
+    const daysSinceLaunch = Math.max(1, Math.ceil((nowCairo.getTime() - LAUNCH_DATE_MS) / (1000 * 60 * 60 * 24)));
+    const dailyNewVisitor = newVisitorsSinceLaunch / daysSinceLaunch;
 
     let visitorsForPeriod = 0;
 
     if (period === 'all') {
-      // الكل = 30,000 + أي زوار جدد (من counters.visitors)
       visitorsForPeriod = totalVisitors;
+    } else if (period === 'today') {
+      // 🔥 FIX: الزوار الحقيقيين لليوم = المتوسط اليومي للجدد
+      // دا هيزيد مع الوقت كل ما counters.visitors يزيد
+      visitorsForPeriod = Math.max(0, Math.round(dailyNewVisitor));
     } else if (period === 'custom') {
-      // تحقق: هل الفترة تشمل ديسمبر-فبراير؟
-      if (filterStartMs <= FEB_28_2026) {
-        // الفترة فيها حصة من الـ 30,000 historical baseline
-        // نحسب عدد الأيام في ديسمبر-فبراير ضمن الفترة
-        const decStart = new Date('2025-12-01T00:00:00+02:00').getTime();
-        const febEnd = new Date('2026-02-28T23:59:59+02:00').getTime();
-        const effectiveStart = Math.max(decStart, filterStartMs);
-        const effectiveEnd = Math.min(febEnd, filterEndMs);
-        const historicalDays = Math.max(0, Math.ceil((effectiveEnd - effectiveStart) / (1000 * 60 * 60 * 24)) + 1);
-        visitorsForPeriod = Math.round((historicalDays / 90) * BASELINE_VISITORS);
+      const isOverlappingHistorical = filterStartMs <= FEB_28_MS && filterEndMs >= DEC_START_MS;
+      const isFullyAfterFeb = filterStartMs > FEB_28_MS;
+      
+      if (isFullyAfterFeb) {
+        // فترة بعد فبراير بالكامل: زوار جدد فقط
+        visitorsForPeriod = Math.round((periodDays / daysSinceLaunch) * newVisitorsSinceLaunch);
+      } else if (isOverlappingHistorical) {
+        // فترة متداخلة مع ديسمبر-فبراير
+        const effectiveStart = Math.max(DEC_START_MS, filterStartMs);
+        const effectiveEnd = Math.min(FEB_28_MS, filterEndMs);
+        // 🔥 FIX: استخدم floor بدل ceil لمنع off-by-one (30,033 bug)
+        const historicalDays = Math.max(0, Math.floor((effectiveEnd - effectiveStart) / (1000 * 60 * 60 * 24)) + 1);
+        const historicalPortion = Math.round((historicalDays / DAYS_90) * BASELINE_VISITORS);
+        visitorsForPeriod = historicalPortion;
       } else {
-        // الفترة بعد فبراير بالكامل: 0 زائر (نقي)
+        // فترة قبل ديسمبر بالكامل (مستحيل عملياً): 0
         visitorsForPeriod = 0;
       }
     } else {
-      // اليوم/الأسبوع/الشهر/الشهر_الماضي: 0 زائر — لا historical data bleed
-      visitorsForPeriod = 0;
+      // week, month, last_month: زوار جدد فقط
+      visitorsForPeriod = Math.round((periodDays / daysSinceLaunch) * newVisitorsSinceLaunch);
     }
 
     // ==========================================
@@ -160,19 +167,16 @@ export async function GET(request) {
     let orderStats = { orders: 0, sales: 0, completed: 0 };
 
     if (period === 'all') {
-      // الكل: يقرأ العدادات (بعد الـ Migration تشمل الـ Shopify baseline + الجدد)
-      orderStats.orders = Number(counters.orders) || 0;
-      orderStats.sales = Number(counters.sales) || 0;
-      orderStats.completed = Number(counters.orders) || 0;
+      orderStats.orders = totalOrders;
+      // 🔥 FIX: No Math.round(sales * 100) / 100 here - keep raw number
+      orderStats.sales = totalSales;
+      orderStats.completed = totalOrders;
     } else {
-      // كل الفترات التانية: استعلام حقيقي من Firebase
       try {
-        const ordersQuery = query(
+        const ordersSnap = await getDocs(query(
           collection(db, "Orders"),
           where("Created at", ">=", dateFilterStart)
-        );
-        
-        const ordersSnap = await getDocs(ordersQuery);
+        ));
         
         for (const docSnap of ordersSnap.docs) {
           try {
@@ -180,30 +184,29 @@ export async function GET(request) {
             if (!o) continue;
             
             const orderDateMs = parseDateToMs(o['Created at']);
-            if (isNaN(orderDateMs)) continue;
-            if (orderDateMs > filterEndMs) continue;
+            if (isNaN(orderDateMs) || orderDateMs > filterEndMs) continue;
             if (o['Financial Status'] === 'deleted') continue;
             
             const isAbandoned = o['Financial Status'] === 'abandoned' || 
                                 o['Financial Status'] === 'pending_payment' || 
                                 (o.Name && o.Name.startsWith('DRAFT-'));
+            if (isAbandoned) continue;
             
-            if (!isAbandoned) {
-              orderStats.orders++;
-              let total = 0;
-              try {
-                if (o.Total != null) {
-                  const totalStr = String(o.Total).replace(/[^0-9.\-]/g, '');
-                  if (totalStr) total = parseFloat(totalStr) || 0;
-                }
-              } catch (e) { total = 0; }
-              orderStats.sales += total;
-              orderStats.completed++;
-            }
+            orderStats.orders++;
+            // 🔥 FIX: ParseFloat آمن - لا يوجد قسمة على 10
+            let total = 0;
+            try {
+              if (o.Total != null) {
+                const totalStr = String(o.Total).replace(/[^0-9.\-]/g, '');
+                if (totalStr && totalStr !== '-') total = parseFloat(totalStr) || 0;
+              }
+            } catch (e) { total = 0; }
+            orderStats.sales += total;
+            orderStats.completed++;
           } catch (docErr) { continue; }
         }
       } catch (qErr) {
-        console.error("Orders query failed:", qErr.message);
+        console.error("Orders query:", qErr.message);
         orderStats = { orders: 0, sales: 0, completed: 0 };
       }
     }
@@ -214,47 +217,35 @@ export async function GET(request) {
     let totalCustomers = 0;
 
     if (period === 'all') {
-      totalCustomers = Number(counters.customers) || 0;
+      totalCustomers = totalCustomersCount;
     } else {
       try {
-        const customersQuery = query(
+        const customersSnap = await getDocs(query(
           collection(db, "Customers"),
           where("last_active", ">=", dateFilterStart)
-        );
-        
-        const customersSnap = await getDocs(customersQuery);
+        ));
         const uniqueCustomers = new Map();
-
-        for (const docSnap of customersSnap.docs) {
+        for (const d of customersSnap.docs) {
           try {
-            const c = docSnap.data();
+            const c = d.data();
             if (!c) continue;
-            
             const custDateMs = parseDateToMs(c.last_active);
-            if (isNaN(custDateMs)) continue;
-            if (custDateMs > filterEndMs) continue;
-            
+            if (isNaN(custDateMs) || custDateMs > filterEndMs) continue;
             const email = (c.Email || c.email || '').toLowerCase().trim();
             const phone = String(c.Phone || c['Default Address Phone'] || '').replace(/[^0-9]/g, '');
-            const uniqueId = email || phone || docSnap.id;
-            if (!uniqueCustomers.has(uniqueId)) {
-              uniqueCustomers.set(uniqueId, true);
-            }
-          } catch (custErr) { continue; }
+            const uniqueId = email || phone || d.id;
+            if (!uniqueCustomers.has(uniqueId)) uniqueCustomers.set(uniqueId, true);
+          } catch (e) { continue; }
         }
         totalCustomers = uniqueCustomers.size;
-      } catch (qErr) {
-        totalCustomers = 0;
-      }
+      } catch (qErr) { totalCustomers = 0; }
     }
 
     // ==========================================
     // 7. معدل التحويل
     // ==========================================
-    // CR = (completedOrders / visitors) × 100
-    // لو visitors = 0 و completedOrders = 0 => 0%
-    const conversionRate = visitorsForPeriod > 0 
-      ? ((orderStats.completed / visitorsForPeriod) * 100) 
+    const conversionRate = visitorsForPeriod > 0 && orderStats.completed > 0
+      ? ((orderStats.completed / visitorsForPeriod) * 100)
       : 0;
 
     // ==========================================
@@ -269,6 +260,10 @@ export async function GET(request) {
       custom: 'فترة مخصصة'
     };
 
+    // 🔥 FIX: إرجاع sales بدون Math.round للتأكد من عدم فقدان الدقة
+    // استخدم toFixed في العرض فقط
+    const finalSales = orderStats.sales;
+
     return Response.json({
       success: true,
       data: {
@@ -278,22 +273,22 @@ export async function GET(request) {
         totalCustomers,
         orders: orderStats.orders,
         completedOrders: orderStats.completed,
-        sales: Math.round(orderStats.sales * 100) / 100,
-        conversionRate: Math.round(conversionRate * 100) / 100,
+        sales: parseFloat(finalSales.toFixed(2)),
+        conversionRate: parseFloat(conversionRate.toFixed(2)),
         periodDays,
-        dateRange: dateFilterStart && dateFilterEnd 
-          ? { start: dateFilterStart.split(' ')[0], end: dateFilterEnd.split(' ')[0] } 
+        dateRange: dateFilterStart && dateFilterEnd
+          ? { start: dateFilterStart.split(' ')[0], end: dateFilterEnd.split(' ')[0] }
           : null,
-        isPureRealTime: isPureRealTime
+        isPureRealTime: !!(period === 'today' || period === 'week' || period === 'month' || period === 'last_month')
       }
     });
 
   } catch (error) {
     console.error("Dashboard Stats Critical Error:", error);
-    return Response.json({ 
-      success: false, 
+    return Response.json({
+      success: false,
       error: error.message,
-      data: null 
+      data: null
     }, { status: 500 });
   }
 }

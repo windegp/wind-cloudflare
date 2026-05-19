@@ -209,7 +209,7 @@ export default function Dashboard() {
             <div className="absolute left-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 p-4 w-72">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-bold text-gray-700">فترة مخصصة</h3>
-                <button onClick={() => { setShowCustomPicker(false); setActivePeriod('today'); fetchDashboardStats('today', '', ''); }} className="text-gray-400 hover:text-gray-600 p-1">
+                <button onClick={() => setShowCustomPicker(false)} className="text-gray-400 hover:text-gray-600 p-1">
                   <X size={16} />
                 </button>
               </div>
