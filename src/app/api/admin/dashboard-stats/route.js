@@ -47,6 +47,11 @@ export async function GET(request) {
     const pad = (n) => String(n).padStart(2, '0');
     const formatCairoDate = (d) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 
+    // حساب توقيت "نهاية أمس" لضمان عدم تكرار زوار اليوم في الاستعلامات التاريخية
+    const yesterdayDate = new Date(nowCairo);
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterdayEndMs = Date.parse((formatCairoDate(yesterdayDate) + ' 23:59:59').replace(' ', 'T'));
+
     // ==========================================
     // 2. نطاق التاريخ لكل فترة
     // ==========================================
@@ -110,17 +115,8 @@ export async function GET(request) {
     }
 
     // ==========================================
-    // 3. حساب الزوار — استعلام حقيقي لكل فترة
+    // 3. حساب الزوار — بدون تكرار (No Double Counting)
     // ==========================================
-    // جميع الفترات تستعلم real data. لا يوجد hardcoded zeros.
-    // إذا مفيش بيانات، الاستعلام يرجع 0 طبيعي.
-    // - اليوم: counters.todayVisitors (عداد لحظي)
-    // - أمس: counters.yesterdayVisitors (محفوظ من منتصف الليل)
-    // - الأسبوع/الشهر/الشهر الماضي: countUniqueCustomersByDate()
-    // - الكل: counters.visitors (30,000 + جديد)
-    // - فترة مخصصة: الحصة من baseline لو متداخلة مع Dec-Feb، وإلا استعلام حقيقي
-    // ==========================================
-
     let visitorsForPeriod = 0;
 
     if (period === 'all') {
@@ -129,30 +125,31 @@ export async function GET(request) {
       visitorsForPeriod = todayVisitors;
     } else if (period === 'yesterday') {
       visitorsForPeriod = yesterdayVisitors;
+    } else if (period === 'last_month') {
+      // الشهر الماضي: استعلام حقيقي بالكامل بدون إضافة زوار اليوم
+      visitorsForPeriod = await countUniqueCustomersByDate(db, dateFilterStart, filterEndMs);
     } else if (period === 'custom') {
-      // فترة مخصصة: استعلام حقيقي
       const DEC_START_MS = new Date('2025-12-01T00:00:00+02:00').getTime();
       const FEB_28_MS = new Date('2026-02-28T23:59:59+02:00').getTime();
       const isOverlappingHistorical = filterStartMs <= FEB_28_MS && filterEndMs >= DEC_START_MS;
 
       if (isOverlappingHistorical) {
-        // جزء تاريخي من baseline
         const effectiveStart = Math.max(DEC_START_MS, filterStartMs);
         const effectiveEnd = Math.min(FEB_28_MS, filterEndMs);
         const historicalDays = Math.max(0, Math.floor((effectiveEnd - effectiveStart) / (1000 * 60 * 60 * 24)) + 1);
         visitorsForPeriod = Math.round((historicalDays / 90) * 30000);
       } else {
-        // استعلام حقيقي من Customers
         visitorsForPeriod = await countUniqueCustomersByDate(db, dateFilterStart, filterEndMs);
       }
     } else {
-      // week, month, last_month: استعلام حقيقي من Customers + اليوم
-      const historicalVisitors = await countUniqueCustomersByDate(db, dateFilterStart, filterEndMs);
+      // week, month: لمنع التكرار، نستعلم من قاعدة البيانات حتى "نهاية أمس" فقط
+      // ثم نجمع عداد "اليوم" اللحظي بشكل مستقل
+      const historicalVisitors = await countUniqueCustomersByDate(db, dateFilterStart, yesterdayEndMs);
       visitorsForPeriod = historicalVisitors + todayVisitors;
     }
 
     // ==========================================
-    // 4. حساب الطلبات
+    // 4. حساب الطلبات — استعلام حقيقي 100%
     // ==========================================
     let orderStats = { orders: 0, sales: 0, completed: 0 };
 
@@ -175,6 +172,7 @@ export async function GET(request) {
             if (o['Financial Status'] === 'deleted') continue;
             const isAbandoned = o['Financial Status'] === 'abandoned' || o['Financial Status'] === 'pending_payment' || (o.Name && o.Name.startsWith('DRAFT-'));
             if (isAbandoned) continue;
+            
             orderStats.orders++;
             let total = 0;
             try {
@@ -193,10 +191,8 @@ export async function GET(request) {
     }
 
     // ==========================================
-    // 5. حساب العملاء — استعلام حقيقي
+    // 5. حساب العملاء — استعلام حقيقي لعملاء ببيانات فقط
     // ==========================================
-    // "العميل" الحقيقي: عنده إيميل OR هاتف OR اشترى OR ترك سلة
-    // مش كل زائر anonymous
     let totalCustomers = 0;
 
     if (period === 'all') {
@@ -249,10 +245,6 @@ export async function GET(request) {
   }
 }
 
-/**
- * دالة مساعدة: تحسب عدد العملاء الفريدين في فترة زمنية
- * تستعلم Customers collection حسب last_active
- */
 async function countUniqueCustomersByDate(db, dateFilterStart, filterEndMs) {
   try {
     const customersSnap = await getDocs(query(
@@ -278,11 +270,6 @@ async function countUniqueCustomersByDate(db, dateFilterStart, filterEndMs) {
   }
 }
 
-/**
- * دالة مساعدة: تحسب عدد العملاء الحقيقيين في فترة زمنية
- * العميل الحقيقي = عنده إيميل OR هاتف OR عنده طلبات OR ترك سلة
- * مش مجرد زائر anonymous
- */
 async function countRealCustomersByDate(db, dateFilterStart, filterEndMs) {
   try {
     const customersSnap = await getDocs(query(
@@ -298,7 +285,6 @@ async function countRealCustomersByDate(db, dateFilterStart, filterEndMs) {
         const custDateMs = parseDateToMs(c.last_active);
         if (isNaN(custDateMs) || custDateMs > filterEndMs) continue;
         
-        // شرط أن يكون عميل حقيقي: عنده إيميل أو هاتف أو اشترى أو ترك سلة
         const hasEmail = !!(c.Email || c.email || '').trim();
         const hasPhone = !!(c.Phone || c['Default Address Phone'] || '').toString().replace(/[^0-9]/g, '');
         const hasOrders = Number(c['Total Orders'] || 0) > 0;
