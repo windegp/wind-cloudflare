@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useState, useMemo } from 'react';
-import { getRtdb, getDb } from "@/lib/firebase"; 
-import { doc, getDoc } from "firebase/firestore/lite"; // 🔥 استدعاء دوال الجلب المباشر الموفرة
-import { useSettings } from "@/context/SettingsContext"; 
+import { getRtdb } from "@/lib/firebase"; 
+import { useSettings } from "@/context/SettingsContext"; // 🔥 الربط مع الكونتكس الموفر
+// 🔥 استدعاء دوال الـ Realtime Database
 import { ref, onValue } from "firebase/database"; 
 import { Package, TrendingUp, ShoppingCart, Users, Activity, Calendar, ChevronDown, Eye } from '@/components/icons-extra';
 import { useRouter } from 'next/navigation';
@@ -11,46 +11,28 @@ export const dynamic = 'force-dynamic';
 
 export default function Dashboard() {
   const router = useRouter();
-  const { settings: contextSettings } = useSettings(); 
+  const { settings } = useSettings(); // سحب البيانات المجمعة من الكونتكس (0 قراءة إضافية)
   const [liveVisitors, setLiveVisitors] = useState(0);
-  const [freshCounters, setFreshCounters] = useState(null); // 🔥 مخزن للأرقام المحدثة فوراً عند الريفريش
 
-  // 🔥 [تعديل الأمان والأداء] جلب أحدث العدادات فوراً عند عمل ريفريش للصفحة
-  useEffect(() => {
-    async function fetchLatestCounters() {
-      try {
-        const db = getDb();
-        const docRef = doc(db, "siteSettings", "counters");
-        const docSnap = await getDoc(docRef);
-        
-        if (docSnap.exists()) {
-          setFreshCounters(docSnap.data());
-        }
-      } catch (error) {
-        console.error("Error fetching fresh counters:", error);
-      }
-    }
-    fetchLatestCounters();
-  }, []);
-
-  // استخراج الأرقام بذكاء: يفضل الأرقام الطازجة (Fresh)، وإذا لم تتوفر بعد يستخدم بيانات الكونتكس
+  // استخراج الأرقام من وثيقة الإعدادات المركزية - Safe property access for legacy browsers
+  // Memoized to prevent recalculation on every render
   const stats = useMemo(() => {
-    const counters = freshCounters || (contextSettings && contextSettings.counters) || {};
+    const counters = (settings && settings.counters) || {};
     return {
       products: counters.products || 0,
       orders: counters.orders || 0,
       sales: counters.sales || 0,
       customers: counters.customers || 0,
-      visitors: counters.visitors || 0 
+      visitors: counters.visitors || 0 // 🔥 الحقل الجديد
     };
-  }, [freshCounters, contextSettings]);
+  }, [settings]);
 
-  // 🔥 جلب الزوار النشطين بذكاء لمنع استنزاف الكوتا وقت الخمول
+  // 🔥 [تعديل الحماية] جلب الزوار النشطين بذكاء لمنع استنزاف الكوتا وقت الخمول
   useEffect(() => {
     let unsubscribe = null;
 
     const startListening = () => {
-      if (unsubscribe) return; 
+      if (unsubscribe) return; // الخط مفتوح بالفعل
       try {
         const rtdb = getRtdb();
         const liveSessionsRef = ref(rtdb, 'LiveSessions');
@@ -61,15 +43,21 @@ export default function Dashboard() {
             const now = Date.now();
             let activeCount = 0;
             Object.values(data).forEach(session => {
+              // 🛡️ FIXED: Safe timestamp handling with Date.now() fallback
               let lastActive = session.lastActive;
 
+              // Guard 1: serverTime must be valid number (not object placeholder)
+              // Using global isFinite with type check for legacy browser compatibility
               if (typeof lastActive !== 'number' || !isFinite(lastActive) || lastActive <= 0) {
+                // Guard 2: fallback to client timestamp
                 lastActive = session.lastActiveClient;
                 if (typeof lastActive !== 'number' || !isFinite(lastActive) || lastActive <= 0) {
+                  // Guard 3: use NOW to prevent filtering bug (don't return 0!)
                   lastActive = Date.now();
                 }
               }
 
+              // EXTENDED: 2 hours (7200000ms) - onDisconnect not working properly
               if (now - lastActive < 7200000) {
                 activeCount++;
               }
@@ -93,16 +81,21 @@ export default function Dashboard() {
       }
     };
 
+    // 1. تشغيل المراقبة فوراً لو التاب نشط
     if (!document.hidden) startListening();
 
+    // 2. 🪄 حساس نشاط التاب - Keep listening for instant updates on return
     const handleVisibilityChange = () => {
       if (!document.hidden) {
-        // الاتصال يعود تلقائياً
+        // Admin returned to tab - onValue automatically syncs latest data
+        // No need to stop/start, Firebase handles reconnection seamlessly
       }
+      // Removed aggressive stopListening() - connection stays alive for real-time updates
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
+    // 3. التنظيف الشامل
     return () => {
       stopListening();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
@@ -117,7 +110,7 @@ export default function Dashboard() {
         <div className="flex items-center gap-2">
           <button className="flex items-center gap-2 bg-white border border-gray-300 text-[#202223] px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-[#008060]/20 w-full sm:w-auto justify-center">
             <Calendar size={16} className="text-gray-500" />
-            كل الوقت
+            اليوم
             <ChevronDown size={16} className="text-gray-500" />
           </button>
         </div>
@@ -155,8 +148,8 @@ export default function Dashboard() {
           </div>
           <div>
             <p className="text-2xl font-bold text-[#202223]" dir="ltr">
-              EGP {Number(stats.sales).toLocaleString()}
-            </p>
+  EGP {Number(stats.sales).toLocaleString()}
+</p>
             <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
               <span className="text-green-600 font-bold">--%</span> مقارنة بأمس
             </p>
@@ -170,8 +163,8 @@ export default function Dashboard() {
           </div>
           <div>
             <p className="text-2xl font-bold text-[#202223]">
-              {Number(stats.visitors).toLocaleString()}
-            </p>
+   {Number(stats.visitors).toLocaleString()}
+</p>
             <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
               <span className="text-red-500 font-bold">--%</span> مقارنة بأمس
             </p>
