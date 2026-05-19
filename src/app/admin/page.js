@@ -4,7 +4,7 @@ import { getRtdb, getDb } from "@/lib/firebase";
 import { useSettings } from "@/context/SettingsContext";
 import { ref, onValue } from "firebase/database";
 import { collection, query, where, getDocs, orderBy, limit } from "firebase/firestore/lite";
-import { Package, TrendingUp, ShoppingCart, Users, Activity, Calendar, ChevronDown, Eye, BarChart2 } from '@/components/icons-extra';
+import { Package, TrendingUp, ShoppingCart, Users, Activity, Calendar, ChevronDown, Eye } from '@/components/icons-extra';
 import { useRouter } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
@@ -245,7 +245,7 @@ export default function Dashboard() {
 
       {/* فلتر الفترة الزمنية */}
       <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 flex flex-wrap items-center gap-2 shadow-sm">
-        <BarChart2 size={16} className="text-gray-400 shrink-0" />
+        <Activity size={16} className="text-gray-400 shrink-0" />
         {['this_month','last_month','dec_feb','all','custom'].map(p => (
           <button
             key={p}
