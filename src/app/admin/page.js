@@ -6,8 +6,8 @@ import { useSettings } from "@/context/SettingsContext"; // 🔥 الربط مع
 import { ref, onValue } from "firebase/database"; 
 import { Package, TrendingUp, ShoppingCart, Users, Activity, Calendar, ChevronDown, Eye } from '@/components/icons-extra';
 import { useRouter } from 'next/navigation';
-import dynamic from 'next/dynamic';
-const PeriodStats = dynamic(() => import('@/app/admin/components/PeriodStats'), { ssr: false });
+import dynamicImport from 'next/dynamic';
+const PeriodStats = dynamicImport(() => import('@/app/admin/components/PeriodStats'), { ssr: false });
 
 export const dynamic = 'force-dynamic';
 
