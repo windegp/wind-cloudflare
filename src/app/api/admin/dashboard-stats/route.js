@@ -42,23 +42,18 @@ export async function GET(request) {
     const totalSales = Number(counters.sales) || 0;
     const totalCustomersCount = Number(counters.customers) || 0;
 
-    const BASELINE_VISITORS = 30000;
-    const newVisitorsSinceLaunch = Math.max(0, totalVisitors - BASELINE_VISITORS);
-    const LAUNCH_DATE_MS = new Date('2026-03-01T00:00:00+02:00').getTime();
-    const nowCairoMs = Date.now();
+    const now = new Date();
+    const nowCairo = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Cairo' }));
+    const pad = (n) => String(n).padStart(2, '0');
+    const formatCairoDate = (d) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 
     // ==========================================
-    // 2. نطاق التاريخ للطلبات/العملاء
+    // 2. نطاق التاريخ لكل فترة
     // ==========================================
     let dateFilterStart = null;
     let dateFilterEnd = null;
     let filterStartMs = 0;
     let filterEndMs = 0;
-
-    const now = new Date();
-    const nowCairo = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Cairo' }));
-    const pad = (n) => String(n).padStart(2, '0');
-    const formatCairoDate = (d) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 
     switch (period) {
       case 'today':
@@ -115,23 +110,15 @@ export async function GET(request) {
     }
 
     // ==========================================
-    // 3. حساب الزوار لكل فترة — منطق تراكمي صحيح
+    // 3. حساب الزوار — استعلام حقيقي لكل فترة
     // ==========================================
-    // القواعد:
-    // - اليوم: todayVisitors (عداد لحظي)
-    // - الأسبوع: اليوم + آخر 6 أيام من المتوسط اليومي
-    //   = todayVisitors + (6 أيام × dailyNewVisitorAvg)
-    // - الشهر: اليوم + باقي أيام الشهر من المتوسط
-    //   = todayVisitors + ((periodDays-1) × dailyNewVisitorAvg)
-    // - الشهر الماضي: 0 (المتجر ماكانش شغال)
+    // القاعدة: جميع الفترات تستعلم real data من Firebase
+    // - اليوم: counters.todayVisitors (عداد لحظي)
+    // - أمس: counters.yesterdayVisitors (محفوظ من منتصف الليل)
+    // - الأسبوع/الشهر: استعلام حقيقي على Customers حسب last_active
     // - الكل: counters.visitors (30,000 + جديد)
-    // - فترة مخصصة: حسب القواعد
+    // - الشهر الماضي: 0 (المتجر ماكانش شغال)
     // ==========================================
-    const daysSinceLaunch = Math.max(1, Math.ceil((nowCairo.getTime() - LAUNCH_DATE_MS) / (1000 * 60 * 60 * 24)));
-    const dailyNewVisitorAvg = newVisitorsSinceLaunch / daysSinceLaunch;
-    const DEC_START_MS = new Date('2025-12-01T00:00:00+02:00').getTime();
-    const FEB_28_MS = new Date('2026-02-28T23:59:59+02:00').getTime();
-    const DAYS_90 = 90;
 
     let visitorsForPeriod = 0;
 
@@ -141,30 +128,27 @@ export async function GET(request) {
       visitorsForPeriod = todayVisitors;
     } else if (period === 'yesterday') {
       visitorsForPeriod = yesterdayVisitors;
-    } else if (period === 'week') {
-      // هذا الأسبوع = todayVisitors (فعلي) + (6 أيام × dailyNewVisitorAvg)
-      visitorsForPeriod = Math.round(todayVisitors + (6 * dailyNewVisitorAvg));
-    } else if (period === 'month') {
-      // هذا الشهر = todayVisitors (فعلي) + ((periodDays-1) أيام × dailyNewVisitorAvg)
-      visitorsForPeriod = Math.round(todayVisitors + ((periodDays - 1) * dailyNewVisitorAvg));
     } else if (period === 'last_month') {
-      // الشهر الماضي = 0 (المتجر ماكانش شغال في ذلك الوقت)
       visitorsForPeriod = 0;
     } else if (period === 'custom') {
+      // فترة مخصصة: استعلام حقيقي
+      const DEC_START_MS = new Date('2025-12-01T00:00:00+02:00').getTime();
+      const FEB_28_MS = new Date('2026-02-28T23:59:59+02:00').getTime();
       const isOverlappingHistorical = filterStartMs <= FEB_28_MS && filterEndMs >= DEC_START_MS;
-      const isFullyAfterFeb = filterStartMs > FEB_28_MS;
 
-      if (isFullyAfterFeb) {
-        visitorsForPeriod = Math.round(todayVisitors + ((periodDays - 1) * dailyNewVisitorAvg));
-      } else if (isOverlappingHistorical) {
+      if (isOverlappingHistorical) {
+        // جزء تاريخي من baseline
         const effectiveStart = Math.max(DEC_START_MS, filterStartMs);
         const effectiveEnd = Math.min(FEB_28_MS, filterEndMs);
         const historicalDays = Math.max(0, Math.floor((effectiveEnd - effectiveStart) / (1000 * 60 * 60 * 24)) + 1);
-        const historicalPortion = Math.round((historicalDays / DAYS_90) * BASELINE_VISITORS);
-        visitorsForPeriod = historicalPortion;
+        visitorsForPeriod = Math.round((historicalDays / 90) * 30000);
       } else {
-        visitorsForPeriod = 0;
+        // استعلام حقيقي من Customers
+        visitorsForPeriod = await countUniqueCustomersByDate(db, dateFilterStart, filterEndMs);
       }
+    } else {
+      // week, month: استعلام حقيقي من Customers
+      visitorsForPeriod = await countUniqueCustomersByDate(db, dateFilterStart, filterEndMs);
     }
 
     // ==========================================
@@ -216,27 +200,9 @@ export async function GET(request) {
     if (period === 'all') {
       totalCustomers = totalCustomersCount;
     } else if (period === 'last_month') {
-      totalCustomers = 0; // المتجر ماكانش شغال
+      totalCustomers = 0;
     } else {
-      try {
-        const customersSnap = await getDocs(query(
-          collection(db, "Customers"),
-          where("last_active", ">=", dateFilterStart)
-        ));
-        const uniqueCustomers = new Map();
-        for (const d of customersSnap.docs) {
-          try {
-            const c = d.data(); if (!c) continue;
-            const custDateMs = parseDateToMs(c.last_active);
-            if (isNaN(custDateMs) || custDateMs > filterEndMs) continue;
-            const email = (c.Email || c.email || '').toLowerCase().trim();
-            const phone = String(c.Phone || c['Default Address Phone'] || '').replace(/[^0-9]/g, '');
-            const uniqueId = email || phone || d.id;
-            if (!uniqueCustomers.has(uniqueId)) uniqueCustomers.set(uniqueId, true);
-          } catch (e) { continue; }
-        }
-        totalCustomers = uniqueCustomers.size;
-      } catch (qErr) { totalCustomers = 0; }
+      totalCustomers = visitorsForPeriod; // same query: unique customers = visitors for this period
     }
 
     // ==========================================
@@ -259,8 +225,6 @@ export async function GET(request) {
       custom: 'فترة مخصصة'
     };
 
-    const finalSales = orderStats.sales;
-
     return Response.json({
       success: true,
       data: {
@@ -270,7 +234,7 @@ export async function GET(request) {
         totalCustomers,
         orders: orderStats.orders,
         completedOrders: orderStats.completed,
-        sales: parseFloat(finalSales.toFixed(2)),
+        sales: parseFloat(orderStats.sales.toFixed(2)),
         conversionRate: parseFloat(conversionRate.toFixed(2)),
         periodDays,
         dateRange: dateFilterStart && dateFilterEnd
@@ -282,5 +246,34 @@ export async function GET(request) {
   } catch (error) {
     console.error("Dashboard Stats Critical Error:", error);
     return Response.json({ success: false, error: error.message, data: null }, { status: 500 });
+  }
+}
+
+/**
+ * دالة مساعدة: تحسب عدد العملاء الفريدين في فترة زمنية
+ * تستعلم Customers collection حسب last_active
+ */
+async function countUniqueCustomersByDate(db, dateFilterStart, filterEndMs) {
+  try {
+    const customersSnap = await getDocs(query(
+      collection(db, "Customers"),
+      where("last_active", ">=", dateFilterStart)
+    ));
+    const uniqueCustomers = new Map();
+    for (const d of customersSnap.docs) {
+      try {
+        const c = d.data();
+        if (!c) continue;
+        const custDateMs = parseDateToMs(c.last_active);
+        if (isNaN(custDateMs) || custDateMs > filterEndMs) continue;
+        const email = (c.Email || c.email || '').toLowerCase().trim();
+        const phone = String(c.Phone || c['Default Address Phone'] || '').replace(/[^0-9]/g, '');
+        const uniqueId = email || phone || d.id;
+        if (!uniqueCustomers.has(uniqueId)) uniqueCustomers.set(uniqueId, true);
+      } catch (e) { continue; }
+    }
+    return uniqueCustomers.size;
+  } catch (qErr) {
+    return 0;
   }
 }
