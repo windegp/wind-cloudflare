@@ -10,6 +10,7 @@ export const dynamic = 'force-dynamic';
 
 const PERIODS = [
   { id: 'today', label: 'اليوم' },
+  { id: 'yesterday', label: 'أمس' },
   { id: 'week', label: 'آخر 7 أيام' },
   { id: 'month', label: 'هذا الشهر' },
   { id: 'last_month', label: 'الشهر الماضي' },

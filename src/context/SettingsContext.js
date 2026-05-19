@@ -40,11 +40,14 @@ export const SettingsProvider = ({ children }) => {
         const today = getTodayStr();
         
         if (counters.todayDate !== today) {
-          // يوم جديد: reset todayVisitors = 1, update todayDate, increment total visitors
+          // يوم جديد: قبل مسح todayVisitors، نحفظ آخر قيمة في yesterdayVisitors
+          const prevTodayVisitors = Number(counters.todayVisitors) || 0;
+          
           updateDoc(settingsRef, {
             "counters.visitors": increment(1),
             "counters.todayDate": today,
-            "counters.todayVisitors": 1
+            "counters.todayVisitors": 1,
+            "counters.yesterdayVisitors": prevTodayVisitors
           }).catch(err => console.error("Counter reset failed:", err));
         } else {
           // نفس اليوم: increment both counters

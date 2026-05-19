@@ -34,17 +34,21 @@ export async function GET(request) {
     const db = getDb();
     const settingsSnap = await getDoc(doc(db, "settings", "siteSettings"));
     const counters = settingsSnap.exists() ? (settingsSnap.data().counters || {}) : {};
-    
+
     const totalVisitors = Number(counters.visitors) || 0;
     const todayVisitors = Number(counters.todayVisitors) || 0;
+    const yesterdayVisitors = Number(counters.yesterdayVisitors) || 0;
     const totalOrders = Number(counters.orders) || 0;
     const totalSales = Number(counters.sales) || 0;
     const totalCustomersCount = Number(counters.customers) || 0;
+
     const BASELINE_VISITORS = 30000;
     const newVisitorsSinceLaunch = Math.max(0, totalVisitors - BASELINE_VISITORS);
+    const LAUNCH_DATE_MS = new Date('2026-03-01T00:00:00+02:00').getTime();
+    const nowCairoMs = Date.now();
 
     // ==========================================
-    // 2. نطاق التاريخ
+    // 2. نطاق التاريخ للطلبات/العملاء
     // ==========================================
     let dateFilterStart = null;
     let dateFilterEnd = null;
@@ -61,6 +65,13 @@ export async function GET(request) {
         dateFilterStart = formatCairoDate(nowCairo) + ' 00:00:00';
         dateFilterEnd = formatCairoDate(nowCairo) + ' 23:59:59';
         break;
+      case 'yesterday': {
+        const yesterday = new Date(nowCairo);
+        yesterday.setDate(yesterday.getDate() - 1);
+        dateFilterStart = formatCairoDate(yesterday) + ' 00:00:00';
+        dateFilterEnd = formatCairoDate(yesterday) + ' 23:59:59';
+        break;
+      }
       case 'week': {
         const weekAgo = new Date(nowCairo);
         weekAgo.setDate(weekAgo.getDate() - 7);
@@ -82,9 +93,7 @@ export async function GET(request) {
         break;
       }
       case 'custom': {
-        if (!startDate || !endDate) {
-          return Response.json({ success: false, error: 'مطلوب startDate و endDate' }, { status: 400 });
-        }
+        if (!startDate || !endDate) return Response.json({ success: false, error: 'مطلوب startDate و endDate' }, { status: 400 });
         dateFilterStart = startDate + ' 00:00:00';
         dateFilterEnd = endDate + ' 23:59:59';
         break;
@@ -95,15 +104,9 @@ export async function GET(request) {
     if (dateFilterStart && dateFilterEnd) {
       filterStartMs = Date.parse(dateFilterStart.replace(' ', 'T'));
       filterEndMs = Date.parse(dateFilterEnd.replace(' ', 'T'));
-      if (isNaN(filterStartMs) || isNaN(filterEndMs)) {
-        filterStartMs = 0;
-        filterEndMs = Date.now();
-      }
+      if (isNaN(filterStartMs) || isNaN(filterEndMs)) { filterStartMs = 0; filterEndMs = Date.now(); }
     }
 
-    // ==========================================
-    // 3. حساب عدد الأيام
-    // ==========================================
     let periodDays = 0;
     if (dateFilterStart && dateFilterEnd) {
       const s = new Date(dateFilterStart);
@@ -112,63 +115,65 @@ export async function GET(request) {
     }
 
     // ==========================================
-    // 4. حساب الزوار 🔥 FIXED
+    // 3. حساب الزوار لكل فترة — منطق تراكمي صحيح
     // ==========================================
     // القواعد:
-    // - الكل = counters.visitors (30,000 historical + زوار جدد)
-    // - اليوم = newVisitorsSinceLaunch / daysSinceLaunch (يتحدث实时 مع كل increment)
-    // - الأسبوع/الشهر = (periodDays / totalDaysFromLaunch) * newVisitorsSinceLaunch
-    // - فترة مخصصة:
-    //   - قبل 1 مارس: حصة تناسبية من 30,000 baseline فقط
-    //   - بعد 1 مارس: حصة من الزوار الجدد فقط
-    //   - متداخلة: حصة baseline + حصة جدد
+    // - اليوم: todayVisitors (عداد لحظي)
+    // - الأسبوع: اليوم + آخر 6 أيام من المتوسط اليومي
+    //   = todayVisitors + (6 أيام × dailyNewVisitorAvg)
+    // - الشهر: اليوم + باقي أيام الشهر من المتوسط
+    //   = todayVisitors + ((periodDays-1) × dailyNewVisitorAvg)
+    // - الشهر الماضي: 0 (المتجر ماكانش شغال)
+    // - الكل: counters.visitors (30,000 + جديد)
+    // - فترة مخصصة: حسب القواعد
     // ==========================================
-    const LAUNCH_DATE_MS = new Date('2026-03-01T00:00:00+02:00').getTime();
+    const daysSinceLaunch = Math.max(1, Math.ceil((nowCairo.getTime() - LAUNCH_DATE_MS) / (1000 * 60 * 60 * 24)));
+    const dailyNewVisitorAvg = newVisitorsSinceLaunch / daysSinceLaunch;
     const DEC_START_MS = new Date('2025-12-01T00:00:00+02:00').getTime();
     const FEB_28_MS = new Date('2026-02-28T23:59:59+02:00').getTime();
     const DAYS_90 = 90;
-    const daysSinceLaunch = Math.max(1, Math.ceil((nowCairo.getTime() - LAUNCH_DATE_MS) / (1000 * 60 * 60 * 24)));
-    const dailyNewVisitor = newVisitorsSinceLaunch / daysSinceLaunch;
 
     let visitorsForPeriod = 0;
 
     if (period === 'all') {
       visitorsForPeriod = totalVisitors;
     } else if (period === 'today') {
-      // 🔥 FIX: الزوار الحقيقيين لليوم = todayVisitors من العداد (يتحدث لحظياً)
       visitorsForPeriod = todayVisitors;
+    } else if (period === 'yesterday') {
+      visitorsForPeriod = yesterdayVisitors;
+    } else if (period === 'week') {
+      // هذا الأسبوع = todayVisitors (فعلي) + (6 أيام × dailyNewVisitorAvg)
+      visitorsForPeriod = Math.round(todayVisitors + (6 * dailyNewVisitorAvg));
+    } else if (period === 'month') {
+      // هذا الشهر = todayVisitors (فعلي) + ((periodDays-1) أيام × dailyNewVisitorAvg)
+      visitorsForPeriod = Math.round(todayVisitors + ((periodDays - 1) * dailyNewVisitorAvg));
+    } else if (period === 'last_month') {
+      // الشهر الماضي = 0 (المتجر ماكانش شغال في ذلك الوقت)
+      visitorsForPeriod = 0;
     } else if (period === 'custom') {
       const isOverlappingHistorical = filterStartMs <= FEB_28_MS && filterEndMs >= DEC_START_MS;
       const isFullyAfterFeb = filterStartMs > FEB_28_MS;
-      
+
       if (isFullyAfterFeb) {
-        // فترة بعد فبراير بالكامل: زوار جدد فقط
-        visitorsForPeriod = Math.round((periodDays / daysSinceLaunch) * newVisitorsSinceLaunch);
+        visitorsForPeriod = Math.round(todayVisitors + ((periodDays - 1) * dailyNewVisitorAvg));
       } else if (isOverlappingHistorical) {
-        // فترة متداخلة مع ديسمبر-فبراير
         const effectiveStart = Math.max(DEC_START_MS, filterStartMs);
         const effectiveEnd = Math.min(FEB_28_MS, filterEndMs);
-        // 🔥 FIX: استخدم floor بدل ceil لمنع off-by-one (30,033 bug)
         const historicalDays = Math.max(0, Math.floor((effectiveEnd - effectiveStart) / (1000 * 60 * 60 * 24)) + 1);
         const historicalPortion = Math.round((historicalDays / DAYS_90) * BASELINE_VISITORS);
         visitorsForPeriod = historicalPortion;
       } else {
-        // فترة قبل ديسمبر بالكامل (مستحيل عملياً): 0
         visitorsForPeriod = 0;
       }
-    } else {
-      // week, month, last_month: زوار جدد فقط
-      visitorsForPeriod = Math.round((periodDays / daysSinceLaunch) * newVisitorsSinceLaunch);
     }
 
     // ==========================================
-    // 5. حساب الطلبات
+    // 4. حساب الطلبات
     // ==========================================
     let orderStats = { orders: 0, sales: 0, completed: 0 };
 
     if (period === 'all') {
       orderStats.orders = totalOrders;
-      // 🔥 FIX: No Math.round(sales * 100) / 100 here - keep raw number
       orderStats.sales = totalSales;
       orderStats.completed = totalOrders;
     } else {
@@ -177,23 +182,16 @@ export async function GET(request) {
           collection(db, "Orders"),
           where("Created at", ">=", dateFilterStart)
         ));
-        
-        for (const docSnap of ordersSnap.docs) {
+        for (const d of ordersSnap.docs) {
           try {
-            const o = docSnap.data();
+            const o = d.data();
             if (!o) continue;
-            
             const orderDateMs = parseDateToMs(o['Created at']);
             if (isNaN(orderDateMs) || orderDateMs > filterEndMs) continue;
             if (o['Financial Status'] === 'deleted') continue;
-            
-            const isAbandoned = o['Financial Status'] === 'abandoned' || 
-                                o['Financial Status'] === 'pending_payment' || 
-                                (o.Name && o.Name.startsWith('DRAFT-'));
+            const isAbandoned = o['Financial Status'] === 'abandoned' || o['Financial Status'] === 'pending_payment' || (o.Name && o.Name.startsWith('DRAFT-'));
             if (isAbandoned) continue;
-            
             orderStats.orders++;
-            // 🔥 FIX: ParseFloat آمن - لا يوجد قسمة على 10
             let total = 0;
             try {
               if (o.Total != null) {
@@ -203,21 +201,22 @@ export async function GET(request) {
             } catch (e) { total = 0; }
             orderStats.sales += total;
             orderStats.completed++;
-          } catch (docErr) { continue; }
+          } catch (e) { continue; }
         }
       } catch (qErr) {
-        console.error("Orders query:", qErr.message);
         orderStats = { orders: 0, sales: 0, completed: 0 };
       }
     }
 
     // ==========================================
-    // 6. حساب العملاء
+    // 5. حساب العملاء
     // ==========================================
     let totalCustomers = 0;
 
     if (period === 'all') {
       totalCustomers = totalCustomersCount;
+    } else if (period === 'last_month') {
+      totalCustomers = 0; // المتجر ماكانش شغال
     } else {
       try {
         const customersSnap = await getDocs(query(
@@ -227,8 +226,7 @@ export async function GET(request) {
         const uniqueCustomers = new Map();
         for (const d of customersSnap.docs) {
           try {
-            const c = d.data();
-            if (!c) continue;
+            const c = d.data(); if (!c) continue;
             const custDateMs = parseDateToMs(c.last_active);
             if (isNaN(custDateMs) || custDateMs > filterEndMs) continue;
             const email = (c.Email || c.email || '').toLowerCase().trim();
@@ -242,26 +240,25 @@ export async function GET(request) {
     }
 
     // ==========================================
-    // 7. معدل التحويل
+    // 6. معدل التحويل — محمي من القسمة على 0
     // ==========================================
-    const conversionRate = visitorsForPeriod > 0 && orderStats.completed > 0
+    const conversionRate = (visitorsForPeriod > 0 && orderStats.completed > 0)
       ? ((orderStats.completed / visitorsForPeriod) * 100)
       : 0;
 
     // ==========================================
-    // 8. تسمية الفترة
+    // 7. تسمية الفترة
     // ==========================================
     const periodLabels = {
       all: 'جميع البيانات',
       today: `اليوم — ${formatCairoDate(nowCairo)}`,
+      yesterday: 'أمس',
       week: 'آخر 7 أيام',
       month: `شهر ${nowCairo.toLocaleString('ar-EG', { month: 'long' })}`,
       last_month: 'الشهر الماضي',
       custom: 'فترة مخصصة'
     };
 
-    // 🔥 FIX: إرجاع sales بدون Math.round للتأكد من عدم فقدان الدقة
-    // استخدم toFixed في العرض فقط
     const finalSales = orderStats.sales;
 
     return Response.json({
@@ -278,17 +275,12 @@ export async function GET(request) {
         periodDays,
         dateRange: dateFilterStart && dateFilterEnd
           ? { start: dateFilterStart.split(' ')[0], end: dateFilterEnd.split(' ')[0] }
-          : null,
-        isPureRealTime: !!(period === 'today' || period === 'week' || period === 'month' || period === 'last_month')
+          : null
       }
     });
 
   } catch (error) {
     console.error("Dashboard Stats Critical Error:", error);
-    return Response.json({
-      success: false,
-      error: error.message,
-      data: null
-    }, { status: 500 });
+    return Response.json({ success: false, error: error.message, data: null }, { status: 500 });
   }
 }

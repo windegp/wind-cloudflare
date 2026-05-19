@@ -94,7 +94,8 @@ export async function GET(request) {
       products: currentCounters.products || 0,
       visitors: totalVisitors,
       todayDate: todayDate,
-      todayVisitors: 0
+      todayVisitors: 0,
+      yesterdayVisitors: 0
     }}, { merge: true });
 
     // محاولة تحديث الـ KV cache (تتجاهل الأخطاء في dev mode)
@@ -107,7 +108,8 @@ export async function GET(request) {
         products: currentCounters.products || 0,
         visitors: totalVisitors,
         todayDate: todayDate,
-        todayVisitors: 0
+        todayVisitors: 0,
+        yesterdayVisitors: 0
       }});
     } catch (kvErr) {
       console.log("KV cache update skipped (not available)");
