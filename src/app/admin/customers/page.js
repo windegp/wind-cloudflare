@@ -172,9 +172,32 @@ export default function CustomersPage() {
 
       const customersSnap = await getDocs(q);
       const newCustomers = customersSnap.docs.map(doc => {
-         const data = doc.data();
-         // ... نفس عملية البارسينج السابقة (باختصار للوقت هنا، لكن تأكد من معالجتها بنفس الطريقة إذا احتجت)
-         return { ...data, id: doc.id, segments: ['all'], 'Total Orders': data['Total Orders'] || 0, 'Total Spent': data['Total Spent'] || 0, data_source: data.data_source || 'Shopify_Import' };
+        const data = doc.data();
+        const totalOrders = Number(data['Total Orders'] || 0);
+        const dbSegments = data.segments || [];
+
+        const segments = ['all'];
+        if (data.Email) segments.push('Email_Subscriber');
+        if (totalOrders === 0) {
+          segments.push('Potential_Customer');
+          if (data.hasAbandoned === true || dbSegments.includes('Abandoned_Checkout')) {
+            segments.push('Abandoned_Checkout');
+          }
+        } else if (totalOrders === 1) {
+          segments.push('Purchased_Once');
+        } else if (totalOrders > 1) {
+          segments.push('VIP_Customer');
+          segments.push('Purchased_Once');
+        }
+
+        return {
+          ...data,
+          id: doc.id,
+          segments,
+          'Total Orders': totalOrders,
+          'Total Spent': data['Total Spent'] || 0,
+          data_source: data.data_source || 'Shopify_Import'
+        };
       });
 
       setAdditionalCustomers(prev => [...prev, ...newCustomers]);
@@ -325,27 +348,41 @@ export default function CustomersPage() {
 
     try {
       const db = getDb();
-      let q;
+      let allExportData = [];
+      let lastDoc = null;
+      let fetchMore = true;
 
-      if (activeTab === 'wind') {
-        q = query(collection(db, "Customers"), where("data_source", "==", "WIND_Web"));
-      } else if (activeTab === 'shopify') {
-        q = query(collection(db, "Customers"), where("data_source", "==", "Shopify_Import"));
-      } else {
-        q = collection(db, "Customers");
+      while (fetchMore) {
+        let constraints = [limit(500)];
+
+        if (activeTab === 'wind') {
+          constraints.push(where("data_source", "==", "WIND_Web"));
+        } else if (activeTab === 'shopify') {
+          constraints.push(where("data_source", "==", "Shopify_Import"));
+        }
+
+        if (lastDoc) constraints.push(startAfter(lastDoc));
+
+        const snap = await getDocs(query(collection(db, "Customers"), ...constraints));
+
+        if (snap.empty) {
+          fetchMore = false;
+        } else {
+          allExportData = [...allExportData, ...snap.docs.map(d => ({ ...d.data(), _docRef: d }))];
+          lastDoc = snap.docs[snap.docs.length - 1];
+          if (snap.docs.length < 500) fetchMore = false;
+        }
       }
 
-      const snap = await getDocs(q);
       let exportData = [];
+      allExportData.forEach(c => {
 
-      snap.docs.forEach(doc => {
-        const c = doc.data();
-        const totalOrders = Number(c['Total Orders'] || 0);
+      const totalOrders = Number(c['Total Orders'] || 0);
         const dbSegments = c.segments || [];
-        
+
         let calculatedSegments = ['all'];
         if (c.Email) calculatedSegments.push('Email_Subscriber');
-        
+
         if (totalOrders === 0) {
           calculatedSegments.push('Potential_Customer');
           if (c.hasAbandoned === true || dbSegments.includes('Abandoned_Checkout')) {
