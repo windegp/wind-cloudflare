@@ -65,10 +65,9 @@ async function countVisitorsAndCustomers(db, dateFilterStart, filterEndMs) {
         if (!uniqueVisitors.has(uniqueId)) uniqueVisitors.set(uniqueId, true);
         
         // Real customer check
+        // العميل الحقيقي = (إيميل أو هاتف) AND (لديه طلبات)
         const hasOrders = Number(c['Total Orders'] || 0) > 0;
-        const hasAbandoned = c.hasAbandoned === true || (c.segments && c.segments.includes('Abandoned_Checkout'));
-        
-        if ((email || phone) && (hasOrders || hasAbandoned)) {
+        if ((email || phone) && hasOrders) {
           if (!realCustomers.has(uniqueId)) realCustomers.set(uniqueId, true);
         }
       } catch (docErr) {

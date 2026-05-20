@@ -4,19 +4,37 @@ import { collection, query, getDocs, getDoc, doc, startAfter, limit, setDoc } fr
 export const dynamic = 'force-dynamic';
 
 export async function GET(request) {
-  // ==========================================
-  // 🔥 Migration Script: يحصي الأعداد الحقيقية من Firebase مرة واحدة
-  // ويخزنها في settings/siteSettings/counters بشكل آمن
-  // ==========================================
   try {
     const db = getDb();
+
+    // ==========================================
+    // � حماية ضد إعادة التشغيل
+    // ==========================================
+    const checkSnap = await getDoc(doc(db, "settings", "siteSettings"));
+    const existingData = checkSnap.exists() ? checkSnap.data() : {};
+    const existingCounters = existingData.counters || {};
+
+    if (existingCounters.migrated === true && existingCounters.orders > 0) {
+      return Response.json({
+        success: true,
+        message: `✅ الـ Migration تم من قبل. البيانات الحالية: ${existingCounters.orders} طلب`,
+        data: {
+          orders: existingCounters.orders || 0,
+          sales: existingCounters.sales || 0,
+          customers: existingCounters.customers || 0,
+          visitors: existingCounters.visitors || 0,
+          alreadyMigrated: true
+        }
+      });
+    }
+
     let totalOrders = 0;
     let totalSales = 0;
     let totalCustomers = 0;
     let totalVisitors = 0;
     let lastDoc = null;
     let fetchMore = true;
-    
+
     // ==========================================
     // 1. سحب كل الطلبات من Orders
     // ==========================================
@@ -24,25 +42,22 @@ export async function GET(request) {
       let constraints = [collection(db, "Orders"), limit(500)];
       if (lastDoc) constraints.push(startAfter(lastDoc));
       const snap = await getDocs(query(...constraints));
-      
+
       if (snap.empty) {
         fetchMore = false;
       } else {
         snap.docs.forEach(d => {
           const o = d.data();
           if (o['Financial Status'] === 'deleted') return;
-          
-          const isAbandoned = o['Financial Status'] === 'abandoned' || 
-                              o['Financial Status'] === 'pending_payment' || 
+          const isAbandoned = o['Financial Status'] === 'abandoned' ||
+                              o['Financial Status'] === 'pending_payment' ||
                               o.Name?.startsWith('DRAFT-');
-          
           if (!isAbandoned) {
             totalOrders++;
             const total = typeof o.Total === 'string' ? parseFloat(o.Total) || 0 : Number(o.Total) || 0;
             totalSales += total;
           }
         });
-        
         lastDoc = snap.docs[snap.docs.length - 1];
         if (snap.docs.length < 500) fetchMore = false;
       }
@@ -53,12 +68,10 @@ export async function GET(request) {
     // ==========================================
     fetchMore = true;
     lastDoc = null;
-    
     while (fetchMore) {
       let constraints = [collection(db, "Customers"), limit(500)];
       if (lastDoc) constraints.push(startAfter(lastDoc));
       const snap = await getDocs(query(...constraints));
-      
       if (snap.empty) {
         fetchMore = false;
       } else {
@@ -71,92 +84,77 @@ export async function GET(request) {
     // ==========================================
     // 3. جلب العداد الحالي للزوار
     // ==========================================
-    const settingsSnap = await getDoc(doc(db, "settings", "siteSettings"));
-    const currentCounters = settingsSnap.exists() ? (settingsSnap.data().counters || {}) : {};
-    totalVisitors = currentCounters.visitors || 0;
+    totalVisitors = existingCounters.visitors || 0;
 
     const now = new Date();
     const pad = (n) => String(n).padStart(2, '0');
     const todayDate = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
 
     // ==========================================
-    // 4. تحديث العدادات وإعادة بناء المنيو المفقود بناءً على السناب شوت الجديد
+    // 4. تحديث العدادات + المنيو — setDoc مع {merge:true} آمن
     // ==========================================
-    await setDoc(doc(db, "settings", "siteSettings"), { 
-      brandName: "WIND Shopping",
-      logoUrl: "https://ik.imagekit.io/windeg/WIND_Shopping/logo.png",
-      announcements: ["شحن مجاني للطلبات أكثر من 2000 ج.م"],
-      type: "siteSettings",
-      menuItems: [
-        { id: "pybo9dy3e", link: "/", title: "الرئيسية", children: [] },
-        { id: "ldsj84fsj", link: "/collections/new-arrivals", title: "وصل حديثاً", children: [] },
-        { id: "4ses324u5", link: "/collections/best-sellers", title: "الأكثر مبيعاً", children: [] },
-        {
-          id: "032dec24l",
-          link: "/collections/womens-clothing",
-          title: "نسائي",
-          children: [
-            { id: "3sqa0h5fm", link: "/collections/women-sale", title: "تخفيضات", children: [] },
-            { id: "c0mhfds4m", link: "/women/summer-wear", title: "ملابس صيفية", children: [] },
-            {
-              id: "0c7un2epl",
-              link: "/women/winter-wear",
-              title: "ملابس شتوية",
-              children: [
-                { id: "mlwfw577r", link: "/collections/womens-pullovers-sweaters", title: "بلوفرات وسويترات", children: [] },
-                { id: "qtnbqn5du", link: "/collections/womens-basics", title: "الأساسيات", children: [] },
-                { id: "oyv20cpt3", link: "/collections/womens-cardigans", title: "كارديجان", children: [] },
-                { id: "o86ofi6ec", link: "/collections/womens-matching-sets", title: "أطقم وسوتس (Sets)", children: [] },
-                { id: "eol9izfzb", link: "/collections/womens-pants", title: "بنطلونات", children: [] },
-                { id: "471ggbdwp", link: "/collections/dresses", title: "الفساتين", children: [] },
-                { id: "w3xmhvd3x", link: "/collections/womens-jackets-coats", title: "جاكيتات ومعاطف نسائية", children: [] },
-                { id: "nwg5bi4jt", link: "/collections/womens-hoodies-sweatshirts", title: "هوديز وسويت شيرت", children: [] },
-                { id: "xcf1x0arc", link: "/collections/womens-vests", title: "فستات نسائية", children: [] }
-              ]
-            },
-            { id: "kpgr8ao0r", link: "/collections/womens-shawls", title: "شالات", children: [] },
-            { id: "3rxyga0m4", link: "/collections/womens-scarves", title: "أوشحة", children: [] },
-            {
-              id: "w6hwbz1c8",
-              link: "/collections/inner-hijab-essentials",
-              title: "أساسيات الحجاب",
-              children: [
-                { id: "cm4npav60", link: "/collections/inner-head-scarves", title: "وشاح الرأس (البونيه)", children: [] },
-                { id: "62vb58joa", link: "/collections/tarboosh-hijab-caps", title: "طربوش حجاب", children: [] },
-                { id: "l8j6p27en", link: "/collections/inner-neck-covers-hijab", title: "أغطية الرقبة (الرقبية)", children: [] }
-              ]
-            },
-            { id: "9d1gtxzhe", link: "/collections/womens-esdal-prayer", title: "إسدال الصلاة", children: [] }
-          ]
-        },
-        { id: "a8tiqlcnz", link: "/collections/mens-clothing", title: "رجالي", children: [] },
-        { id: "ut22wu7zx", link: "/contact-us", title: "تواصل معنا", children: [] }
-      ],
+    const flatMenuItems = [
+      { id: "pybo9dy3e", title: "الرئيسية", link: "/" },
+      { id: "ldsj84fsj", title: "وصل حديثاً", link: "/collections/new-arrivals" },
+      { id: "4ses324u5", title: "الأكثر مبيعاً", link: "/collections/best-sellers" },
+      { id: "3sqa0h5fm", title: "تخفيضات", link: "/collections/women-sale" },
+      { id: "c0mhfds4m", title: "ملابس صيفية", link: "/women/summer-wear" },
+      { id: "mlwfw577r", title: "بلوفرات وسويترات", link: "/collections/womens-pullovers-sweaters" },
+      { id: "qtnbqn5du", title: "الأساسيات", link: "/collections/womens-basics" },
+      { id: "oyv20cpt3", title: "كارديجان", link: "/collections/womens-cardigans" },
+      { id: "o86ofi6ec", title: "أطقم وسوتس (Sets)", link: "/collections/womens-matching-sets" },
+      { id: "eol9izfzb", title: "بنطلونات", link: "/collections/womens-pants" },
+      { id: "471ggbdwp", title: "الفساتين", link: "/collections/dresses" },
+      { id: "w3xmhvd3x", title: "جاكيتات ومعاطف نسائية", link: "/collections/womens-jackets-coats" },
+      { id: "nwg5bi4jt", title: "هوديز وسويت شيرت", link: "/collections/womens-hoodies-sweatshirts" },
+      { id: "xcf1x0arc", title: "فستات نسائية", link: "/collections/womens-vests" },
+      { id: "kpgr8ao0r", title: "شالات", link: "/collections/womens-shawls" },
+      { id: "3rxyga0m4", title: "أوشحة", link: "/collections/womens-scarves" },
+      { id: "cm4npav60", title: "وشاح الرأس (البونيه)", link: "/collections/inner-head-scarves" },
+      { id: "62vb58joa", title: "طربوش حجاب", link: "/collections/tarboosh-hijab-caps" },
+      { id: "l8j6p27en", title: "أغطية الرقبة (الرقبية)", link: "/collections/inner-neck-covers-hijab" },
+      { id: "w6hwbz1c8", title: "أساسيات الحجاب", link: "/collections/inner-hijab-essentials" },
+      { id: "9d1gtxzhe", title: "إسدال الصلاة", link: "/collections/womens-esdal-prayer" },
+      { id: "032dec24l", title: "نسائي", link: "/collections/womens-clothing" },
+      { id: "a8tiqlcnz", title: "رجالي", link: "/collections/mens-clothing" },
+      { id: "ut22wu7zx", title: "تواصل معنا", link: "/contact-us" }
+    ];
+
+    await setDoc(doc(db, "settings", "siteSettings"), {
+      menuItems: flatMenuItems,
       counters: {
         orders: totalOrders,
         sales: totalSales,
         customers: totalCustomers,
-        products: currentCounters.products || 0,
+        products: existingCounters.products || 0,
         visitors: totalVisitors,
         todayDate: todayDate,
         todayVisitors: 0,
-        yesterdayVisitors: 0
+        yesterdayVisitors: 0,
+        migrated: true
+      },
+      migration: {
+        menu_moved: true
       }
     }, { merge: true });
 
-    // محاولة تحديث الـ KV cache إذا وُجدت
+    // تحديث الـ KV cache
     try {
       const { kvSet } = await import('@/lib/kv-cache');
-      await kvSet('site_settings_v1', { 
+      await kvSet('site_settings_v1', {
         counters: {
           orders: totalOrders,
           sales: totalSales,
           customers: totalCustomers,
-          products: currentCounters.products || 0,
+          products: existingCounters.products || 0,
           visitors: totalVisitors,
           todayDate: todayDate,
           todayVisitors: 0,
-          yesterdayVisitors: 0
+          yesterdayVisitors: 0,
+          migrated: true
+        },
+        migration: {
+          menu_moved: true
         }
       });
     } catch (kvErr) {
@@ -165,7 +163,7 @@ export async function GET(request) {
 
     return Response.json({
       success: true,
-      message: `✅ تم تحديث العدادات وإعادة بناء المنيو المحدث بنجاح`,
+      message: `✅ تم تحديث العدادات والمنيو بنجاح`,
       data: {
         orders: totalOrders,
         sales: totalSales,
@@ -176,9 +174,9 @@ export async function GET(request) {
 
   } catch (error) {
     console.error("Migration Error:", error);
-    return Response.json({ 
-      success: false, 
-      error: error.message 
+    return Response.json({
+      success: false,
+      error: error.message
     }, { status: 500 });
   }
 }
