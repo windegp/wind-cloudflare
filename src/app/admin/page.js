@@ -95,12 +95,21 @@ export default function Dashboard() {
   }, [activePeriod, fetchDashboardStats]);
   // ملاحظة: customStartDate/customEndDate مش متضمنين — بنستخدمهم يدوي
 
-  // تحديث دوري كل 30 ثانية
+  // تحديث دوري كل 60 ثانية — أطول + حماية من التكرار
+  const lastFetchRef = useRef(0);
   useEffect(() => {
     if (activePeriod === 'custom') return;
     const interval = setInterval(() => {
+      // إيقاف الـ polling لو التاب مش نشط (مخفي)
+      if (document.hidden) return;
+      // منع الـ fetch لو آخر مرة كانت من أقل من 30 ثانية
+      const now = Date.now();
+      if (now - lastFetchRef.current < 30000) return;
+      lastFetchRef.current = now;
       fetchDashboardStats(activePeriod, customStartDate, customEndDate);
-    }, 30000);
+    }, 60000);
+    // Fetch فوري عند أول تحميل
+    lastFetchRef.current = Date.now();
     return () => clearInterval(interval);
   }, [activePeriod, customStartDate, customEndDate, fetchDashboardStats]);
 

@@ -13,6 +13,31 @@ function getTodayStr() {
   return `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
 }
 
+/**
+ * LOCK: يمنع التاب الغير مسؤول من إعادة الكتابة فوق rollover
+ * https://developer.mozilla.org/en-US/docs/Web/API/Storage/lock
+ */
+function acquireRolloverLock() {
+  const lockKey = 'wind_rollover_lock';
+  const lock = localStorage.getItem(lockKey);
+  const nowMs = Date.now();
+  
+  if (lock) {
+    const lockData = JSON.parse(lock);
+    // Lock expires after 5 seconds — يمنع lock stuck forever
+    if (nowMs - lockData.timestamp < 5000) {
+      return false; // Lock acquired by another tab
+    }
+  }
+  
+  localStorage.setItem(lockKey, JSON.stringify({ timestamp: nowMs }));
+  return true;
+}
+
+function releaseRolloverLock() {
+  localStorage.removeItem('wind_rollover_lock');
+}
+
 export const SettingsProvider = ({ children }) => {
   const pathname = usePathname();
   const isAdmin = pathname && pathname.startsWith('/admin');
@@ -26,7 +51,7 @@ export const SettingsProvider = ({ children }) => {
     dedupingInterval: 300000,
   });
 
-  // 🔥 2. عداد الزوار اليومي (يدعم التتبع اللحظي لليوم)
+  // 🔥 عداد الزوار — مع حماية rollover من التكرار بين التابات
   useEffect(() => {
     const hasBeenCounted = sessionStorage.getItem("wind_v_counted");
     
@@ -34,21 +59,36 @@ export const SettingsProvider = ({ children }) => {
       const db = getDb();
       const settingsRef = doc(db, "settings", "siteSettings");
       
-      // نقرا أولاً لنعرف إذا كان اليوم بدأ جديد
       getDoc(settingsRef).then(snap => {
         const counters = snap.exists() ? (snap.data().counters || {}) : {};
         const today = getTodayStr();
         
         if (counters.todayDate !== today) {
-          // يوم جديد: قبل مسح todayVisitors، نحفظ آخر قيمة في yesterdayVisitors
-          const prevTodayVisitors = Number(counters.todayVisitors) || 0;
-          
-          updateDoc(settingsRef, {
-            "counters.visitors": increment(1),
-            "counters.todayDate": today,
-            "counters.todayVisitors": 1,
-            "counters.yesterdayVisitors": prevTodayVisitors
-          }).catch(err => console.error("Counter reset failed:", err));
+          // 🔒 محاولة أخذ الـ lock — لو تاب تاني أخذه، نتخطى rollover ونزود visitors بس
+          if (acquireRolloverLock()) {
+            try {
+              // إعادة قراءة counters بعد الـ lock للتأكد
+              const finalTodayVisitors = Number(counters.todayVisitors) || 0;
+              
+              updateDoc(settingsRef, {
+                "counters.visitors": increment(1),
+                "counters.todayDate": today,
+                "counters.todayVisitors": 1,
+                "counters.yesterdayVisitors": finalTodayVisitors
+              }).catch(err => console.error("Counter reset failed:", err))
+              .finally(() => releaseRolloverLock());
+            } catch (e) {
+              releaseRolloverLock();
+              // Fallback: increment visitors only
+              updateDoc(settingsRef, { "counters.visitors": increment(1) }).catch(() => {});
+            }
+          } else {
+            // تاب تاني مسؤول عن rollover — نزود visitors بس
+            updateDoc(settingsRef, {
+              "counters.visitors": increment(1),
+              "counters.todayVisitors": increment(1)
+            }).catch(err => console.error("Secondary tab increment failed:", err));
+          }
         } else {
           // نفس اليوم: increment both counters
           updateDoc(settingsRef, {

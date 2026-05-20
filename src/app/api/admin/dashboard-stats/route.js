@@ -3,13 +3,20 @@ import { collection, query, where, getDocs, getDoc, doc } from "firebase/firesto
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * تحويل أي تنسيق تاريخ إلى milliseconds
+ * تدعم: US locale "5/19/2026, 8:44:50 PM", Shopify "2025-11-29 07:22:28 +0200"
+ * تدعم: Firebase Timestamp, ISO string
+ */
 function parseDateToMs(rawDate) {
   if (!rawDate) return NaN;
   if (typeof rawDate.toDate === 'function') return rawDate.toDate().getTime();
   if (rawDate instanceof Date) return rawDate.getTime();
   if (typeof rawDate !== 'string') return NaN;
+  
   const ms = Date.parse(rawDate);
   if (!isNaN(ms)) return ms;
+  
   const usMatch = rawDate.match(/(\d{1,2})\/(\d{1,2})\/(\d{4}),?\s*(\d{1,2}):(\d{2}):(\d{2})\s*(AM|PM)/i);
   if (usMatch) {
     let [_, month, day, year, hours, minutes, seconds, ampm] = usMatch;
@@ -18,10 +25,69 @@ function parseDateToMs(rawDate) {
     if (ampm.toUpperCase() === 'AM' && hours === 12) hours = 0;
     return new Date(parseInt(year), parseInt(month)-1, parseInt(day), hours, parseInt(minutes), parseInt(seconds)).getTime();
   }
+  
   const withT = rawDate.replace(' ', 'T').split('+')[0].trim();
   const ms2 = Date.parse(withT);
   if (!isNaN(ms2)) return ms2;
+  
   return NaN;
+}
+
+/**
+ * استعلام واحد على Customers — يحسب الزوار والعملاء الحقيقيين معاً
+ * لمنع التكرار (كانت 2 queried منفصلتين)
+ */
+async function countVisitorsAndCustomers(db, dateFilterStart, filterEndMs) {
+  const result = { visitors: 0, realCustomers: 0 };
+  
+  try {
+    const customersSnap = await getDocs(query(
+      collection(db, "Customers"),
+      where("last_active", ">=", dateFilterStart)
+    ));
+    
+    const uniqueVisitors = new Map();
+    const realCustomers = new Map();
+    
+    for (const d of customersSnap.docs) {
+      try {
+        const c = d.data();
+        if (!c) continue;
+        
+        const custDateMs = parseDateToMs(c.last_active);
+        if (isNaN(custDateMs) || custDateMs > filterEndMs) continue;
+        
+        const email = (c.Email || c.email || '').toLowerCase().trim();
+        const phone = String(c.Phone || c['Default Address Phone'] || '').replace(/[^0-9]/g, '');
+        const uniqueId = email || phone || d.id;
+        
+        // All = visitor
+        if (!uniqueVisitors.has(uniqueId)) uniqueVisitors.set(uniqueId, true);
+        
+        // Real customer check
+        const hasOrders = Number(c['Total Orders'] || 0) > 0;
+        const hasAbandoned = c.hasAbandoned === true || (c.segments && c.segments.includes('Abandoned_Checkout'));
+        
+        if ((email || phone) && (hasOrders || hasAbandoned)) {
+          if (!realCustomers.has(uniqueId)) realCustomers.set(uniqueId, true);
+        }
+      } catch (docErr) {
+        console.error(`[dashboard-stats] Skipping bad customer doc: ${d.id}`, docErr.message);
+        continue;
+      }
+    }
+    
+    result.visitors = uniqueVisitors.size;
+    result.realCustomers = realCustomers.size;
+  } catch (qErr) {
+    console.error(`[dashboard-stats] Customers query failed: ${qErr.code || qErr.message}`, 
+      qErr.message);
+    // Graceful fallback
+    result.visitors = 0;
+    result.realCustomers = 0;
+  }
+  
+  return result;
 }
 
 export async function GET(request) {
@@ -32,6 +98,10 @@ export async function GET(request) {
 
   try {
     const db = getDb();
+    
+    // ==========================================
+    // 1. عدادات Firebase
+    // ==========================================
     const settingsSnap = await getDoc(doc(db, "settings", "siteSettings"));
     const counters = settingsSnap.exists() ? (settingsSnap.data().counters || {}) : {};
 
@@ -46,11 +116,6 @@ export async function GET(request) {
     const nowCairo = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Cairo' }));
     const pad = (n) => String(n).padStart(2, '0');
     const formatCairoDate = (d) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-
-    // حساب توقيت "نهاية أمس" لضمان عدم تكرار زوار اليوم في الاستعلامات التاريخية
-    const yesterdayDate = new Date(nowCairo);
-    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-    const yesterdayEndMs = Date.parse((formatCairoDate(yesterdayDate) + ' 23:59:59').replace(' ', 'T'));
 
     // ==========================================
     // 2. نطاق التاريخ لكل فترة
@@ -93,18 +158,27 @@ export async function GET(request) {
         break;
       }
       case 'custom': {
-        if (!startDate || !endDate) return Response.json({ success: false, error: 'مطلوب startDate و endDate' }, { status: 400 });
+        if (!startDate || !endDate) {
+          console.warn("[dashboard-stats] Custom period missing startDate/endDate");
+          return Response.json({ success: false, error: 'مطلوب startDate و endDate' }, { status: 400 });
+        }
         dateFilterStart = startDate + ' 00:00:00';
         dateFilterEnd = endDate + ' 23:59:59';
         break;
       }
-      default: break;
+      default:
+        console.warn(`[dashboard-stats] Unknown period: ${period}, defaulting to all`);
+        break;
     }
 
     if (dateFilterStart && dateFilterEnd) {
       filterStartMs = Date.parse(dateFilterStart.replace(' ', 'T'));
       filterEndMs = Date.parse(dateFilterEnd.replace(' ', 'T'));
-      if (isNaN(filterStartMs) || isNaN(filterEndMs)) { filterStartMs = 0; filterEndMs = Date.now(); }
+      if (isNaN(filterStartMs) || isNaN(filterEndMs)) {
+        console.warn("[dashboard-stats] Failed to parse date boundaries, using fallback");
+        filterStartMs = 0; 
+        filterEndMs = Date.now();
+      }
     }
 
     let periodDays = 0;
@@ -115,19 +189,34 @@ export async function GET(request) {
     }
 
     // ==========================================
-    // 3. حساب الزوار — بدون تكرار (No Double Counting)
+    // 3. حساب الزوار — استعلام واحد لكل الفترات
     // ==========================================
     let visitorsForPeriod = 0;
+    let totalCustomers = 0;
 
     if (period === 'all') {
       visitorsForPeriod = totalVisitors;
+      totalCustomers = totalCustomersCount;
     } else if (period === 'today') {
       visitorsForPeriod = todayVisitors;
+      // Today customers: query real data (single scan)
+      const todayResult = await countVisitorsAndCustomers(db, dateFilterStart, filterEndMs);
+      totalCustomers = todayResult.realCustomers;
     } else if (period === 'yesterday') {
       visitorsForPeriod = yesterdayVisitors;
+      // Fallback: لو yesterdayVisitors صفر، نجيب من الاستعلام
+      if (yesterdayVisitors === 0 && dateFilterStart && dateFilterEnd) {
+        const yesterdayResult = await countVisitorsAndCustomers(db, dateFilterStart, filterEndMs);
+        visitorsForPeriod = yesterdayResult.visitors;
+        totalCustomers = yesterdayResult.realCustomers;
+      } else {
+        const yesterdayResult = await countVisitorsAndCustomers(db, dateFilterStart, filterEndMs);
+        totalCustomers = yesterdayResult.realCustomers;
+      }
     } else if (period === 'last_month') {
-      // الشهر الماضي: استعلام حقيقي بالكامل بدون إضافة زوار اليوم
-      visitorsForPeriod = await countUniqueCustomersByDate(db, dateFilterStart, filterEndMs);
+      const result = await countVisitorsAndCustomers(db, dateFilterStart, filterEndMs);
+      visitorsForPeriod = result.visitors;
+      totalCustomers = result.realCustomers;
     } else if (period === 'custom') {
       const DEC_START_MS = new Date('2025-12-01T00:00:00+02:00').getTime();
       const FEB_28_MS = new Date('2026-02-28T23:59:59+02:00').getTime();
@@ -138,18 +227,27 @@ export async function GET(request) {
         const effectiveEnd = Math.min(FEB_28_MS, filterEndMs);
         const historicalDays = Math.max(0, Math.floor((effectiveEnd - effectiveStart) / (1000 * 60 * 60 * 24)) + 1);
         visitorsForPeriod = Math.round((historicalDays / 90) * 30000);
+        const custResult = await countVisitorsAndCustomers(db, dateFilterStart, filterEndMs);
+        totalCustomers = custResult.realCustomers;
       } else {
-        visitorsForPeriod = await countUniqueCustomersByDate(db, dateFilterStart, filterEndMs);
+        const result = await countVisitorsAndCustomers(db, dateFilterStart, filterEndMs);
+        visitorsForPeriod = result.visitors;
+        totalCustomers = result.realCustomers;
       }
     } else {
-      // week, month: لمنع التكرار، نستعلم من قاعدة البيانات حتى "نهاية أمس" فقط
-      // ثم نجمع عداد "اليوم" اللحظي بشكل مستقل
-      const historicalVisitors = await countUniqueCustomersByDate(db, dateFilterStart, yesterdayEndMs);
-      visitorsForPeriod = historicalVisitors + todayVisitors;
+      // week, month: استعلام إلى نهاية أمس + todayVisitors
+      const yesterdayDate = new Date(nowCairo);
+      yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+      const yesterdayEndStr = formatCairoDate(yesterdayDate) + ' 23:59:59';
+      const yesterdayEndMs = Date.parse(yesterdayEndStr.replace(' ', 'T'));
+      
+      const result = await countVisitorsAndCustomers(db, dateFilterStart, yesterdayEndMs);
+      visitorsForPeriod = result.visitors + todayVisitors;
+      totalCustomers = result.realCustomers;
     }
 
     // ==========================================
-    // 4. حساب الطلبات — استعلام حقيقي 100%
+    // 4. حساب الطلبات
     // ==========================================
     let orderStats = { orders: 0, sales: 0, completed: 0 };
 
@@ -157,59 +255,59 @@ export async function GET(request) {
       orderStats.orders = totalOrders;
       orderStats.sales = totalSales;
       orderStats.completed = totalOrders;
-    } else {
+    } else if (dateFilterStart && dateFilterEnd) {
       try {
         const ordersSnap = await getDocs(query(
           collection(db, "Orders"),
           where("Created at", ">=", dateFilterStart)
         ));
+        
+        let processedCount = 0;
         for (const d of ordersSnap.docs) {
           try {
             const o = d.data();
             if (!o) continue;
+            
             const orderDateMs = parseDateToMs(o['Created at']);
             if (isNaN(orderDateMs) || orderDateMs > filterEndMs) continue;
             if (o['Financial Status'] === 'deleted') continue;
-            const isAbandoned = o['Financial Status'] === 'abandoned' || o['Financial Status'] === 'pending_payment' || (o.Name && o.Name.startsWith('DRAFT-'));
+            
+            const isAbandoned = o['Financial Status'] === 'abandoned' || 
+                                o['Financial Status'] === 'pending_payment' || 
+                                (o.Name && o.Name.startsWith('DRAFT-'));
             if (isAbandoned) continue;
             
             orderStats.orders++;
             let total = 0;
-            try {
-              if (o.Total != null) {
-                const totalStr = String(o.Total).replace(/[^0-9.\-]/g, '');
-                if (totalStr && totalStr !== '-') total = parseFloat(totalStr) || 0;
-              }
-            } catch (e) { total = 0; }
+            if (o.Total != null) {
+              const totalStr = String(o.Total).replace(/[^0-9.\-]/g, '');
+              if (totalStr && totalStr !== '-') total = parseFloat(totalStr) || 0;
+            }
             orderStats.sales += total;
             orderStats.completed++;
-          } catch (e) { continue; }
+            processedCount++;
+          } catch (docErr) {
+            console.error(`[dashboard-stats] Skipping bad order doc: ${d.id}`, docErr.message);
+            continue;
+          }
         }
+        console.log(`[dashboard-stats] Orders query: ${processedCount} orders processed for ${period}`);
       } catch (qErr) {
+        console.error(`[dashboard-stats] Orders query failed for ${period}:`, 
+          qErr.code || 'QUERY_ERROR', qErr.message);
         orderStats = { orders: 0, sales: 0, completed: 0 };
       }
     }
 
     // ==========================================
-    // 5. حساب العملاء — استعلام حقيقي لعملاء ببيانات فقط
-    // ==========================================
-    let totalCustomers = 0;
-
-    if (period === 'all') {
-      totalCustomers = totalCustomersCount;
-    } else if (dateFilterStart && dateFilterEnd) {
-      totalCustomers = await countRealCustomersByDate(db, dateFilterStart, filterEndMs);
-    }
-
-    // ==========================================
-    // 6. معدل التحويل — محمي من القسمة على 0
+    // 5. معدل التحويل
     // ==========================================
     const conversionRate = (visitorsForPeriod > 0 && orderStats.completed > 0)
       ? ((orderStats.completed / visitorsForPeriod) * 100)
       : 0;
 
     // ==========================================
-    // 7. تسمية الفترة
+    // 6. تسمية الفترة
     // ==========================================
     const periodLabels = {
       all: 'جميع البيانات',
@@ -240,66 +338,14 @@ export async function GET(request) {
     });
 
   } catch (error) {
-    console.error("Dashboard Stats Critical Error:", error);
-    return Response.json({ success: false, error: error.message, data: null }, { status: 500 });
-  }
-}
-
-async function countUniqueCustomersByDate(db, dateFilterStart, filterEndMs) {
-  try {
-    const customersSnap = await getDocs(query(
-      collection(db, "Customers"),
-      where("last_active", ">=", dateFilterStart)
-    ));
-    const uniqueVisitors = new Map();
-    for (const d of customersSnap.docs) {
-      try {
-        const c = d.data();
-        if (!c) continue;
-        const custDateMs = parseDateToMs(c.last_active);
-        if (isNaN(custDateMs) || custDateMs > filterEndMs) continue;
-        const email = (c.Email || c.email || '').toLowerCase().trim();
-        const phone = String(c.Phone || c['Default Address Phone'] || '').replace(/[^0-9]/g, '');
-        const uniqueId = email || phone || d.id;
-        if (!uniqueVisitors.has(uniqueId)) uniqueVisitors.set(uniqueId, true);
-      } catch (e) { continue; }
-    }
-    return uniqueVisitors.size;
-  } catch (qErr) {
-    return 0;
-  }
-}
-
-async function countRealCustomersByDate(db, dateFilterStart, filterEndMs) {
-  try {
-    const customersSnap = await getDocs(query(
-      collection(db, "Customers"),
-      where("last_active", ">=", dateFilterStart)
-    ));
-    const realCustomers = new Map();
-    for (const d of customersSnap.docs) {
-      try {
-        const c = d.data();
-        if (!c) continue;
-        
-        const custDateMs = parseDateToMs(c.last_active);
-        if (isNaN(custDateMs) || custDateMs > filterEndMs) continue;
-        
-        const hasEmail = !!(c.Email || c.email || '').trim();
-        const hasPhone = !!(c.Phone || c['Default Address Phone'] || '').toString().replace(/[^0-9]/g, '');
-        const hasOrders = Number(c['Total Orders'] || 0) > 0;
-        const hasAbandoned = c.hasAbandoned === true || (c.segments && c.segments.includes('Abandoned_Checkout'));
-        
-        if (hasEmail || hasPhone || hasOrders || hasAbandoned) {
-          const email = (c.Email || c.email || '').toLowerCase().trim();
-          const phone = String(c.Phone || c['Default Address Phone'] || '').replace(/[^0-9]/g, '');
-          const uniqueId = email || phone || d.id;
-          if (!realCustomers.has(uniqueId)) realCustomers.set(uniqueId, true);
-        }
-      } catch (e) { continue; }
-    }
-    return realCustomers.size;
-  } catch (qErr) {
-    return 0;
+    console.error(`[dashboard-stats] CRITICAL error for period=${searchParams.get('period')}:`, 
+      error.name, error.message, error.stack?.split('\n')[0]);
+    
+    // Graceful fallback: return counters data only
+    return Response.json({ 
+      success: false, 
+      error: 'خطأ في تحميل الإحصائيات، يرجى المحاولة مرة أخرى',
+      data: null 
+    }, { status: 500 });
   }
 }
