@@ -397,6 +397,7 @@ export default function CheckoutPage() {
                 "Default Address Province": formData.governorate || "",
                 // 🔥 تحديث الشريحة وتمسح السلة المتروكة
                 segments: [newSegment],
+                status: newSegment,
                 last_active: new Date().toLocaleString('en-US', { timeZone: 'Africa/Cairo' })
               }, { merge: true });
             } catch (error) {
@@ -430,6 +431,7 @@ export default function CheckoutPage() {
                 Last_Order_Status: "New",
                 data_source: "WIND_Web",
                 segments: ["Purchased_Once"],
+                status: "Purchased_Once",
                 last_active: new Date().toLocaleString('en-US', { timeZone: 'Africa/Cairo' })
               });
             } catch (error) {

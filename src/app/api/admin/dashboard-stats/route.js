@@ -65,9 +65,13 @@ async function countVisitorsAndCustomers(db, dateFilterStart, filterEndMs) {
         if (!uniqueVisitors.has(uniqueId)) uniqueVisitors.set(uniqueId, true);
         
         // Real customer check
-        // العميل الحقيقي = (إيميل أو هاتف) AND (لديه طلبات)
-        const hasOrders = Number(c['Total Orders'] || 0) > 0;
-        if ((email || phone) && hasOrders) {
+        // العميل الحقيقي = فقط من اشترى (Purchased_Once أو VIP_Customer)
+        // البيانات تُخزن في حقول segments (مصفوفة) — لا يوجد حقل status
+        const isRealCustomer = 
+          (c.segments && (c.segments.includes('Purchased_Once') || c.segments.includes('VIP_Customer'))) ||
+          Number(c['Total Orders'] || 0) > 0; // TEMP fallback للبيانات القديمة
+        
+        if (isRealCustomer) {
           if (!realCustomers.has(uniqueId)) realCustomers.set(uniqueId, true);
         }
       } catch (docErr) {
