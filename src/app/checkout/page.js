@@ -11,6 +11,15 @@ import { getDb } from "@/lib/firebase";
 import { doc, setDoc, getDoc, deleteDoc, updateDoc, increment } from "firebase/firestore/lite";
 import { ChevronDown, Info, CheckCircle2, Phone, ShoppingBag, Shield, Tag, ChevronLeft, Truck, CreditCard, Banknote, Smartphone, X, Lock } from '@/components/icons-extra';
 
+// Helper function to get Cairo-local ISO timestamp for Firestore queries
+// Format: "YYYY-MM-DD HH:MM:SS" — matches dashboard query format
+function getCairoTimestamp() {
+  const cairoStr = new Date().toLocaleString('en-US', { timeZone: 'Africa/Cairo' });
+  const cairoDate = new Date(cairoStr);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${cairoDate.getFullYear()}-${pad(cairoDate.getMonth()+1)}-${pad(cairoDate.getDate())} ${pad(cairoDate.getHours())}:${pad(cairoDate.getMinutes())}:${pad(cairoDate.getSeconds())}`;
+}
+
 // Helper function to handle Firebase errors
 function handleFirebaseError(error, operation) {
   console.error(`Firebase ${operation} error:`, error);
@@ -260,6 +269,13 @@ export default function CheckoutPage() {
             }, { merge: true });
           }
 
+          // The abandoned cart snapshot uses a locale-based date
+          // which differs from "YYYY-MM-DD HH:MM:SS" format used in dashboard queries.
+          // To maintain backward compatibility, we keep this as-is but the dashboard
+          // uses parseDateToMs() which handles both formats correctly via Firestore fallback.
+          // ⚠️ The dashboard uses ">=" string comparison on Firestore, so for reliable
+          // date-range queries, the main submit flow below uses "YYYY-MM-DD HH:MM:SS" format.
+
           lastSavedDraftRef.current = currentSnapshot;
 
         } catch (error) {
@@ -330,7 +346,7 @@ export default function CheckoutPage() {
         Currency: "EGP",
         "Financial Status": paymentMethod === 'card' ? "pending_payment" : "pending",
         "Payment Method": paymentMethod,
-        "Created at": new Date().toLocaleString('en-US', { timeZone: 'Africa/Cairo' }),
+        "Created at": getCairoTimestamp(),
         data_source: "WIND_Web", // عشان الأدمن يفصلهم عن شوبيفاي
         
         // جلب الصور الدقيقة من سلة المشتريات
@@ -398,7 +414,7 @@ export default function CheckoutPage() {
                 // 🔥 تحديث الشريحة وتمسح السلة المتروكة
                 segments: [newSegment],
                 status: newSegment,
-                last_active: new Date().toLocaleString('en-US', { timeZone: 'Africa/Cairo' })
+                last_active: getCairoTimestamp()
               }, { merge: true });
             } catch (error) {
               console.error('Error updating customer:', error);
@@ -432,7 +448,7 @@ export default function CheckoutPage() {
                 data_source: "WIND_Web",
                 segments: ["Purchased_Once"],
                 status: "Purchased_Once",
-                last_active: new Date().toLocaleString('en-US', { timeZone: 'Africa/Cairo' })
+                last_active: getCairoTimestamp()
               });
             } catch (error) {
               console.error('Error creating customer:', error);

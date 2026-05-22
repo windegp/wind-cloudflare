@@ -238,7 +238,7 @@ export async function GET(request) {
         totalCustomers = result.realCustomers;
       }
     } else {
-      // week, month: استعلام إلى نهاية أمس + todayVisitors
+      // week, month: استعلام إلى نهاية أمس + اليوم
       const yesterdayDate = new Date(nowCairo);
       yesterdayDate.setDate(yesterdayDate.getDate() - 1);
       const yesterdayEndStr = formatCairoDate(yesterdayDate) + ' 23:59:59';
@@ -246,7 +246,9 @@ export async function GET(request) {
       
       const result = await countVisitorsAndCustomers(db, dateFilterStart, yesterdayEndMs);
       visitorsForPeriod = result.visitors + todayVisitors;
-      totalCustomers = result.realCustomers;
+      // إضافة عملاء اليوم (من realCustomers + استعلام منفصل لليوم)
+      const todayResult = await countVisitorsAndCustomers(db, dateFilterStart, filterEndMs);
+      totalCustomers = todayResult.realCustomers;
     }
 
     // ==========================================

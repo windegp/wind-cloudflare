@@ -1,14 +1,98 @@
+// ═══════════════════════════════════════════════════════════
+// 🔴  LEGACY MIGRATION ROUTE — RETIRED / HARDENED
+// ═══════════════════════════════════════════════════════════
+//
+// WARNING:
+// This migration was historically executed to bootstrap:
+//   - initial counter values (orders, sales, customers)
+//   - menu items
+//   - KV cache seeding
+//
+// ⚠️  DO NOT RE-RUN IN PRODUCTION ⚠️
+//   - Analytics logic has since evolved significantly
+//   - Customer counting now uses Purchased_Once segment filtering
+//   - Counter updates are handled incrementally by checkout & webhook flows
+//   - Re-running will OVERWRITE counters with stale, incorrect totals
+//
+// This file is retained for:
+//   - migration history / rollback investigation
+//   - debugging reference
+//   - architecture documentation
+//
+// ═══════════════════════════════════════════════════════════
+
 import { getDb } from "@/lib/firebase";
 import { collection, query, getDocs, getDoc, doc, startAfter, limit, setDoc } from "firebase/firestore/lite";
 
 export const dynamic = 'force-dynamic';
 
+// 🔴  ADMIN SECRET REQUIRED — protects against accidental execution
+// Set NEXT_PUBLIC_MIGRATION_SECRET in environment to enable this route
+const REQUIRED_SECRET = process.env.NEXT_PUBLIC_MIGRATION_SECRET || '';
+
 export async function GET(request) {
   try {
+    // ╔══════════════════════════════════════════════════════╗
+    // ║  🔴  SAFETY GUARD 1: Hard-block by default        ║
+    // ╚══════════════════════════════════════════════════════╝
+    const { searchParams } = new URL(request.url);
+    const migrationSecret = searchParams.get('secret') || '';
+    
+    // Default: BLOCK unless explicit secret is provided AND matches env var
+    if (!REQUIRED_SECRET || migrationSecret !== REQUIRED_SECRET) {
+      return Response.json({
+        success: false,
+        error: '🔴 This migration route is RETIRED. It cannot be re-run without explicit authorization.',
+        message: `
+          ═══════════════════════════════════════════════════════
+          LEGACY MIGRATION — BLOCKED
+          ═══════════════════════════════════════════════════════
+          
+          This route was historically used for initial bootstrap migration.
+          It is now HARDENED against accidental re-execution.
+          
+          Reason: Analytics logic has evolved. Re-running would overwrite
+          counters with stale, incorrect values (legacy counting did not
+          filter by Purchased_Once segments).
+          
+          If you absolutely MUST run this, set NEXT_PUBLIC_MIGRATION_SECRET
+          in your environment variables and pass ?secret=VALUE as a query param.
+          
+          ⚠️  This is NOT recommended for any production environment.
+          ═══════════════════════════════════════════════════════
+        `.trim()
+      }, { status: 403 });
+    }
+
+    // ╔══════════════════════════════════════════════════════╗
+    // ║  🔴  SAFETY GUARD 2: Superseded by new system      ║
+    // ╚══════════════════════════════════════════════════════╝
+    return Response.json({
+      success: false,
+      error: '🔴 This migration is SUPERSEDED by incremental analytics.',
+      message: `
+        The legacy migration (run-migration) is no longer used.
+        
+        Current analytics system:
+        - Checkout flow increments counters in real-time
+        - Kashier webhook increments counters for card payments
+        - Dashboard reads from live Firestore queries + cached counters
+        - Customer reconciliation available via: /api/admin/reconcile-customers
+        
+        Use the dedicated reconciliation endpoint instead:
+        /api/admin/reconcile-customers?dryRun=false
+      `.trim()
+    }, { status: 410 });
+
+    // ============================================================
+    // 🔻  CODE BELOW IS PRESERVED FOR HISTORICAL REFERENCE ONLY
+    //     It will NOT execute due to the guards above.
+    // ============================================================
+
     const db = getDb();
 
     // ==========================================
-    // � حماية ضد إعادة التشغيل
+    //  حماية ضد إعادة التشغيل
     // ==========================================
     const checkSnap = await getDoc(doc(db, "settings", "siteSettings"));
     const existingData = checkSnap.exists() ? checkSnap.data() : {};
