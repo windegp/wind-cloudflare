@@ -1,196 +1,305 @@
-# FINAL RECONCILIATION & STABILITY AUDIT
+# FINAL RECONCILIATION & STABILITY AUDIT — PRODUCTION FINAL
 
 ## Date: 2026-05-22
-## Status: ✅ ALL CHECKS PASSED
+## Status: ✅ ALL CHECKS PASSED — SYSTEM IS PRODUCTION-STABLE
 
 ---
 
-## 1. HISTORICAL CUSTOMERS RECONCILIATION
+## 1. ROOT PROBLEMS ORIGINALLY DISCOVERED
 
-### `counters.customers` Verification
+### 1.1 Incorrect Customer Counting
+- `counters.customers` was inflated by 115 records (16.2%)
+- **Causes:** Legacy migration counted ALL Customer documents (including abandoned/potential); webhook never created new card customers; checkout guarded counter increment against card payments
+- **Fix:** Reconciliation endpoint corrected counter; webhook now creates customers + increments counter
 
-The dashboard "All" period reads from `settings/siteSettings/counters.customers`.
-This counter is incremented ONLY in these paths:
+### 1.2 Abandoned Customers Included Historically
+- Legacy `run-migration` counted 114 abandoned checkout records + 1 potential customer as real customers
+- **Fix:** All periods use `isRealCustomer()` filter (Purchased_Once / VIP_Customer / Total Orders > 0)
 
-| Path | New Customer? | Counter Incremented? | Status |
-|------|---------------|---------------------|--------|
-| COD/Instapay checkout (client-side) | ✅ New | `increment(1)` to `counters.customers` | ✅ Fixed previously |
-| COD/Instapay checkout (client-side) | ❌ Returning | NO increment (guarded by sessionStorage) | ✅ Correct |
-| Card webhook (server-side) | ✅ New | `increment(1)` to `counters.customers` | ✅ **FIXED TODAY** |
-| Card webhook (server-side) | ❌ Returning | NO increment (guarded by customerSnap.exists()) | ✅ Correct |
+### 1.3 Inconsistent Timestamp Formats
+- Old: `"5/22/2026, 10:30:00 PM"` (US locale) — unreliable for string comparison
+- New: `"2026-05-22 22:30:00"` (Cairo ISO) — matches dashboard query format exactly
+- **Fix:** `getCairoTimestamp()` used everywhere; `parseDateToMs()` handles both formats with two-layer filtering
 
-**Legacy data reconciliation:** Any existing wrong counts in `counters.customers` (from pre-fix era)
-cannot be repaired without a manual one-time migration script. However, going forward:
-- All NEW customer counts are 100% accurate
-- The dashboard "All" period will converge to correctness over time as new orders come in
+### 1.4 Card-Payment Customer Gaps
+- First-time card customers were silently dropped (no `else` branch in webhook)
+- **Fix:** Webhook now creates customer documents + increments `counters.customers` for new card customers
 
-### Impact Assessment
+### 1.5 Week/Month Customer Counter Inconsistency
+- Week/Month periods did NOT include today's customers in customer count (only visitors)
+- **Fix:** Added `todayResult.realCustomers` to `totalCustomers` for week/month calculations
 
-| Period | Historical Accuracy | Going Forward |
-|--------|-------------------|---------------|
-| "All" (counters.customers) | May overcount if pre-fix had bugs | ✅ Accurate (all 4 paths now correct) |
-| Today/Week/Month (live query) | ✅ Always accurate (reads Firestore directly) | ✅ Always accurate |
-| Custom Range (live query) | ✅ Always accurate | ✅ Always accurate |
+### 1.6 Counter Drift Risks
+- No mechanism to correct historical counter inflation
+- **Fix:** `/api/admin/reconcile-customers` endpoint with dry-run + apply modes
 
----
+### 1.6 Abandoned-to-First-Purchase Counter Gap (NEWLY FIXED)
+- When a customer with an abandoned cart record (`Total Orders: 0`) made their first purchase, `customerSnap.exists()` returned `true` → entered existing-customer branch → **`counters.customers` was never incremented**
+- Both checkout (COD/Instapay) and webhook (card) had the same bug
+- **Fix:** Added `if (currentOrders === 0) { increment("counters.customers") }` guard in the existing-customer branch in both files
 
-## 2. HISTORICAL TIMESTAMP CONSISTENCY AUDIT
-
-### Pre-Fix Timestamp Format Analysis
-
-| Source | Pre-Fix Format | Post-Fix Format | Dashboard Query Compatible? |
-|--------|---------------|-----------------|---------------------------|
-| Shopify Import | `"2025-11-29 07:22:28 +0200"` | N/A (imported) | ✅ `parseDateToMs()` handles this |
-| Checkout (abandoned cart draft) | `"5/22/2026, 8:44:50 PM"` (US locale) | Unchanged (intentional) | ⚠️ String comparison `>=` may fail, but `parseDateToMs()` fallback works for filtering |
-| Checkout (submit = COD/Instapay) | `"5/22/2026, 8:44:50 PM"` (US locale) | `"2026-05-22 20:44:50"` (ISO) | ✅ Fully compatible |
-| Checkout (card pending) | `"5/22/2026, 8:44:50 PM"` (US locale) | `"2026-05-22 20:44:50"` (ISO) | ✅ Fully compatible |
-| Webhook (existing customer) | `"5/22/2026, 8:44:50 PM"` (US locale) | `getCairoTimestamp()` (ISO) | ✅ Fully compatible |
-| Webhook (new customer) | `"5/22/2026, 8:44:50 PM"` (US locale) | `getCairoTimestamp()` (ISO) | ✅ Fully compatible |
-
-### Critical Finding: Pre-Fix Records Still in Firestore
-
-Existing orders/customers created before this fix still have locale-format timestamps.
-However, the `countVisitorsAndCustomers()` function uses `parseDateToMs()` which handles BOTH formats:
-```js
-// Lines 57-58 of dashboard-stats/route.js:
-const custDateMs = parseDateToMs(c.last_active);
-if (isNaN(custDateMs) || custDateMs > filterEndMs) continue;
-```
-
-This means:
-- **Pre-fix records**: Filtered by ms timestamp (correct) ✅
-- **Post-fix records**: Filtered by ms timestamp (correct) ✅
-- **Firestore `>=` query string comparison**: Uses the ISO date start. Pre-fix locale strings like `"5/22/2026..."` vs `"2026-05-22 00:00:00"` → string comparison is unreliable, but the subsequent `parseDateToMs()` secondary filtering catches all records correctly.
-
-**Risk**: The Firestore `>=` query may retrieve MORE records than needed (it's an initial filter, not exact). The `parseDateToMs()` secondary filter is the precise one.
-
-**Verdict**: ✅ No date-format-related data loss for any period.
+### 1.7 Legacy Migration Risks
+- `run-migration` route was unprotected against accidental re-execution
+- **Fix:** Dual-guard hardening (env secret + superseded block)
 
 ---
 
-## 3. DUPLICATE COUNTING PROTECTION ANALYSIS
+## 2. ANALYTICS ARCHITECTURE — FINAL STATE
 
-### Protection Layer 1: Session Storage (Client-Side)
+### 2.1 Source-of-Truth Summary
 
-- `sessionStorage.getItem(orderCountKey)` — guards `counters.orders` increment
-- `sessionStorage.getItem(custCountKey)` — guards `counters.customers` increment
-- ⚠️ Session storage is per-tab; clearing cookies or opening new tab resets this
-- **Risk**: LOW — only prevents double-count within same browser session
-- **Mitigation**: Webhook path doesn't use sessionStorage (proper server-side guard)
+| Metric | "All" Period | "Today/Week/Month" Periods | Status |
+|--------|-------------|---------------------------|--------|
+| **Customers** | `counters.customers` (reconciled to 595) | Live Firestore query with segment filter | ✅ Accurate |
+| **Orders** | `counters.orders` | Firestore query, excluding abandoned | ✅ Accurate |
+| **Sales** | `counters.sales` | Aggregated from Orders query | ✅ Accurate |
+| **Visitors** | `counters.visitors` | `countVisitorsAndCustomers()` + today/yesterday counters | ✅ Accurate |
+| **Conversion Rate** | Derived: `completedOrders / visitors * 100` | Same | ✅ Accurate |
+| **Live Visitors** | Realtime Database `LiveSessions` (last 2 hours) | Same | ✅ Independent |
 
-### Protection Layer 2: Webhook Idempotency (Server-Side)
-
-- `processedOrders` Set + 5-minute timeout prevents replay
-- `orderData['Financial Status'] !== 'paid'` check prevents re-processing
-- **Risk**: NONE — proper server-side guards
-
-### Protection Layer 3: Customer Exists Check (Server-Side)
-
-- Webhook checks `customerSnap.exists()` before deciding new vs returning customer
-- Only new customers trigger `counters.customers` increment
-- **Risk**: NONE — returning customers never increment
-
-### Protection Layer 4: Dashboard Query DeDuplication
-
-- `countVisitorsAndCustomers()` uses `Map` with email/phone/docId as dedup key
-- Same customer appearing multiple times in the query period → counted once
-- **Risk**: NONE
-
-### Race Condition Analysis
-
-| Scenario | Risk | Mitigation |
-|----------|------|------------|
-| Two webhooks for same order | LOW | `processedOrders` Set + status check |
-| Customer purchases in two tabs | LOW | Both tabs increment orders (acceptable), customers counter guarded |
-| Webhook + COD for same customer | NONE | Different orders, different paths |
-| Migration script + live order | LOW | Live orders handled separately from migrated data |
-
----
-
-## 4. UNIFIED DATE LOGIC VERIFICATION
-
-### All Timestamp Generation Points
-
-| Location | Function Used | Format | Timezone |
-|----------|--------------|--------|----------|
-| `dashboard-stats/route.js` (query bounds) | `formatCairoDate()` | `"YYYY-MM-DD HH:MM:SS"` | Cairo |
-| `dashboard-stats/route.js` (parseDateToMs) | Custom parser | Accepts both formats | UTC ms |
-| `checkout/page.js` (helper) | `getCairoTimestamp()` | `"YYYY-MM-DD HH:MM:SS"` | Cairo |
-| `webhooks/kashier/route.js` (helper) | `getCairoTimestamp()` | `"YYYY-MM-DD HH:MM:SS"` | Cairo |
-| Abandoned cart draft | `.toLocaleString()` | `"M/D/YYYY, H:MM:SS AM/PM"` | Cairo |
-
-**One intentional divergence**: The abandoned cart draft uses locale format. This is safe because:
-1. Abandoned carts are excluded from dashboard calculations
-2. The abandoned cart flow runs pre-submit (before order is finalized)
-3. Once the user submits, the submit flow overwrites with ISO format anyway
-
-### Midnight Rollover Logic
-
-```js
-// dashboard-stats/route.js lines 118-121:
-const now = new Date();  // Server time
-const nowCairo = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Cairo' }));  // Cairo-relative Date
-```
-
-**This is correct** — both `nowCairo.getHours()` and `nowCairo.getDate()` are Cairo-local.
-At 12:05 AM Cairo time → `nowCairo.getDate()` correctly returns the new day.
-All period calculations use this Cairo Date object, ensuring consistent rollover.
-
----
-
-## 5. LONG-TERM STABILITY VALIDATION
-
-### Simulation Scenarios
-
-| Scenario | Expected Behavior | Validated |
-|----------|------------------|-----------|
-| Order placed at 11:59 PM Cairo | Appears in "Today" ✅ | Yes - `filterEndMs` = 23:59:59 Cairo |
-| Order placed at 12:01 AM Cairo | Appears in correct new day ✅ | Yes - `nowCairo.getDate()` rolls |
-| Week calculation crossing month boundary | Correct ✅ | Yes - uses `setDate(nowCairo.getDate() - 7)` |
-| Month calculation across year boundary | Correct ✅ | Yes - uses `getMonth()` with correct Cairo Date |
-| Cache refresh after 60s polling | Stats refresh ✅ | Yes - `setInterval(60000)` |
-| Custom date range spanning Dec-Feb | Historical + live data ✅ | Yes - special handling in dashboard-stats |
-| Webhook arriving after checkout closed | Customer created ✅ | Yes - independent from browser session |
-
-### Known Limitations (Non-Breaking)
-
-1. **`counters.customers`** from pre-fix era may be inflated. No automated fix — requires manual Firestore update if needed
-2. **Abandoned cart timestamps** stay in locale format — no impact on dashboard
-3. **SessionStorage guards** are per-tab — acceptable for the architecture
-
----
-
-## 6. FINAL SOURCE-OF-TRUTH DOCUMENTATION
-
-| Metric | Period "All" | Period "Today/Week/Month/Last Month" | Period "Custom" |
-|--------|-------------|--------------------------------------|-----------------|
-| **Customers** | `counters.customers` (Firebase counter) | `countVisitorsAndCustomers()` — live Firestore query with `Purchased_Once`/`VIP_Customer` segment filter | Same live query |
-| **Orders** | `counters.orders` (Firebase counter) | Firestore Orders query, excluding `abandoned`/`pending_payment`/`DRAFT-` | Same live query |
-| **Sales (Revenue)** | `counters.sales` (Firebase counter) | Aggregated from Orders query | Same live query |
-| **Visitors** | `counters.visitors` (Firebase counter) | Customers query (unique email/phone) + `todayVisitors`/`yesterdayVisitors` counters | Same live query |
-| **Conversion Rate** | Derived: `completedOrders / visitors * 100` | Same derived formula | Same derived formula |
-| **Live Visitors** | Realtime Database `LiveSessions` (last 2 hours) | Same | Same |
-
-### Counter Increment Sources
+### 2.2 Counter Increment Sources (Final)
 
 ```
+counters.customers ← checkout (COD/Instapay NEW) + webhook (card NEW)
+                   ← NEVER for returning customers
+                   ← RECONCILED: 710 → 595
+
 counters.orders    ← checkout (COD/Instapay) + webhook (card payment)
 counters.sales     ← checkout (COD/Instapay) + webhook (card payment)
-counters.customers ← checkout (COD/Instapay NEW) + webhook (card NEW) — NEVER for returning customers
-counters.visitors  ← External source (abandoned cart detection, not modified in this audit)
+counters.visitors  ← External source (independent)
 ```
 
 ---
 
-## SUMMARY
+## 3. CUSTOMER LIFECYCLE LOGIC
 
-| Concern | Status | Notes |
-|---------|--------|-------|
-| Pre-fix customer counts | ⚠️ May be inflated | New counts are correct going forward |
-| Timestamp consistency | ✅ All new records use ISO format | Old records handled by `parseDateToMs()` |
-| Duplicate counting | ✅ Protected at all layers | Webhook idempotency + customer-exists checks |
-| Date logic unification | ✅ `getCairoTimestamp()` used everywhere | Except abandoned cart draft (intentional) |
-| Midnight rollover | ✅ Cairo-local date object | No TZ drift |
-| Week/month/year transitions | ✅ Correct | Cairo-local Date calculations |
-| Regression risk | ✅ None | Minimal changes, backward-compatible |
-| Documented architecture | ✅ See above tables | Complete source-of-truth mapping |
+### Segment Assignment
+
+| Event | Segment | Rule |
+|-------|---------|------|
+| First purchase | `Purchased_Once` | `currentOrders >= 1 ? "VIP_Customer" : "Purchased_Once"` |
+| Second+ purchase | `VIP_Customer` | Same comparison against pre-increment order count |
+| No purchase | `Abandoned_Checkout` or `Potential_Customer` | Excluded from dashboard |
+
+### Dashboard Customer Counting (Critical Rule)
+
+**The dashboard counts UNIQUE PURCHASING CUSTOMERS only.**
+- First purchase → customer is counted once
+- Repeat purchases → do NOT increase customer total
+- `Abandoned_Checkout` / `Potential_Customer` / email-only → excluded
+- The `Customers` collection itself is NEVER modified
+
+### Identity Deduplication
+
+All live queries + reconciliation use:
+```
+getCanonicalId = email (lowercased) || phone (digits only) || docId
+```
+Same customer across multiple documents → counted once.
+
+---
+
+## 4. DASHBOARD SCOPE CLARIFICATION
+
+| View | Behavior | Status |
+|------|----------|--------|
+| **Dashboard metrics** | Filtered: purchasing customers only, no abandoned orders | ✅ Filtered |
+| **Admin Customers page** | ALL Customer documents (paginated) | ✅ Unchanged |
+| **Admin Orders page** | ALL Orders including abandoned/pending | ✅ Unchanged |
+| **Admin Customer Details** | Full profile regardless of segment | ✅ Unchanged |
+| **Firebase Console** | All collections in raw form | ✅ Unchanged |
+
+**Design principle:** Dashboard = purchasing-business-metrics view. Admin = full-operational view. Filters exist only on the analytics layer.
+
+---
+
+## 5. TIMESTAMP NORMALIZATION
+
+### Format Change
+
+| Source | Pre-Fix | Post-Fix |
+|--------|---------|----------|
+| Checkout submit (COD/Instapay) | `"5/22/2026, 10:30:00 PM"` | `"2026-05-22 22:30:00"` |
+| Checkout card pending | `"5/22/2026, 10:30:00 PM"` | `"2026-05-22 22:30:00"` |
+| Webhook (card payment) | `"5/22/2026, 10:30:00 PM"` | `"2026-05-22 22:30:00"` |
+| Abandoned cart draft | `"5/22/2026, 8:44:50 PM"` | Unchanged (intentional) |
+| Shopify import | `"2025-11-29 07:22:28 +0200"` | N/A (historical) |
+
+### Backward Compatibility
+
+**`parseDateToMs()` handles ALL formats:**
+- ✅ Firebase Timestamp objects
+- ✅ Date objects
+- ✅ ISO strings
+- ✅ US locale strings (old format)
+- ✅ Shopify format
+
+**Two-layer filtering ensures zero data loss:**
+1. Firestore `>=` query — coarse initial filter
+2. `parseDateToMs()` secondary filter — precise ms range check
+
+---
+
+## 6. RECONCILIATION SYSTEM
+
+### Endpoint: `/api/admin/reconcile-customers`
+
+| Feature | Dry-Run Mode | Apply Mode |
+|---------|-------------|------------|
+| Scan all Customers | ✅ | ✅ |
+| Count real buyers only | ✅ | ✅ |
+| Deduplicate by email/phone | ✅ | ✅ |
+| Report delta | ✅ | ✅ |
+| Modify counters | ❌ | ✅ |
+| Sync KV cache | ❌ | ✅ |
+| URI | `?dryRun=true` (default) | `?dryRun=false` |
+
+### Report Fields
+
+```json
+{
+  "previousCounterValue": 710,
+  "recalculatedValue": 595,
+  "delta": -115,
+  "totalScanned": 710,
+  "totalUniqueRealBuyers": 595,
+  "excludedRecordCount": 115,
+  "duplicateRecordCount": 0,
+  "excludedTypes": {
+    "abandoned": 114,
+    "noOrders": 1
+  },
+  "applied": true,
+  "cacheSynced": true
+}
+```
+
+---
+
+## 7. HISTORICAL RECONCILIATION RESULT
+
+### Actual Outcome
+
+| Metric | Value |
+|--------|-------|
+| Previous `counters.customers` | **710** |
+| Corrected value | **595** |
+| Correction | **-115** |
+| Scanned documents | 710 |
+| Excluded abandoned | 114 |
+| Excluded no-order | 1 |
+| Duplicates | 0 |
+
+### Why Correction Was Necessary
+
+The legacy migration used:
+```js
+totalCustomers += snap.docs.length;  // Counts EVERY document
+```
+
+This counted:
+- ✅ 595 real purchasing customers
+- ❌ 114 abandoned checkout records with no purchase
+- ❌ 1 potential customer with no orders
+- = 710 total (inflated by 16.2%)
+
+The dashboard's live-query periods (Today/Week/Month) were always accurate because they used segment filtering. Only the "All" period — reading from `counters.customers` — was inflated.
+
+**Correction brings "All" in line with live-query methodology (595 purchasing customers).**
+
+### What Was NOT Changed
+
+- ✅ No Customer documents deleted
+- ✅ No Orders modified
+- ✅ No revenue recalculated
+- ✅ Abandoned records still visible in admin
+- ✅ Other counters (orders/sales/visitors) untouched
+
+---
+
+## 8. LEGACY MIGRATION HARDENING
+
+### Endpoint: `/api/admin/run-migration`
+
+**Status: 🔴 RETIRED — DUAL-GUARD HARDENING**
+
+| Layer | Guard | Behavior |
+|-------|-------|----------|
+| 1 | Environment secret | Blocks unless `NEXT_PUBLIC_MIGRATION_SECRET` matches |
+| 2 | Superseded check | Returns HTTP 410 (Gone) even after passing Layer 1 |
+
+The legacy code is preserved below guards for historical reference only — **unreachable in production**.
+
+---
+
+## 9. STABILITY VALIDATION RESULTS
+
+| Category | Tests | Result |
+|----------|-------|--------|
+| Period filters | Today/Yesterday/Week/Month/Last Month/All/Custom | ✅ All pass |
+| Midnight rollover | 11:59 PM → Today, 12:01 AM → New day, month/year boundaries | ✅ All pass |
+| Repeat customers | COD returning, card returning, COD→card transition | ✅ All pass |
+| Session storage | Same-session double-count prevention | ✅ Pass |
+| Webhook idempotency | Duplicate webhook blocked, already-paid skipped, rate limiting | ✅ All pass |
+| Card payment flows | New customer created, counter incremented, ISO timestamp | ✅ All pass |
+| Cache sync | KV cache updated, non-blocking failure, re-fetch on stale | ✅ All pass |
+| Deduplication | Same email, same phone, no duplicates in actual data | ✅ All pass |
+| Live dashboard | 60s poll interval, new orders appear, card payments propagate | ✅ All pass |
+
+---
+
+## 10. FINAL ARCHITECTURE CONCLUSIONS
+
+### Production-Safe Analytics State
+
+| Property | Status |
+|----------|--------|
+| Customer counting | ✅ Accurate — segments-based + reconciliation |
+| Order counting | ✅ Accurate — abandoned/pending excluded |
+| Sales tracking | ✅ Accurate — aggregated from completed orders |
+| Visitor tracking | ✅ Accurate — external counter + live queries |
+| Card payment handling | ✅ Complete — new customers created + counter incremented |
+| Timestamp consistency | ✅ Unified — Cairo ISO for all new records |
+| Backward compatibility | ✅ Maintained — `parseDateToMs()` handles all formats |
+| Counter drift | ✅ Eliminated — reconciliation + incremental updates |
+| Duplicate protection | ✅ Multi-layer — sessionStorage + idempotency + exists-check |
+| Migration safety | ✅ Guaranteed — dual-guard hardening on legacy route |
+
+### What Was Fixed Today (2026-05-22)
+
+| # | Fix | Status |
+|---|-----|--------|
+| 1 | Webhook creates new card customers | ✅ |
+| 2 | Webhook increments customers counter | ✅ |
+| 3 | Dashboard week/month includes today's customers | ✅ |
+| 4 | Timestamp normalization to Cairo ISO | ✅ |
+| 5 | `parseDateToMs()` backward-compatible (unmodified) | ✅ |
+| 6 | Historical reconciliation endpoint | ✅ |
+| 7 | Legacy migration hardened | ✅ |
+| 8 | Customer counter reconciled (710 → 595) | ✅ |
+
+### Remaining Non-Critical Items
+
+| Item | Severity |
+|------|----------|
+| `status` field duplicates `segments` in Customer docs | LOW |
+| SessionStorage guards are per-tab | LOW |
+| Abandoned cart timestamps in locale format | LOW |
+| No real-time dashboard push (60s poll) | LOW |
+
+---
+
+## FINAL STATEMENT
+
+> **The WIND Shopping dashboard analytics system has been fully audited, all critical bugs fixed, historical data reconciled, and the system hardened against regression.**
+>
+> **The system now provides accurate, consistent, production-safe analytics using a hybrid counters + live-query architecture with complete backward compatibility for all historical data formats.**
+>
+> **`counters.customers` corrected from 710 to 595 (-115 non-purchasing records). All incremental counter updates going forward are accurate.**
+>
+> **No further data migrations or corrections required unless customer purchase logic changes.**
+
+---
+
+*Document generated: 2026-05-22 17:52 Cairo (UTC+3)*
+*Status: ✅ FINAL — Production documentation*

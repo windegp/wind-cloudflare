@@ -94,6 +94,15 @@ export async function POST(request) {
                             const currentSpent = Number(existingData['Total Spent'] || 0);
                             const newSegment = currentOrders >= 1 ? "VIP_Customer" : "Purchased_Once";
 
+                            // ⚠️ If customer had 0 orders (abandoned cart only), this is their
+                            // FIRST purchase → must increment counters.customers
+                            if (currentOrders === 0) {
+                                const settingsRef = doc(db, "settings", "siteSettings");
+                                await updateDoc(settingsRef, {
+                                    "counters.customers": increment(1)
+                                });
+                            }
+
                             await setDoc(customerRef, {
                                 "Total Orders": currentOrders + 1,
                                 "Total Spent": currentSpent + Number(orderData.Total || 0),
