@@ -6,8 +6,10 @@ import { usePathname } from 'next/navigation';
 import { usePageReady, useGlobalLoader } from "../../context/GlobalLoaderContext";
 import { useRouter } from 'next/navigation';
 import Link from "next/link";
-// 🔥 استدعاء الفايربيس
-import { getDb } from "@/lib/firebase";
+// 🔥 استدعاء الفايربيس — إصدار خفيف مخصص للـ checkout فقط
+// يستورد firebase/firestore/lite فقط بدون storage/auth/database
+// لتجنب مشاكل Edge Runtime في Cloudflare
+import { getDb } from "@/lib/firebase-checkout";
 import { doc, setDoc, getDoc, deleteDoc, updateDoc, increment } from "firebase/firestore/lite";
 import { ChevronDown, Info, CheckCircle2, Phone, ShoppingBag, Shield, Tag, ChevronLeft, Truck, CreditCard, Banknote, Smartphone, X, Lock } from '@/components/icons-extra';
 

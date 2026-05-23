@@ -1,42 +1,12 @@
 "use client";
 import { createContext, useContext, useEffect, useState } from "react";
 import { getDb } from "../lib/firebase";
-import { updateDoc, increment, doc, getDoc } from "firebase/firestore/lite";
+import { updateDoc, increment, doc, getDoc, setDoc } from "firebase/firestore/lite";
 import { usePathname } from "next/navigation";
 import useSWR from 'swr';
+import { getCairoDateStr, getCairoTimestamp } from '@/lib/analytics-helpers';
 
 const SettingsContext = createContext();
-
-function getTodayStr() {
-  const now = new Date();
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
-}
-
-/**
- * LOCK: يمنع التاب الغير مسؤول من إعادة الكتابة فوق rollover
- * https://developer.mozilla.org/en-US/docs/Web/API/Storage/lock
- */
-function acquireRolloverLock() {
-  const lockKey = 'wind_rollover_lock';
-  const lock = localStorage.getItem(lockKey);
-  const nowMs = Date.now();
-  
-  if (lock) {
-    const lockData = JSON.parse(lock);
-    // Lock expires after 5 seconds — يمنع lock stuck forever
-    if (nowMs - lockData.timestamp < 5000) {
-      return false; // Lock acquired by another tab
-    }
-  }
-  
-  localStorage.setItem(lockKey, JSON.stringify({ timestamp: nowMs }));
-  return true;
-}
-
-function releaseRolloverLock() {
-  localStorage.removeItem('wind_rollover_lock');
-}
 
 export const SettingsProvider = ({ children }) => {
   const pathname = usePathname();
@@ -51,61 +21,60 @@ export const SettingsProvider = ({ children }) => {
     dedupingInterval: 300000,
   });
 
-  // 🔥 عداد الزوار — مع حماية rollover من التكرار بين التابات
+  // 🔥 Visitor event tracking — writes an immutable event document
+  // No mutable today/yesterday counters. Events are aggregated later.
   useEffect(() => {
     const hasBeenCounted = sessionStorage.getItem("wind_v_counted");
     
     if (!hasBeenCounted && !isAdmin) {
       const db = getDb();
-      const settingsRef = doc(db, "settings", "siteSettings");
       
-      getDoc(settingsRef).then(snap => {
-        const counters = snap.exists() ? (snap.data().counters || {}) : {};
-        const today = getTodayStr();
-        
-        if (counters.todayDate !== today) {
-          // 🔒 محاولة أخذ الـ lock — لو تاب تاني أخذه، نتخطى rollover ونزود visitors بس
-          if (acquireRolloverLock()) {
-            try {
-              // إعادة قراءة counters بعد الـ lock للتأكد
-              const finalTodayVisitors = Number(counters.todayVisitors) || 0;
-              
-              updateDoc(settingsRef, {
-                "counters.visitors": increment(1),
-                "counters.todayDate": today,
-                "counters.todayVisitors": 1,
-                "counters.yesterdayVisitors": finalTodayVisitors
-              }).catch(err => console.error("Counter reset failed:", err))
-              .finally(() => releaseRolloverLock());
-            } catch (e) {
-              releaseRolloverLock();
-              // Fallback: increment visitors only
-              updateDoc(settingsRef, { "counters.visitors": increment(1) }).catch(() => {});
-            }
-          } else {
-            // تاب تاني مسؤول عن rollover — نزود visitors بس
+      // Generate a unique visitor event ID from session + timestamp
+      let sessionId = sessionStorage.getItem('wind_visitor_session');
+      if (!sessionId) {
+        sessionId = 'vis_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+        sessionStorage.setItem('wind_visitor_session', sessionId);
+      }
+      
+      const todayStr = getCairoDateStr(new Date());
+      const visitorEventRef = doc(db, "visitor_events", `${sessionId}_${todayStr}`);
+      
+      // Write a single immutable visitor event document
+      // Each visitor gets one event per day per session
+      getDoc(visitorEventRef).then(snap => {
+        if (!snap.exists()) {
+          setDoc(visitorEventRef, {
+            sessionId: sessionId,
+            date: todayStr,
+            visitedAt: getCairoTimestamp(),
+            country: '',
+            city: '',
+            device: typeof window !== 'undefined' ? (window.innerWidth < 768 ? 'Mobile' : 'Desktop') : '',
+            userAgent: typeof window !== 'undefined' ? window.navigator.userAgent : '',
+            referrer: typeof document !== 'undefined' ? document.referrer : '',
+            page: pathname || '/',
+          }).catch(err => console.warn("Visitor event write failed:", err));
+          
+          // Also increment the simple visitor counter for legacy "All" period use
+          try {
+            const settingsRef = doc(db, "settings", "siteSettings");
             updateDoc(settingsRef, {
               "counters.visitors": increment(1),
-              "counters.todayVisitors": increment(1)
-            }).catch(err => console.error("Secondary tab increment failed:", err));
+            }).catch(() => {});
+          } catch (e) {
+            // Silent fail
           }
-        } else {
-          // نفس اليوم: increment both counters
-          updateDoc(settingsRef, {
-            "counters.visitors": increment(1),
-            "counters.todayVisitors": increment(1)
-          }).catch(err => console.error("Counter increment failed:", err));
         }
-        
-        sessionStorage.setItem("wind_v_counted", "true");
       }).catch(err => {
-        console.error("Counter read failed, fallback to simple increment:", err);
-        updateDoc(settingsRef, { "counters.visitors": increment(1) })
-          .then(() => sessionStorage.setItem("wind_v_counted", "true"))
-          .catch(e => console.error("Fallback counter failed:", e));
+        console.warn("Visitor event check failed:", err);
+        // Fallback: simple counter increment
+        const settingsRef = doc(db, "settings", "siteSettings");
+        updateDoc(settingsRef, { "counters.visitors": increment(1) }).catch(() => {});
       });
+      
+      sessionStorage.setItem("wind_v_counted", "true");
     }
-  }, [isAdmin]);
+  }, [isAdmin, pathname]);
 
   return (
     <SettingsContext.Provider value={{ settings, loading: isLoading }}>

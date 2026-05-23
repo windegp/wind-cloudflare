@@ -5,6 +5,14 @@ import { kvGet, kvSet } from '@/lib/kv-cache';
 export const dynamic = 'force-dynamic';
 const CACHE_KEY = 'site_settings_v1';
 
+/**
+ * TTL reduced from 86400 (24h) to 3600 (1h)
+ * to prevent stale counter values from being served for too long.
+ * The 24h TTL caused: counters.customers showing 30k after reconciliation to 12k.
+ * Counters change frequently (every visitor increment), so 1h TTL is safer.
+ */
+const CACHE_TTL = 3600; // 1 hour instead of 24 hours
+
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const isFreshRequested = searchParams.get('fresh') === 'true';
