@@ -1,6 +1,6 @@
 import { getDb } from "@/lib/firebase";
-import { collection, query, where, getDocs, getDoc, doc } from "firebase/firestore/lite";
-import { getCairoDayBoundaries, getCairoDateStr, parseDateToMs, isRealCustomer, getDateRange, formatCairoDate } from '@/lib/analytics-helpers';
+import { collection, query, where, getDocs, getDoc, doc, limit } from "firebase/firestore/lite";
+import { getCairoDayBoundaries, getCairoDateStr, parseDateToMs, isRealCustomer, getDateRange } from '@/lib/analytics-helpers';
 
 export const dynamic = 'force-dynamic';
 
@@ -97,12 +97,60 @@ async function getOrComputeDaily(db, dateStr) {
   return result;
 }
 
-async function getTotalCounters(db) {
+/**
+ * Find the earliest data date from Orders collection (the immutable source).
+ * This avoids any dependency on analytics_daily index or counters.
+ * Returns "YYYY-MM-DD" string or null if no orders exist.
+ * Manual scan required because "Created at" has mixed formats.
+ */
+async function getEarliestOrderDate(db) {
   try {
-    const snap = await getDoc(doc(db, "settings", "siteSettings"));
-    const c = snap.exists() ? (snap.data().counters || {}) : {};
-    return { orders: Number(c.orders) || 0, sales: Number(c.sales) || 0, customers: Number(c.customers) || 0, visitors: Number(c.visitors) || 0 };
-  } catch { return { orders: 0, sales: 0, customers: 0, visitors: 0 }; }
+    // Scan up to 500 orders to find the earliest date.
+    // Manual scan required because "Created at" has mixed formats
+    // (JS locale string and "YYYY-MM-DD HH:MM:SS") making orderBy unreliable.
+    const snap = await getDocs(query(
+      collection(db, "Orders"),
+      where("Created at", ">", ""),
+      limit(500)
+    ));
+    if (snap.empty) return null;
+    let earliestMs = Infinity;
+    snap.docs.forEach(d => {
+      const o = d.data();
+      if (!o) return;
+      const ms = parseDateToMs(o['Created at']);
+      if (!isNaN(ms) && ms < earliestMs) earliestMs = ms;
+    });
+    if (earliestMs === Infinity) return null;
+    const d = new Date(earliestMs);
+    return getCairoDateStr(d);
+  } catch { return null; }
+}
+
+/**
+ * Aggregate ALL historical analytics by summing analytics_daily for all dates.
+ * This is the SINGLE SOURCE OF TRUTH for all-time totals.
+ * It uses the same getOrComputeDaily function as all other periods.
+ * No counters.visitors / counters.orders / counters.sales.
+ * 
+ * Strategy: find the date of the first order, then aggregate from that date
+ * to today. getOrComputeDaily handles missing daily docs by computing on-the-fly.
+ */
+async function getAllAggregated(db, todayStr) {
+  const startDate = await getEarliestOrderDate(db);
+  if (!startDate) {
+    // No orders exist — fall back to today only
+    return await getOrComputeDaily(db, todayStr);
+  }
+  const allDates = getDateRange(startDate, todayStr);
+  const days = await Promise.all(allDates.map(s => getOrComputeDaily(db, s)));
+  return {
+    visitors: days.reduce((a, d) => a + d.visitors, 0),
+    customers: days.reduce((a, d) => a + d.customers, 0),
+    orders: days.reduce((a, d) => a + d.orders, 0),
+    revenue: parseFloat(days.reduce((a, d) => a + d.revenue, 0).toFixed(2)),
+    conversionRate: 0 // computed below
+  };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -225,16 +273,13 @@ export async function GET(request) {
       }
 
       case 'all': {
-        const counters = await getTotalCounters(db);
-        result.orders = counters.orders;
-        result.revenue = counters.sales;
-        result.customers = counters.customers;
-        result.visitors = counters.visitors;
-        periodDays = 90; // approximate for the Shopify import period
-        // Compute conversion rate for ALL period using aggregated counters
+        const allData = await getAllAggregated(db, todayStr);
+        result = allData;
+        periodDays = allData.visitors > 0 ? Math.round(allData.visitors / Math.max(1, allData.visitors / 30)) : 90;
         if (result.visitors > 0 && result.orders > 0) {
           result.conversionRate = parseFloat(((result.orders / result.visitors) * 100).toFixed(2));
         }
+        dateRange = null; // unknown for all-time
         break;
       }
     }
