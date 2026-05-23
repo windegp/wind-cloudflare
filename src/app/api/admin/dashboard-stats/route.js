@@ -1,6 +1,6 @@
 import { getDb } from "@/lib/firebase";
 import { collection, query, where, getDocs, getDoc, doc } from "firebase/firestore/lite";
-import { getCairoDayBoundaries, getCairoDateStr, parseDateToMs, isRealCustomer, getDateRange } from '@/lib/analytics-helpers';
+import { getCairoDayBoundaries, getCairoDateStr, parseDateToMs, isRealCustomer, getDateRange, formatCairoDate } from '@/lib/analytics-helpers';
 
 export const dynamic = 'force-dynamic';
 
@@ -105,11 +105,6 @@ async function getTotalCounters(db) {
   } catch { return { orders: 0, sales: 0, customers: 0, visitors: 0 }; }
 }
 
-function formatCairoDate(d) {
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-}
-
 // ═══════════════════════════════════════════════════════════
 // MAIN HANDLER
 // ═══════════════════════════════════════════════════════════
@@ -122,9 +117,7 @@ export async function GET(request) {
 
   try {
     const db = getDb();
-    const now = new Date();
-    const nowCairo = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Cairo' }));
-    const todayStr = formatCairoDate(nowCairo);
+    const todayStr = getCairoDateStr(new Date());
 
     // Today's data: always compute from analytics_daily or live query
     const todayData = await getOrComputeDaily(db, todayStr);
@@ -141,9 +134,10 @@ export async function GET(request) {
         break;
 
       case 'yesterday': {
-        const yesterday = new Date(nowCairo);
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayStr = formatCairoDate(yesterday);
+        // Compute yesterday's Cairo date string without Date arithmetic timezone issues
+        const todayParts = todayStr.split('-').map(Number);
+        const yesterdayDate = new Date(Date.UTC(todayParts[0], todayParts[1] - 1, todayParts[2] - 1, 12, 0, 0));
+        const yesterdayStr = getCairoDateStr(yesterdayDate);
         result = await getOrComputeDaily(db, yesterdayStr);
         periodDays = 1;
         dateRange = { start: yesterdayStr, end: yesterdayStr };
@@ -151,11 +145,12 @@ export async function GET(request) {
       }
 
       case 'week': {
+        // Compute 7 day Cairo date strings without Date arithmetic timezone issues
+        const todayParts = todayStr.split('-').map(Number);
         const sevenDays = [];
         for (let i = 6; i >= 0; i--) {
-          const d = new Date(nowCairo);
-          d.setDate(d.getDate() - i);
-          sevenDays.push(formatCairoDate(d));
+          const d = new Date(Date.UTC(todayParts[0], todayParts[1] - 1, todayParts[2] - i, 12, 0, 0));
+          sevenDays.push(getCairoDateStr(d));
         }
         const days = await Promise.all(sevenDays.map(s => getOrComputeDaily(db, s)));
         result.visitors = days.reduce((a, d) => a + d.visitors, 0);
@@ -171,8 +166,9 @@ export async function GET(request) {
       }
 
       case 'month': {
-        const monthStart = new Date(nowCairo.getFullYear(), nowCairo.getMonth(), 1);
-        const dates = getDateRange(formatCairoDate(monthStart), todayStr);
+        // Compute month start from Cairo date string to avoid timezone roundtrip issues
+        const monthStartStr = todayStr.slice(0, 7) + '-01';
+        const dates = getDateRange(monthStartStr, todayStr);
         const days = await Promise.all(dates.map(s => getOrComputeDaily(db, s)));
         result.visitors = days.reduce((a, d) => a + d.visitors, 0);
         result.customers = days.reduce((a, d) => a + d.customers, 0);
@@ -187,10 +183,15 @@ export async function GET(request) {
       }
 
       case 'last_month': {
-        const firstDay = new Date(nowCairo.getFullYear(), nowCairo.getMonth() - 1, 1);
-        const lastDay = new Date(nowCairo.getFullYear(), nowCairo.getMonth(), 0);
-        const firstStr = formatCairoDate(firstDay);
-        const lastStr = formatCairoDate(lastDay);
+        // Compute last month bounds directly from Cairo date strings
+        const [curYear, curMonth] = todayStr.split('-').map(Number);
+        let lastMonth = curMonth - 1;
+        let lastYear = curYear;
+        if (lastMonth === 0) { lastMonth = 12; lastYear--; }
+        const firstStr = `${lastYear}-${String(lastMonth).padStart(2, '0')}-01`;
+        // Last day of last month = day 0 of this month
+        const lastDayDate = new Date(Date.UTC(curYear, curMonth - 1, 0, 12, 0, 0));
+        const lastStr = getCairoDateStr(lastDayDate);
         const dates = getDateRange(firstStr, lastStr);
         const days = await Promise.all(dates.map(s => getOrComputeDaily(db, s)));
         result.visitors = days.reduce((a, d) => a + d.visitors, 0);
@@ -230,16 +231,24 @@ export async function GET(request) {
         result.customers = counters.customers;
         result.visitors = counters.visitors;
         periodDays = 90; // approximate for the Shopify import period
+        // Compute conversion rate for ALL period using aggregated counters
+        if (result.visitors > 0 && result.orders > 0) {
+          result.conversionRate = parseFloat(((result.orders / result.visitors) * 100).toFixed(2));
+        }
         break;
       }
     }
+
+    // Compute Cairo month name for label using Intl.DateTimeFormat
+    const todayDate = new Date(Date.UTC(+todayStr.slice(0, 4), +todayStr.slice(5, 7) - 1, +todayStr.slice(8, 10), 12, 0, 0));
+    const monthName = todayDate.toLocaleString('ar-EG', { timeZone: 'Africa/Cairo', month: 'long' });
 
     const periodLabels = {
       all: 'جميع البيانات',
       today: `اليوم — ${todayStr}`,
       yesterday: 'أمس',
       week: 'آخر 7 أيام',
-      month: `شهر ${nowCairo.toLocaleString('ar-EG', { month: 'long' })}`,
+      month: `شهر ${monthName}`,
       last_month: 'الشهر الماضي',
       custom: 'فترة مخصصة'
     };

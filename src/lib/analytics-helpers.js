@@ -14,13 +14,56 @@ export function getCairoDateStr(date) {
 
 /**
  * Get Cairo date boundaries for queries
+ * 
+ * Uses noon-to-noon technique to determine the actual Cairo timezone offset
+ * for the given date, avoiding any hardcoded offset assumptions.
+ * This is SERVER-TIMEZONE-INDEPENDENT — it always computes correct offsets.
+ * 
+ * Egypt observes EET (UTC+2) and EEST (UTC+3) during DST.
+ * The noon reference is used because it never straddles a calendar day boundary.
  */
 export function getCairoDayBoundaries(dateStr) {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  
+  // Use noon UTC to determine Cairo's actual offset for this date
+  const noonUTC = Date.UTC(year, month - 1, day, 12, 0, 0);
+  const noonDate = new Date(noonUTC);
+  
+  // Get Cairo's date-time components for noon UTC using Intl.DateTimeFormat
+  // CRITICAL: Use Date.UTC() to reconstruct the Cairo time as UTC milliseconds.
+  // Do NOT use `new Date(string)` for the Cairo time string, as that would be
+  // parsed in the SERVER's local timezone, not UTC.
+  const cairoParts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Africa/Cairo',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false
+  }).formatToParts(noonDate);
+  
+  const getPart = (type) => parseInt(cairoParts.find(p => p.type === type).value, 10);
+  const cairoYear = getPart('year');
+  const cairoMonth = getPart('month');
+  const cairoDay = getPart('day');
+  const cairoHour = getPart('hour');
+  const cairoMinute = getPart('minute');
+  
+  // Reconstruct Cairo's UTC timestamp from components using Date.UTC
+  const cairoMs = Date.UTC(cairoYear, cairoMonth - 1, cairoDay, cairoHour, cairoMinute, 0);
+  
+  // Cairo's offset from UTC in milliseconds (+2h or +3h)
+  const cairoOffsetMs = cairoMs - noonUTC;
+  
+  // Start of Cairo day in UTC milliseconds
+  const startMs = Date.UTC(year, month - 1, day, 0, 0, 0) - cairoOffsetMs;
+  
+  // End of Cairo day (inclusive) = start + 24h - 1ms
+  const endMs = startMs + 86400000 - 1;
+  
   return {
     start: dateStr + ' 00:00:00',
     end: dateStr + ' 23:59:59',
-    startMs: Date.parse(dateStr + 'T00:00:00+02:00'),
-    endMs: Date.parse(dateStr + 'T23:59:59+02:00'),
+    startMs,
+    endMs,
   };
 }
 
@@ -71,12 +114,32 @@ export function getCairoTimestamp() {
 }
 
 /**
+ * Format a Date object to Cairo date string "YYYY-MM-DD"
+ * Always uses Cairo timezone via getCairoDateStr.
+ * CRITICAL: DO NOT use d.getFullYear()/getMonth()/getDate() directly
+ * as those return LOCAL timezone values, not Cairo timezone.
+ */
+export function formatCairoDate(d) {
+  return getCairoDateStr(d);
+}
+
+/**
  * Get list of date strings between two dates (inclusive)
+ * 
+ * Uses noon reference time to avoid timezone offset boundary issues.
+ * The loop starts at noon local time and increments by 1 day,
+ * converting each to Cairo date string. Noon is always on the correct
+ * calendar date regardless of timezone offset vs UTC.
  */
 export function getDateRange(dateStart, dateEnd) {
   const dates = [];
-  const current = new Date(dateStart + 'T00:00:00+02:00');
-  const end = new Date(dateEnd + 'T00:00:00+02:00');
+  // Parse start/end date strings into UTC noon timestamps.
+  // Using noon ensures the Date object is always on the correct calendar date
+  // when converted to Cairo timezone, regardless of Cairo's UTC offset.
+  const [sy, sm, sd] = dateStart.split('-').map(Number);
+  const [ey, em, ed] = dateEnd.split('-').map(Number);
+  const current = new Date(Date.UTC(sy, sm - 1, sd, 12, 0, 0));
+  const end = new Date(Date.UTC(ey, em - 1, ed, 12, 0, 0));
   while (current <= end) {
     dates.push(getCairoDateStr(current));
     current.setDate(current.getDate() + 1);
