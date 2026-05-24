@@ -14,7 +14,7 @@ import ProductCard from '../products/ProductCard';
 // ✅ card-lift آمن على الموبايل (translate محدود)
 // ✅ spacing system موحد: py-16 لكل قسم
 // ✅ كل البيانات الديناميكية والمنطق محفوظان 100%
-// ✅ هوية WIND: Cairo + Tajawal | ذهبي #F5C518 | أسود #1A1A1A | كريمي
+// ✅ هوية WIND: Cairo + Tajawal | أسود #1A1A1A | أبيض #FFFFFF
 // ==========================================================================
 
 // ─────────────────────────────────────────────
@@ -57,10 +57,7 @@ const GlobalStyles = () => (
       background: linear-gradient(to left, transparent, #E2DDD5 40%, #E2DDD5 60%, transparent);
     }
 
-    /* ── Card hover — mobile-safe ──
-       على الموبايل: فقط ظل خفيف
-       على الديسكتوب: رفع + ظل ذهبي
-    ── */
+    /* ── Card hover — mobile-safe ── */
     .card-lift {
       transition:
         transform  0.45s cubic-bezier(0.22, 1, 0.36, 1),
@@ -70,7 +67,7 @@ const GlobalStyles = () => (
     @media (hover: hover) {
       .card-lift:hover {
         transform: translateY(-6px);
-        box-shadow: 0 24px 48px rgba(0,0,0,0.09), 0 0 0 1.5px rgba(245,197,24,0.35);
+        box-shadow: 0 24px 48px rgba(0,0,0,0.09), 0 0 0 1.5px rgba(26,26,26,0.25);
       }
     }
 
@@ -80,13 +77,13 @@ const GlobalStyles = () => (
     }
     .img-zoom:hover { transform: scale(1.06); }
 
-    /* ── Gold underline on hover ── */
+    /* ── Gray underline on hover ── */
     .gold-bar {
       display: block;
       height: 2px;
       width: 0;
       border-radius: 2px;
-      background: linear-gradient(to left, #F5C518, #E6AE00);
+      background: linear-gradient(to left, #1A1A1A, #555555);
       transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
     }
     *:hover > .gold-bar,
@@ -110,7 +107,7 @@ const SectionHeading = ({ title, subTitle, link, linkLabel = "عرض الكل", 
     <div className={`flex items-center ${centered ? 'justify-center gap-3' : 'justify-between'}`}>
       <div className={`flex items-center gap-3 ${centered ? 'flex-col-reverse' : ''}`}>
         {!centered && (
-          <div className="w-[4px] h-[26px] rounded-full shrink-0" style={{ background: 'linear-gradient(180deg,#F5C518,#E6AE00)' }} />
+          <div className="w-[4px] h-[26px] rounded-full shrink-0" style={{ background: 'linear-gradient(180deg,#1A1A1A,#555555)' }} />
         )}
         <h2 className="wind-title text-xl md:text-3xl text-[#1A1A1A] leading-none">
           {title}
@@ -122,7 +119,7 @@ const SectionHeading = ({ title, subTitle, link, linkLabel = "عرض الكل", 
           href={link}
           className="wind-body flex items-center gap-1.5 text-[#1A1A1A] text-xs md:text-sm font-bold
                      bg-white border border-[#E2DDD5] px-4 py-2 rounded-full
-                     hover:border-[#F5C518] hover:shadow-md transition-all duration-300 shrink-0 group"
+                     hover:border-[#1A1A1A] hover:shadow-md transition-all duration-300 shrink-0 group"
         >
           {linkLabel}
           <span className="text-base leading-none group-hover:-translate-x-1 transition-transform inline-block">›</span>
@@ -142,7 +139,7 @@ const SectionHeading = ({ title, subTitle, link, linkLabel = "عرض الكل", 
     {centered && (
       <div className="flex items-center justify-center gap-3 mt-5">
         <div className="h-px w-12 bg-[#E2DDD5]" />
-        <div className="w-1.5 h-1.5 rounded-full bg-[#F5C518]" />
+        <div className="w-1.5 h-1.5 rounded-full bg-[#1A1A1A]" />
         <div className="h-px w-12 bg-[#E2DDD5]" />
       </div>
     )}
@@ -175,26 +172,22 @@ const PriceBadge = ({ price, compareAtPrice, size = "md" }) => (
 // ─────────────────────────────────────────────
 const AvailablePill = () => (
   <span className="wind-body text-[11px] px-2.5 py-1 rounded-full font-semibold"
-    style={{ background: 'rgba(245,197,24,0.1)', color: '#9A7800', border: '1px solid rgba(245,197,24,0.25)' }}>
+    style={{ background: 'rgba(26,26,26,0.08)', color: '#555', border: '1px solid rgba(26,26,26,0.2)' }}>
     متوفر الآن
   </span>
 );
 
 // ==========================================================================
-// الهيرو المينيماليست المتمركز (Editorial Centered Hero) - خالي من الأخطاء 100%
-// نقاط مرتبطة بالزر ارتباط مباشر (CSS Grid)، مساحات مرنة، وأنيميشن نصوص مستقل.
+// الهيرو المينيماليست المتمركز (Editorial Centered Hero)
 // ==========================================================================
 export const EditorialCenteredHero = ({ data }) => {
   const [current, setCurrent] = useState(0);
   const slides = data?.slides || [];
   
-  // 💡 حالة جديدة لضمان عمل الأنيميشن عند أول تحميل للصفحة
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-    // تفعيل الأنيميشن فوراً بعد تحميل المكون
     setIsMounted(true);
-
     if (slides.length === 0) return;
     const timer = setInterval(() => {
       setCurrent((prev) => (prev === slides.length - 1 ? 0 : prev + 1));
@@ -207,27 +200,23 @@ export const EditorialCenteredHero = ({ data }) => {
   return (
     <div className="relative w-full bg-white text-black pb-14" dir="rtl">
       
-      {/* 1. الصورة الرئيسية */}
       <div className="relative w-full aspect-[4/5] md:aspect-[21/9] bg-[#EAEAEA] overflow-hidden rounded-none">
         {slides.map((slide, index) => (
           <img 
             key={index}
             src={slide.image} 
             alt={slide.title}
-            // 💡 ربطنا الصورة بـ isMounted عشان تعمل تأثيرها أول ما الصفحة تفتح
             className={`absolute inset-0 w-full h-full object-cover origin-center rounded-none transition-all duration-[1500ms] ease-[cubic-bezier(0.25,1,0.5,1)] ${(isMounted && index === current) ? 'opacity-100 scale-100 z-10' : 'opacity-0 scale-105 z-0'}`} 
             style={{ willChange: 'opacity, transform' }}
           />
         ))}
       </div>
 
-      {/* 2. قسم المحتوى والنقاط */}
       <div className="relative w-full bg-white px-6 pt-10 flex flex-col items-center">
         
         <div className="w-full max-w-4xl grid" style={{ gridTemplateColumns: '1fr' }}>
           
           {slides.map((slide, index) => {
-            // 💡 شرط مركب: العنصر نشط + الصفحة حملت
             const isActive = isMounted && index === current;
 
             return (
@@ -237,35 +226,28 @@ export const EditorialCenteredHero = ({ data }) => {
                 style={{ gridArea: '1 / 1' }}
               >
                 
-                {/* أ. العنوان الصغير */}
                 <span 
-                  // 💡 زيادة المسافة إلى translate-y-12 (48px) لظهور أوضح
                   className={`font-tajawal text-[#1A1A1A] text-[14px] md:text-[16px] font-bold tracking-widest uppercase mb-3 transition-all ease-[cubic-bezier(0.22,1,0.36,1)] ${isActive ? 'translate-y-0 opacity-100 duration-[800ms] delay-[150ms]' : 'translate-y-12 opacity-0 duration-[300ms] delay-0'}`}
                   style={{ willChange: 'opacity, transform' }}
                 >
                   {slide.tag || "WIND EXCLUSIVE"}
                 </span>
                 
-                {/* ب. النص الرئيسي */}
                 <h1 
-                  // 💡 زيادة المسافة إلى translate-y-12
                   className={`text-[32px] md:text-[42px] lg:text-[48px] font-medium text-[#1A1A1A] leading-[1.2] tracking-normal text-center px-4 mb-8 md:mb-9 transition-all ease-[cubic-bezier(0.22,1,0.36,1)] ${isActive ? 'translate-y-0 opacity-100 duration-[800ms] delay-[300ms]' : 'translate-y-12 opacity-0 duration-[300ms] delay-0'}`}
                   style={{ fontFamily: "'Cairo', sans-serif", willChange: 'opacity, transform' }}
                 >
                   {slide.title}
                 </h1>
                 
-                {/* ج. الزر */}
                 <a 
                   href={slide.productLink} 
-                  // 💡 زيادة المسافة إلى translate-y-12
                   className={`font-tajawal inline-flex justify-center items-center bg-white text-[#1A1A1A] border border-[#1A1A1A] rounded-[3px] px-9 py-3.5 font-bold text-[13px] md:text-[14px] tracking-widest uppercase hover:bg-[#1A1A1A] hover:text-white transition-all ease-[cubic-bezier(0.22,1,0.36,1)] shadow-sm ${isActive ? 'translate-y-0 opacity-100 duration-[800ms] delay-[450ms]' : 'translate-y-12 opacity-0 duration-[300ms] delay-0'}`}
                   style={{ willChange: 'opacity, transform' }}
                 >
                   {slide.buttonText || "تسوق الإطلالة"}
                 </a>
 
-                {/* د. النقاط */}
                 <div 
                   className={`flex justify-center items-center gap-3.5 mt-12 md:mt-14 ${isActive ? 'opacity-100 visible' : 'opacity-0 invisible'}`}
                   style={{ transition: 'none' }}
@@ -275,7 +257,6 @@ export const EditorialCenteredHero = ({ data }) => {
                     return (
                       <div 
                         key={i} 
-                        // 💡 النقطة النشطة كبيرة (w-4 h-4)، وغير النشطة صغيرة جداً وأنعم (w-2 h-2 opacity-60)
                         className={`rounded-full transition-all duration-300 ${isDotActive ? 'w-4 h-4 bg-white border-[1.5px] border-[#1A1A1A]' : 'w-2 h-2 bg-[#1A1A1A] opacity-60'}`}
                       />
                     );
@@ -329,7 +310,6 @@ export const FeaturedToday = ({ data }) => {
         <SectionHeading title={data.title || "Featured Today"} subTitle={data.subTitle} />
 
         <div className="relative group/slider px-4">
-          {/* ── أسهم التنقل ── */}
           {[
             { d: 'right', show: showRight, pos: 'right-2', path: "M9 5l7 7-7 7" },
             { d: 'left',  show: showLeft,  pos: 'left-2',  path: "M15 19l-7-7 7-7" },
@@ -341,8 +321,8 @@ export const FeaturedToday = ({ data }) => {
               className={`absolute top-1/2 -translate-y-1/2 ${pos} z-30
                          w-11 h-11 flex items-center justify-center
                          bg-white/95 backdrop-blur-sm shadow-lg
-                         border border-[#EEEBE5] hover:border-[#F5C518]
-                         text-[#1A1A1A] hover:text-[#E6AE00]
+                         border border-[#EEEBE5] hover:border-[#1A1A1A]
+                         text-[#1A1A1A] hover:text-[#1A1A1A]
                          rounded-full transition-all duration-300
                          ${show ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
             >
@@ -352,7 +332,6 @@ export const FeaturedToday = ({ data }) => {
             </button>
           ))}
 
-          {/* ── السلايدر ── */}
           <div
             ref={scrollRef}
             onScroll={handleScroll}
@@ -366,7 +345,6 @@ export const FeaturedToday = ({ data }) => {
               return (
                 <div key={mIndex} className="flex items-stretch snap-start">
 
-                  {/* ── الكارت الرئيسي ── */}
                   <div className="relative z-50 flex flex-col gap-0">
                     <Link
                       href={mainCard.linkUrl || "#"}
@@ -380,7 +358,6 @@ export const FeaturedToday = ({ data }) => {
                           className="w-full h-full object-cover img-zoom" />
                         <div className="absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-black/65 to-transparent pointer-events-none" />
 
-                        {/* Badge النوع */}
                         {mainCard.badgeType && mainCard.badgeType !== 'none' && (
                           <div className="absolute top-3 right-3 flex items-center gap-1.5
                                          bg-white/95 backdrop-blur-sm px-3 py-1.5 rounded-full
@@ -406,7 +383,6 @@ export const FeaturedToday = ({ data }) => {
                       </div>
                     </Link>
 
-                    {/* ── Info row ── */}
                     <div className="px-1 mt-3.5 flex justify-between items-start gap-2">
                       <div>
                         <h3 className="wind-title text-[#1A1A1A] text-sm md:text-base line-clamp-2 leading-snug">
@@ -423,7 +399,7 @@ export const FeaturedToday = ({ data }) => {
                           aria-label="فتح المزيد"
                           className="mt-0.5 w-8 h-8 flex items-center justify-center
                                      bg-white border border-[#EEEBE5] rounded-full shadow-sm
-                                     hover:border-[#F5C518] hover:bg-[#FFFBF0] transition-all shrink-0"
+                                     hover:border-[#1A1A1A] hover:bg-[#F5F5F5] transition-all shrink-0"
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-[#1A1A1A]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
@@ -433,7 +409,6 @@ export const FeaturedToday = ({ data }) => {
                     </div>
                   </div>
 
-                  {/* ── الكروت الفرعية ── */}
                   {hasSubCards && mainCard.subCards.map((subCard, sIndex) => {
                     const isLast = sIndex === mainCard.subCards.length - 1;
                     return (
@@ -471,7 +446,7 @@ export const FeaturedToday = ({ data }) => {
                               aria-label="إغلاق"
                               className="mt-0.5 w-8 h-8 flex items-center justify-center
                                          bg-white border border-[#EEEBE5] rounded-full shadow-sm
-                                         hover:border-[#F5C518] hover:bg-[#FFFBF0] transition-all shrink-0"
+                                         hover:border-[#1A1A1A] hover:bg-[#F5F5F5] transition-all shrink-0"
                             >
                               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-[#1A1A1A] rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
@@ -516,14 +491,12 @@ export const TopTenProducts = ({ data }) => {
               className="flex bg-white border border-[#EEEBE5] rounded-2xl overflow-hidden
                          card-lift group"
             >
-              {/* ── الصورة ── */}
               <div className="relative w-[120px] md:w-[150px] shrink-0 bg-[#FAF8F3] overflow-hidden">
                 <img
                   src={card.image}
                   alt={card.mainTitle}
                   className="w-full h-full object-cover aspect-[2/3] img-zoom"
                 />
-                {/* Bookmark */}
                 <div
                   className="absolute top-0 right-0 w-9 flex items-start justify-center pt-2"
                   style={{
@@ -533,13 +506,11 @@ export const TopTenProducts = ({ data }) => {
                     boxShadow: '0 4px 10px rgba(0,0,0,0.25)',
                   }}
                 >
-                  <Plus size={18} className="text-[#F5C518]" />
+                  <Plus size={18} className="text-[#1A1A1A]" />
                 </div>
               </div>
 
-              {/* ── التفاصيل ── */}
               <div className="flex-1 p-4 md:p-5 flex flex-col justify-between min-h-[150px]">
-                {/* Rank badge */}
                 <div className="mb-2.5 w-fit">
                   <div
                     className="px-3 pt-1.5 pb-3"
@@ -549,7 +520,7 @@ export const TopTenProducts = ({ data }) => {
                       borderRadius: '2px 2px 0 0',
                     }}
                   >
-                    <span className="wind-title text-[#F5C518] text-xs md:text-sm leading-none block">
+                    <span className="wind-title text-[#1A1A1A] text-xs md:text-sm leading-none block">
                       #{index + 1}
                     </span>
                   </div>
@@ -573,23 +544,21 @@ export const TopTenProducts = ({ data }) => {
                 </div>
 
                 <div className="flex items-center justify-between flex-wrap gap-3 mt-auto">
-                  {/* التقييم */}
                   <div className="flex items-center gap-2 bg-[#FAF8F3] border border-[#EEEBE5] px-3 py-1.5 rounded-full">
-                    <Star size={14} className="text-[#F5C518] fill-[#F5C518]" />
+                    <Star size={14} className="text-[#1A1A1A] fill-[#1A1A1A]" />
                     <span className="wind-title text-[#1A1A1A] text-xs font-bold">{card.rating || "5.0"}</span>
                     <span className="wind-body text-[#B0A898] text-[10px]">({card.reviewsCount || "—"})</span>
                     <div className="w-px h-3.5 bg-[#EEEBE5]" />
-                    <button className="wind-body text-[#1A1A1A] hover:text-[#E6AE00] text-xs font-bold transition-colors">
+                    <button className="wind-body text-[#1A1A1A] hover:text-[#555] text-xs font-bold transition-colors">
                       قيّم
                     </button>
                   </div>
 
-                  {/* زر العرض */}
                   <Link
                     href={card.linkUrl || "/"}
                     className="wind-body flex items-center gap-1.5
-                               bg-[#1A1A1A] hover:bg-[#F5C518]
-                               text-white hover:text-[#1A1A1A]
+                               bg-[#1A1A1A] hover:bg-[#333]
+                               text-white hover:text-white
                                text-xs md:text-sm font-bold
                                px-4 py-2 rounded-full
                                transition-all duration-300 shadow-sm"
@@ -610,7 +579,7 @@ export const TopTenProducts = ({ data }) => {
               className="wind-body text-[#1A1A1A] font-bold text-sm
                          border border-[#EEEBE5] bg-white
                          px-10 py-3.5 rounded-full
-                         hover:border-[#F5C518] hover:shadow-md
+                         hover:border-[#1A1A1A] hover:shadow-md
                          transition-all duration-300"
             >
               عرض القائمة كاملة
@@ -650,10 +619,9 @@ export const MarqueeProducts = ({ data }) => {
                 href={product.linkUrl || "#"}
                 className="w-[165px] md:w-[230px] flex-none group block"
               >
-                {/* صورة */}
                 <div className="relative aspect-[3/4] w-full overflow-hidden bg-[#FAF8F3]
                                rounded-2xl border border-[#EEEBE5] mb-3.5
-                               group-hover:border-[#F5C518]/50 group-hover:shadow-lg
+                               group-hover:border-[#1A1A1A]/30 group-hover:shadow-lg
                                transition-all duration-400">
                   <img
                     src={product.image}
@@ -662,7 +630,7 @@ export const MarqueeProducts = ({ data }) => {
                   />
                   {product.badge && (
                     <span className="absolute top-3 right-3 z-10
-                                    bg-[#F5C518] text-[#1A1A1A]
+                                    bg-[#1A1A1A] text-white
                                     wind-body text-[9px] md:text-[10px] font-black
                                     px-2.5 py-1 rounded-sm uppercase tracking-wider shadow-sm">
                       {product.badge}
@@ -677,7 +645,6 @@ export const MarqueeProducts = ({ data }) => {
                   )}
                 </div>
 
-                {/* النص */}
                 <div className="text-right px-0.5" dir="rtl">
                   <h3 className="wind-title text-[#1A1A1A] text-sm md:text-base line-clamp-2
                                  group-hover:opacity-70 transition-opacity leading-snug">
@@ -718,12 +685,10 @@ export const BestSellersSection = ({ data }) => {
 
         <div className="flex flex-col md:flex-row gap-5 md:gap-7 px-4 md:px-6 pb-16">
 
-          {/* ── المنتج البطل ── */}
           {heroProduct && (
             <div className="md:w-5/12 w-full relative group card-lift">
-              {/* Badge */}
               <div className="absolute top-4 right-4 z-20">
-                <span className="wind-title bg-[#1A1A1A] text-[#F5C518]
+                <span className="wind-title bg-[#1A1A1A] text-white
                                  text-[10px] md:text-xs font-black px-4 py-1.5
                                  rounded-sm shadow-lg uppercase tracking-wider">
                   الأكثر طلباً #1
@@ -733,7 +698,7 @@ export const BestSellersSection = ({ data }) => {
               <Link href={heroProduct.linkUrl || "#"} className="block h-full">
                 <div className="relative aspect-[3/4] w-full overflow-hidden bg-white rounded-2xl
                                border border-[#EEEBE5] shadow-sm
-                               group-hover:border-[#F5C518]/40 group-hover:shadow-xl
+                               group-hover:border-[#1A1A1A]/30 group-hover:shadow-xl
                                transition-all duration-500">
                   <img
                     src={heroProduct.image} alt={heroProduct.name}
@@ -745,7 +710,7 @@ export const BestSellersSection = ({ data }) => {
                       {heroProduct.name}
                     </h3>
                     <div className="flex items-baseline gap-3">
-                      <span className="wind-title text-[#F5C518] font-black text-xl md:text-2xl drop-shadow">
+                      <span className="wind-title text-[#1A1A1A] font-black text-xl md:text-2xl drop-shadow">
                         {heroProduct.price} LE
                       </span>
                       {heroProduct.compareAtPrice && (
@@ -760,19 +725,17 @@ export const BestSellersSection = ({ data }) => {
             </div>
           )}
 
-          {/* ── شبكة المنتجات ── */}
           <div className="md:w-7/12 w-full grid grid-cols-2 gap-4 md:gap-5">
             {gridProducts.map((p, index) => (
               <div key={index} className="group card-lift">
                 <Link href={p.linkUrl || "#"} className="block h-full">
                   <div className="relative aspect-[3/4] w-full overflow-hidden bg-white rounded-2xl
                                  border border-[#EEEBE5]
-                                 group-hover:border-[#F5C518]/40 group-hover:shadow-lg
+                                 group-hover:border-[#1A1A1A]/30 group-hover:shadow-lg
                                  transition-all duration-500">
                     <img src={p.image} alt={p.name}
                       className="w-full h-full object-cover img-zoom" />
 
-                    {/* Info overlay */}
                     <div className="absolute inset-x-0 bottom-0 bg-white/97 backdrop-blur-sm
                                    p-3.5 md:p-4 border-t border-[#EEEBE5]
                                    group-hover:bg-[#FAF8F3] transition-colors duration-300">
@@ -824,12 +787,10 @@ export const ExclusiveOffers = ({ data }) => {
                 src={p.image} alt={p.name}
                 className="w-full h-full object-cover img-zoom"
               />
-              {/* Overlay */}
               <div className="absolute inset-0 bg-gradient-to-t
                              from-black/90 via-black/15 to-transparent
                              opacity-60 group-hover:opacity-85 transition-opacity duration-500" />
 
-              {/* تخفيض badge */}
               {p.compareAtPrice && (
                 <div className="absolute top-4 left-4 z-20
                                bg-white text-[#1A1A1A] wind-body text-[10px] md:text-xs font-black
@@ -838,7 +799,6 @@ export const ExclusiveOffers = ({ data }) => {
                 </div>
               )}
 
-              {/* النص في الأسفل */}
               <div className="absolute bottom-0 inset-x-0 p-5 text-right z-20
                              translate-y-2 group-hover:translate-y-0 transition-transform duration-400">
                 <h3 className="wind-title text-white text-base md:text-lg leading-snug line-clamp-2 mb-2.5 drop-shadow">
@@ -846,12 +806,11 @@ export const ExclusiveOffers = ({ data }) => {
                 </h3>
                 <PriceBadge price={p.price} compareAtPrice={p.compareAtPrice} size="lg" />
 
-                {/* خط ذهبي */}
-                <div className="h-px w-0 bg-gradient-to-l from-[#F5C518] to-transparent
+                <div className="h-px w-0 bg-gradient-to-l from-[#1A1A1A] to-transparent
                                group-hover:w-full transition-all duration-500 ease-out my-3.5" />
 
                 <span className="wind-body flex items-center justify-end gap-1.5
-                               text-[#F5C518] text-xs font-bold tracking-wider
+                               text-[#1A1A1A] text-xs font-bold tracking-wider
                                opacity-0 group-hover:opacity-100 transition-opacity duration-400 delay-75">
                   تسوق الآن
                   <ChevronLeft size={14} />
@@ -889,19 +848,17 @@ export const MasterpieceCollections = ({ data }) => {
               href={`/collections/${col.slug || col.id}`}
               className="group relative overflow-hidden rounded-2xl
                         border border-[#EEEBE5] bg-white shadow-sm
-                        hover:shadow-xl hover:border-[#F5C518]/40
+                        hover:shadow-xl hover:border-[#1A1A1A]/30
                         transition-all duration-500"
               style={{ height: index === 0 ? '540px' : '470px' }}
             >
-              {/* رقم الخلفية */}
               <span className="absolute top-5 left-5 z-10
                               wind-title text-[70px] md:text-[100px] font-black leading-none
                               text-white/25 select-none drop-shadow
-                              group-hover:text-[#F5C518]/50 transition-colors duration-600">
+                              group-hover:text-[#1A1A1A]/50 transition-colors duration-600">
                 {String(index + 1).padStart(2, '0')}
               </span>
 
-              {/* الصورة */}
               <img
                 src={col.image || "/placeholder.jpg"}
                 alt={col.customName || col.name}
@@ -912,20 +869,18 @@ export const MasterpieceCollections = ({ data }) => {
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/88 via-black/25 to-transparent pointer-events-none" />
 
-              {/* النصوص */}
               <div className="absolute bottom-7 right-6 left-6 text-right z-20">
                 <h3 className="wind-title text-white text-2xl md:text-3xl font-black mb-2.5 drop-shadow
                               group-hover:-translate-y-1 transition-transform duration-400">
                   {col.customName || col.name}
                 </h3>
-                {/* الخط الذهبي المتحرك */}
-                <div className="h-[2px] w-0 rounded-full bg-gradient-to-l from-[#F5C518] to-transparent
+                <div className="h-[2px] w-0 rounded-full bg-gradient-to-l from-[#1A1A1A] to-transparent
                                group-hover:w-full transition-all duration-600 ease-out" />
                 <p className="wind-body text-white/75 text-sm mt-3 flex items-center gap-1.5
                              opacity-0 group-hover:opacity-100 group-hover:translate-x-1
                              transition-all duration-500 delay-75">
                   {col.description || "تصفح المجموعة كاملة"}
-                  <span className="text-[#F5C518] text-base leading-none">›</span>
+                  <span className="text-[#1A1A1A] text-base leading-none">›</span>
                 </p>
               </div>
             </Link>
@@ -942,7 +897,6 @@ export const MasterpieceCollections = ({ data }) => {
 export const TopRatedWeekly = ({ data, bundle }) => {
   const [quickViewProduct, setQuickViewProduct] = useState(null);
 
-  // استخدام البيانات الممررة عبر props بدلًا من الاستدعاء المباشر
   const products = bundle?.topRatedWeekly || data?.products || [];
 
   if (products.length === 0) return null;
@@ -957,24 +911,24 @@ export const TopRatedWeekly = ({ data, bundle }) => {
             return (
               <div key={idx} className="flex gap-4 p-4 rounded-2xl overflow-hidden transition-all duration-300 card-lift"
                 style={{
-                  background:  isFirst ? 'linear-gradient(135deg,#FFFDF5 0%,#FFFAEB 100%)' : '#FFFFFF',
-                  border:      isFirst ? '1.5px solid rgba(245,197,24,0.5)' : '1.5px solid #EEEBE5',
-                  boxShadow:   isFirst ? '0 4px 20px rgba(245,197,24,0.10)' : '0 2px 8px rgba(0,0,0,0.04)',
+                  background:  isFirst ? 'linear-gradient(135deg,#F5F5F5 0%,#EAEAEA 100%)' : '#FFFFFF',
+                  border:      isFirst ? '1.5px solid rgba(26,26,26,0.3)' : '1.5px solid #EEEBE5',
+                  boxShadow:   isFirst ? '0 4px 20px rgba(26,26,26,0.08)' : '0 2px 8px rgba(0,0,0,0.04)',
                 }}>
                 <Link href={`/products/${p.id}`} className="relative shrink-0 rounded-xl overflow-hidden block group" style={{ width: 110, height: 160 }}>
                   <img src={p.images?.[0] || p.mainImage} alt={p.title} className="w-full h-full object-cover img-zoom" />
                   <div className="absolute top-0 right-0 w-7 flex items-start justify-center pt-1.5 z-10" style={{ height: 48, clipPath: 'polygon(0 0, 100% 0, 100% 100%, 50% 80%, 0 100%)', background: 'linear-gradient(180deg,#1A1A1A 0%,#2E2E2E 100%)', boxShadow: '0 3px 8px rgba(0,0,0,0.25)' }}>
-                    <Plus size={18} className="text-[#F5C518]" />
+                    <Plus size={18} className="text-[#1A1A1A]" />
                   </div>
                 </Link>
                 <div className="flex flex-col justify-start flex-1 py-0.5 text-right">
-                  <div className="w-fit mb-3"><div className="px-3 pt-1.5 pb-3" style={{ background: '#1A1A1A', clipPath: 'polygon(0 0, 100% 0, 100% 100%, 50% 85%, 0 100%)', borderRadius: '2px 2px 0 0' }}><span className="wind-title text-[#F5C518] text-sm leading-none block">#{idx + 1}</span></div></div>
+                  <div className="w-fit mb-3"><div className="px-3 pt-1.5 pb-3" style={{ background: '#1A1A1A', clipPath: 'polygon(0 0, 100% 0, 100% 100%, 50% 85%, 0 100%)', borderRadius: '2px 2px 0 0' }}><span className="wind-title text-[#1A1A1A] text-sm leading-none block">#{idx + 1}</span></div></div>
                   <Link href={`/products/${p.id}`}><h3 className="wind-title text-[#1A1A1A] text-base md:text-lg line-clamp-2 leading-snug mb-1.5 hover:opacity-70 transition-opacity">{p.title}</h3></Link>
                   <span className="gold-bar mb-3" />
                   <div className="flex items-center gap-2.5 mb-3 flex-wrap"><span className="wind-title text-[#1A1A1A] text-base md:text-lg font-black">{p.price} LE</span><span className="wind-title text-[11px] font-bold px-2 py-0.5 rounded-sm bg-black text-white">متوفر</span></div>
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="flex items-center gap-1.5"><Star size={14} className="text-[#F5C518] fill-[#F5C518]" /><span className="wind-title text-[#1A1A1A] text-sm font-bold">{p.weeklyAvg}</span><span className="wind-body text-[#B0A898] text-xs">({p.weeklyCount})</span></div>
-                    <button className="wind-body flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full transition-all" style={{ color: '#9A7800', background: 'rgba(245,197,24,0.08)', border: '1px solid rgba(245,197,24,0.2)' }}><Star size={11} strokeWidth={2} className="text-[#F5C518]" /> قيّم</button>
+                    <div className="flex items-center gap-1.5"><Star size={14} className="text-[#1A1A1A] fill-[#1A1A1A]" /><span className="wind-title text-[#1A1A1A] text-sm font-bold">{p.weeklyAvg}</span><span className="wind-body text-[#B0A898] text-xs">({p.weeklyCount})</span></div>
+                    <button className="wind-body flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full transition-all" style={{ color: '#666', background: 'rgba(26,26,26,0.06)', border: '1px solid rgba(26,26,26,0.15)' }}><Star size={11} strokeWidth={2} className="text-[#1A1A1A]" /> قيّم</button>
                   </div>
                   <button onClick={() => setQuickViewProduct(p)} className="wind-body flex items-center gap-1.5 text-sm font-bold w-fit px-3 py-1.5 rounded-lg transition-all mt-auto text-[#1A1A1A] bg-[#FAF8F3] hover:bg-[#F5F0E8] border border-[#EEEBE5]"><Eye size={15} /> نظرة سريعة</button>
                 </div>
@@ -994,7 +948,6 @@ export const TopRatedWeekly = ({ data, bundle }) => {
 export const MostLikedWeekly = ({ data, bundle }) => {
   const [quickViewProduct, setQuickViewProduct] = useState(null);
 
-  // استخدام البيانات الممررة عبر props بدلًا من الاستدعاء المباشر
   const products = bundle?.mostLikedWeekly || data?.products || [];
 
   if (products.length === 0) return null;
@@ -1006,9 +959,9 @@ export const MostLikedWeekly = ({ data, bundle }) => {
         <div className="grid grid-cols-2 md:grid-cols-5 gap-5 md:gap-7 px-4 md:px-6 pb-16">
           {products.map((p, idx) => (
             <div key={idx} className="group relative flex flex-col items-center text-center">
-              <div className="relative aspect-[3/4] w-full arch-frame bg-[#EDEAE3] shadow-sm group-hover:shadow-xl transition-all duration-500 border border-[#E2DDD5] group-hover:border-[#F5C518]/40">
+              <div className="relative aspect-[3/4] w-full arch-frame bg-[#EDEAE3] shadow-sm group-hover:shadow-xl transition-all duration-500 border border-[#E2DDD5] group-hover:border-[#1A1A1A]/30">
                 <Link href={`/products/${p.id}`} className="block w-full h-full"><img src={p.images?.[0] || p.mainImage} alt={p.title} className="w-full h-full object-cover img-zoom" /></Link>
-                <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setQuickViewProduct(p); }} aria-label="نظرة سريعة" className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 bg-white/92 backdrop-blur-sm text-[#1A1A1A] p-2.5 rounded-full shadow-md hover:bg-[#1A1A1A] hover:text-[#F5C518] transition-all duration-300 opacity-100 md:opacity-0 md:translate-y-2 md:group-hover:opacity-100 md:group-hover:translate-y-0"><Eye size={15} strokeWidth={2} /></button>
+                <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setQuickViewProduct(p); }} aria-label="نظرة سريعة" className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 bg-white/92 backdrop-blur-sm text-[#1A1A1A] p-2.5 rounded-full shadow-md hover:bg-[#1A1A1A] hover:text-white transition-all duration-300 opacity-100 md:opacity-0 md:translate-y-2 md:group-hover:opacity-100 md:group-hover:translate-y-0"><Eye size={15} strokeWidth={2} /></button>
               </div>
               <Link href={`/products/${p.id}`} className="pt-4 flex flex-col items-center w-full px-1">
                 <h3 className="wind-title text-[#1A1A1A] text-sm md:text-base line-clamp-1 group-hover:opacity-70 transition-opacity">{p.title}</h3>
@@ -1025,31 +978,30 @@ export const MostLikedWeekly = ({ data, bundle }) => {
 };
 
 // ==========================================================================
-// 11. TOP RATED ALL-TIME (العموم) - IMDb Style 
+// 11. TOP RATED ALL-TIME (العموم)
 // ==========================================================================
 export const TopRatedAllTime = ({ data, bundle }) => {
   const [quickViewProduct, setQuickViewProduct] = useState(null);
 
-  // استخدام البيانات الممررة عبر props بدلًا من الاستدعاء المباشر
   const products = bundle?.topRatedAllTime || data?.products || [];
 
   if (products.length === 0) return null;
 
   return (
-    <section className="bg-black py-10 font-sans border-y border-gray-800" dir="rtl">
+    <section className="bg-[#1A1A1A] py-10 font-sans border-y border-gray-800" dir="rtl">
       <div className="max-w-3xl mx-auto flex flex-col gap-5 px-4">
         <div className="mb-2">
           {(data.viewAllLink || data.linkUrl) ? (
-            <Link href={data.viewAllLink || data.linkUrl} className="flex items-center gap-2 group w-fit"><div className="w-[4px] h-[24px] bg-[#F5C518] rounded-full shrink-0"></div><h2 className="text-white text-xl md:text-2xl font-bold flex items-center gap-1 group-hover:text-gray-300 transition-colors">{data.title || "أساطير التقييمات"}<ChevronLeft size={22} className="text-white group-hover:text-gray-300 transition-colors mt-0.5" /></h2></Link>
+            <Link href={data.viewAllLink || data.linkUrl} className="flex items-center gap-2 group w-fit"><div className="w-[4px] h-[24px] bg-[#1A1A1A] rounded-full shrink-0"></div><h2 className="text-white text-xl md:text-2xl font-bold flex items-center gap-1 group-hover:text-gray-300 transition-colors">{data.title || "أساطير التقييمات"}<ChevronLeft size={22} className="text-white group-hover:text-gray-300 transition-colors mt-0.5" /></h2></Link>
           ) : (
-            <div className="flex items-center gap-2 w-fit"><div className="w-[4px] h-[24px] bg-[#F5C518] rounded-full shrink-0"></div><h2 className="text-white text-xl md:text-2xl font-bold flex items-center gap-1">{data.title || "أساطير التقييمات"}</h2></div>
+            <div className="flex items-center gap-2 w-fit"><div className="w-[4px] h-[24px] bg-[#1A1A1A] rounded-full shrink-0"></div><h2 className="text-white text-xl md:text-2xl font-bold flex items-center gap-1">{data.title || "أساطير التقييمات"}</h2></div>
           )}
           {data.subTitle && <p className="text-[#A3A3A3] text-xs font-medium mt-1 pr-6">{data.subTitle}</p>}
         </div>
         <div className="flex flex-col gap-5">
           {products.map((p, idx) => {
             const isFirstCard = idx === 0;
-            const cardBgStyle = isFirstCard ? "bg-gradient-to-l from-[#1A1A1A] to-[#2c230b] border border-[#F5C518]/30 shadow-[0_0_30px_rgba(245,197,24,0.15)]" : "bg-[#1A1A1A] border border-gray-800 shadow-sm";
+            const cardBgStyle = isFirstCard ? "bg-gradient-to-l from-[#1A1A1A] to-[#333] border border-[#1A1A1A]/50 shadow-[0_0_30px_rgba(26,26,26,0.15)]" : "bg-[#1A1A1A] border border-gray-800 shadow-sm";
             return (
               <div key={idx} className={`flex gap-3 md:gap-4 p-5 rounded-2xl overflow-hidden transition-all duration-300 ${cardBgStyle}`}>
                 <Link href={`/products/${p.id}`} className="relative w-[110px] h-[160px] md:w-[130px] md:h-[180px] shrink-0 bg-gray-800 rounded-lg overflow-hidden block shadow-md group z-0">
@@ -1061,7 +1013,7 @@ export const TopRatedAllTime = ({ data, bundle }) => {
                   <Link href={`/products/${p.id}`}><h3 className="text-white font-bold text-base md:text-xl leading-tight line-clamp-2 mb-2 hover:underline">{p.title}</h3></Link>
                   <div className="text-[#A3A3A3] text-sm md:text-base mb-3 flex items-center gap-3 font-medium"><span className="font-black text-base md:text-lg text-white">{p.price} LE</span><span className="bg-gray-900/80 px-2.5 py-1 rounded text-[11px] md:text-xs border border-gray-800">متوفر الآن</span></div>
                   <div className="flex items-center gap-4 mb-4">
-                    <div className="flex items-center gap-1.5"><Star size={16} className="text-[#F5C518] fill-[#F5C518]" /><span className="text-white text-base font-medium pt-0.5">{p.allTimeAvg}</span><span className="text-[#A3A3A3] text-xs pt-0.5">({p.allTimeCount})</span></div>
+                    <div className="flex items-center gap-1.5"><Star size={16} className="text-[#1A1A1A] fill-[#1A1A1A]" /><span className="text-white text-base font-medium pt-0.5">{p.allTimeAvg}</span><span className="text-[#A3A3A3] text-xs pt-0.5">({p.allTimeCount})</span></div>
                     <button className="flex items-center gap-1.5 text-[#5799EF] hover:bg-white/5 px-2.5 py-1 rounded transition-colors text-xs font-medium"><Star size={15} strokeWidth={2} className="text-[#5799EF]" /> قيّم</button>
                   </div>
                   <button onClick={() => setQuickViewProduct(p)} className="flex items-center gap-2 text-[#5799EF] text-sm font-bold w-fit hover:bg-white/5 px-3 py-2 -ml-3 rounded-lg transition-colors mt-auto"><Eye size={18} /> نظرة سريعة</button>
@@ -1082,7 +1034,6 @@ export const TopRatedAllTime = ({ data, bundle }) => {
 export const MostLikedAllTime = ({ data, bundle }) => {
   const [quickViewProduct, setQuickViewProduct] = useState(null);
 
-  // استخدام البيانات الممررة عبر props بدلًا من الاستدعاء المباشر
   const products = bundle?.mostLikedAllTime || data?.products || [];
 
   if (products.length === 0) return null;
@@ -1121,9 +1072,8 @@ export const MostLikedAllTime = ({ data, bundle }) => {
 };
 
 // ==========================================================================
-// 13. CIRCULAR COLLECTIONS (Season Collection) - 🔥 MANUAL BADGE ONLY 🔥
+// 13. CIRCULAR COLLECTIONS
 // ==========================================================================
-
 export const CircularCollections = ({ data }) => {
   const collections = data?.linkedCollections || [];
   const sectionRef = useRef(null);
@@ -1148,7 +1098,6 @@ export const CircularCollections = ({ data }) => {
   return (
     <section ref={sectionRef} className="bg-[#FFFFFF] overflow-hidden">
       <div className="max-w-[1400px] mx-auto pb-12 pt-10" dir="rtl">
-
         <div className="text-center mb-10 px-4">
           <div className={`transition-all duration-[600ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${isSectionVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
             <h2 className="text-[#1A1A1A] text-2xl md:text-[28px] font-medium tracking-wide" style={{fontFamily: "'Cairo', sans-serif"}}>
@@ -1163,12 +1112,9 @@ export const CircularCollections = ({ data }) => {
             )}
           </div>
         </div>
-
         <div className="flex overflow-x-auto scrollbar-hide snap-x px-4 md:px-6 pb-6 pt-2 gap-4 md:gap-10">
           {collections.map((col, index) => {
             const slug = col.slug || col.id;
-            
-            // 💡 الاعتماد الكلي على الحقل اليدوي (badge) المكتوب من لوحة التحكم
             const displayCount = (col.badge && col.badge.trim() !== "") ? col.badge : null;
 
             return (
@@ -1188,7 +1134,6 @@ export const CircularCollections = ({ data }) => {
                     className="w-full h-full object-cover transition-transform duration-[1500ms] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-110"
                   />
                 </div>
-                
                 <div className="mt-5 flex items-center justify-center w-full relative">
                   <div className="relative inline-block">
                     <h3 className="text-[#1A1A1A] text-base md:text-xl font-bold group-hover:text-[#666] transition-colors line-clamp-1 text-center" style={{fontFamily: "'Cairo', sans-serif"}}>
@@ -1211,15 +1156,12 @@ export const CircularCollections = ({ data }) => {
 };
 
 // ==========================================================================
-// 14. TABBED HIGHLIGHTS (المنتجات المبوبة)
+// 14. TABBED HIGHLIGHTS
 // ==========================================================================
 export const TabbedHighlights = ({ data }) => {
   const products = data?.products || data?.cards || [];
   const [activeTab, setActiveTab] = useState(0);
-
-  // حالة لظهور القسم بالكامل عند السكرول
   const [isSectionVisible, setIsSectionVisible] = useState(false);
-  // حالة مخصصة لإعادة تشغيل أنيميشن الكروت عند تغيير التاب
   const [animateCards, setAnimateCards] = useState(false);
 
   const tabs = data?.tabs && data.tabs.length === 3 ? data.tabs : ["Hot items", "Best sellers", "New arrivals"];
@@ -1240,7 +1182,6 @@ export const TabbedHighlights = ({ data }) => {
   const sectionRef = useRef(null);
   const carouselRef = useRef(null);
 
-  // 1. مراقب القسم (يشتغل مرة واحدة لما العميل يعمل سكرول ويوصل للقسم)
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -1255,41 +1196,29 @@ export const TabbedHighlights = ({ data }) => {
     return () => observer.disconnect();
   }, []);
 
-  // 2. إعادة ضبط الأنيميشن والسكرول كل ما التاب يتغير
   useEffect(() => {
-    // إخفاء الكروت لحظياً
     setAnimateCards(false); 
-    
-    // إرجاع شريط التمرير لأول السطر
     if (carouselRef.current) {
       carouselRef.current.scrollLeft = 0;
     }
-
-    // إظهار الكروت بعد جزء من الثانية لتشغيل الأنيميشن من جديد
     const timer = setTimeout(() => {
       setAnimateCards(true);
     }, 50);
-
     return () => clearTimeout(timer);
   }, [activeTab]);
 
   if (!products.length) return null;
 
-  // شرط إظهار الكروت: القسم يكون ظاهر + الأنيميشن شغال
   const showCards = isSectionVisible && animateCards;
 
   return (
     <section ref={sectionRef} className="bg-white overflow-hidden pt-8 pb-16" dir="rtl">
       <div className="max-w-[1400px] mx-auto">
-
-        {/* عنوان القسم */}
         <div className={`text-center mb-10 px-4 transition-all duration-[600ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${isSectionVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'}`}>
           <h2 className="text-[#1A1A1A] text-2xl md:text-[28px] font-medium tracking-wide" style={{fontFamily: "'Cairo', sans-serif"}}>
             {data.title || "This Week's Highlights"}
           </h2>
         </div>
-
-        {/* أزرار التابات */}
         <div className={`flex justify-center gap-6 md:gap-10 mb-8 px-4 transition-all duration-[600ms] delay-100 ease-[cubic-bezier(0.22,1,0.36,1)] ${isSectionVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'}`}>
           {tabs.map((tab, idx) => (
             <button
@@ -1304,8 +1233,6 @@ export const TabbedHighlights = ({ data }) => {
             </button>
           ))}
         </div>
-
-        {/* حاوية الكروت */}
         <div className={`transition-all duration-[600ms] delay-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${isSectionVisible ? 'opacity-100' : 'opacity-0'}`}>
           <div
             ref={carouselRef}
@@ -1314,9 +1241,7 @@ export const TabbedHighlights = ({ data }) => {
             {(tabProducts[activeTab] || []).map((p, idx) => (
               <div
                 key={`${activeTab}-${idx}`}
-                // 💡 سطر الأنيميشن الديناميكي بطريقة React النظيفة
                 className={`highlight-card-item min-w-[75vw] sm:min-w-[40vw] md:min-w-0 snap-center transition-all duration-[700ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${showCards ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-[28px]'}`}
-                // 💡 التتابع الزمني وتسريع كارت الشاشة
                 style={{ 
                   transitionDelay: `${idx * 80}ms`,
                   willChange: 'opacity, transform' 
@@ -1332,7 +1257,6 @@ export const TabbedHighlights = ({ data }) => {
           </div>
         </div>
 
-        {/* زر تصفح كل المنتجات */}
         {(data.viewAllLink || data.linkUrl) && (
           <div className={`mt-6 flex justify-center px-4 transition-all duration-[600ms] delay-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${isSectionVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'}`}>
             <Link
@@ -1354,15 +1278,13 @@ export const TabbedHighlights = ({ data }) => {
 };
 
 // ==========================================================================
-// 15. BANNER PRODUCT GRID (قسم الغلاف والمنتجات - أسلوب المجلات)
-// تم التحديث: محاذاة الكروت مع الغلاف 100%، نظام الشبكة (2x2)، تكبير الخطوط
+// 15. BANNER PRODUCT GRID
 // ==========================================================================
 export const BannerProductGrid = ({ data }) => {
   const products = data?.products || data?.cards || [];
   const sectionRef = useRef(null);
   const [isVisible, setIsVisible] = useState(false);
 
-  // تأثير ظهور القسم والنص العلوي (The React Way)
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -1377,33 +1299,20 @@ export const BannerProductGrid = ({ data }) => {
     return () => observer.disconnect();
   }, []);
 
-  // 🧹 تم إزالة الـ useEffect الثاني (الذي كان يستخدم querySelectorAll) بالكامل 
-  // وتم نقل تأثيراته مباشرة إلى كود ريأكت بالأسفل لتجنب أي تعارض ولتسريع الأداء
-
   if (!products.length && !data.bannerImage) return null;
 
   return (
-    // تم إزالة الخط الفاصل (border-t border-[#EEEBE5])
     <section ref={sectionRef} className="bg-white overflow-hidden pt-12 pb-16" dir="rtl">
-      
-      {/* 🌟 الحاوية الأم: تم توحيد الـ px هنا لضمان محاذاة الغلاف مع الكروت 100% */}
       <div className="max-w-[1400px] mx-auto px-4 md:px-10 lg:px-14">
-        
-        {/* ── 1. النص العلوي الوصفي ── */}
         {data.topDescription && (
-          // 🌊 تطبيق نعومة Apple: ease-[cubic-bezier(0.16,1,0.3,1)]
           <div className={`text-center mb-8 px-2 transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
-            {/* 🌟 تم تكبير الخط ليتطابق مع المرفق */}
             <p className="text-[#1A1A1A] text-[22px] md:text-[28px] leading-[1.5] max-w-4xl mx-auto font-medium font-tajawal">
               {data.topDescription}
             </p>
           </div>
         )}
 
-        {/* ── 2. صورة الغلاف (Banner) مع المحتوى ── */}
         {data.bannerImage && (
-          // 🌟 المسافة السفلية mb-4 تطابق الـ gap-4 بتاع المنتجات ليظهروا ككتلة واحدة
-          // 🌊 تطبيق نعومة Apple بدلاً من ease-out
           <div className={`relative w-full overflow-hidden mb-4 md:mb-6 transition-all duration-[1000ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
             <div className="relative w-full aspect-[3/4] md:aspect-[21/9] bg-[#F5F5F5] overflow-hidden group">
               <img 
@@ -1411,12 +1320,9 @@ export const BannerProductGrid = ({ data }) => {
                 alt={data.bannerTitle || "Section Banner"} 
                 className="w-full h-full object-cover transition-transform duration-[2000ms] group-hover:scale-105"
               />
-              
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent"></div>
-
               <div className="absolute bottom-6 md:bottom-12 right-6 md:right-12 flex flex-col items-start z-10 text-right">
                 {data.bannerSubTitle && (
-                  // 🌟 تم تكبير العنوان الفرعي وزيادة المسافة تحته (mb-3) ليفصل عن الرئيسي
                   <span className="text-white/90 text-[14px] md:text-[16px] font-bold tracking-widest mb-3 font-tajawal">
                     {data.bannerSubTitle}
                   </span>
@@ -1427,7 +1333,6 @@ export const BannerProductGrid = ({ data }) => {
                   </h2>
                 )}
                 {data.buttonText && (
-                  // تم توحيد شكل الزر ليتطابق مع زر الهيرو
                   <Link 
                     href={data.buttonLink || "#"} 
                     className="font-tajawal inline-flex justify-center items-center bg-white text-[#1A1A1A] border border-[#1A1A1A] rounded-[3px] px-9 py-3.5 font-bold text-[13px] md:text-[14px] tracking-widest uppercase hover:bg-[#1A1A1A] hover:text-white transition-all duration-300 shadow-md"
@@ -1440,19 +1345,14 @@ export const BannerProductGrid = ({ data }) => {
           </div>
         )}
 
-        {/* ── 3. شبكة المنتجات (نظام كارتين وتحتهم كارتين) ── */}
         <div className={`transition-all duration-700 delay-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
-          {/* 🌟 تم تحويلها لـ grid ثابت لضمان نظام "2 كارت في الصف" بدون سحب أفقي */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
             {products.map((p, idx) => (
               <div
                 key={idx}
-                // 💡 تفعيل الشفافية والحركة ديناميكياً باستخدام حالة ريأكت
                 className={`banner-card-item transition-all duration-[800ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
                 style={{ 
-                  // ✨ تأثير الشلال (مضاف إليه 300ms ليتناغم مع ظهور الحاوية الأم)
                   transitionDelay: `${300 + (idx % 4) * 100}ms`,
-                  // 🚀 همسة كارت الشاشة لتسريع الحركة
                   willChange: 'opacity, transform' 
                 }}
               >
@@ -1470,9 +1370,9 @@ export const BannerProductGrid = ({ data }) => {
     </section>
   );
 };
+
 // ==========================================================================
-// 16. VISUAL BREAK SECTION (الفاصل المرئي الداكن) - نسخة محدثة ومطابقة للمرجع
-// تم التحديث: تكبير المسافات الكلية، تكبير الخطوط، زيادة تنفس النصوص، وتكبير الزر
+// 16. VISUAL BREAK SECTION
 // ==========================================================================
 export const VisualBreakSection = ({ data }) => {
   const sectionRef = useRef(null);
@@ -1486,7 +1386,7 @@ export const VisualBreakSection = ({ data }) => {
           observer.unobserve(entry.target);
         }
       },
-      { threshold: 0.15 } // يظهر عند دخول 15% من القسم
+      { threshold: 0.15 }
     );
     if (sectionRef.current) observer.observe(sectionRef.current);
     return () => observer.disconnect();
@@ -1495,15 +1395,9 @@ export const VisualBreakSection = ({ data }) => {
   if (!data.promoTitle && !data.promoImage) return null;
 
   return (
-    // القسم هنا له خلفية داكنة ولا يحتوي أصلاً على خطوط فاصلة
-    // 🌟 ت1: زيادة ضخمة في الـ Padding العلوى لتكبير مساحة البانر الأسود الأساسي (pt-24 md:pt-36)
     <section ref={sectionRef} className="bg-[#1E1E1E] text-white overflow-hidden pt-24 md:pt-36 pb-0" dir="ltr">
       
-      {/* ── حاوية النصوص بالمنتصف ── */}
       <div className="max-w-4xl mx-auto px-6 text-center flex flex-col items-center">
-        
-        {/* ت2: تكبير حجم العنوان الصغير (text-base md:text-lg) */}
-        {/* ت4: زيادة المسافة تحته ليتنفس (mb-6 md:mb-8) */}
         {data.promoSubTitle && (
           <span 
             className={`font-bold mb-6 md:mb-8 tracking-wide transition-all duration-[700ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'} text-base md:text-lg font-tajawal`}
@@ -1513,8 +1407,6 @@ export const VisualBreakSection = ({ data }) => {
           </span>
         )}
 
-        {/* ت4: زيادة المسافة بين أسطر العنوان الرئيسي (leading-[1.2]) ليصبح أكثر تنفساً */}
-        {/* ت4: زيادة المسافة الكبيرة تحته (mb-8 md:mb-12) */}
         {data.promoTitle && (
           <h2 
             className={`text-4xl md:text-[56px] font-bold mb-8 md:mb-12 leading-[1.2] transition-all duration-[700ms] delay-150 ease-[cubic-bezier(0.16,1,0.3,1)] ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'} font-tajawal`}
@@ -1524,7 +1416,6 @@ export const VisualBreakSection = ({ data }) => {
           </h2>
         )}
 
-        {/* ت4: زيادة المسافة الضخمة قبل الزر ليعطي إحساساً بالفخامة (mb-10 md:mb-16) */}
         {data.promoDescription && (
           <p 
             className={`text-[15px] md:text-lg text-gray-300 mb-10 md:mb-16 max-w-xl leading-relaxed transition-all duration-[700ms] delay-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'} font-tajawal`}
@@ -1534,7 +1425,6 @@ export const VisualBreakSection = ({ data }) => {
           </p>
         )}
 
-        {/* تم توحيد شكل الزر ليتطابق مع زر الهيرو بدقة (مع الحفاظ على أنيميشن الفاصل المرئي) */}
         {(data.buttonText && data.buttonLink) && (
           <Link 
             href={data.buttonLink} 
@@ -1544,11 +1434,8 @@ export const VisualBreakSection = ({ data }) => {
             {data.buttonText}
           </Link>
         )}
-
       </div>
 
-      {/* ── 5. صورة الفاصل (ممتدة ومرتبطة بأسفل القسم) ── */}
-      {/* ت4: زيادة المسافة العلوية قبل الصورة لتتنفس بعيداً عن الزر (mt-16 md:mt-24) */}
       {data.promoImage && (
         <div 
           className={`w-full mt-16 md:mt-24 transition-all duration-[1000ms] delay-[600ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'}`}
@@ -1565,12 +1452,11 @@ export const VisualBreakSection = ({ data }) => {
     </section>
   );
 };
-// ==========================================================================
-// 17. CUSTOMER REVIEWS (تقييمات العملاء) - 🔥 SWR + HOOKS OPTIMIZED 🔥
-// ==========================================================================
 
+// ==========================================================================
+// 17. CUSTOMER REVIEWS
+// ==========================================================================
 export const CustomerReviewsSection = ({ data, bundle }) => {
-  // 🔥 استخراج آمن للبيانات 
   const reviews = bundle?.reviews || data?.reviews || [];
   const allProducts = bundle?.products || data?.products || {};
 
@@ -1583,10 +1469,8 @@ export const CustomerReviewsSection = ({ data, bundle }) => {
   const [isQuickViewModalOpen, setIsQuickViewModalOpen] = useState(false);
   const [isSectionVisible, setIsSectionVisible] = useState(false);
 
-  // 1. مراقب ظهور القسم
   useEffect(() => {
     if (!reviews || reviews.length === 0) return;
-
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
@@ -1597,11 +1481,9 @@ export const CustomerReviewsSection = ({ data, bundle }) => {
       { threshold: 0.15 }
     );
     if (sectionRef.current) observer.observe(sectionRef.current);
-
     return () => observer.disconnect();
   }, [reviews?.length]);
 
-  // 2. مؤقت تقليب تلقائي آمن
   useEffect(() => {
     if (!reviews || reviews.length <= 1 || isHovered || isQuickViewModalOpen) return;
     const timer = setInterval(() => {
@@ -1611,7 +1493,6 @@ export const CustomerReviewsSection = ({ data, bundle }) => {
     return () => clearInterval(timer);
   }, [reviews?.length, isHovered, isQuickViewModalOpen]);
 
-  // 3. دوال التحكم
   const nextReview = () => { setCurrentIndex((prev) => (prev === reviews.length - 1 ? 0 : prev + 1)); setExpandedReviews({}); };
   const prevReview = () => { setCurrentIndex((prev) => (prev === 0 ? reviews.length - 1 : prev - 1)); setExpandedReviews({}); };
   const toggleExpand = (id) => { setExpandedReviews(prev => ({ ...prev, [id]: !prev[id] })); };
@@ -1630,12 +1511,10 @@ export const CustomerReviewsSection = ({ data, bundle }) => {
     }
   };
 
-  // لو لا يوجد تقييمات قادمة من الصفحة الرئيسية لا تعرض القسم
   if (!reviews || reviews.length === 0) return null;
 
   return (
     <section ref={sectionRef} className="bg-[#F5F5F5] py-12 md:py-16 flex flex-col items-center justify-center" dir="rtl">
-
       <div className={`mb-6 md:mb-8 px-4 text-center transition-all duration-[800ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${isSectionVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
         <h2 className="text-[#1A1A1A] font-bold text-[19px] md:text-[23px] uppercase tracking-[0.15em]" style={{ fontFamily: "'Cairo', sans-serif" }}>
           {data?.title || "Happy Customers"}
@@ -1643,13 +1522,11 @@ export const CustomerReviewsSection = ({ data, bundle }) => {
       </div>
 
       <div className={`max-w-[1400px] w-full mx-auto px-4 flex flex-col items-center transition-all duration-[1000ms] delay-150 ease-[cubic-bezier(0.16,1,0.3,1)] ${isSectionVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
-
         <div className="bg-white rounded-[2px] shadow-sm w-full max-w-2xl px-6 pt-7 pb-8 md:px-12 md:pt-9 md:pb-10 relative h-auto"
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >
           {reviews.map((review, index) => {
-            // 🔥 حماية WIND: تأمين جميع الحقول لمنع الـ Crash
             const productData = allProducts[review?.productHandle] || null;
             const isOrphanReview = !productData;
             const safeText = review?.text || "";
@@ -1662,12 +1539,11 @@ export const CustomerReviewsSection = ({ data, bundle }) => {
             return (
               <div key={review?.id || index}
                 className={`w-full transition-all duration-[800ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
-                  isActive ? 'opacity-100 relative translate-x-0' : 'opacity-0 absolute inset-x-6 md:inset-x-12 translate-x-4 pointer-events-none'
+                  isActive ? 'opacity-100 relative translate-x-0' : 'opacity-0 absolute pointer-events-none'
                 }`}
                 style={{
                   display: isActive ? 'block' : 'none',
                   textAlign: isEnglish ? 'left' : 'right', 
-                  dir: isEnglish ? 'ltr' : 'rtl',
                   willChange: 'opacity, transform'
                 }}
               >
@@ -1684,12 +1560,11 @@ export const CustomerReviewsSection = ({ data, bundle }) => {
                   className={`flex gap-[1.5px] mb-4 transition-all duration-500 ease-out ${isActive ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'} ${isEnglish ? 'justify-start' : 'justify-start'}`}
                   style={{ transitionDelay: isActive ? '200ms' : '0ms' }}
                 >
-                  {/* 🔥 استخدام safeRating لضمان ظهور النجوم مهما حدث */}
                   {[...Array(5)].map((_, i) => (
                     <Star
                       key={i}
                       size={11}
-                      className={i < safeRating ? "fill-[#FFC107] text-[#FFC107]" : "fill-gray-200 text-gray-200"}
+                      className={i < safeRating ? "fill-[#1A1A1A] text-[#1A1A1A]" : "fill-gray-200 text-gray-200"}
                     />
                   ))}
                 </div>
@@ -1701,7 +1576,6 @@ export const CustomerReviewsSection = ({ data, bundle }) => {
                   <p className={`text-[#333333] leading-[1.7] ${!isExpanded ? 'line-clamp-4' : ''} ${isEnglish ? 'text-[13px] md:text-[15px] font-sans' : 'text-[14px] md:text-[16px] font-tajawal'}`}>
                     "{safeText}"
                   </p>
-
                   {isLongText && (
                     <button
                       onClick={() => toggleExpand(review?.id || index)}
@@ -1718,7 +1592,6 @@ export const CustomerReviewsSection = ({ data, bundle }) => {
                   className={`flex items-center gap-4 px-1 transition-all duration-500 ease-out ${isActive ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'} flex-row`}
                   style={{ transitionDelay: isActive ? '400ms' : '0ms' }}
                 >
-
                   <button
                     onClick={() => !isOrphanReview && handleOpenQuickView(productData)}
                     disabled={isOrphanReview}
@@ -1747,7 +1620,6 @@ export const CustomerReviewsSection = ({ data, bundle }) => {
                       </span>
                     </button>
                   )}
-
                 </div>
               </div>
             );
@@ -1759,12 +1631,10 @@ export const CustomerReviewsSection = ({ data, bundle }) => {
             <button onClick={prevReview} className="text-[#1A1A1A] hover:opacity-40 transition-opacity">
               <ChevronRight size={18} strokeWidth={2} />
             </button>
-
             <div className="flex items-center gap-3" dir="ltr">
               <span className="text-[#1A1A1A] font-bold text-[11px] font-mono opacity-80 w-4 text-center">
                 {currentIndex + 1}
               </span>
-
               <div className="flex gap-1.5 items-center">
                 {[...Array(Math.min(reviews.length, 5))].map((_, i) => {
                   const isActiveDot = (currentIndex % 5) === i;
@@ -1778,13 +1648,11 @@ export const CustomerReviewsSection = ({ data, bundle }) => {
                 })}
               </div>
             </div>
-
             <button onClick={nextReview} className="text-[#1A1A1A] hover:opacity-40 transition-opacity">
               <ChevronLeft size={18} strokeWidth={2} />
             </button>
           </div>
         )}
-
       </div>
 
       <QuickViewModal
@@ -1792,29 +1660,25 @@ export const CustomerReviewsSection = ({ data, bundle }) => {
         isOpen={isQuickViewModalOpen}
         onClose={() => setIsQuickViewModalOpen(false)}
       />
-
     </section>
   );
 };
 
 // ==========================================================================
-// 18. FLOATING IDEA & COLLECTIONS SECTION (الفكرة العائمة وكروت المجموعات)
+// 18. FLOATING IDEA & COLLECTIONS SECTION
 // ==========================================================================
 export const FloatingCollectionsSection = ({ data }) => {
   const [isVisible, setIsVisible] = useState(false);
   const sectionRef = useRef(null);
 
-  // جلب صور الجرافيتي من الأدمن
   const floatImages = [
     data?.floatImg1 || "https://placehold.co/300x400/F5F5F5/AAAAAA?text=WIND+STYLE",
     data?.floatImg2 || "https://placehold.co/300x350/F5F5F5/AAAAAA?text=QUALITY",
     data?.floatImg3 || "https://placehold.co/300x350/F5F5F5/AAAAAA?text=DETAILS"
   ];
 
-  // الكروت اللي تم اختيارها من الأدمن
   const cards = data?._adminItems || [];
 
-  // مراقب التمرير (Scroll Observer) للأنيميشن الرئيسي
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -1829,7 +1693,6 @@ export const FloatingCollectionsSection = ({ data }) => {
     return () => observer.disconnect();
   }, []);
 
-  // مراقب لظهور كروت الأقسام (Posters) بتأثير الشلال
   const [visibleCards, setVisibleCards] = useState({});
   const cardsRef = useRef([]);
 
@@ -1856,7 +1719,6 @@ export const FloatingCollectionsSection = ({ data }) => {
 
   return (
     <section className="w-full bg-white flex flex-col items-center justify-start overflow-hidden pt-16 md:pt-24 pb-16 md:pb-24" dir="ltr">
-      
       <style>{`
         @keyframes float-slow {
           0%, 100% { transform: translateY(0px); }
@@ -1875,24 +1737,18 @@ export const FloatingCollectionsSection = ({ data }) => {
         .anim-float-3 { animation: float-fast 3.8s ease-in-out infinite; }
       `}</style>
 
-      {/* ================= الجزء الأول: الفكرة العائمة ================= */}
       <div className="relative w-full max-w-[1400px] mx-auto min-h-[45vh] md:min-h-[55vh] flex flex-col items-center justify-center mb-6 md:mb-10">
-        
-        {/* الصور العائمة مع تحسين الظلال */}
         <div className="absolute top-[10%] md:top-[15%] left-[4%] md:left-[6%] w-24 h-32 md:w-36 md:h-48 anim-float-1 z-0 shadow-lg border-4 border-white/50">
            <img src={floatImages[0]} alt="Style 1" className="w-full h-full object-cover" />
         </div>
-
         <div className="absolute top-[0%] md:top-[4%] right-[4%] md:right-[6%] w-20 h-24 md:w-28 md:h-32 anim-float-2 z-0 shadow-lg border-4 border-white/50 translate-y-8">
            <img src={floatImages[1]} alt="Style 2" className="w-full h-full object-cover" />
         </div>
-
         <div className="absolute bottom-[5%] md:bottom-[12%] right-[4%] md:right-[6%] w-20 h-24 md:w-28 md:h-32 anim-float-3 z-0 shadow-lg border-4 border-white/50">
            <img src={floatImages[2]} alt="Style 3" className="w-full h-full object-cover" />
         </div>
 
         <div className="relative z-10 max-w-4xl mx-auto px-6 text-center flex flex-col items-center justify-center mt-10 md:mt-0">
-          
           <h4 
             ref={sectionRef} 
             className={`text-[#1A1A1A] text-[14px] md:text-[16px] font-semibold mb-4 uppercase tracking-[0.2em] transition-all ease-[cubic-bezier(0.16,1,0.3,1)] ${isVisible ? 'translate-y-0 opacity-100 duration-[800ms] delay-[150ms]' : 'translate-y-10 opacity-0 duration-[300ms] delay-0'}`} 
@@ -1901,7 +1757,6 @@ export const FloatingCollectionsSection = ({ data }) => {
             {data?.floatingSubTitle || "The product idea"}
           </h4>
 
-          {/* تم تصغير الخط درجتين مع زيادة المسافة السفلية */}
           <h2 
             className={`text-[#1A1A1A] text-[18px] md:text-[28px] font-semibold leading-[1.3] md:leading-[1.25] mb-10 max-w-3xl transition-all ease-[cubic-bezier(0.16,1,0.3,1)] ${isVisible ? 'translate-y-0 opacity-100 duration-[800ms] delay-[300ms]' : 'translate-y-10 opacity-0 duration-[300ms] delay-0'}`} 
             style={{ fontFamily: "'Tajawal', sans-serif", willChange: 'opacity, transform' }}
@@ -1919,9 +1774,7 @@ export const FloatingCollectionsSection = ({ data }) => {
         </div>
       </div>
 
-      {/* ================= الجزء الثاني: كروت المجموعات (Posters) ================= */}
       <div className="w-full flex flex-col gap-8 md:gap-14 items-center px-4 md:px-6 max-w-[1400px] mx-auto">
-        
         {cards.map((card, index) => {
           const imgUrl = card.customImage || card.originalImage || "https://placehold.co/800x1000/F5F5F5/AAAAAA";
           const subtitle = card.badge || "WIND COLLECTION";
@@ -1936,12 +1789,11 @@ export const FloatingCollectionsSection = ({ data }) => {
               key={index} 
               data-index={index}
               ref={el => cardsRef.current[index] = el}
-              // ✨ تأثير الشلال والنعومة للكروت
               className={`w-full relative group overflow-hidden bg-[#F9F9F9] flex flex-col justify-end transition-all duration-[1000ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${isCardVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'}`}
               style={{ 
                 aspectRatio: '3/4', 
                 maxHeight: '85vh',
-                transitionDelay: `${(index % 2) * 150}ms`, // تأخير متدرج بسيط
+                transitionDelay: `${(index % 2) * 150}ms`,
                 willChange: 'opacity, transform'
               }}
             >
@@ -1950,38 +1802,30 @@ export const FloatingCollectionsSection = ({ data }) => {
                 alt={title} 
                 className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-[2000ms] ease-[cubic-bezier(0.16,1,0.3,1)]" 
               />
-              
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent opacity-80" />
-
               <div className="relative z-10 w-full flex flex-col items-end justify-end pb-10 md:pb-14 text-right px-6 md:px-12">
-                
                 <span 
                   className="text-white text-[14px] md:text-[16px] font-semibold tracking-[0.2em] uppercase mb-4 drop-shadow-md" 
                   style={{ fontFamily: "'Cairo', sans-serif" }}
                 >
                   {subtitle}
                 </span>
-                
                 <h3 
                   className="text-white text-[20px] md:text-[28px] font-semibold mb-5 drop-shadow-md leading-tight max-w-xl" 
                   style={{ fontFamily: "'Tajawal', sans-serif" }}
                 >
                   {title}
                 </h3>
-                
-                {/* 🎯 تم توحيد الزر ليتطابق تماماً مع زر الفاصل المرئي (px-9 py-3.5) */}
                 <a 
                   href={link} 
                   className="font-tajawal inline-flex justify-center items-center bg-white text-[#1A1A1A] border border-white rounded-[3px] px-9 py-3.5 font-bold text-[13px] md:text-[14px] tracking-widest uppercase hover:bg-[#1A1A1A] hover:text-white hover:border-[#1A1A1A] transition-all duration-[600ms] ease-[cubic-bezier(0.16,1,0.3,1)] shadow-sm"
                 >
                   {btnText}
                 </a>
-
               </div>
             </div>
           );
         })}
-
       </div>
     </section>
   );

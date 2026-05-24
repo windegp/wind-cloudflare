@@ -10,7 +10,7 @@ const ExternalIcon = () => (
 
 export default function Footer() {
   return (
-    <footer className="bg-black text-white pt-12 pb-10 flex flex-col items-center justify-center font-sans" dir="rtl">
+    <footer className="bg-[#1A1A1A] text-white pt-12 pb-10 flex flex-col items-center justify-center font-sans" dir="rtl">
       
       {/* 1. صف السوشيال ميديا */}
       <div className="flex gap-8 mb-10 items-center">
@@ -78,7 +78,7 @@ export default function Footer() {
       </div>
 
       {/* 8. حقوق النشر والتاريخ */}
-      <div className="text-[#a3a3a3] text-[13px] tracking-wide font-sans text-center">
+      <div className="text-[#888] text-[13px] tracking-wide font-sans text-center">
         {""}
         &copy;
         {" 2019-"}

@@ -32,7 +32,7 @@ export default function ScrollToTop() {
       onClick={scrollToTop}
       aria-label="العودة للأعلى"
       // التصميم: دائري داكن، يظهر في الأسفل يساراً، ويتحول للذهبي عند التفاعل
-      className="fixed bottom-6 left-6 z-50 p-3 rounded-full bg-[#1A1A1A] border border-[#333] text-white shadow-[0_4px_12px_rgba(0,0,0,0.5)] transition-all duration-300 hover:bg-[#F5C518] hover:text-black hover:border-[#F5C518] hover:scale-110 animate-fade-in"
+      className="fixed bottom-6 left-6 z-50 p-3 rounded-full bg-[#1A1A1A] border border-[#333] text-white shadow-[0_4px_12px_rgba(0,0,0,0.5)] transition-all duration-300 hover:bg-[#333] hover:text-white hover:border-[#555] hover:scale-110 animate-fade-in"
     >
       <svg 
         xmlns="http://www.w3.org/2000/svg" 

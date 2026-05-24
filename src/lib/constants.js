@@ -30,8 +30,8 @@ export const VALID_PROMO_CODES = {
 // ============================================
 // 🎨 BRAND COLORS
 // ============================================
-export const BRAND_COLOR = "#F5C518"; // Yellow/Gold
-export const BRAND_COLOR_HEX = "#F5C518";
+export const BRAND_COLOR = "#1A1A1A"; // Black
+export const BRAND_COLOR_HEX = "#1A1A1A";
 export const DARK_BG = "#1A1A1A";
 export const LIGHT_TEXT = "#ffffff";
 

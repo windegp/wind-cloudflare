@@ -203,8 +203,8 @@ export default function QuickViewModal({ product, isOpen, onClose }) {
         .qv-scroll::-webkit-scrollbar-track { background: transparent; }
         .qv-scroll::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 4px; }
 
-        .pay-btn-qv { background: #F5C518; color: #1A1A1A; }
-        .pay-btn-qv:hover { background: #e6b800; transform: translateY(-2px); box-shadow: 0 4px 15px rgba(245,197,24,0.3); }
+        .pay-btn-qv { background: #1A1A1A; color: #FFFFFF; }
+        .pay-btn-qv:hover { background: #333333; transform: translateY(-2px); box-shadow: 0 4px 15px rgba(26,26,26,0.3); }
 
         .light-wind-tabs .wind-tabs-container details { background:#FFFFFF!important; border:1px solid #EAEAEA!important; border-radius:12px; margin-bottom:12px; padding:0 16px!important; transition:all .3s; }
         .light-wind-tabs .wind-tabs-container details[open] { border-color:#1A1A1A!important; background:#FAF9F6!important; }
@@ -248,7 +248,7 @@ export default function QuickViewModal({ product, isOpen, onClose }) {
       <span className="text-lg font-black text-[#1A1A1A] mt-0.5" style={{fontFamily:"Cairo,sans-serif"}}>
         {qvReviewsData.rating || product.rating}
       </span>
-      <Star className="text-[#F5C518] fill-[#F5C518] group-hover:scale-110 transition-transform" size={18} strokeWidth={2.5} />
+      <Star className="text-[#1A1A1A] fill-[#1A1A1A] group-hover:scale-110 transition-transform" size={18} strokeWidth={2.5} />
     </div>
   )}
               </div>

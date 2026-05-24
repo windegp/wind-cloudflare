@@ -37,7 +37,7 @@ export default function RootLayout({ children }) {
     <html lang="ar" dir="rtl" className={`${cairo.variable} ${tajawal.variable}`}> 
       <head>
       </head>
-      <body className={`${cairo.className} bg-[#121212] text-white antialiased overflow-x-hidden`}>
+      <body className={`${cairo.className} bg-white text-[#1A1A1A] antialiased overflow-x-hidden`}>
         {/* ✅ تغليف الموقع بالكامل بـ SWRProvider لضمان حماية الكوتا عالمياً */}
         <SWRProvider>
           <GlobalLoaderProvider>

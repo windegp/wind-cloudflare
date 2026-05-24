@@ -28,13 +28,13 @@ export default function CartDrawer() {
               <div className="flex items-center gap-3">
                 {/* Cart icon with badge */}
                 <div className="relative">
-                  <div className="w-9 h-9 bg-[#F5C518]/10 rounded-xl flex items-center justify-center">
-                    <svg className="w-5 h-5 text-[#F5C518]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="w-9 h-9 bg-[#1A1A1A]/10 rounded-xl flex items-center justify-center">
+                    <svg className="w-5 h-5 text-[#1A1A1A]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                     </svg>
                   </div>
                   {cartItems.length > 0 && (
-                    <span className="absolute -top-1.5 -right-1.5 bg-[#F5C518] text-black text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-sm">
+                    <span className="absolute -top-1.5 -right-1.5 bg-[#1A1A1A] text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-sm">
                       {cartItems.reduce((acc, i) => acc + i.qty, 0)}
                     </span>
                   )}

@@ -7,7 +7,7 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        windGold: '#F5C518',
+        windGray: '#1A1A1A',
       },
       fontFamily: {
         // نربط الخط الأساسي للمشروع بمتغير خط Cairo

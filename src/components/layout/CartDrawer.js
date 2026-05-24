@@ -156,8 +156,8 @@ export default function CartDrawer() {
         .cart-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
         .cart-scroll::-webkit-scrollbar-track { background: transparent; }
         .cart-scroll::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 4px; }
-        .checkout-btn { background-color: #F5C518 !important; color: #1A1A1A !important; transition: all 0.3s; }
-        .checkout-btn:hover { background-color: #e6b800 !important; transform: translateY(-2px); }
+        .checkout-btn { background-color: #1A1A1A !important; color: #FFFFFF !important; transition: all 0.3s; }
+        .checkout-btn:hover { background-color: #333333 !important; transform: translateY(-2px); }
         .suggested-item img { transition: transform 0.5s ease; }
         .suggested-item:hover img { transform: scale(1.05); }
       `}</style>
@@ -177,8 +177,8 @@ export default function CartDrawer() {
             <div className="bg-white px-5 py-4 flex items-center justify-between border-b border-gray-100 z-10">
               <div className="flex items-center gap-3">
                 <div className="relative">
-                  <div className="w-9 h-9 bg-[#F5C518]/10 rounded-xl flex items-center justify-center">
-                    <ShoppingBag className="w-5 h-5 text-[#F5C518]" />
+                  <div className="w-9 h-9 bg-[#1A1A1A]/10 rounded-xl flex items-center justify-center">
+                    <ShoppingBag className="w-5 h-5 text-[#1A1A1A]" />
                   </div>
                   {cartItems.length > 0 && (
                     <span className="absolute -top-1.5 -right-1.5 bg-[#1A1A1A] text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-sm">
@@ -245,7 +245,7 @@ export default function CartDrawer() {
 
               {cartItems.length > 0 && suggestedProducts.length > 0 && (
                 <div className="bg-[#FAF9F6] border-t border-gray-100 pt-5 pb-6 px-5">
-                  <h3 className="text-base font-black text-[#1A1A1A] flex items-center gap-2 mb-4"><div className="w-1.5 h-5 bg-[#F5C518] rounded-full"></div> أكمل إطلالتك</h3>
+                  <h3 className="text-base font-black text-[#1A1A1A] flex items-center gap-2 mb-4"><div className="w-1.5 h-5 bg-[#1A1A1A] rounded-full"></div> أكمل إطلالتك</h3>
                   {isLoadingSuggestions ? (
                     <div className="flex justify-center py-6"><Loader2 className="animate-spin text-gray-400" size={24} /></div>
                   ) : (

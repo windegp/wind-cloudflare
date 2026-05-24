@@ -268,7 +268,7 @@ mergedProduct;
         <div className="flex flex-col text-right px-1 pb-6 mt-4">
           <span className="text-[#888888] text-[11px] font-bold tracking-widest mb-2 font-tajawal">{smartCategoryText}</span>
           <Link href={productLink}>
-            <h3 className="text-[#1A1A1A] text-[14px] md:text-[15px] font-semibold line-clamp-1 hover:text-[#E6AE00] transition-colors mb-1.5 font-cairo">{title}</h3>
+            <h3 className="text-[#1A1A1A] text-[14px] md:text-[15px] font-semibold line-clamp-1 hover:text-[#888] transition-colors mb-1.5 font-cairo">{title}</h3>
           </Link>
 
           {reviewsData.count > 0 && (
@@ -278,7 +278,7 @@ mergedProduct;
                 <span className="text-[#1A1A1A] text-[13px] font-bold mt-0.5 font-cairo">{reviewsData.rating}</span>
                 <div className="flex items-center gap-[2px]">
                   {[0, 1, 2, 3, 4].map((i) => (
-                    <Star key={i} className={`w-3.5 h-3.5 group-hover:scale-110 transition-transform ${i < fullStarsCount ? 'text-[#F5C518] fill-[#F5C518]' : 'text-gray-300 fill-gray-300'}`} />
+                    <Star key={i} className={`w-3.5 h-3.5 group-hover:scale-110 transition-transform ${i < fullStarsCount ? 'text-[#1A1A1A] fill-[#1A1A1A]' : 'text-gray-300 fill-gray-300'}`} />
                   ))}
                 </div>
               </div>
@@ -325,7 +325,7 @@ mergedProduct;
         <div className="fixed inset-0 z-[1000000] flex items-end md:items-center justify-center bg-black/50 backdrop-blur-sm p-0 md:p-4" dir="rtl">
           <div className="bg-white w-full md:max-w-xl rounded-t-2xl md:rounded-2xl border border-[#EAEAEA] shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
             <div className="p-4 border-b border-[#EAEAEA] flex justify-between items-center bg-[#FAF9F6] sticky top-0 z-10">
-              <h3 className="font-black text-lg text-[#1A1A1A] flex items-center gap-2"><div className="w-[4px] h-[20px] bg-[#E6AE00] rounded-full"></div> تقييمات العملاء</h3>
+              <h3 className="font-black text-lg text-[#1A1A1A] flex items-center gap-2"><div className="w-[4px] h-[20px] bg-[#1A1A1A] rounded-full"></div> تقييمات العملاء</h3>
               <button onClick={() => setReviewsModalCardOpen(false)} className="bg-white border border-[#EAEAEA] hover:bg-gray-100 p-1.5 rounded-full text-gray-500 transition-colors shadow-sm"><X size={20} /></button>
             </div>
             <div className="p-0 overflow-y-auto" dir="rtl"><ProductReviews productHandle={handle || String(id)} /></div>

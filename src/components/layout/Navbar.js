@@ -103,7 +103,7 @@ export default function Navbar() {
       {/* 1. شريط الإعلانات العلوي */}
       <div className="bg-[#FAF9F6] text-[#1A1A1A] h-10 flex items-center justify-center border-b border-[#EAEAEA] relative z-[110] px-4 shadow-sm transition-colors duration-700">
         <div className="flex items-center gap-4 md:gap-8 relative justify-center">
-          <button onClick={prevAd} className="hover:scale-125 hover:text-[#F5C518] transition-all p-1 z-10">
+          <button onClick={prevAd} className="hover:scale-125 hover:text-[#1A1A1A] transition-all p-1 z-10">
             <ChevronLeft className="w-4 h-4 animate-arrow-slide-left cursor-pointer text-[#666]" />
           </button>
 
@@ -119,7 +119,7 @@ export default function Navbar() {
             ))}
           </div>
 
-          <button onClick={nextAd} className="hover:scale-125 hover:text-[#F5C518] transition-all p-1 z-10">
+          <button onClick={nextAd} className="hover:scale-125 hover:text-[#1A1A1A] transition-all p-1 z-10">
             <ChevronRight className="w-4 h-4 animate-arrow-slide-right cursor-pointer text-[#666]" />
           </button>
         </div>
@@ -128,7 +128,7 @@ export default function Navbar() {
       {/* 2. النافبار الأساسي */}
       <nav className="bg-white backdrop-blur-xl border-b border-black/5 sticky top-0 z-[100] h-20 w-full transition-all duration-500">
         <div className="max-w-[1600px] mx-auto px-6 h-full flex items-center justify-between">
-          <button onClick={() => setIsMenuOpen(true)} className="group flex items-center gap-3 text-black/70 hover:text-[#F5C518] transition-all">
+          <button onClick={() => setIsMenuOpen(true)} className="group flex items-center gap-3 text-black/70 hover:text-[#1A1A1A] transition-all">
             <div className="flex flex-col gap-1.5 overflow-hidden">
               <span className="w-8 h-[2px] bg-current transition-all group-hover:w-5"></span>
               <span className="w-5 h-[2px] bg-current transition-all group-hover:w-8"></span>
@@ -147,10 +147,10 @@ export default function Navbar() {
           </div>
 
           <div className="flex items-center gap-6">
-            <button onClick={toggleCart} className="relative group p-2 text-black/70 hover:text-[#F5C518] transition-all">
+            <button onClick={toggleCart} className="relative group p-2 text-black/70 hover:text-[#1A1A1A] transition-all">
               <ShoppingBag size={24} strokeWidth={1.5} />
               {cartItems?.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-[#F5C518] text-black text-[9px] font-black w-5 h-5 flex items-center justify-center rounded-full border-2 border-black">
+                <span className="absolute -top-1 -right-1 bg-[#1A1A1A] text-white text-[9px] font-black w-5 h-5 flex items-center justify-center rounded-full border-2 border-white">
                   {cartItems.length}
                 </span>
               )}
@@ -166,7 +166,7 @@ export default function Navbar() {
           <div className="absolute top-0 right-0 w-full max-w-[400px] h-full bg-[#0a0a0a] border-l border-white/5 shadow-2xl flex flex-col animate-slide-in">
             <div className="p-6 border-b border-white/10 bg-[#111] flex justify-between items-center min-h-[80px]">
               {history.length > 0 ? (
-                <button onClick={goBack} className="flex items-center gap-2 bg-[#F5C518] text-black px-4 py-2 rounded-lg font-black text-xs hover:bg-white transition-colors">
+                <button onClick={goBack} className="flex items-center gap-2 bg-[#1A1A1A] text-white px-4 py-2 rounded-lg font-black text-xs hover:bg-gray-200 transition-colors">
                   <ArrowRight size={16} strokeWidth={3} />
                   <span>رجوع</span>
                 </button>
@@ -179,21 +179,21 @@ export default function Navbar() {
             </div>
             <div className="px-8 pt-6">
               <h2 className="text-3xl font-black text-white italic animate-fade-in">{activeLayer.title}</h2>
-              <div className="h-1 w-12 bg-[#F5C518] mt-2 mb-4"></div>
+              <div className="h-1 w-12 bg-[#1A1A1A] mt-2 mb-4"></div>
             </div>
             <div className="flex-1 overflow-y-auto px-6 pb-10 custom-scrollbar">
               <ul className="space-y-3">
                 {activeLayer.items.map((item, i) => (
                   <li key={item.id || i} className="animate-fade-up" style={{ animationDelay: `${i * 0.03}s` }}>
                     {item.children?.length > 0 ? (
-                      <button onClick={() => openSubMenu(item)} className="w-full flex items-center justify-between p-4 bg-[#1a1a1a] border border-[#222] rounded-xl hover:border-[#F5C518] hover:bg-[#222] group transition-all">
+                      <button onClick={() => openSubMenu(item)} className="w-full flex items-center justify-between p-4 bg-[#f5f5f5] border border-[#e5e5e5] rounded-xl hover:border-[#1A1A1A] hover:bg-[#eee] group transition-all">
                         <span className="text-lg font-bold text-gray-200 group-hover:text-white">{item.title}</span>
-                        <div className="flex items-center text-[#F5C518]">
+                        <div className="flex items-center text-[#1A1A1A]">
                           <ChevronLeft size={20} />
                         </div>
                       </button>
                     ) : (
-                      <Link href={item.link} onClick={closeMenu} className="block p-4 border-b border-white/5 text-lg font-bold text-gray-400 hover:text-[#F5C518] transition-all">
+                      <Link href={item.link} onClick={closeMenu} className="block p-4 border-b border-gray-200 text-lg font-bold text-gray-600 hover:text-[#1A1A1A] transition-all">
                         {item.title}
                       </Link>
                     )}
