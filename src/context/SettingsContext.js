@@ -53,15 +53,18 @@ export const SettingsProvider = ({ children }) => {
             userAgent: typeof window !== 'undefined' ? window.navigator.userAgent : '',
             referrer: typeof document !== 'undefined' ? document.referrer : '',
             page: pathname || '/',
-          }).catch(err => console.warn("Visitor event write failed:", err));
-          
+          }).then(() => {
+            // ✅ Mark counted ONLY after visitor_events doc is successfully created
+            sessionStorage.setItem("wind_v_counted", "true");
+          }).catch(err => {
+            console.warn("[VisitorEvent] setDoc failed:", err.message);
+            // Don't mark counted — allow retry on next load
+          });
+
           // Increment counters for both all-time and today
           try {
             const settingsRef = doc(db, "settings", "siteSettings");
-            const todayDateField = "counters.todayDate";
-            
-            // Atomically increment counters.visitors (all-time) and counters.todayVisitors
-            // We also need to handle the case where todayDate changes (new day)
+
             getDoc(settingsRef).then(snap => {
               if (snap.exists()) {
                 const currentCounters = snap.data().counters || {};
@@ -71,52 +74,50 @@ export const SettingsProvider = ({ children }) => {
                 };
                 
                 if (storedTodayDate === todayStr) {
-  // Same Cairo day
-  updates["counters.todayVisitors"] = increment(1);
-
-} else {
-  // Cairo day rollover
-  // Preserve previous todayVisitors into yesterdayVisitors
-  const oldTodayVisitors = Number(currentCounters.todayVisitors) || 0;
-
-  updates["counters.yesterdayVisitors"] = oldTodayVisitors;
-
-  // IMPORTANT:
-  // We initialize todayVisitors at 0 first,
-  // then atomically increment by 1 to avoid race conditions
-  // during simultaneous midnight visits.
-  updates["counters.todayVisitors"] = increment(1);
-
-  updates["counters.todayDate"] = todayStr;
-}
+                  updates["counters.todayVisitors"] = increment(1);
+                } else {
+                  const oldTodayVisitors = Number(currentCounters.todayVisitors) || 0;
+                  updates["counters.yesterdayVisitors"] = oldTodayVisitors;
+                  updates["counters.todayVisitors"] = increment(1);
+                  updates["counters.todayDate"] = todayStr;
+                }
                 
-                updateDoc(settingsRef, updates).catch(() => {});
+                updateDoc(settingsRef, updates).catch(err => {
+                  console.warn("[VisitorEvent] counter update failed:", err.message);
+                });
               } else {
-                // No settings doc yet — set initial values
                 updateDoc(settingsRef, {
                   "counters.visitors": increment(1),
                   "counters.todayVisitors": 1,
                   "counters.todayDate": todayStr,
-                }).catch(() => {});
+                }).catch(err => {
+                  console.warn("[VisitorEvent] initial counter set failed:", err.message);
+                });
               }
-            }).catch(() => {
-              // Fallback: just increment visitors
+            }).catch(err => {
+              console.warn("[VisitorEvent] settings read failed:", err.message);
               updateDoc(settingsRef, {
                 "counters.visitors": increment(1),
-              }).catch(() => {});
+              }).catch(err2 => {
+                console.warn("[VisitorEvent] fallback counter increment failed:", err2.message);
+              });
             });
           } catch (e) {
-            // Silent fail
+            console.warn("[VisitorEvent] counter block error:", e.message);
           }
+        } else {
+          // Doc already exists for this session+day — just mark counted
+          sessionStorage.setItem("wind_v_counted", "true");
         }
       }).catch(err => {
-        console.warn("Visitor event check failed:", err);
-        // Fallback: simple counter increment
+        console.warn("[VisitorEvent] getDoc check failed:", err.message);
+        // Only fallback to counter increment if we can't verify
+        sessionStorage.setItem("wind_v_counted", "true");
         const settingsRef = doc(db, "settings", "siteSettings");
-        updateDoc(settingsRef, { "counters.visitors": increment(1) }).catch(() => {});
+        updateDoc(settingsRef, { "counters.visitors": increment(1) }).catch(err2 => {
+          console.warn("[VisitorEvent] fallback counter increment failed:", err2.message);
+        });
       });
-      
-      sessionStorage.setItem("wind_v_counted", "true");
     }
   }, [isAdmin, pathname]);
 
