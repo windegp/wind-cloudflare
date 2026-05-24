@@ -1,161 +1,129 @@
 import { getDb } from "@/lib/firebase";
-import { collection, query, where, getDocs, getDoc, doc, limit } from "firebase/firestore/lite";
-import { getCairoDayBoundaries, getCairoDateStr, parseDateToMs, isRealCustomer, getDateRange } from '@/lib/analytics-helpers';
+import { collection, query, where, getDocs, getDoc, doc } from "firebase/firestore/lite";
+import { parseDateToMs, isRealCustomer, getCairoDateStr } from '@/lib/analytics-helpers';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * ═══════════════════════════════════════════════════════════
- * DASHBOARD STATS — DETERMINISTIC HISTORICAL AGGREGATION
+ * DASHBOARD STATS — STABLE HYBRID APPROACH
  * ═══════════════════════════════════════════════════════════
  *
- * PRIMARY SOURCE: analytics_daily/{YYYY-MM-DD}
- *   Pre-computed daily documents from analytics-daily route.
- *   If a daily doc doesn't exist, it will be computed on-the-fly.
+ * PRIMARY SOURCE FOR ALL-TIME TOTALS: Firestore counters (settings/siteSettings)
+ *   - counters.visitors = 30000 historical baseline + real visitor increments
+ *   - counters.orders, counters.sales, counters.customers = real-time updated
  *
- * FALLBACK: Live Firestore queries (when daily docs unavailable)
+ * PRIMARY SOURCE FOR FILTERED PERIODS: Live Firestore queries
+ *   - Orders collection (filtered by "Created at")
+ *   - Customers collection (filtered by "last_active")
+ *
+ * NO getAllAggregated() — avoids Worker 1102 CPU limit errors
+ * NO full analytics_daily scan — avoids heavy aggregation
  * 
- * ALL timezone calculations use Africa/Cairo.
- * NO mutable counters (todayVisitors/yesterdayVisitors).
- * NO fake visitor estimations.
+ * All timezone calculations use Africa/Cairo.
  * ═══════════════════════════════════════════════════════════
  */
 
-// ═══════════════════════════════════════════════════════════
-// DAILY DOC HELPERS
-// ═══════════════════════════════════════════════════════════
-
-async function getDailyDoc(db, dateStr) {
-  try {
-    const snap = await getDoc(doc(db, "analytics_daily", dateStr));
-    if (snap.exists()) return snap.data();
-  } catch {}
-  return null;
-}
-
-async function getOrComputeDaily(db, dateStr) {
-  const existing = await getDailyDoc(db, dateStr);
-  if (existing) return existing;
+/**
+ * Query Customers for a date range — returns visitor count + real customer count
+ * Uses a SINGLE scan to avoid double queries.
+ */
+async function queryCustomersForRange(db, startDateStr, endDateStr, filterStartMs, filterEndMs) {
+  const result = { visitors: 0, realCustomers: 0 };
   
-  // Compute on-the-fly from live queries (same logic as analytics-daily route)
-  const bounds = getCairoDayBoundaries(dateStr);
-  const result = { visitors: 0, customers: 0, orders: 0, revenue: 0, conversionRate: 0 };
-  
-  // Visitors from visitor_events
   try {
-    const eventsSnap = await getDocs(query(collection(db, "visitor_events"), where("date", "==", dateStr)));
-    const uniqueSessions = new Set();
-    eventsSnap.docs.forEach(d => { const e = d.data(); if (e.sessionId) uniqueSessions.add(e.sessionId); });
-    result.visitors = uniqueSessions.size;
-  } catch {
-    // Fallback: Customers.last_active
-    try {
-      const custSnap = await getDocs(query(collection(db, "Customers"), where("last_active", ">=", bounds.start)));
-      const unique = new Set();
-      custSnap.docs.forEach(d => {
-        const c = d.data(); if (!c) return;
-        const ms = parseDateToMs(c.last_active);
-        if (isNaN(ms) || ms > bounds.endMs) return;
-        unique.add((c.Email || c.email || '').toLowerCase().trim() || String(c.Phone || '').replace(/[^0-9]/g, '') || d.id);
-      });
-      result.visitors = unique.size;
-    } catch { result.visitors = 0; }
+    const snap = await getDocs(query(
+      collection(db, "Customers"),
+      where("last_active", ">=", startDateStr)
+    ));
+    
+    const uniqueVisitors = new Map();
+    const realCustomers = new Map();
+    
+    for (const d of snap.docs) {
+      try {
+        const c = d.data();
+        if (!c) continue;
+        
+        const custDateMs = parseDateToMs(c.last_active);
+        if (isNaN(custDateMs) || custDateMs > filterEndMs) continue;
+        
+        const email = (c.Email || c.email || '').toLowerCase().trim();
+        const phone = String(c.Phone || c['Default Address Phone'] || '').replace(/[^0-9]/g, '');
+        const uniqueId = email || phone || d.id;
+        
+        // All active customers = visitors
+        if (!uniqueVisitors.has(uniqueId)) uniqueVisitors.set(uniqueId, true);
+        
+        // Real customer = has email/phone AND has orders AND is in Purchased_Once/VIP
+        if ((email || phone) && isRealCustomer(c)) {
+          if (!realCustomers.has(uniqueId)) realCustomers.set(uniqueId, true);
+        }
+      } catch (err) {
+        console.error(`[dashboard-stats] Skipping bad customer doc: ${d.id}`, err.message);
+        continue;
+      }
+    }
+    
+    result.visitors = uniqueVisitors.size;
+    result.realCustomers = realCustomers.size;
+  } catch (qErr) {
+    console.error(`[dashboard-stats] Customers query failed: ${qErr.code || qErr.message}`);
+    result.visitors = 0;
+    result.realCustomers = 0;
   }
   
-  // Customers
-  try {
-    const custSnap = await getDocs(query(collection(db, "Customers"), where("last_active", ">=", bounds.start)));
-    const uniqueReal = new Set();
-    custSnap.docs.forEach(d => {
-      const c = d.data(); if (!c) return;
-      const ms = parseDateToMs(c.last_active);
-      if (isNaN(ms) || ms > bounds.endMs) return;
-      if (!isRealCustomer(c)) return;
-      uniqueReal.add((c.Email || c.email || '').toLowerCase().trim() || String(c.Phone || '').replace(/[^0-9]/g, '') || d.id);
-    });
-    result.customers = uniqueReal.size;
-  } catch { result.customers = 0; }
-  
-  // Orders + revenue
-  try {
-    const ordersSnap = await getDocs(query(collection(db, "Orders"), where("Created at", ">=", bounds.start)));
-    ordersSnap.docs.forEach(d => {
-      const o = d.data(); if (!o) return;
-      const ms = parseDateToMs(o['Created at']);
-      if (isNaN(ms) || ms > bounds.endMs) return;
-      if (o['Financial Status'] === 'deleted') return;
-      if (o['Financial Status'] === 'abandoned' || o['Financial Status'] === 'pending_payment' || (o.Name && o.Name.startsWith('DRAFT-'))) return;
-      result.orders++;
-      const totalStr = String(o.Total || '').replace(/[^0-9.\-]/g, '');
-      if (totalStr && totalStr !== '-') result.revenue += parseFloat(totalStr) || 0;
-    });
-  } catch { result.orders = 0; result.revenue = 0; }
-  
-  if (result.visitors > 0 && result.orders > 0) {
-    result.conversionRate = parseFloat(((result.orders / result.visitors) * 100).toFixed(2));
-  }
   return result;
 }
 
 /**
- * Find the earliest data date from Orders collection (the immutable source).
- * This avoids any dependency on analytics_daily index or counters.
- * Returns "YYYY-MM-DD" string or null if no orders exist.
- * Manual scan required because "Created at" has mixed formats.
+ * Query Orders for a date range — returns order count + revenue sum
  */
-async function getEarliestOrderDate(db) {
+async function queryOrdersForRange(db, startDateStr, endDateStr, filterStartMs, filterEndMs) {
+  const result = { orders: 0, sales: 0, completed: 0 };
+  
   try {
-    // Scan up to 500 orders to find the earliest date.
-    // Manual scan required because "Created at" has mixed formats
-    // (JS locale string and "YYYY-MM-DD HH:MM:SS") making orderBy unreliable.
     const snap = await getDocs(query(
       collection(db, "Orders"),
-      where("Created at", ">", ""),
-      limit(500)
+      where("Created at", ">=", startDateStr)
     ));
-    if (snap.empty) return null;
-    let earliestMs = Infinity;
-    snap.docs.forEach(d => {
-      const o = d.data();
-      if (!o) return;
-      const ms = parseDateToMs(o['Created at']);
-      if (!isNaN(ms) && ms < earliestMs) earliestMs = ms;
-    });
-    if (earliestMs === Infinity) return null;
-    const d = new Date(earliestMs);
-    return getCairoDateStr(d);
-  } catch { return null; }
-}
-
-/**
- * Aggregate ALL historical analytics by summing analytics_daily for all dates.
- * This is the SINGLE SOURCE OF TRUTH for all-time totals.
- * It uses the same getOrComputeDaily function as all other periods.
- * No counters.visitors / counters.orders / counters.sales.
- * 
- * Strategy: find the date of the first order, then aggregate from that date
- * to today. getOrComputeDaily handles missing daily docs by computing on-the-fly.
- */
-async function getAllAggregated(db, todayStr) {
-  const startDate = await getEarliestOrderDate(db);
-  if (!startDate) {
-    // No orders exist — fall back to today only
-    return await getOrComputeDaily(db, todayStr);
+    
+    for (const d of snap.docs) {
+      try {
+        const o = d.data();
+        if (!o) continue;
+        
+        const orderDateMs = parseDateToMs(o['Created at']);
+        if (isNaN(orderDateMs) || orderDateMs > filterEndMs) continue;
+        if (o['Financial Status'] === 'deleted') continue;
+        
+        const isAbandoned = o['Financial Status'] === 'abandoned' ||
+                            o['Financial Status'] === 'pending_payment' ||
+                            (o.Name && o.Name.startsWith('DRAFT-'));
+        if (isAbandoned) continue;
+        
+        result.orders++;
+        let total = 0;
+        if (o.Total != null) {
+          const totalStr = String(o.Total).replace(/[^0-9.\-]/g, '');
+          if (totalStr && totalStr !== '-') total = parseFloat(totalStr) || 0;
+        }
+        result.sales += total;
+        result.completed++;
+      } catch (err) {
+        console.error(`[dashboard-stats] Skipping bad order doc: ${d.id}`, err.message);
+        continue;
+      }
+    }
+  } catch (qErr) {
+    console.error(`[dashboard-stats] Orders query failed: ${qErr.code || qErr.message}`);
+    result.orders = 0;
+    result.sales = 0;
+    result.completed = 0;
   }
-  const allDates = getDateRange(startDate, todayStr);
-  const days = await Promise.all(allDates.map(s => getOrComputeDaily(db, s)));
-  return {
-    visitors: days.reduce((a, d) => a + d.visitors, 0),
-    customers: days.reduce((a, d) => a + d.customers, 0),
-    orders: days.reduce((a, d) => a + d.orders, 0),
-    revenue: parseFloat(days.reduce((a, d) => a + d.revenue, 0).toFixed(2)),
-    conversionRate: 0 // computed below
-  };
+  
+  return result;
 }
-
-// ═══════════════════════════════════════════════════════════
-// MAIN HANDLER
-// ═══════════════════════════════════════════════════════════
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
@@ -165,132 +133,163 @@ export async function GET(request) {
 
   try {
     const db = getDb();
-    const todayStr = getCairoDateStr(new Date());
 
-    // Today's data: always compute from analytics_daily or live query
-    const todayData = await getOrComputeDaily(db, todayStr);
+    // ==========================================
+    // 1. Read counters from settings/siteSettings
+    // ==========================================
+    const settingsSnap = await getDoc(doc(db, "settings", "siteSettings"));
+    const counters = settingsSnap.exists() ? (settingsSnap.data().counters || {}) : {};
+    
+    const totalVisitors = Number(counters.visitors) || 0;
+    const todayVisitors = Number(counters.todayVisitors) || 0;
+    const yesterdayVisitors = Number(counters.yesterdayVisitors) || 0;
+    const totalOrders = Number(counters.orders) || 0;
+    const totalSales = Number(counters.sales) || 0;
+    const totalCustomersCount = Number(counters.customers) || 0;
 
-    let result = { visitors: 0, customers: 0, orders: 0, revenue: 0, conversionRate: 0 };
-    let dateRange = null;
-    let periodDays = 0;
+    // ==========================================
+    // 2. Compute Cairo date boundaries for this period
+    // ==========================================
+    const dateParts = getCairoDateStr(new Date()).split('-').map(Number);
+    const todayDate = new Date(Date.UTC(dateParts[0], dateParts[1] - 1, dateParts[2], 12, 0, 0));
+    
+    const pad = (n) => String(n).padStart(2, '0');
+    const formatCairoDate = (d) => {
+      return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+    };
+    
+    let dateFilterStart = null;
+    let dateFilterEnd = null;
+    let filterStartMs = 0;
+    let filterEndMs = 0;
 
     switch (period) {
       case 'today':
-        result = todayData;
-        periodDays = 1;
-        dateRange = { start: todayStr, end: todayStr };
+        dateFilterStart = formatCairoDate(todayDate) + ' 00:00:00';
+        dateFilterEnd = formatCairoDate(todayDate) + ' 23:59:59';
         break;
-
       case 'yesterday': {
-        // Compute yesterday's Cairo date string without Date arithmetic timezone issues
-        const todayParts = todayStr.split('-').map(Number);
-        const yesterdayDate = new Date(Date.UTC(todayParts[0], todayParts[1] - 1, todayParts[2] - 1, 12, 0, 0));
-        const yesterdayStr = getCairoDateStr(yesterdayDate);
-        result = await getOrComputeDaily(db, yesterdayStr);
-        periodDays = 1;
-        dateRange = { start: yesterdayStr, end: yesterdayStr };
+        const yesterday = new Date(todayDate);
+        yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+        dateFilterStart = formatCairoDate(yesterday) + ' 00:00:00';
+        dateFilterEnd = formatCairoDate(yesterday) + ' 23:59:59';
         break;
       }
-
       case 'week': {
-        // Compute 7 day Cairo date strings without Date arithmetic timezone issues
-        const todayParts = todayStr.split('-').map(Number);
-        const sevenDays = [];
-        for (let i = 6; i >= 0; i--) {
-          const d = new Date(Date.UTC(todayParts[0], todayParts[1] - 1, todayParts[2] - i, 12, 0, 0));
-          sevenDays.push(getCairoDateStr(d));
-        }
-        const days = await Promise.all(sevenDays.map(s => getOrComputeDaily(db, s)));
-        result.visitors = days.reduce((a, d) => a + d.visitors, 0);
-        result.customers = days.reduce((a, d) => a + d.customers, 0);
-        result.orders = days.reduce((a, d) => a + d.orders, 0);
-        result.revenue = parseFloat(days.reduce((a, d) => a + d.revenue, 0).toFixed(2));
-        periodDays = 7;
-        dateRange = { start: sevenDays[0], end: sevenDays[6] };
-        if (result.visitors > 0 && result.orders > 0) {
-          result.conversionRate = parseFloat(((result.orders / result.visitors) * 100).toFixed(2));
-        }
+        const weekAgo = new Date(todayDate);
+        weekAgo.setUTCDate(weekAgo.getUTCDate() - 6);
+        dateFilterStart = formatCairoDate(weekAgo) + ' 00:00:00';
+        dateFilterEnd = formatCairoDate(todayDate) + ' 23:59:59';
         break;
       }
-
       case 'month': {
-        // Compute month start from Cairo date string to avoid timezone roundtrip issues
-        const monthStartStr = todayStr.slice(0, 7) + '-01';
-        const dates = getDateRange(monthStartStr, todayStr);
-        const days = await Promise.all(dates.map(s => getOrComputeDaily(db, s)));
-        result.visitors = days.reduce((a, d) => a + d.visitors, 0);
-        result.customers = days.reduce((a, d) => a + d.customers, 0);
-        result.orders = days.reduce((a, d) => a + d.orders, 0);
-        result.revenue = parseFloat(days.reduce((a, d) => a + d.revenue, 0).toFixed(2));
-        periodDays = dates.length;
-        dateRange = { start: dates[0], end: dates[dates.length - 1] };
-        if (result.visitors > 0 && result.orders > 0) {
-          result.conversionRate = parseFloat(((result.orders / result.visitors) * 100).toFixed(2));
-        }
+        const monthStart = new Date(Date.UTC(todayDate.getUTCFullYear(), todayDate.getUTCMonth(), 1, 12, 0, 0));
+        dateFilterStart = formatCairoDate(monthStart) + ' 00:00:00';
+        dateFilterEnd = formatCairoDate(todayDate) + ' 23:59:59';
         break;
       }
-
       case 'last_month': {
-        // Compute last month bounds directly from Cairo date strings
-        const [curYear, curMonth] = todayStr.split('-').map(Number);
-        let lastMonth = curMonth - 1;
-        let lastYear = curYear;
-        if (lastMonth === 0) { lastMonth = 12; lastYear--; }
-        const firstStr = `${lastYear}-${String(lastMonth).padStart(2, '0')}-01`;
-        // Last day of last month = day 0 of this month
-        const lastDayDate = new Date(Date.UTC(curYear, curMonth - 1, 0, 12, 0, 0));
-        const lastStr = getCairoDateStr(lastDayDate);
-        const dates = getDateRange(firstStr, lastStr);
-        const days = await Promise.all(dates.map(s => getOrComputeDaily(db, s)));
-        result.visitors = days.reduce((a, d) => a + d.visitors, 0);
-        result.customers = days.reduce((a, d) => a + d.customers, 0);
-        result.orders = days.reduce((a, d) => a + d.orders, 0);
-        result.revenue = parseFloat(days.reduce((a, d) => a + d.revenue, 0).toFixed(2));
-        periodDays = dates.length;
-        dateRange = { start: dates[0], end: dates[dates.length - 1] };
-        if (result.visitors > 0 && result.orders > 0) {
-          result.conversionRate = parseFloat(((result.orders / result.visitors) * 100).toFixed(2));
-        }
+        const firstDay = new Date(Date.UTC(todayDate.getUTCFullYear(), todayDate.getUTCMonth() - 1, 1, 12, 0, 0));
+        const lastDay = new Date(Date.UTC(todayDate.getUTCFullYear(), todayDate.getUTCMonth(), 0, 12, 0, 0));
+        dateFilterStart = formatCairoDate(firstDay) + ' 00:00:00';
+        dateFilterEnd = formatCairoDate(lastDay) + ' 23:59:59';
         break;
       }
-
       case 'custom': {
         if (!startDate || !endDate) {
           return Response.json({ success: false, error: 'مطلوب startDate و endDate' }, { status: 400 });
         }
-        const dates = getDateRange(startDate, endDate);
-        const days = await Promise.all(dates.map(s => getOrComputeDaily(db, s)));
-        result.visitors = days.reduce((a, d) => a + d.visitors, 0);
-        result.customers = days.reduce((a, d) => a + d.customers, 0);
-        result.orders = days.reduce((a, d) => a + d.orders, 0);
-        result.revenue = parseFloat(days.reduce((a, d) => a + d.revenue, 0).toFixed(2));
-        periodDays = dates.length;
-        dateRange = { start: dates[0], end: dates[dates.length - 1] };
-        if (result.visitors > 0 && result.orders > 0) {
-          result.conversionRate = parseFloat(((result.orders / result.visitors) * 100).toFixed(2));
-        }
-        break;
-      }
-
-      case 'all': {
-        const allData = await getAllAggregated(db, todayStr);
-        result = allData;
-        periodDays = allData.visitors > 0 ? Math.round(allData.visitors / Math.max(1, allData.visitors / 30)) : 90;
-        if (result.visitors > 0 && result.orders > 0) {
-          result.conversionRate = parseFloat(((result.orders / result.visitors) * 100).toFixed(2));
-        }
-        dateRange = null; // unknown for all-time
+        dateFilterStart = startDate + ' 00:00:00';
+        dateFilterEnd = endDate + ' 23:59:59';
         break;
       }
     }
 
-    // Compute Cairo month name for label using Intl.DateTimeFormat
-    const todayDate = new Date(Date.UTC(+todayStr.slice(0, 4), +todayStr.slice(5, 7) - 1, +todayStr.slice(8, 10), 12, 0, 0));
+    if (dateFilterStart && dateFilterEnd) {
+      // Parse dates safely — use our own parseDateToMs from helpers
+      const startMs = Date.parse(dateFilterStart.replace(' ', 'T'));
+      const endMs = Date.parse(dateFilterEnd.replace(' ', 'T'));
+      if (!isNaN(startMs) && !isNaN(endMs)) {
+        filterStartMs = startMs;
+        filterEndMs = endMs;
+      }
+    }
+
+    // Compute periodDays
+    let periodDays = 0;
+    if (dateFilterStart && dateFilterEnd) {
+      const s = new Date(dateFilterStart);
+      const e = new Date(dateFilterEnd);
+      periodDays = Math.max(1, Math.floor((e - s) / (1000 * 60 * 60 * 24)) + 1);
+    }
+
+    // ==========================================
+    // 3. Compute stats for the requested period
+    // ==========================================
+    let visitorsForPeriod = 0;
+    let customersForPeriod = 0;
+    let orderStats = { orders: 0, sales: 0, completed: 0 };
+
+    if (period === 'all') {
+      // ALL: Use counters directly — fast, no heavy scans
+      visitorsForPeriod = totalVisitors;
+      customersForPeriod = totalCustomersCount;
+      orderStats.orders = totalOrders;
+      orderStats.sales = totalSales;
+      orderStats.completed = totalOrders;
+      periodDays = 90; // Reasonable default for "all time"
+      
+    } else if (period === 'today') {
+      // TODAY: Use todayVisitors counter + live customer query
+      visitorsForPeriod = todayVisitors;
+      
+      // Query today's real customers
+      if (dateFilterStart && filterStartMs && filterEndMs) {
+        const todayResult = await queryCustomersForRange(db, dateFilterStart, dateFilterEnd, filterStartMs, filterEndMs);
+        customersForPeriod = todayResult.realCustomers;
+      }
+      
+      // Query today's orders
+      if (dateFilterStart && filterStartMs && filterEndMs) {
+        orderStats = await queryOrdersForRange(db, dateFilterStart, dateFilterEnd, filterStartMs, filterEndMs);
+      }
+      
+    } else if (period === 'yesterday') {
+      // YESTERDAY: Query from scratch (yesterdayVisitors may be stale)
+      if (dateFilterStart && filterStartMs && filterEndMs) {
+        const yesterdayResult = await queryCustomersForRange(db, dateFilterStart, dateFilterEnd, filterStartMs, filterEndMs);
+        visitorsForPeriod = yesterdayResult.visitors;
+        customersForPeriod = yesterdayResult.realCustomers;
+        orderStats = await queryOrdersForRange(db, dateFilterStart, dateFilterEnd, filterStartMs, filterEndMs);
+      }
+      
+    } else {
+      // WEEK, MONTH, LAST_MONTH, CUSTOM: Query from scratch
+      if (dateFilterStart && filterStartMs && filterEndMs) {
+        // For week/month/last_month, we query customers up to the end date
+        const custResult = await queryCustomersForRange(db, dateFilterStart, dateFilterEnd, filterStartMs, filterEndMs);
+        visitorsForPeriod = custResult.visitors;
+        customersForPeriod = custResult.realCustomers;
+        orderStats = await queryOrdersForRange(db, dateFilterStart, dateFilterEnd, filterStartMs, filterEndMs);
+      }
+    }
+
+    // ==========================================
+    // 4. Conversion rate
+    // ==========================================
+    const conversionRate = (visitorsForPeriod > 0 && orderStats.completed > 0)
+      ? parseFloat(((orderStats.completed / visitorsForPeriod) * 100).toFixed(2))
+      : 0;
+
+    // ==========================================
+    // 5. Period label
+    // ==========================================
+    // Compute Cairo month name for label
     const monthName = todayDate.toLocaleString('ar-EG', { timeZone: 'Africa/Cairo', month: 'long' });
 
     const periodLabels = {
       all: 'جميع البيانات',
-      today: `اليوم — ${todayStr}`,
+      today: `اليوم — ${formatCairoDate(todayDate)}`,
       yesterday: 'أمس',
       week: 'آخر 7 أيام',
       month: `شهر ${monthName}`,
@@ -298,24 +297,37 @@ export async function GET(request) {
       custom: 'فترة مخصصة'
     };
 
+    // Build dateRange for response
+    let dateRangeForResponse = null;
+    if (dateFilterStart && dateFilterEnd && period !== 'all') {
+      dateRangeForResponse = {
+        start: dateFilterStart.split(' ')[0],
+        end: dateFilterEnd.split(' ')[0]
+      };
+    }
+
     return Response.json({
       success: true,
       data: {
         period,
         periodLabel: periodLabels[period] || period,
-        visitors: result.visitors,
-        totalCustomers: result.customers,
-        orders: result.orders,
-        completedOrders: result.orders,
-        sales: result.revenue,
-        conversionRate: result.conversionRate,
+        visitors: visitorsForPeriod,
+        totalCustomers: customersForPeriod,
+        orders: orderStats.orders,
+        completedOrders: orderStats.completed,
+        sales: parseFloat(orderStats.sales.toFixed(2)),
+        conversionRate,
         periodDays,
-        dateRange
+        dateRange: dateRangeForResponse
       }
     });
 
   } catch (error) {
     console.error(`[dashboard-stats] CRITICAL error for period=${searchParams.get('period')}:`, error.name, error.message);
-    return Response.json({ success: false, error: 'خطأ في تحميل الإحصائيات', data: null }, { status: 500 });
+    return Response.json({
+      success: false,
+      error: 'خطأ في تحميل الإحصائيات',
+      data: null
+    }, { status: 500 });
   }
 }

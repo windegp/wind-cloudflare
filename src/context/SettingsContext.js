@@ -22,7 +22,8 @@ export const SettingsProvider = ({ children }) => {
   });
 
   // 🔥 Visitor event tracking — writes an immutable event document
-  // No mutable today/yesterday counters. Events are aggregated later.
+  // Each visitor gets one event per day per session
+  // Also updates counters.visitors and counters.todayVisitors
   useEffect(() => {
     const hasBeenCounted = sessionStorage.getItem("wind_v_counted");
     
@@ -40,7 +41,6 @@ export const SettingsProvider = ({ children }) => {
       const visitorEventRef = doc(db, "visitor_events", `${sessionId}_${todayStr}`);
       
       // Write a single immutable visitor event document
-      // Each visitor gets one event per day per session
       getDoc(visitorEventRef).then(snap => {
         if (!snap.exists()) {
           setDoc(visitorEventRef, {
@@ -55,12 +55,48 @@ export const SettingsProvider = ({ children }) => {
             page: pathname || '/',
           }).catch(err => console.warn("Visitor event write failed:", err));
           
-          // Also increment the simple visitor counter for legacy "All" period use
+          // Increment counters for both all-time and today
           try {
             const settingsRef = doc(db, "settings", "siteSettings");
-            updateDoc(settingsRef, {
-              "counters.visitors": increment(1),
-            }).catch(() => {});
+            const todayDateField = "counters.todayDate";
+            
+            // Atomically increment counters.visitors (all-time) and counters.todayVisitors
+            // We also need to handle the case where todayDate changes (new day)
+            getDoc(settingsRef).then(snap => {
+              if (snap.exists()) {
+                const currentCounters = snap.data().counters || {};
+                const storedTodayDate = currentCounters.todayDate || '';
+                const updates = {
+                  "counters.visitors": increment(1),
+                };
+                
+                if (storedTodayDate === todayStr) {
+                  // Same day — simply increment todayVisitors
+                  updates["counters.todayVisitors"] = increment(1);
+                } else {
+                  // New day — reset todayVisitors to 1 and update todayDate
+                  // Move old todayVisitors to yesterdayVisitors
+                  const oldTodayVisitors = Number(currentCounters.todayVisitors) || 0;
+                  updates["counters.yesterdayVisitors"] = oldTodayVisitors;
+                  updates["counters.todayVisitors"] = 1;
+                  updates["counters.todayDate"] = todayStr;
+                }
+                
+                updateDoc(settingsRef, updates).catch(() => {});
+              } else {
+                // No settings doc yet — set initial values
+                updateDoc(settingsRef, {
+                  "counters.visitors": increment(1),
+                  "counters.todayVisitors": 1,
+                  "counters.todayDate": todayStr,
+                }).catch(() => {});
+              }
+            }).catch(() => {
+              // Fallback: just increment visitors
+              updateDoc(settingsRef, {
+                "counters.visitors": increment(1),
+              }).catch(() => {});
+            });
           } catch (e) {
             // Silent fail
           }
