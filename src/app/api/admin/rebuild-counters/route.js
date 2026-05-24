@@ -40,6 +40,18 @@ function getCanonicalId(customer, docId) {
 }
 
 export async function GET(request) {
+  // SAFETY GUARD:
+  // Prevent accidental public rebuild execution
+  const authHeader = request.headers.get('x-rebuild-secret');
+
+  if (process.env.REBUILD_SECRET) {
+    if (authHeader !== process.env.REBUILD_SECRET) {
+      return Response.json({
+        success: false,
+        error: 'Unauthorized rebuild request'
+      }, { status: 403 });
+    }
+  }
   const { searchParams } = new URL(request.url);
   const dryRun = searchParams.get('dryRun') !== 'false';
 
@@ -128,7 +140,9 @@ export async function GET(request) {
     let lastCustDoc = null;
     let fetchCustomers = true;
 
-    const seenIdentities = new Set();
+    // Deduplicate real customers by canonical identity
+// Memory-safe for current scale (~30k historical imports)
+const seenIdentities = new Set();
 
     console.log("[rebuild-counters] Starting Customers scan...");
 
@@ -227,7 +241,7 @@ export async function GET(request) {
     if (dryRun) {
       return Response.json({
         success: true,
-        message: `🔍 Dry-run complete. Orders: ${previousOrders} → ${orderCount}, Sales: EGP ${previousSales.toFixed(2)} → EGP ${salesTotal.toFixed(2)}, Customers: ${previousCustomers} → ${customerCount}. Pass ?dryRun=false to apply.`,
+        message: `🔍 Dry-run complete. Orders: ${previousOrders} → ${orderCount}, Sales: EGP ${previousSales.toFixed(2)} → ${salesTotal.toFixed(2)}, Customers: ${previousCustomers} → ${customerCount}. Run with ?dryRun=false to APPLY changes.`,
         report
       });
     }

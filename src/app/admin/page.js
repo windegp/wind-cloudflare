@@ -58,12 +58,12 @@ export default function Dashboard() {
     setStatsError(null);
     
     try {
-      let url = `/api/admin/dashboard-stats?period=${period}`;
+      let url = `/api/admin/dashboard-stats?period=${period}&_=${Date.now()}`;
       if (period === 'custom' && startDate && endDate) {
         url += `&startDate=${startDate}&endDate=${endDate}`;
       }
       
-      const res = await fetch(url);
+      const res = await fetch(url, { cache: 'no-store' });
       const result = await res.json();
       
       if (result.success) {
@@ -95,21 +95,21 @@ export default function Dashboard() {
   }, [activePeriod, fetchDashboardStats]);
   // ملاحظة: customStartDate/customEndDate مش متضمنين — بنستخدمهم يدوي
 
-  // تحديث دوري كل 60 ثانية — أطول + حماية من التكرار
+  // تحديث دوري كل 15 ثانية — استجابة شبه فورية
   const lastFetchRef = useRef(0);
   useEffect(() => {
     if (activePeriod === 'custom') return;
     const interval = setInterval(() => {
       // إيقاف الـ polling لو التاب مش نشط (مخفي)
       if (document.hidden) return;
-      // منع الـ fetch لو آخر مرة كانت من أقل من 30 ثانية
+      // منع الـ fetch لو آخر مرة كانت من أقل من 10 ثوانٍ
       const now = Date.now();
-      if (now - lastFetchRef.current < 30000) return;
+      if (now - lastFetchRef.current < 10000) return;
       lastFetchRef.current = now;
       fetchDashboardStats(activePeriod, customStartDate, customEndDate);
-    }, 60000);
+    }, 15000);
     // Fetch فوري عند أول تحميل
-    lastFetchRef.current = Date.now();
+    lastFetchRef.current = 0; // السماح ب fetch فوري
     return () => clearInterval(interval);
   }, [activePeriod, customStartDate, customEndDate, fetchDashboardStats]);
 

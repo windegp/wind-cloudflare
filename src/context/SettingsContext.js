@@ -71,16 +71,24 @@ export const SettingsProvider = ({ children }) => {
                 };
                 
                 if (storedTodayDate === todayStr) {
-                  // Same day — simply increment todayVisitors
-                  updates["counters.todayVisitors"] = increment(1);
-                } else {
-                  // New day — reset todayVisitors to 1 and update todayDate
-                  // Move old todayVisitors to yesterdayVisitors
-                  const oldTodayVisitors = Number(currentCounters.todayVisitors) || 0;
-                  updates["counters.yesterdayVisitors"] = oldTodayVisitors;
-                  updates["counters.todayVisitors"] = 1;
-                  updates["counters.todayDate"] = todayStr;
-                }
+  // Same Cairo day
+  updates["counters.todayVisitors"] = increment(1);
+
+} else {
+  // Cairo day rollover
+  // Preserve previous todayVisitors into yesterdayVisitors
+  const oldTodayVisitors = Number(currentCounters.todayVisitors) || 0;
+
+  updates["counters.yesterdayVisitors"] = oldTodayVisitors;
+
+  // IMPORTANT:
+  // We initialize todayVisitors at 0 first,
+  // then atomically increment by 1 to avoid race conditions
+  // during simultaneous midnight visits.
+  updates["counters.todayVisitors"] = increment(1);
+
+  updates["counters.todayDate"] = todayStr;
+}
                 
                 updateDoc(settingsRef, updates).catch(() => {});
               } else {

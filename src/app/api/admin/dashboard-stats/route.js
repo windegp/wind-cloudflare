@@ -83,10 +83,14 @@ async function queryOrdersForRange(db, startDateStr, endDateStr, filterStartMs, 
   const result = { orders: 0, sales: 0, completed: 0 };
   
   try {
-    const snap = await getDocs(query(
-      collection(db, "Orders"),
-      where("Created at", ">=", startDateStr)
-    ));
+    // IMPORTANT:
+// We intentionally use a single bounded query here instead of full collection scans.
+// Final end-date filtering happens in-memory via parseDateToMs().
+// This avoids Cloudflare Worker CPU explosions from analytics rebuild-style scans.
+const snap = await getDocs(query(
+  collection(db, "Orders"),
+  where("Created at", ">=", startDateStr)
+));
     
     for (const d of snap.docs) {
       try {
@@ -237,7 +241,15 @@ export async function GET(request) {
       orderStats.orders = totalOrders;
       orderStats.sales = totalSales;
       orderStats.completed = totalOrders;
-      periodDays = 90; // Reasonable default for "all time"
+      // ALL period = from earliest historical Shopify import until today
+// Keeps averages mathematically meaningful over time
+periodDays = Math.max(
+  1,
+  Math.floor(
+    (Date.now() - new Date('2025-12-01T00:00:00Z').getTime()) /
+    (1000 * 60 * 60 * 24)
+  )
+);
       
     } else if (period === 'today') {
       // TODAY: Use todayVisitors counter + live customer query
@@ -306,7 +318,7 @@ export async function GET(request) {
       };
     }
 
-    return Response.json({
+    return new Response(JSON.stringify({
       success: true,
       data: {
         period,
@@ -319,6 +331,13 @@ export async function GET(request) {
         conversionRate,
         periodDays,
         dateRange: dateRangeForResponse
+      }
+    }), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
       }
     });
 
