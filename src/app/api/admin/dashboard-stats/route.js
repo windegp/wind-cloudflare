@@ -14,8 +14,13 @@ export const dynamic = 'force-dynamic';
  *   - counters.orders, counters.sales, counters.customers = real-time updated
  *
  * PRIMARY SOURCE FOR FILTERED PERIODS: Live Firestore queries
+ *   - visitor_events collection (for ALL time-filtered visitor counts)
  *   - Orders collection (filtered by "Created at")
  *   - Customers collection (filtered by "last_active")
+ *
+ * CRITICAL RULE:
+ *   visitor_events = source of truth for all time-based filters (today, yesterday, week, month, custom)
+ *   counters       = only for real-time display (today/all totals fallback), NOT analytics queries
  *
  * NO getAllAggregated() — avoids Worker 1102 CPU limit errors
  * NO full analytics_daily scan — avoids heavy aggregation
@@ -27,7 +32,7 @@ export const dynamic = 'force-dynamic';
 /**
  * Query visitor_events for a date range — returns unique session count (real visitors)
  * Uses the date field (YYYY-MM-DD) which is indexed in visitor_events.
- * This is the SAME source as analytics-daily and the today counter.
+ * This is the SAME source as analytics-daily.
  * Do NOT use Customers.last_active for visitors — that only captures purchasers.
  */
 async function queryVisitorsFromEvents(db, startDateOnly, endDateOnly) {
@@ -162,13 +167,13 @@ export async function GET(request) {
 
     // ==========================================
     // 1. Read counters from settings/siteSettings
+    //    (Used for 'all' period, not for filtered time periods)
     // ==========================================
     const settingsSnap = await getDoc(doc(db, "settings", "siteSettings"));
     const counters = settingsSnap.exists() ? (settingsSnap.data().counters || {}) : {};
     
     const totalVisitors = Number(counters.visitors) || 0;
     const todayVisitors = Number(counters.todayVisitors) || 0;
-    const yesterdayVisitors = Number(counters.yesterdayVisitors) || 0;
     const totalOrders = Number(counters.orders) || 0;
     const totalSales = Number(counters.sales) || 0;
     const totalCustomersCount = Number(counters.customers) || 0;
@@ -236,8 +241,6 @@ export async function GET(request) {
       // dateFilterStart/End are already Cairo-midnight strings like "2026-05-24 00:00:00".
       // Replacing space with T and appending Z forces UTC interpretation,
       // which is deterministic regardless of runtime locale (Worker, Edge, Node).
-      // Without +Z, Date.parse() would use the server's local timezone,
-      // which varies by Cloudflare Worker region.
       const startMs = Date.parse(dateFilterStart.replace(' ', 'T') + 'Z');
       const endMs = Date.parse(dateFilterEnd.replace(' ', 'T') + 'Z');
       if (!isNaN(startMs) && !isNaN(endMs)) {
@@ -268,51 +271,42 @@ export async function GET(request) {
       orderStats.orders = totalOrders;
       orderStats.sales = totalSales;
       orderStats.completed = totalOrders;
-      // ALL period = from earliest historical Shopify import until today
-// Keeps averages mathematically meaningful over time
-periodDays = Math.max(
-  1,
-  Math.floor(
-    (Date.now() - new Date('2025-12-01T00:00:00Z').getTime()) /
-    (1000 * 60 * 60 * 24)
-  )
-);
-      
-    } else if (period === 'today') {
-      // TODAY: Use todayVisitors counter (incremented by SettingsContext)
-      visitorsForPeriod = todayVisitors;
-      
-      // Query today's real customers from Customers collection
-      if (dateFilterStart && filterStartMs && filterEndMs) {
-        const todayResult = await queryRealCustomersForRange(db, dateFilterStart, dateFilterEnd, filterStartMs, filterEndMs);
-        customersForPeriod = todayResult.realCustomers;
-      }
-      
-      // Query today's orders
-      if (dateFilterStart && filterStartMs && filterEndMs) {
-        orderStats = await queryOrdersForRange(db, dateFilterStart, dateFilterEnd, filterStartMs, filterEndMs);
-      }
-      
-    } else if (period === 'yesterday') {
-      // YESTERDAY: Query visitors from visitor_events + customers from Customers
-      if (dateFilterStart && filterStartMs && filterEndMs) {
-        // Extract YYYY-MM-DD only for visitor_events query (no time suffix)
-        const yesterdayStr = dateFilterStart.split(' ')[0];
-        visitorsForPeriod = await queryVisitorsFromEvents(db, yesterdayStr, yesterdayStr);
-        const custResult = await queryRealCustomersForRange(db, dateFilterStart, dateFilterEnd, filterStartMs, filterEndMs);
-        customersForPeriod = custResult.realCustomers;
-        orderStats = await queryOrdersForRange(db, dateFilterStart, dateFilterEnd, filterStartMs, filterEndMs);
-      }
-      
+      periodDays = Math.max(
+        1,
+        Math.floor(
+          (Date.now() - new Date('2025-12-01T00:00:00Z').getTime()) /
+          (1000 * 60 * 60 * 24)
+        )
+      );
     } else {
-      // WEEK, MONTH, LAST_MONTH, CUSTOM: Query from visitor_events + Customers
+      // ═══════════════════════════════════════════════════════════
+      // ALL FILTERED PERIODS: Use visitor_events as source of truth
+      // ═══════════════════════════════════════════════════════════
+      // This includes 'today', 'yesterday', 'week', 'month',
+      // 'last_month', and 'custom'.
+      //
+      // CRITICAL: We do NOT use counters.todayVisitors for the 'today'
+      // period, because after midnight Cairo time, the counter still
+      // holds yesterday's value until the first visitor triggers a
+      // rollover. This would cause inflated "today" counts during
+      // the gap between midnight and first visitor.
+      //
+      // visitor_events.date is always correct because it's written
+      // with getCairoDateStr() at event creation time, independent
+      // of counter rollover logic.
+      // ═══════════════════════════════════════════════════════════
       if (dateFilterStart && filterStartMs && filterEndMs) {
-        // Extract YYYY-MM-DD only for visitor_events date range query
         const startDateOnly = dateFilterStart.split(' ')[0];
         const endDateOnly = dateFilterEnd.split(' ')[0];
+
+        // Visitors from visitor_events (accurate for all time filters)
         visitorsForPeriod = await queryVisitorsFromEvents(db, startDateOnly, endDateOnly);
+
+        // Customers
         const custResult = await queryRealCustomersForRange(db, dateFilterStart, dateFilterEnd, filterStartMs, filterEndMs);
         customersForPeriod = custResult.realCustomers;
+
+        // Orders & revenue
         orderStats = await queryOrdersForRange(db, dateFilterStart, dateFilterEnd, filterStartMs, filterEndMs);
       }
     }
