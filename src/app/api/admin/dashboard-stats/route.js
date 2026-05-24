@@ -25,11 +25,39 @@ export const dynamic = 'force-dynamic';
  */
 
 /**
- * Query Customers for a date range — returns visitor count + real customer count
- * Uses a SINGLE scan to avoid double queries.
+ * Query visitor_events for a date range — returns unique session count (real visitors)
+ * Uses the date field (YYYY-MM-DD) which is indexed in visitor_events.
+ * This is the SAME source as analytics-daily and the today counter.
+ * Do NOT use Customers.last_active for visitors — that only captures purchasers.
  */
-async function queryCustomersForRange(db, startDateStr, endDateStr, filterStartMs, filterEndMs) {
-  const result = { visitors: 0, realCustomers: 0 };
+async function queryVisitorsFromEvents(db, startDateOnly, endDateOnly) {
+  try {
+    // visitor_events.date is stored as "YYYY-MM-DD" string — perfect for range queries
+    // Firestore string comparison on YYYY-MM-DD sorts correctly lexicographically
+    const snap = await getDocs(query(
+      collection(db, "visitor_events"),
+      where("date", ">=", startDateOnly),
+      where("date", "<=", endDateOnly)
+    ));
+    
+    const uniqueSessions = new Set();
+    snap.docs.forEach(d => {
+      const ev = d.data();
+      if (ev.sessionId) uniqueSessions.add(ev.sessionId);
+    });
+    return uniqueSessions.size;
+  } catch (qErr) {
+    console.error(`[dashboard-stats] visitor_events query failed: ${qErr.code || qErr.message}`);
+    return 0;
+  }
+}
+
+/**
+ * Query Customers for a date range — returns real customer count only.
+ * Used ONLY for the "totalCustomers" metric, NOT for visitors.
+ */
+async function queryRealCustomersForRange(db, startDateStr, endDateStr, filterStartMs, filterEndMs) {
+  const result = { realCustomers: 0 };
   
   try {
     const snap = await getDocs(query(
@@ -37,7 +65,6 @@ async function queryCustomersForRange(db, startDateStr, endDateStr, filterStartM
       where("last_active", ">=", startDateStr)
     ));
     
-    const uniqueVisitors = new Map();
     const realCustomers = new Map();
     
     for (const d of snap.docs) {
@@ -52,9 +79,6 @@ async function queryCustomersForRange(db, startDateStr, endDateStr, filterStartM
         const phone = String(c.Phone || c['Default Address Phone'] || '').replace(/[^0-9]/g, '');
         const uniqueId = email || phone || d.id;
         
-        // All active customers = visitors
-        if (!uniqueVisitors.has(uniqueId)) uniqueVisitors.set(uniqueId, true);
-        
         // Real customer = has email/phone AND has orders AND is in Purchased_Once/VIP
         if ((email || phone) && isRealCustomer(c)) {
           if (!realCustomers.has(uniqueId)) realCustomers.set(uniqueId, true);
@@ -65,11 +89,9 @@ async function queryCustomersForRange(db, startDateStr, endDateStr, filterStartM
       }
     }
     
-    result.visitors = uniqueVisitors.size;
     result.realCustomers = realCustomers.size;
   } catch (qErr) {
     console.error(`[dashboard-stats] Customers query failed: ${qErr.code || qErr.message}`);
-    result.visitors = 0;
     result.realCustomers = 0;
   }
   
@@ -210,9 +232,14 @@ export async function GET(request) {
     }
 
     if (dateFilterStart && dateFilterEnd) {
-      // Parse dates safely — use our own parseDateToMs from helpers
-      const startMs = Date.parse(dateFilterStart.replace(' ', 'T'));
-      const endMs = Date.parse(dateFilterEnd.replace(' ', 'T'));
+      // Parse dates using Date.parse() with explicit UTC interpretation.
+      // dateFilterStart/End are already Cairo-midnight strings like "2026-05-24 00:00:00".
+      // Replacing space with T and appending Z forces UTC interpretation,
+      // which is deterministic regardless of runtime locale (Worker, Edge, Node).
+      // Without +Z, Date.parse() would use the server's local timezone,
+      // which varies by Cloudflare Worker region.
+      const startMs = Date.parse(dateFilterStart.replace(' ', 'T') + 'Z');
+      const endMs = Date.parse(dateFilterEnd.replace(' ', 'T') + 'Z');
       if (!isNaN(startMs) && !isNaN(endMs)) {
         filterStartMs = startMs;
         filterEndMs = endMs;
@@ -252,12 +279,12 @@ periodDays = Math.max(
 );
       
     } else if (period === 'today') {
-      // TODAY: Use todayVisitors counter + live customer query
+      // TODAY: Use todayVisitors counter (incremented by SettingsContext)
       visitorsForPeriod = todayVisitors;
       
-      // Query today's real customers
+      // Query today's real customers from Customers collection
       if (dateFilterStart && filterStartMs && filterEndMs) {
-        const todayResult = await queryCustomersForRange(db, dateFilterStart, dateFilterEnd, filterStartMs, filterEndMs);
+        const todayResult = await queryRealCustomersForRange(db, dateFilterStart, dateFilterEnd, filterStartMs, filterEndMs);
         customersForPeriod = todayResult.realCustomers;
       }
       
@@ -267,20 +294,24 @@ periodDays = Math.max(
       }
       
     } else if (period === 'yesterday') {
-      // YESTERDAY: Query from scratch (yesterdayVisitors may be stale)
+      // YESTERDAY: Query visitors from visitor_events + customers from Customers
       if (dateFilterStart && filterStartMs && filterEndMs) {
-        const yesterdayResult = await queryCustomersForRange(db, dateFilterStart, dateFilterEnd, filterStartMs, filterEndMs);
-        visitorsForPeriod = yesterdayResult.visitors;
-        customersForPeriod = yesterdayResult.realCustomers;
+        // Extract YYYY-MM-DD only for visitor_events query (no time suffix)
+        const yesterdayStr = dateFilterStart.split(' ')[0];
+        visitorsForPeriod = await queryVisitorsFromEvents(db, yesterdayStr, yesterdayStr);
+        const custResult = await queryRealCustomersForRange(db, dateFilterStart, dateFilterEnd, filterStartMs, filterEndMs);
+        customersForPeriod = custResult.realCustomers;
         orderStats = await queryOrdersForRange(db, dateFilterStart, dateFilterEnd, filterStartMs, filterEndMs);
       }
       
     } else {
-      // WEEK, MONTH, LAST_MONTH, CUSTOM: Query from scratch
+      // WEEK, MONTH, LAST_MONTH, CUSTOM: Query from visitor_events + Customers
       if (dateFilterStart && filterStartMs && filterEndMs) {
-        // For week/month/last_month, we query customers up to the end date
-        const custResult = await queryCustomersForRange(db, dateFilterStart, dateFilterEnd, filterStartMs, filterEndMs);
-        visitorsForPeriod = custResult.visitors;
+        // Extract YYYY-MM-DD only for visitor_events date range query
+        const startDateOnly = dateFilterStart.split(' ')[0];
+        const endDateOnly = dateFilterEnd.split(' ')[0];
+        visitorsForPeriod = await queryVisitorsFromEvents(db, startDateOnly, endDateOnly);
+        const custResult = await queryRealCustomersForRange(db, dateFilterStart, dateFilterEnd, filterStartMs, filterEndMs);
         customersForPeriod = custResult.realCustomers;
         orderStats = await queryOrdersForRange(db, dateFilterStart, dateFilterEnd, filterStartMs, filterEndMs);
       }
