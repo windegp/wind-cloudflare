@@ -40,9 +40,21 @@ export const SettingsProvider = ({ children }) => {
       const todayStr = getCairoDateStr(new Date());
       const visitorEventRef = doc(db, "visitor_events", `${sessionId}_${todayStr}`);
       
+      // [DIAGNOSTIC] Before visitor_events write attempt
+      console.log("[VisitorEvent] ATTEMPTING setDoc for:", visitorEventRef.id, "at", new Date().toISOString());
+      
       // Write a single immutable visitor event document
       getDoc(visitorEventRef).then(snap => {
         if (!snap.exists()) {
+          // ═══════════════════════════════════════════════════
+          // FIX: Chain counter updates AFTER setDoc resolves
+          // ═══════════════════════════════════════════════════
+          // Previously, setDoc and counter updates ran in parallel
+          // as separate promise chains. If setDoc failed silently,
+          // counters still incremented but visitor_events never persisted.
+          // Now counter updates only proceed AFTER setDoc succeeds.
+          // ═══════════════════════════════════════════════════
+          
           setDoc(visitorEventRef, {
             sessionId: sessionId,
             date: todayStr,
@@ -54,15 +66,15 @@ export const SettingsProvider = ({ children }) => {
             referrer: typeof document !== 'undefined' ? document.referrer : '',
             page: pathname || '/',
           }).then(() => {
+            // [DIAGNOSTIC] visitor_events write succeeded
+            console.log("[VisitorEvent] ✅ setDoc SUCCEEDED for:", visitorEventRef.id);
+
             // ✅ Mark counted ONLY after visitor_events doc is successfully created
             sessionStorage.setItem("wind_v_counted", "true");
-          }).catch(err => {
-            console.warn("[VisitorEvent] setDoc failed:", err.message);
-            // Don't mark counted — allow retry on next load
-          });
 
-          // Increment counters for both all-time and today
-          try {
+            // ═══════════════════════════════════════════════════
+            // Increment counters ONLY after visitor_events is confirmed written
+            // ═══════════════════════════════════════════════════
             const settingsRef = doc(db, "settings", "siteSettings");
 
             getDoc(settingsRef).then(snap => {
@@ -102,11 +114,16 @@ export const SettingsProvider = ({ children }) => {
                 console.warn("[VisitorEvent] fallback counter increment failed:", err2.message);
               });
             });
-          } catch (e) {
-            console.warn("[VisitorEvent] counter block error:", e.message);
-          }
+          }).catch(err => {
+            // [DIAGNOSTIC] visitor_events write FAILED
+            console.error("[VisitorEvent] ❌ setDoc FAILED:", err.message, err.code || "");
+            console.error("[VisitorEvent] ❌ Full error:", JSON.stringify(err));
+            // Don't mark counted — allow retry on next load
+            // IMPORTANT: Do NOT increment counters if visitor_events write failed
+          });
         } else {
           // Doc already exists for this session+day — just mark counted
+          console.log("[VisitorEvent] Doc already exists for session+day, skipping write");
           sessionStorage.setItem("wind_v_counted", "true");
         }
       }).catch(err => {
