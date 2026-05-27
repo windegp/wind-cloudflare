@@ -12,7 +12,7 @@ import SizeChartModal from "@/components/SizeChartModal";
 import ProductReviews from "@/components/products/ProductReviews";
 // استدعاء الهوكات الجديدة لتقليل استهلاك الكوتا
 import { useProduct, useRelatedProducts } from "@/hooks/useFirestore";
-import { Plus, Minus, Star, Info, Share2, Heart, ImageIcon, X, Truck, Eye, ShieldCheck, ChevronLeft, Search, ChevronRight, ShoppingBag, CreditCard, Banknote } from '@/components/icons-extra';
+import { Plus, Minus, Star, Info, Share2, Heart, ImageIcon, X, Truck, Eye, ShieldCheck, ChevronLeft, Search, ChevronRight, ShoppingBag, CreditCard, Banknote, ChevronDown } from '@/components/icons-extra';
 
 export default function ProductView({ initialProduct, sourceCategory }) {
   const { id } = useParams();
@@ -53,9 +53,13 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   const touchStartX = useRef(null);
   const touchStartY = useRef(null);
   const colorsRef   = useRef(null);
+  const scrollContainerRef = useRef(null);
+
   // 🔥 مراجع السحر لمنع السبام وتقليل الكتابة في فايربيز
   const likeTimeoutRef = useRef(null);
   const pendingActionRef = useRef(0);
+
+  const [showHiddenThumbs, setShowHiddenThumbs] = useState(false);
 
   useEffect(() => {
     if (product?.id) {
@@ -120,7 +124,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
     localStorage.setItem('wind_wishlist', JSON.stringify(newWishlist));
 
     // 2. تجميع الطلبات (Debouncing) لمنع استنزاف الكوتا
-    // هنستنى 1.5 ثانية، لو العميل داس لاיק ושال اللايك بسرعة (الصافي صفر)، مش هنكلم فايربيز أصلاً!
+    // هنستنى 1.5 ثانية، لو العميل داس لايك ושال اللايك بسرعة (الصافي صفر)، مش هنكلم فايربيز أصلاً!
     if (likeTimeoutRef.current) clearTimeout(likeTimeoutRef.current);
 
     likeTimeoutRef.current = setTimeout(async () => {
@@ -362,7 +366,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
         {/* Hero Image Gallery */}
         <div 
-          className="relative w-full aspect-[3/4] bg-[#F5F5F5] group"
+          className="relative w-full aspect-[3/4] bg-[#F5F5F5] group overflow-hidden"
           onClick={() => openGallery(activeIdx)}
           onTouchStart={handleHeroTouchStart}
           onTouchMove={handleHeroTouchMove}
@@ -372,41 +376,60 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             key={activeImage}
             src={getImageUrl(activeImage)} 
             alt={product.title} 
-            className="w-full h-full object-cover transition-opacity duration-500 ease-out animate-[galleryIn_0.5s_ease-out]"
+            className="w-full h-full object-cover transition-all duration-500 ease-out"
           />
 
           <button 
             onClick={(e) => { e.stopPropagation(); openGallery(activeIdx); }} 
-            className="absolute top-4 right-4 z-10 bg-white/80 p-2.5 rounded-full backdrop-blur-sm border border-[#DDDDDD] text-[#111111] hover:bg-white transition-all duration-300 cursor-zoom-in"
+            className="absolute top-4 right-4 z-10 bg-white/80 p-2.5 rounded-full border border-[#DDDDDD] text-[#111111] hover:bg-white transition-all duration-300 cursor-zoom-in"
           >
             <Search size={18} />
           </button>
 
-          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-3 text-[#111111]/60 text-[10px] tracking-[0.08em] pointer-events-none z-10 bg-white/80 px-3 py-1.5 rounded-full backdrop-blur-sm border border-[#DDDDDD]">
+          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-3 text-[#111111]/60 text-[10px] tracking-[0.08em] pointer-events-none z-10 bg-white/80 px-3 py-1.5 rounded-full border border-[#DDDDDD]">
             <span>{activeIdx + 1} / {gallery.length}</span>
           </div>
         </div>
 
+        {/* Mobile Gallery Thumbnails */}
+        <div className="px-5 pt-3 pb-2 overflow-x-auto hide-scrollbar-horizontal" dir="rtl">
+          <div className="flex gap-2">
+            {gallery.map((img, idx) => (
+              <button
+                key={idx}
+                onClick={() => { setActiveImage(img); setActiveIdx(idx); }}
+                className={`flex-shrink-0 w-16 h-20 overflow-hidden border transition-all duration-300 ${
+                  activeIdx === idx
+                    ? 'border-black opacity-100'
+                    : 'border-[#DDDDDD] opacity-50 hover:opacity-80'
+                }`}
+              >
+                <img src={getImageUrl(img)} alt="" className="w-full h-full object-cover" />
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* === MOBILE CONTENT === */}
-        <div className="px-5 py-6" dir="rtl">
+        <div className="px-5 py-4" dir="rtl">
 
           {/* Action Bar */}
-          <div className="mb-6 flex items-center gap-5">
+          <div className="mb-5 flex items-center gap-5">
             <button onClick={(e) => { e.stopPropagation(); openGallery(activeIdx); }} className="flex items-center gap-1.5 text-[#666666] hover:text-[#111111] transition-all duration-300">
               <ImageIcon size={17} />
-              <span className="text-[11px] font-semibold tracking-[0.08em]">{gallery.length} صور</span>
+              <span className="text-[11px] font-medium tracking-[0.08em]">{gallery.length} صور</span>
             </button>
             
             <button onClick={handleWishlistToggle} className="flex items-center gap-1.5 transition-all duration-300 hover:text-black text-[#666666]">
               <Heart size={17} fill={isWishlisted ? "#111111" : "none"} color={isWishlisted ? "#111111" : "currentColor"} className="transition-all duration-300" />
-              <span className={`text-[11px] font-semibold tracking-[0.08em] transition-colors ${isWishlisted ? 'text-black' : 'text-[#666666]'}`}>
+              <span className={`text-[11px] font-medium tracking-[0.08em] transition-colors ${isWishlisted ? 'text-black' : 'text-[#666666]'}`}>
                 {realLikesCount > 0 ? (realLikesCount > 999 ? (realLikesCount/1000).toFixed(1) + 'K' : realLikesCount) : "إعجاب"}
               </span>
             </button>
 
             <button onClick={handleShare} className="flex items-center gap-1.5 text-[#666666] hover:text-[#111111] transition-all duration-300">
               <Share2 size={17} />
-              <span className="text-[11px] font-semibold tracking-[0.08em]">مشاركة</span>
+              <span className="text-[11px] font-medium tracking-[0.08em]">مشاركة</span>
             </button>
           </div>
 
@@ -431,34 +454,32 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                 .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
                 .join(' ')
                 .trim();
-              return <p className="text-[11px] text-[#666666] tracking-[0.08em] uppercase mb-2 font-semibold">{cleanName}</p>;
+              return <p className="text-[11px] text-[#666666] tracking-[0.08em] uppercase mb-2 font-medium">{cleanName}</p>;
             }
             return null;
           })()}
 
-          {/* Title */}
-          <h1 className="text-[23px] font-bold text-[#111111] tracking-tight leading-[1.1] mb-1">{product.title}</h1>
+          {/* Title - more editorial */}
+          <h1 className="text-xl font-medium text-[#111111] tracking-tight leading-[1.1] mb-1">{product.title}</h1>
 
-          {/* Price + Stock */}
-          <div className="flex items-baseline gap-1.5 mt-2">
-            <span className="text-2xl font-semibold text-[#111111]">{product.price}</span>
-            <span className="text-xs text-[#666666] font-medium">ج.م</span>
+          {/* Price + متوفر inline */}
+          <div className="flex items-baseline gap-1.5 mt-3">
+            <span className="text-xl font-normal text-[#333333] tracking-[0.02em]">{product.price}</span>
+            <span className="text-xs text-[#666666]">ج.م</span>
             {product.compareAtPrice && (
               <span className="text-xs text-[#999999] line-through mr-1">{product.compareAtPrice} ج.م</span>
             )}
-          </div>
-
-          {/* In Stock Dot */}
-          <div className="flex items-center gap-2 mt-4">
-            <span className="w-2 h-2 rounded-full bg-green-500"></span>
-            <span className="text-xs text-[#666666]">
-              {product?.quantity > 0 || product?.sellOutOfStock === "Yes" ? "In stock" : "غير متوفر"}
+            <span className="mr-3 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+              <span className="text-[11px] text-[#666666]">
+                {product?.quantity > 0 || product?.sellOutOfStock === "Yes" ? "متوفر" : "غير متوفر"}
+              </span>
             </span>
           </div>
 
-          {/* Star Rating */}
-          <a href="#reviews-section" onClick={scrollToReviews} className="flex items-center gap-2 group w-fit hover:opacity-80 transition-opacity mt-4">
-            <div className="flex gap-0.5 text-[#111111]">
+          {/* Star Rating - yellow stars */}
+          <a href="#reviews-section" onClick={scrollToReviews} className="flex items-center gap-2 group w-fit hover:opacity-80 transition-opacity mt-3">
+            <div className="flex gap-0.5 text-[#FDBA12]">
               {[...Array(5)].map((_, i) => (
                 <Star key={i} size={13} fill={i < Math.round(realRating) ? "currentColor" : "none"} className={i >= Math.round(realRating) ? "text-[#DDDDDD]" : ""} />
               ))}
@@ -470,13 +491,13 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
           {/* Short Description */}
           {product.description && (
-            <div className="mt-6">
+            <div className="mt-5">
               <p className="text-sm leading-relaxed text-[#666666]">
                 {shortDescription}
               </p>
               <button 
                 onClick={() => setDescModalOpen(true)}
-                className="text-[#111111] text-[11px] font-semibold flex items-center gap-1 hover:underline underline-offset-4 mt-1"
+                className="text-[#111111] text-[11px] font-medium flex items-center gap-1 hover:underline underline-offset-4 mt-1"
               >
                 <Info size={12} />
                 عرض تفاصيل المنتج والخامات
@@ -484,78 +505,81 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             </div>
           )}
 
-          {/* Color Selector */}
-          {safeColors.length > 0 && (
-            <div className="mt-10 border-t border-[#DDDDDD] pt-7">
-              <div className="flex items-baseline gap-2 mb-4">
-                <span className="text-[11px] text-[#666666] tracking-wider uppercase font-semibold">
-                  {safeColors.length > 1 ? "اختر اللون" : "اللون"}
-                </span>
-                {selectedColor && <span className="text-[#111111] text-[12px] font-medium capitalize">{selectedColor}</span>}
-              </div>
-              <div ref={colorsRef} className="flex flex-wrap gap-3">
-                {safeColors.map((ci, i) => {
-                  const name  = typeof ci === "string" ? ci : ci.name;
-                  const hi    = product.colorSwatches?.[name] || (typeof ci === "object" ? ci.swatch : "#DDDDDD");
-                  const isImg = hi.startsWith("http") || hi.includes("/");
-                  const isSel = selectedColor === name;
-                  return (
-                    <button key={i} onClick={() => { setSelectedColor(name); if (isImg) { setActiveImage(hi); setActiveIdx(0); } }} title={name} className="flex flex-col items-center group/c transition-all duration-200">
-                      <div className={`w-10 h-10 rounded-full overflow-hidden transition-all duration-200 bg-white ${isSel ? "ring-2 ring-black ring-offset-2 ring-offset-white" : "ring-1 ring-[#DDDDDD] hover:ring-black/30"}`}>
-                        {isImg ? <img src={getImageUrl(hi)} alt={name} className="w-full h-full object-cover" /> : <div style={{backgroundColor:hi}} className="w-full h-full border border-black/5 rounded-full" />}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Size Selector */}
-          {safeSizes.length > 0 && (
-            <div className="mt-8 border-t border-[#DDDDDD] pt-7">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-[11px] text-[#666666] tracking-wider uppercase font-semibold">
-                    {safeSizes.length > 1 ? "اختر المقاس" : "المقاس"}
+          {/* Unified Selectors Area (NO separator between color & size) */}
+          <div className="mt-8 border-t border-[#DDDDDD] pt-7">
+            {/* Color Selector - boxed style */}
+            {safeColors.length > 0 && (
+              <div className="mb-6">
+                <div className="flex items-baseline gap-2 mb-3">
+                  <span className="text-[11px] text-[#666666] tracking-[0.08em] uppercase font-medium">
+                    {safeColors.length > 1 ? "اختر اللون" : "اللون"}
                   </span>
-                  {selectedSize && <span className="text-[#111111] text-[12px] font-medium capitalize">{selectedSize}</span>}
+                  {selectedColor && <span className="text-[#111111] text-[12px] font-medium capitalize">{selectedColor}</span>}
                 </div>
-                <button onClick={() => setSizeGuideOpen(true)} className="text-[11px] text-[#111111] font-medium flex items-center gap-1.5 border border-[#DDDDDD] bg-white hover:border-black px-3 py-1 transition-all">
-                  <Info size={12} /> دليل القياسات
-                </button>
+                <div ref={colorsRef} className="flex flex-wrap gap-2">
+                  {safeColors.map((ci, i) => {
+                    const name  = typeof ci === "string" ? ci : ci.name;
+                    const hi    = product.colorSwatches?.[name] || (typeof ci === "object" ? ci.swatch : "#DDDDDD");
+                    const isImg = hi.startsWith("http") || hi.includes("/");
+                    const isSel = selectedColor === name;
+                    return (
+                      <button key={i} onClick={() => { setSelectedColor(name); if (isImg) { setActiveImage(hi); setActiveIdx(0); } }} title={name} className="transition-all duration-200">
+                        <div className={`w-9 h-9 flex items-center justify-center border transition-all duration-200 bg-white ${isSel ? "border-black ring-1 ring-black" : "border-[#DDDDDD] hover:border-black/40"}`}>
+                          {isImg ? <img src={getImageUrl(hi)} alt={name} className="w-full h-full object-cover" /> : <div style={{backgroundColor:hi}} className="w-full h-full" />}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              {safeSizes.length > 1 && (
-                <div className="flex flex-wrap gap-2">
-                  {safeSizes.map(sz => (
-                    <button key={sz} onClick={() => setSelectedSize(sz)} className={`min-w-[56px] h-9 text-sm font-medium border transition-all duration-200 capitalize ${selectedSize===sz ? "bg-black text-white border-black" : "bg-white text-[#666666] border-[#DDDDDD] hover:border-black hover:text-black"}`}>{sz}</button>
-                  ))}
+            )}
+
+            {/* Size Selector - no divider from colors */}
+            {safeSizes.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-[11px] text-[#666666] tracking-[0.08em] uppercase font-medium">
+                      {safeSizes.length > 1 ? "اختر المقاس" : "المقاس"}
+                    </span>
+                    {selectedSize && <span className="text-[#111111] text-[12px] font-medium capitalize">{selectedSize}</span>}
+                  </div>
+                  <button onClick={() => setSizeGuideOpen(true)} className="text-[11px] text-[#111111] font-medium flex items-center gap-1.5 border border-[#DDDDDD] bg-white hover:border-black px-3 py-0.5 transition-all">
+                    <Info size={11} /> دليل القياسات
+                  </button>
                 </div>
-              )}
-            </div>
-          )}
+                {safeSizes.length > 1 && (
+                  <div className="flex flex-wrap gap-2">
+                    {safeSizes.map(sz => (
+                      <button key={sz} onClick={() => setSelectedSize(sz)} className={`min-w-[52px] h-9 text-sm font-medium border transition-all duration-200 capitalize ${selectedSize===sz ? "bg-black text-white border-black" : "bg-white text-[#666666] border-[#DDDDDD] hover:border-black hover:text-black"}`}>{sz}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* === MOBILE ADD TO CART === */}
-          <div className="mt-10 border-t border-[#DDDDDD] pt-7">
-            <div className="sticky bottom-0 pb-4 bg-white pt-4">
+          <div className="mt-8 border-t border-[#DDDDDD] pt-7">
+            <div className="sticky bottom-0 pb-4 bg-white pt-2">
             <div className="flex gap-3">
               <button 
                 onClick={() => {
                   addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity});
                   setQuantity(1);
                 }} 
-                className="flex-1 text-sm font-semibold py-[14px] flex items-center justify-center gap-2 transition-all duration-200"
-                style={{background:'#000', color:'#fff', border:'1px solid #000'}}
+                className="flex-1 text-sm font-medium py-[16px] flex items-center justify-center transition-all duration-200 relative overflow-hidden"
+                style={{background:'#000', color:'#fff', border:'1px solid #000', letterSpacing:'0.02em'}}
                 onMouseEnter={e => { e.currentTarget.style.opacity = '0.9'; }}
                 onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
               >
-                <ShoppingBag size={17} />
-                أضف إلي السلة — {(product.price * quantity)} ج.م
+                <span className="relative z-10">أضف إلي السلة — {(product.price * quantity)} ج.م</span>
+                <span className="absolute inset-0 bg-white/5 opacity-0 hover:opacity-100 transition-opacity"></span>
               </button>
               
-              <div className="flex items-center justify-between bg-white border border-[#DDDDDD] px-2 w-[90px] shrink-0">
+              <div className="flex items-center justify-between bg-white border border-[#DDDDDD] px-2 w-[85px] shrink-0">
                 <button onClick={() => setQuantity(q => q + 1)} className="text-[#666666] hover:text-black p-1 transition-colors"><Plus size={15} /></button>
-                <span className="text-[#111111] font-medium text-sm">{quantity}</span>
+                <span className="text-[#111111] text-sm font-medium">{quantity}</span>
                 <button onClick={() => setQuantity(q => q > 1 ? q - 1 : 1)} className="text-[#666666] hover:text-black p-1 transition-colors"><Minus size={15} /></button>
               </div>
             </div>
@@ -563,47 +587,77 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             </div>
           </div>
 
-          {/* Trust Badges */}
+          {/* Trust Badges - cleaner */}
           <div className="mt-6 grid grid-cols-3 gap-px bg-[#E5E5E5]">
-            <div className="flex items-center gap-1.5 text-[10px] text-[#666666] font-medium justify-center bg-white py-3">
-              <Truck size={13} className="text-black" />
+            <div className="flex items-center gap-1.5 text-[10px] text-[#666666] justify-center bg-white py-3">
+              <Truck size={12} className="text-[#111111]" />
               <span>شحن سريع</span>
             </div>
-            <div className="flex items-center gap-1.5 text-[10px] text-[#666666] font-medium justify-center bg-white py-3">
-              <Eye size={13} className="text-black" />
+            <div className="flex items-center gap-1.5 text-[10px] text-[#666666] justify-center bg-white py-3">
+              <Eye size={12} className="text-[#111111]" />
               <span>معاينة للطلب</span>
             </div>
-            <div className="flex items-center gap-1.5 text-[10px] text-[#666666] font-medium justify-center bg-white py-3">
-              <ShieldCheck size={13} className="text-black" />
+            <div className="flex items-center gap-1.5 text-[10px] text-[#666666] justify-center bg-white py-3">
+              <ShieldCheck size={12} className="text-[#111111]" />
               <span>استرجاع سهل</span>
             </div>
           </div>
 
           <div className="mt-3 flex items-center justify-between bg-[#FAFAFA] py-3 px-4 border border-[#E5E5E5]">
             <div className="flex items-center gap-2 text-[11px] text-[#666666]">
-              <ShieldCheck size={13} className="text-green-600" />
+              <ShieldCheck size={13} className="text-[#111111]" />
               <span>دفع آمن 100%</span>
             </div>
             <div className="flex items-center gap-3 text-[#999999]">
               <CreditCard size={16} className="hover:text-black transition-colors"/>
               <Banknote size={16} className="hover:text-black transition-colors"/>
-              <div className="bg-[#FAFAFA] px-1.5 py-0.5 text-[9px] border border-[#DDDDDD] text-[#111111] font-semibold">INSTAPAY</div>
-              <div className="bg-[#FAFAFA] px-1.5 py-0.5 text-[9px] border border-[#DDDDDD] text-[#111111] font-semibold">VISA</div>
+              <div className="bg-[#FAFAFA] px-1.5 py-0.5 text-[9px] border border-[#DDDDDD] text-[#111111]">INSTAPAY</div>
+              <div className="bg-[#FAFAFA] px-1.5 py-0.5 text-[9px] border border-[#DDDDDD] text-[#111111]">VISA</div>
             </div>
           </div>
 
-          {/* Product Description - Accordion */}
+          {/* Premium Accordion Section */}
           {product.description && (
-            <div className="py-8 border-t border-[#DDDDDD] mt-8">
-              <details className="group transition-all duration-500">
-                <summary className="flex items-center justify-between cursor-pointer text-sm font-medium text-[#111111] py-3 transition-all duration-300">
-                  <span>تفاصيل المنتج</span>
-                  <span className="text-[#999999] group-open:rotate-180 transition-transform duration-500 text-xs">▼</span>
-                </summary>
-                <div className="mt-4 ql-editor-display" dir="rtl">
-                  <div dangerouslySetInnerHTML={{__html: closedDescriptionHTML}} />
-                </div>
-              </details>
+            <div className="mt-8 border-t border-[#DDDDDD] pt-6">
+              <div className="space-y-0">
+                <details className="group border-b border-[#E5E5E5] transition-all duration-500">
+                  <summary className="flex items-center justify-between cursor-pointer text-sm text-[#111111] py-4 transition-all duration-300 list-none">
+                    <span className="font-medium">عن المنتج</span>
+                    <span className="text-[#999999] group-open:rotate-45 transition-transform duration-500 text-sm">+</span>
+                  </summary>
+                  <div className="pb-5 text-[13px] text-[#666666] leading-relaxed ql-editor-display" dir="rtl">
+                    <div dangerouslySetInnerHTML={{__html: closedDescriptionHTML}} />
+                  </div>
+                </details>
+                <details className="group border-b border-[#E5E5E5] transition-all duration-500">
+                  <summary className="flex items-center justify-between cursor-pointer text-sm text-[#111111] py-4 transition-all duration-300 list-none">
+                    <span className="font-medium">الخامات</span>
+                    <span className="text-[#999999] group-open:rotate-45 transition-transform duration-500 text-sm">+</span>
+                  </summary>
+                  <div className="pb-5 text-[13px] text-[#666666] leading-relaxed">
+                    <p>خامات عالية الجودة. يرجى مراجعة ملصق العناية المرفق بالمنتج للحصول على تعليمات الغسيل والاستخدام.</p>
+                  </div>
+                </details>
+                <details className="group border-b border-[#E5E5E5] transition-all duration-500">
+                  <summary className="flex items-center justify-between cursor-pointer text-sm text-[#111111] py-4 transition-all duration-300 list-none">
+                    <span className="font-medium">المواصفات</span>
+                    <span className="text-[#999999] group-open:rotate-45 transition-transform duration-500 text-sm">+</span>
+                  </summary>
+                  <div className="pb-5 text-[13px] text-[#666666] leading-relaxed">
+                    <p>رمز المنتج: {product.id || product.handle || "—"}</p>
+                    {product.metafields?.specifications && <p>{product.metafields.specifications}</p>}
+                  </div>
+                </details>
+                <details className="group border-b border-[#E5E5E5] transition-all duration-500">
+                  <summary className="flex items-center justify-between cursor-pointer text-sm text-[#111111] py-4 transition-all duration-300 list-none">
+                    <span className="font-medium">الشحن والاسترجاع</span>
+                    <span className="text-[#999999] group-open:rotate-45 transition-transform duration-500 text-sm">+</span>
+                  </summary>
+                  <div className="pb-5 text-[13px] text-[#666666] leading-relaxed">
+                    <p>شحن سريع خلال 3-7 أيام عمل. إرجاع مجاني خلال 14 يوم من تاريخ الاستلام.</p>
+                  </div>
+                </details>
+              </div>
               {renderCustomHtml('below_description')}
             </div>
           )}
@@ -616,26 +670,36 @@ export default function ProductView({ initialProduct, sourceCategory }) {
         <div className="max-w-[1440px] mx-auto flex" dir="rtl">
           
           {/* LEFT: Gallery */}
-          <div className="w-[60%] flex gap-3 p-8 pl-0">
-            {/* Vertical Thumbnails */}
-            <div className="w-20 flex-shrink-0 flex flex-col gap-2 overflow-y-auto max-h-[80vh]">
-              {gallery.map((img, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => { setActiveImage(img); setActiveIdx(idx); }}
-                  className={`w-full aspect-[3/4] overflow-hidden border transition-all duration-500 ease-out ${
-                    activeIdx === idx 
-                      ? 'border-black opacity-100 grayscale-0' 
-                      : 'border-[#E5E5E5] opacity-50 grayscale hover:opacity-100 hover:grayscale-0 hover:border-[#999999]'
-                  }`}
+          <div className="w-[60%] flex gap-4 p-8 pl-0">
+            {/* Vertical Thumbnails - premium sizing */}
+            <div className="w-[72px] flex-shrink-0 flex flex-col gap-2.5 relative">
+              <div className={`flex flex-col gap-2.5 overflow-y-auto max-h-[70vh] ${showHiddenThumbs ? '' : 'overflow-hidden'}`} style={{maxHeight: showHiddenThumbs ? 'none' : '70vh'}}>
+                {gallery.slice(0, showHiddenThumbs ? gallery.length : 6).map((img, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => { setActiveImage(img); setActiveIdx(idx); }}
+                    className={`w-full aspect-[3/4] overflow-hidden border transition-all duration-500 ease-out ${
+                      activeIdx === idx 
+                        ? 'border-black opacity-100 grayscale-0' 
+                        : 'border-[#E5E5E5] opacity-40 grayscale hover:opacity-100 hover:grayscale-0 hover:border-[#999999]'
+                    }`}
+                  >
+                    <img 
+                      src={getImageUrl(img)} 
+                      alt="" 
+                      className="w-full h-full object-cover transition-all duration-500 ease-out"
+                    />
+                  </button>
+                ))}
+              </div>
+              {gallery.length > 6 && (
+                <button 
+                  onClick={() => setShowHiddenThumbs(!showHiddenThumbs)}
+                  className="w-full py-1.5 flex items-center justify-center border border-[#DDDDDD] bg-white hover:border-black transition-all duration-300 text-[#666666] hover:text-black"
                 >
-                  <img 
-                    src={getImageUrl(img)} 
-                    alt="" 
-                    className="w-full h-full object-cover transition-all duration-500 ease-out"
-                  />
+                  <ChevronDown size={16} className={`transition-transform duration-300 ${showHiddenThumbs ? 'rotate-180' : ''}`} />
                 </button>
-              ))}
+              )}
             </div>
 
             {/* Main Image */}
@@ -651,7 +715,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/[0.02] transition-colors"></div>
               <button 
                 onClick={(e) => { e.stopPropagation(); openGallery(activeIdx); }} 
-                className="absolute top-4 right-4 z-10 bg-white/80 p-2 rounded-full backdrop-blur-sm border border-[#DDDDDD] text-[#111111] hover:bg-white transition-colors opacity-0 group-hover:opacity-100"
+                className="absolute top-4 right-4 z-10 bg-white/80 p-2 rounded-full border border-[#DDDDDD] text-[#111111] hover:bg-white transition-all duration-300 opacity-0 group-hover:opacity-100"
               >
                 <Search size={16} />
               </button>
@@ -681,34 +745,32 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                   .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
                   .join(' ')
                   .trim();
-                return <p className="text-[11px] text-[#666666] tracking-[0.15em] uppercase mb-2 font-medium">{cleanName}</p>;
+                return <p className="text-[11px] text-[#666666] tracking-[0.08em] uppercase mb-2 font-medium">{cleanName}</p>;
               }
               return null;
             })()}
 
-            {/* Title */}
-            <h1 className="text-[26px] font-bold text-[#111111] tracking-tight leading-[1.1] mb-2">{product.title}</h1>
+            {/* Title - more editorial */}
+            <h1 className="text-[24px] font-medium text-[#111111] tracking-tight leading-[1.1] mb-3">{product.title}</h1>
 
-            {/* Price */}
-            <div className="flex items-baseline gap-1.5 mt-4">
-              <span className="text-[28px] font-light text-[#111111]">{product.price}</span>
+            {/* Price + متوفر inline */}
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-[24px] font-normal text-[#333333] tracking-[0.02em]">{product.price}</span>
               <span className="text-sm text-[#666666]">ج.م</span>
               {product.compareAtPrice && (
                 <span className="text-sm text-[#999999] line-through mr-1">{product.compareAtPrice} ج.م</span>
               )}
-            </div>
-
-            {/* In Stock */}
-            <div className="flex items-center gap-2 mt-5">
-              <span className="w-2 h-2 rounded-full bg-green-500"></span>
-              <span className="text-sm text-[#666666]">
-                {product?.quantity > 0 || product?.sellOutOfStock === "Yes" ? "In stock" : "غير متوفر"}
+              <span className="mr-4 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                <span className="text-xs text-[#666666]">
+                  {product?.quantity > 0 || product?.sellOutOfStock === "Yes" ? "متوفر" : "غير متوفر"}
+                </span>
               </span>
             </div>
 
-            {/* Rating */}
-            <a href="#reviews-section" onClick={scrollToReviews} className="flex items-center gap-2 group w-fit hover:opacity-80 transition-opacity mt-5">
-              <div className="flex gap-0.5 text-[#111111]">
+            {/* Rating - yellow stars */}
+            <a href="#reviews-section" onClick={scrollToReviews} className="flex items-center gap-2 group w-fit hover:opacity-80 transition-opacity mt-4">
+              <div className="flex gap-0.5 text-[#FDBA12]">
                 {[...Array(5)].map((_, i) => (
                   <Star key={i} size={14} fill={i < Math.round(realRating) ? "currentColor" : "none"} className={i >= Math.round(realRating) ? "text-[#DDDDDD]" : ""} />
                 ))}
@@ -720,7 +782,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
             {/* Short Description */}
             {product.description && (
-              <div className="mt-6">
+              <div className="mt-5">
                 <p className="text-sm leading-relaxed text-[#666666]">
                   {shortDescription}
                 </p>
@@ -734,75 +796,78 @@ export default function ProductView({ initialProduct, sourceCategory }) {
               </div>
             )}
 
-            {/* Color Selector */}
-            {safeColors.length > 0 && (
-              <div className="mt-10 border-t border-[#DDDDDD] pt-7">
-                <div className="flex items-baseline gap-2 mb-4">
-                  <span className="text-xs text-[#666666] tracking-wider uppercase font-medium">
-                    {safeColors.length > 1 ? "اختر اللون" : "اللون"}
-                  </span>
-                  {selectedColor && <span className="text-[#111111] text-sm font-medium capitalize">{selectedColor}</span>}
-                </div>
-                <div ref={colorsRef} className="flex flex-wrap gap-4">
-                  {safeColors.map((ci, i) => {
-                    const name  = typeof ci === "string" ? ci : ci.name;
-                    const hi    = product.colorSwatches?.[name] || (typeof ci === "object" ? ci.swatch : "#DDDDDD");
-                    const isImg = hi.startsWith("http") || hi.includes("/");
-                    const isSel = selectedColor === name;
-                    return (
-                      <button key={i} onClick={() => { setSelectedColor(name); if (isImg) { setActiveImage(hi); setActiveIdx(0); } }} title={name} className="flex flex-col items-center group/c transition-all duration-200">
-                        <div className={`w-11 h-11 rounded-full overflow-hidden transition-all duration-200 bg-white ${isSel ? "ring-2 ring-black ring-offset-2 ring-offset-white" : "ring-1 ring-[#DDDDDD] hover:ring-black/30"}`}>
-                          {isImg ? <img src={getImageUrl(hi)} alt={name} className="w-full h-full object-cover" /> : <div style={{backgroundColor:hi}} className="w-full h-full border border-black/5 rounded-full" />}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Size Selector */}
-            {safeSizes.length > 0 && (
-              <div className="mt-8 border-t border-[#DDDDDD] pt-7">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-xs text-[#666666] tracking-wider uppercase font-medium">
-                      {safeSizes.length > 1 ? "اختر المقاس" : "المقاس"}
+            {/* Unified Selectors Area */}
+            <div className="mt-8 border-t border-[#DDDDDD] pt-7">
+              {/* Color Selector - boxed style */}
+              {safeColors.length > 0 && (
+                <div className="mb-6">
+                  <div className="flex items-baseline gap-2 mb-3">
+                    <span className="text-xs text-[#666666] tracking-[0.08em] uppercase font-medium">
+                      {safeColors.length > 1 ? "اختر اللون" : "اللون"}
                     </span>
-                    {selectedSize && <span className="text-[#111111] text-sm font-medium capitalize">{selectedSize}</span>}
+                    {selectedColor && <span className="text-[#111111] text-sm font-medium capitalize">{selectedColor}</span>}
                   </div>
-                  <button onClick={() => setSizeGuideOpen(true)} className="text-xs text-[#111111] font-medium flex items-center gap-1.5 border border-[#DDDDDD] bg-white hover:border-black px-3 py-1 transition-all">
-                    <Info size={12} /> دليل القياسات
-                  </button>
+                  <div ref={colorsRef} className="flex flex-wrap gap-2">
+                    {safeColors.map((ci, i) => {
+                      const name  = typeof ci === "string" ? ci : ci.name;
+                      const hi    = product.colorSwatches?.[name] || (typeof ci === "object" ? ci.swatch : "#DDDDDD");
+                      const isImg = hi.startsWith("http") || hi.includes("/");
+                      const isSel = selectedColor === name;
+                      return (
+                        <button key={i} onClick={() => { setSelectedColor(name); if (isImg) { setActiveImage(hi); setActiveIdx(0); } }} title={name} className="transition-all duration-200">
+                          <div className={`w-10 h-10 flex items-center justify-center border transition-all duration-200 bg-white ${isSel ? "border-black ring-1 ring-black" : "border-[#DDDDDD] hover:border-black/40"}`}>
+                            {isImg ? <img src={getImageUrl(hi)} alt={name} className="w-full h-full object-cover" /> : <div style={{backgroundColor:hi}} className="w-full h-full" />}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                {safeSizes.length > 1 && (
-                  <div className="flex flex-wrap gap-2.5">
-                    {safeSizes.map(sz => (
-                      <button key={sz} onClick={() => setSelectedSize(sz)} className={`min-w-[60px] h-10 text-sm font-medium border transition-all duration-200 capitalize ${selectedSize===sz ? "bg-black text-white border-black" : "bg-white text-[#666666] border-[#DDDDDD] hover:border-black hover:text-black"}`}>{sz}</button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+              )}
 
-            {/* ADD TO CART */}
-            <div className="mt-10 border-t border-[#DDDDDD] pt-7">
+              {/* Size Selector */}
+              {safeSizes.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-xs text-[#666666] tracking-[0.08em] uppercase font-medium">
+                        {safeSizes.length > 1 ? "اختر المقاس" : "المقاس"}
+                      </span>
+                      {selectedSize && <span className="text-[#111111] text-sm font-medium capitalize">{selectedSize}</span>}
+                    </div>
+                    <button onClick={() => setSizeGuideOpen(true)} className="text-xs text-[#111111] font-medium flex items-center gap-1.5 border border-[#DDDDDD] bg-white hover:border-black px-3 py-0.5 transition-all">
+                      <Info size={11} /> دليل القياسات
+                    </button>
+                  </div>
+                  {safeSizes.length > 1 && (
+                    <div className="flex flex-wrap gap-2">
+                      {safeSizes.map(sz => (
+                        <button key={sz} onClick={() => setSelectedSize(sz)} className={`min-w-[56px] h-10 text-sm font-medium border transition-all duration-200 capitalize ${selectedSize===sz ? "bg-black text-white border-black" : "bg-white text-[#666666] border-[#DDDDDD] hover:border-black hover:text-black"}`}>{sz}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* ADD TO CART - cleaner, no icon */}
+            <div className="mt-8 border-t border-[#DDDDDD] pt-7">
               <div className="flex gap-3">
                 <button 
                   onClick={() => {
                     addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity});
                     setQuantity(1);
                   }} 
-                  className="flex-1 text-sm font-medium py-[15px] flex items-center justify-center gap-2 transition-all duration-200"
-                  style={{background:'#000', color:'#fff', border:'1px solid #000'}}
+                  className="flex-1 text-sm font-medium py-[17px] flex items-center justify-center transition-all duration-200 relative overflow-hidden"
+                  style={{background:'#000', color:'#fff', border:'1px solid #000', letterSpacing:'0.02em'}}
                   onMouseEnter={e => { e.currentTarget.style.opacity = '0.88'; }}
                   onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
                 >
-                  <ShoppingBag size={17} />
-                  أضف إلي السلة — {(product.price * quantity)} ج.م
+                  <span className="relative z-10">أضف إلي السلة — {(product.price * quantity)} ج.م</span>
+                  <span className="absolute inset-0 bg-white/5 opacity-0 hover:opacity-100 transition-opacity"></span>
                 </button>
                 
-                <div className="flex items-center justify-between bg-white border border-[#DDDDDD] px-2 w-[90px] shrink-0">
+                <div className="flex items-center justify-between bg-white border border-[#DDDDDD] px-2 w-[85px] shrink-0">
                   <button onClick={() => setQuantity(q => q + 1)} className="text-[#666666] hover:text-black p-2 transition-colors"><Plus size={15} /></button>
                   <span className="text-[#111111] text-sm font-medium">{quantity}</span>
                   <button onClick={() => setQuantity(q => q > 1 ? q - 1 : 1)} className="text-[#666666] hover:text-black p-2 transition-colors"><Minus size={15} /></button>
@@ -813,45 +878,75 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
             {/* Trust Badges */}
             <div className="mt-6 grid grid-cols-3 gap-px bg-[#E5E5E5]">
-              <div className="flex items-center gap-1.5 text-[11px] text-[#666666] font-medium justify-center bg-white py-4">
-                <Truck size={14} className="text-black" />
+              <div className="flex items-center gap-1.5 text-[11px] text-[#666666] justify-center bg-white py-4">
+                <Truck size={13} className="text-[#111111]" />
                 <span>شحن سريع</span>
               </div>
-              <div className="flex items-center gap-1.5 text-[11px] text-[#666666] font-medium justify-center bg-white py-4">
-                <Eye size={14} className="text-black" />
+              <div className="flex items-center gap-1.5 text-[11px] text-[#666666] justify-center bg-white py-4">
+                <Eye size={13} className="text-[#111111]" />
                 <span>معاينة للطلب</span>
               </div>
-              <div className="flex items-center gap-1.5 text-[11px] text-[#666666] font-medium justify-center bg-white py-4">
-                <ShieldCheck size={14} className="text-black" />
+              <div className="flex items-center gap-1.5 text-[11px] text-[#666666] justify-center bg-white py-4">
+                <ShieldCheck size={13} className="text-[#111111]" />
                 <span>استرجاع سهل</span>
               </div>
             </div>
 
             <div className="mt-3 flex items-center justify-between bg-[#FAFAFA] py-3 px-4 border border-[#E5E5E5]">
               <div className="flex items-center gap-2 text-xs text-[#666666]">
-                <ShieldCheck size={14} className="text-green-600" />
+                <ShieldCheck size={14} className="text-[#111111]" />
                 <span>دفع آمن 100%</span>
               </div>
               <div className="flex items-center gap-3 text-[#999999]">
                 <CreditCard size={17} className="hover:text-black transition-colors"/>
                 <Banknote size={17} className="hover:text-black transition-colors"/>
-                <div className="bg-[#FAFAFA] px-1.5 py-0.5 text-[9px] border border-[#DDDDDD] text-[#111111] font-semibold">INSTAPAY</div>
-                <div className="bg-[#FAFAFA] px-1.5 py-0.5 text-[9px] border border-[#DDDDDD] text-[#111111] font-semibold">VISA</div>
+                <div className="bg-[#FAFAFA] px-1.5 py-0.5 text-[9px] border border-[#DDDDDD] text-[#111111]">INSTAPAY</div>
+                <div className="bg-[#FAFAFA] px-1.5 py-0.5 text-[9px] border border-[#DDDDDD] text-[#111111]">VISA</div>
               </div>
             </div>
 
-            {/* Accordions (Description + other details integrated) */}
+            {/* Premium Accordion Section Desktop */}
             {product.description && (
-              <div className="mt-10 border-t border-[#DDDDDD] pt-7">
-                <details className="group transition-all duration-500">
-                  <summary className="flex items-center justify-between cursor-pointer text-sm font-medium text-[#111111] py-3 transition-all duration-300">
-                    <span>تفاصيل المنتج</span>
-                    <span className="text-[#999999] group-open:rotate-180 transition-transform duration-500 text-xs">▼</span>
-                  </summary>
-                  <div className="mt-4 ql-editor-display" dir="rtl">
-                    <div dangerouslySetInnerHTML={{__html: closedDescriptionHTML}} />
-                  </div>
-                </details>
+              <div className="mt-8 border-t border-[#DDDDDD] pt-6">
+                <div className="space-y-0">
+                  <details className="group border-b border-[#E5E5E5] transition-all duration-500">
+                    <summary className="flex items-center justify-between cursor-pointer text-sm text-[#111111] py-4 transition-all duration-300 list-none">
+                      <span className="font-medium">عن المنتج</span>
+                      <span className="text-[#999999] group-open:rotate-45 transition-transform duration-500 text-sm">+</span>
+                    </summary>
+                    <div className="pb-5 text-[13px] text-[#666666] leading-relaxed ql-editor-display" dir="rtl">
+                      <div dangerouslySetInnerHTML={{__html: closedDescriptionHTML}} />
+                    </div>
+                  </details>
+                  <details className="group border-b border-[#E5E5E5] transition-all duration-500">
+                    <summary className="flex items-center justify-between cursor-pointer text-sm text-[#111111] py-4 transition-all duration-300 list-none">
+                      <span className="font-medium">الخامات</span>
+                      <span className="text-[#999999] group-open:rotate-45 transition-transform duration-500 text-sm">+</span>
+                    </summary>
+                    <div className="pb-5 text-[13px] text-[#666666] leading-relaxed">
+                      <p>خامات عالية الجودة. يرجى مراجعة ملصق العناية المرفق بالمنتج للحصول على تعليمات الغسيل والاستخدام.</p>
+                    </div>
+                  </details>
+                  <details className="group border-b border-[#E5E5E5] transition-all duration-500">
+                    <summary className="flex items-center justify-between cursor-pointer text-sm text-[#111111] py-4 transition-all duration-300 list-none">
+                      <span className="font-medium">المواصفات</span>
+                      <span className="text-[#999999] group-open:rotate-45 transition-transform duration-500 text-sm">+</span>
+                    </summary>
+                    <div className="pb-5 text-[13px] text-[#666666] leading-relaxed">
+                      <p>رمز المنتج: {product.id || product.handle || "—"}</p>
+                      {product.metafields?.specifications && <p>{product.metafields.specifications}</p>}
+                    </div>
+                  </details>
+                  <details className="group border-b border-[#E5E5E5] transition-all duration-500">
+                    <summary className="flex items-center justify-between cursor-pointer text-sm text-[#111111] py-4 transition-all duration-300 list-none">
+                      <span className="font-medium">الشحن والاسترجاع</span>
+                      <span className="text-[#999999] group-open:rotate-45 transition-transform duration-500 text-sm">+</span>
+                    </summary>
+                    <div className="pb-5 text-[13px] text-[#666666] leading-relaxed">
+                      <p>شحن سريع خلال 3-7 أيام عمل. إرجاع مجاني خلال 14 يوم من تاريخ الاستلام.</p>
+                    </div>
+                  </details>
+                </div>
                 {renderCustomHtml('below_description')}
               </div>
             )}
@@ -918,24 +1013,26 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
       </div>
 
-      {/* ===== GALLERY MODAL ===== */}
+      {/* ===== GALLERY MODAL - Redesigned ===== */}
       {isGalleryOpen && (
         <div 
-          className="fixed inset-0 z-[99999] bg-white flex flex-col gallery-enter"
+          className="fixed inset-0 z-[99999] bg-[#111111]/95 flex flex-col gallery-enter"
           onClick={() => setGalleryOpen(false)} 
         >
-          <div className="flex items-center justify-between px-5 py-4 border-b border-[#E5E5E5]" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between px-5 py-4 border-b border-white/10" onClick={e => e.stopPropagation()}>
             <div className="flex items-center gap-3">
-              <span className="text-[#111111] font-medium text-sm">{product.title}</span>
+              <span className="text-white/80 text-sm">{product.title}</span>
             </div>
-            <div className="flex items-center gap-3">
-              <span className="text-[#666666] text-xs">{galleryIdx+1} / {gallery.length}</span>
-              <button onClick={() => setGalleryOpen(false)} className="bg-white hover:bg-gray-50 border border-[#DDDDDD] p-2 rounded-full text-[#111111] transition-colors"><X size={18} /></button>
+            <div className="flex items-center gap-4">
+              <span className="text-white/60 text-xs">{galleryIdx+1} / {gallery.length}</span>
+              <button onClick={() => setGalleryOpen(false)} className="bg-white/10 hover:bg-white/20 border border-white/20 p-2 rounded-full text-white transition-all duration-300">
+                <X size={18} />
+              </button>
             </div>
           </div>
           
           <div 
-            className="flex-1 relative flex items-center justify-center overflow-hidden bg-[#FAFAFA]" 
+            className="flex-1 relative flex items-center justify-center overflow-hidden bg-black/40" 
             onTouchStart={onTouchStart} 
             onTouchEnd={onTouchEnd}
             onClick={e => e.stopPropagation()} 
@@ -945,18 +1042,18 @@ export default function ProductView({ initialProduct, sourceCategory }) {
               src={getImageUrl(gallery[galleryIdx])} 
               alt="" 
               onClick={() => setIsZoomed(!isZoomed)}
-              className={`max-h-full max-w-full object-contain gallery-img-enter transition-transform duration-300 ${isZoomed ? "scale-150 cursor-zoom-out" : "cursor-zoom-in"}`} 
+              className={`max-h-[90vh] max-w-[90vw] object-contain gallery-img-enter transition-transform duration-500 ease-out ${isZoomed ? "scale-150 cursor-zoom-out" : "cursor-zoom-in"}`} 
             />
             
             {!isZoomed && (
               <>
-                <button onClick={galleryPrev} className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white backdrop-blur-sm border border-[#DDDDDD] hover:border-black text-[#111111] p-3 rounded-full transition-all shadow-sm"><ChevronRight size={22} strokeWidth={1.5} /></button>
-                <button onClick={galleryNext} className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white backdrop-blur-sm border border-[#DDDDDD] hover:border-black text-[#111111] p-3 rounded-full transition-all shadow-sm"><ChevronLeft size={22} strokeWidth={1.5} /></button>
+                <button onClick={galleryPrev} className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 border border-white/20 text-white p-3 rounded-full transition-all duration-300 opacity-60 hover:opacity-100"><ChevronRight size={22} strokeWidth={1.5} /></button>
+                <button onClick={galleryNext} className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 border border-white/20 text-white p-3 rounded-full transition-all duration-300 opacity-60 hover:opacity-100"><ChevronLeft size={22} strokeWidth={1.5} /></button>
               </>
             )}
             
-            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-1.5 pointer-events-none items-center bg-white/80 px-3 py-1.5 rounded-full backdrop-blur-sm border border-[#DDDDDD]">
-              {gallery.map((_,i) => <span key={i} className={`rounded-full bg-black transition-all duration-400 ease-out ${galleryIdx===i ? "w-5 h-1.5 opacity-100" : "w-1.5 h-1.5 opacity-25"}`} />)}
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-1.5 pointer-events-none items-center bg-white/10 px-3 py-1.5 rounded-full border border-white/15">
+              {gallery.map((_,i) => <span key={i} className={`rounded-full bg-white transition-all duration-400 ease-out ${galleryIdx===i ? "w-5 h-1.5 opacity-100" : "w-1.5 h-1.5 opacity-30"}`} />)}
             </div>
           </div>
         </div>
@@ -965,19 +1062,19 @@ export default function ProductView({ initialProduct, sourceCategory }) {
       {/* ===== COLOR ZOOM MODAL ===== */}
       {isImageZoomModalOpen && (
         <div 
-          className="fixed inset-0 z-[99999] flex items-center justify-center bg-white/95 backdrop-blur-sm p-4 animate-[fadeIn_0.3s_ease-out]"
+          className="fixed inset-0 z-[99999] flex items-center justify-center bg-[#111111]/90 backdrop-blur-sm p-4 animate-[fadeIn_0.3s_ease-out]"
           onClick={() => setImageZoomModalOpen(false)}
         >
-          <div className="relative w-full max-w-lg aspect-[3/4] overflow-hidden border border-[#DDDDDD]" onClick={e => e.stopPropagation()}>
+          <div className="relative w-full max-w-lg aspect-[3/4] overflow-hidden border border-white/10" onClick={e => e.stopPropagation()}>
             <img src={getImageUrl(currentColorImage())} alt="Zoomed Color" className="w-full h-full object-cover" />
             <button 
               onClick={() => setImageZoomModalOpen(false)} 
-              className="absolute top-4 left-4 bg-white/90 hover:bg-white p-2.5 rounded-full text-[#111111] transition-colors backdrop-blur-sm border border-[#DDDDDD]"
+              className="absolute top-4 left-4 bg-white/10 hover:bg-white/20 p-2.5 rounded-full text-white transition-all duration-300 border border-white/15"
             >
               <X size={20} />
             </button>
-            <div className="absolute bottom-4 right-4 bg-white/90 px-4 py-2 backdrop-blur-sm border border-[#DDDDDD]">
-              <span className="text-[#111111] text-sm font-medium">{selectedColor}</span>
+            <div className="absolute bottom-4 right-4 bg-white/10 px-4 py-2 border border-white/15">
+              <span className="text-white text-sm font-medium">{selectedColor}</span>
             </div>
           </div>
         </div>
@@ -985,10 +1082,10 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
       {/* ===== DESCRIPTION MODAL ===== */}
       {isDescModalOpen && (
-        <div className="fixed inset-0 z-[99999] flex items-end md:items-center justify-center bg-black/40 backdrop-blur-sm p-0 md:p-4">
+        <div className="fixed inset-0 z-[99999] flex items-end md:items-center justify-center bg-[#111111]/60 backdrop-blur-sm p-0 md:p-4">
           <div className="bg-white w-full md:max-w-xl rounded-t-2xl md:rounded-sm border border-[#E5E5E5] shadow-xl overflow-hidden flex flex-col max-h-[85vh] animate-[fadeIn_0.3s_ease-out]">
             <div className="p-4 border-b border-[#E5E5E5] flex justify-between items-center bg-white sticky top-0 z-10">
-              <h3 className="font-semibold text-base text-[#111111]">
+              <h3 className="font-medium text-base text-[#111111]">
                 معلومات المنتج والتفاصيل
               </h3>
               <button onClick={() => setDescModalOpen(false)} className="bg-white border border-[#DDDDDD] hover:bg-gray-50 p-1.5 rounded-full text-[#666666] transition-colors">
@@ -1027,6 +1124,18 @@ export default function ProductView({ initialProduct, sourceCategory }) {
         .ql-editor-display summary { color:#111111!important; font-weight:500; padding:14px 0!important; cursor:pointer; }
         .ql-editor-display summary::-webkit-details-marker { display:none }
         .ql-editor-display div { color:#666666!important; line-height:1.8; padding-bottom: 16px; }
+
+        /* Subtle breathing animation for CTA button */
+        @keyframes breathe {
+          0%, 100% { transform: translateX(0); }
+          50% { transform: translateX(1px); }
+        }
+        .btn-breathe {
+          animation: breathe 4s ease-in-out infinite;
+        }
+        .btn-breathe:hover {
+          animation: none;
+        }
       `}</style>
     </div>
   );
