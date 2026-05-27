@@ -372,17 +372,17 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             key={activeImage}
             src={getImageUrl(activeImage)} 
             alt={product.title} 
-            className="w-full h-full object-cover transition-opacity duration-500 animate-[galleryIn_0.4s_ease-out]"
+            className="w-full h-full object-cover transition-opacity duration-500 ease-out animate-[galleryIn_0.5s_ease-out]"
           />
 
           <button 
             onClick={(e) => { e.stopPropagation(); openGallery(activeIdx); }} 
-            className="absolute top-4 right-4 z-10 bg-white/80 p-2.5 rounded-full backdrop-blur-sm border border-[#DDDDDD] text-[#111111] hover:bg-white transition-colors cursor-zoom-in"
+            className="absolute top-4 right-4 z-10 bg-white/80 p-2.5 rounded-full backdrop-blur-sm border border-[#DDDDDD] text-[#111111] hover:bg-white transition-all duration-300 cursor-zoom-in"
           >
             <Search size={18} />
           </button>
 
-          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-3 text-[#111111]/60 text-[10px] tracking-wider pointer-events-none z-10 bg-white/80 px-3 py-1.5 rounded-full backdrop-blur-sm border border-[#DDDDDD]">
+          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-3 text-[#111111]/60 text-[10px] tracking-[0.08em] pointer-events-none z-10 bg-white/80 px-3 py-1.5 rounded-full backdrop-blur-sm border border-[#DDDDDD]">
             <span>{activeIdx + 1} / {gallery.length}</span>
           </div>
         </div>
@@ -391,22 +391,22 @@ export default function ProductView({ initialProduct, sourceCategory }) {
         <div className="px-5 py-6" dir="rtl">
 
           {/* Action Bar */}
-          <div className="mb-5 flex items-center gap-5">
-            <button onClick={(e) => { e.stopPropagation(); openGallery(activeIdx); }} className="flex items-center gap-1.5 text-[#666666] hover:text-[#111111] transition-colors">
+          <div className="mb-6 flex items-center gap-5">
+            <button onClick={(e) => { e.stopPropagation(); openGallery(activeIdx); }} className="flex items-center gap-1.5 text-[#666666] hover:text-[#111111] transition-all duration-300">
               <ImageIcon size={17} />
-              <span className="text-[11px] font-semibold">{gallery.length} صور</span>
+              <span className="text-[11px] font-semibold tracking-[0.08em]">{gallery.length} صور</span>
             </button>
             
-            <button onClick={handleWishlistToggle} className="flex items-center gap-1.5 transition-colors hover:text-black text-[#666666]">
+            <button onClick={handleWishlistToggle} className="flex items-center gap-1.5 transition-all duration-300 hover:text-black text-[#666666]">
               <Heart size={17} fill={isWishlisted ? "#111111" : "none"} color={isWishlisted ? "#111111" : "currentColor"} className="transition-all duration-300" />
-              <span className={`text-[11px] font-semibold transition-colors ${isWishlisted ? 'text-black' : 'text-[#666666]'}`}>
+              <span className={`text-[11px] font-semibold tracking-[0.08em] transition-colors ${isWishlisted ? 'text-black' : 'text-[#666666]'}`}>
                 {realLikesCount > 0 ? (realLikesCount > 999 ? (realLikesCount/1000).toFixed(1) + 'K' : realLikesCount) : "إعجاب"}
               </span>
             </button>
 
-            <button onClick={handleShare} className="flex items-center gap-1.5 text-[#666666] hover:text-[#111111] transition-colors">
+            <button onClick={handleShare} className="flex items-center gap-1.5 text-[#666666] hover:text-[#111111] transition-all duration-300">
               <Share2 size={17} />
-              <span className="text-[11px] font-semibold">مشاركة</span>
+              <span className="text-[11px] font-semibold tracking-[0.08em]">مشاركة</span>
             </button>
           </div>
 
@@ -431,16 +431,16 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                 .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
                 .join(' ')
                 .trim();
-              return <p className="text-[11px] text-[#666666] tracking-widest uppercase mb-2 font-semibold">{cleanName}</p>;
+              return <p className="text-[11px] text-[#666666] tracking-[0.08em] uppercase mb-2 font-semibold">{cleanName}</p>;
             }
             return null;
           })()}
 
           {/* Title */}
-          <h1 className="text-[23px] font-bold text-[#111111] tracking-tight leading-tight mb-1">{product.title}</h1>
+          <h1 className="text-[23px] font-bold text-[#111111] tracking-tight leading-[1.1] mb-1">{product.title}</h1>
 
           {/* Price + Stock */}
-          <div className="flex items-baseline gap-1.5 mt-1">
+          <div className="flex items-baseline gap-1.5 mt-2">
             <span className="text-2xl font-semibold text-[#111111]">{product.price}</span>
             <span className="text-xs text-[#666666] font-medium">ج.م</span>
             {product.compareAtPrice && (
@@ -449,7 +449,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           </div>
 
           {/* In Stock Dot */}
-          <div className="flex items-center gap-2 mt-2">
+          <div className="flex items-center gap-2 mt-4">
             <span className="w-2 h-2 rounded-full bg-green-500"></span>
             <span className="text-xs text-[#666666]">
               {product?.quantity > 0 || product?.sellOutOfStock === "Yes" ? "In stock" : "غير متوفر"}
@@ -457,7 +457,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           </div>
 
           {/* Star Rating */}
-          <a href="#reviews-section" onClick={scrollToReviews} className="flex items-center gap-2 group w-fit hover:opacity-80 transition-opacity mt-3">
+          <a href="#reviews-section" onClick={scrollToReviews} className="flex items-center gap-2 group w-fit hover:opacity-80 transition-opacity mt-4">
             <div className="flex gap-0.5 text-[#111111]">
               {[...Array(5)].map((_, i) => (
                 <Star key={i} size={13} fill={i < Math.round(realRating) ? "currentColor" : "none"} className={i >= Math.round(realRating) ? "text-[#DDDDDD]" : ""} />
@@ -470,7 +470,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
           {/* Short Description */}
           {product.description && (
-            <div className="mt-4">
+            <div className="mt-6">
               <p className="text-sm leading-relaxed text-[#666666]">
                 {shortDescription}
               </p>
@@ -486,7 +486,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
           {/* Color Selector */}
           {safeColors.length > 0 && (
-            <div className="mt-8 border-t border-[#E5E5E5] pt-6">
+            <div className="mt-10 border-t border-[#DDDDDD] pt-7">
               <div className="flex items-baseline gap-2 mb-4">
                 <span className="text-[11px] text-[#666666] tracking-wider uppercase font-semibold">
                   {safeColors.length > 1 ? "اختر اللون" : "اللون"}
@@ -513,7 +513,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
           {/* Size Selector */}
           {safeSizes.length > 0 && (
-            <div className="mt-6 border-t border-[#E5E5E5] pt-6">
+            <div className="mt-8 border-t border-[#DDDDDD] pt-7">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-baseline gap-2">
                   <span className="text-[11px] text-[#666666] tracking-wider uppercase font-semibold">
@@ -535,8 +535,9 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             </div>
           )}
 
-          {/* === MOBILE STICKY ADD TO CART === */}
-          <div className="mt-8 border-t border-[#E5E5E5] pt-6">
+          {/* === MOBILE ADD TO CART === */}
+          <div className="mt-10 border-t border-[#DDDDDD] pt-7">
+            <div className="sticky bottom-0 pb-4 bg-white pt-4">
             <div className="flex gap-3">
               <button 
                 onClick={() => {
@@ -559,6 +560,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
               </div>
             </div>
             {renderCustomHtml('below_cart')}
+            </div>
           </div>
 
           {/* Trust Badges */}
@@ -592,13 +594,13 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
           {/* Product Description - Accordion */}
           {product.description && (
-            <div className="py-6 border-t border-[#E5E5E5] mt-6">
-              <details className="group">
-                <summary className="flex items-center justify-between cursor-pointer text-sm font-semibold text-[#111111] py-2">
+            <div className="py-8 border-t border-[#DDDDDD] mt-8">
+              <details className="group transition-all duration-500">
+                <summary className="flex items-center justify-between cursor-pointer text-sm font-medium text-[#111111] py-3 transition-all duration-300">
                   <span>تفاصيل المنتج</span>
-                  <span className="text-[#999999] group-open:rotate-180 transition-transform">▼</span>
+                  <span className="text-[#999999] group-open:rotate-180 transition-transform duration-500 text-xs">▼</span>
                 </summary>
-                <div className="mt-3 ql-editor-display" dir="rtl">
+                <div className="mt-4 ql-editor-display" dir="rtl">
                   <div dangerouslySetInnerHTML={{__html: closedDescriptionHTML}} />
                 </div>
               </details>
@@ -621,30 +623,30 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                 <button
                   key={idx}
                   onClick={() => { setActiveImage(img); setActiveIdx(idx); }}
-                  className={`w-full aspect-[3/4] overflow-hidden border transition-all duration-200 ${
+                  className={`w-full aspect-[3/4] overflow-hidden border transition-all duration-500 ease-out ${
                     activeIdx === idx 
-                      ? 'border-black opacity-100' 
-                      : 'border-[#DDDDDD] opacity-60 hover:opacity-100 hover:border-[#999999]'
+                      ? 'border-black opacity-100 grayscale-0' 
+                      : 'border-[#E5E5E5] opacity-50 grayscale hover:opacity-100 hover:grayscale-0 hover:border-[#999999]'
                   }`}
                 >
                   <img 
                     src={getImageUrl(img)} 
                     alt="" 
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover transition-all duration-500 ease-out"
                   />
                 </button>
               ))}
             </div>
 
             {/* Main Image */}
-            <div className="flex-1 relative bg-[#F5F5F5] aspect-[3/4] cursor-zoom-in group"
+            <div className="flex-1 relative bg-[#F5F5F5] aspect-[3/4] cursor-zoom-in group overflow-hidden"
               onClick={() => openGallery(activeIdx)}
             >
               <img 
                 key={activeImage}
                 src={getImageUrl(activeImage)} 
                 alt={product.title} 
-                className="w-full h-full object-cover transition-opacity duration-500 animate-[galleryIn_0.4s_ease-out]"
+                className="w-full h-full object-cover transition-all duration-500 ease-out group-hover:scale-[1.01]"
               />
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/[0.02] transition-colors"></div>
               <button 
@@ -685,10 +687,10 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             })()}
 
             {/* Title */}
-            <h1 className="text-[26px] font-bold text-[#111111] tracking-tight leading-tight mb-1">{product.title}</h1>
+            <h1 className="text-[26px] font-bold text-[#111111] tracking-tight leading-[1.1] mb-2">{product.title}</h1>
 
             {/* Price */}
-            <div className="flex items-baseline gap-1.5 mt-3">
+            <div className="flex items-baseline gap-1.5 mt-4">
               <span className="text-[28px] font-light text-[#111111]">{product.price}</span>
               <span className="text-sm text-[#666666]">ج.م</span>
               {product.compareAtPrice && (
@@ -697,7 +699,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             </div>
 
             {/* In Stock */}
-            <div className="flex items-center gap-2 mt-4">
+            <div className="flex items-center gap-2 mt-5">
               <span className="w-2 h-2 rounded-full bg-green-500"></span>
               <span className="text-sm text-[#666666]">
                 {product?.quantity > 0 || product?.sellOutOfStock === "Yes" ? "In stock" : "غير متوفر"}
@@ -705,7 +707,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             </div>
 
             {/* Rating */}
-            <a href="#reviews-section" onClick={scrollToReviews} className="flex items-center gap-2 group w-fit hover:opacity-80 transition-opacity mt-4">
+            <a href="#reviews-section" onClick={scrollToReviews} className="flex items-center gap-2 group w-fit hover:opacity-80 transition-opacity mt-5">
               <div className="flex gap-0.5 text-[#111111]">
                 {[...Array(5)].map((_, i) => (
                   <Star key={i} size={14} fill={i < Math.round(realRating) ? "currentColor" : "none"} className={i >= Math.round(realRating) ? "text-[#DDDDDD]" : ""} />
@@ -718,7 +720,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
             {/* Short Description */}
             {product.description && (
-              <div className="mt-5">
+              <div className="mt-6">
                 <p className="text-sm leading-relaxed text-[#666666]">
                   {shortDescription}
                 </p>
@@ -734,7 +736,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
             {/* Color Selector */}
             {safeColors.length > 0 && (
-              <div className="mt-8 border-t border-[#E5E5E5] pt-6">
+              <div className="mt-10 border-t border-[#DDDDDD] pt-7">
                 <div className="flex items-baseline gap-2 mb-4">
                   <span className="text-xs text-[#666666] tracking-wider uppercase font-medium">
                     {safeColors.length > 1 ? "اختر اللون" : "اللون"}
@@ -761,7 +763,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
             {/* Size Selector */}
             {safeSizes.length > 0 && (
-              <div className="mt-6 border-t border-[#E5E5E5] pt-6">
+              <div className="mt-8 border-t border-[#DDDDDD] pt-7">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-baseline gap-2">
                     <span className="text-xs text-[#666666] tracking-wider uppercase font-medium">
@@ -784,7 +786,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             )}
 
             {/* ADD TO CART */}
-            <div className="mt-8 border-t border-[#E5E5E5] pt-6">
+            <div className="mt-10 border-t border-[#DDDDDD] pt-7">
               <div className="flex gap-3">
                 <button 
                   onClick={() => {
@@ -840,13 +842,13 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
             {/* Accordions (Description + other details integrated) */}
             {product.description && (
-              <div className="mt-8 border-t border-[#E5E5E5] pt-6">
-                <details className="group mb-3">
-                  <summary className="flex items-center justify-between cursor-pointer text-sm font-medium text-[#111111] py-3 border-b border-[#E5E5E5]">
+              <div className="mt-10 border-t border-[#DDDDDD] pt-7">
+                <details className="group transition-all duration-500">
+                  <summary className="flex items-center justify-between cursor-pointer text-sm font-medium text-[#111111] py-3 transition-all duration-300">
                     <span>تفاصيل المنتج</span>
-                    <span className="text-[#999999] group-open:rotate-180 transition-transform text-xs">▼</span>
+                    <span className="text-[#999999] group-open:rotate-180 transition-transform duration-500 text-xs">▼</span>
                   </summary>
-                  <div className="mt-3 ql-editor-display" dir="rtl">
+                  <div className="mt-4 ql-editor-display" dir="rtl">
                     <div dangerouslySetInnerHTML={{__html: closedDescriptionHTML}} />
                   </div>
                 </details>
@@ -862,7 +864,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
       <div className="max-w-[1440px] mx-auto px-5 lg:px-8" dir="rtl">
 
         {/* Reviews */}
-        <div id="reviews-section" className="py-6 lg:py-10 mt-4 border-t border-[#E5E5E5]">
+        <div id="reviews-section" className="py-8 lg:py-12 mt-6 border-t border-[#DDDDDD]">
           <ProductReviews 
             productHandle={product.handle || product.id} 
             onReviewStatsUpdate={(rating, count) => {
@@ -874,36 +876,36 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
         {/* Related Products */}
         {product.metafields?.hideRelatedSection !== "Yes" && relatedProducts.length > 0 && (
-          <div className="py-10 lg:py-14 border-t border-[#E5E5E5]">
-            <h2 className="text-lg lg:text-xl font-semibold text-[#111111] tracking-tight mb-6 lg:mb-8">
+          <div className="py-12 lg:py-16 border-t border-[#DDDDDD]">
+            <h2 className="text-sm lg:text-base font-medium text-[#111111] tracking-[0.08em] uppercase mb-8 lg:mb-10">
               منتجات قد تعجبك
             </h2>
             
-            <div className="flex gap-4 lg:gap-6 overflow-x-auto hide-scrollbar-horizontal pb-4 -mx-5 px-5 lg:mx-0 lg:px-0" dir="rtl">
+            <div className="flex gap-5 lg:gap-8 overflow-x-auto hide-scrollbar-horizontal pb-4 -mx-5 px-5 lg:mx-0 lg:px-0" dir="rtl">
               {relatedProducts.map(rp => (
                 <Link 
                   href={`/products/${rp.id}`} 
                   key={rp.id} 
-                  className="flex-shrink-0 w-[140px] lg:w-[200px] group cursor-pointer block transition-all duration-300"
+                  className="flex-shrink-0 w-[130px] lg:w-[180px] group cursor-pointer block transition-all duration-500"
                 >
-                  <div className="relative aspect-[3/4] bg-[#F5F5F5] overflow-hidden border border-[#E5E5E5] mb-3 group-hover:border-black/20 transition-all duration-500">
+                  <div className="relative aspect-[3/4] bg-[#F5F5F5] overflow-hidden border border-[#E5E5E5] mb-3 group-hover:border-black/30 transition-all duration-500">
                     <img 
                       src={getRelatedImageUrl(rp)} 
                       alt={rp.title} 
                       loading="lazy"
-                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.03]" 
+                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.02]" 
                     />
                   </div>
                   
                   <div className="px-0.5">
-                    <h3 className="text-sm lg:text-base text-[#111111] font-medium line-clamp-2 mb-1.5 transition-colors group-hover:text-[#666666]">
+                    <h3 className="text-[12px] lg:text-sm text-[#111111] font-medium line-clamp-2 mb-1 transition-colors group-hover:text-[#666666]">
                       {rp.title}
                     </h3>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[#111111] font-semibold text-sm lg:text-base">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[#111111] font-medium text-xs lg:text-sm">
                         {rp.price}
                       </span>
-                      <span className="text-[#666666] text-[10px] lg:text-xs">ج.م</span>
+                      <span className="text-[#666666] text-[9px] lg:text-[11px]">ج.م</span>
                     </div>
                   </div>
                 </Link>
