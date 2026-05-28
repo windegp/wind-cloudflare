@@ -12,7 +12,7 @@ import SizeChartModal from "@/components/SizeChartModal";
 import ProductReviews from "@/components/products/ProductReviews";
 // استدعاء الهوكات الجديدة لتقليل استهلاك الكوتا
 import { useProduct, useRelatedProducts } from "@/hooks/useFirestore";
-import { Plus, Minus, Star, Info, Share2, Heart, ImageIcon, X, Truck, Eye, ShieldCheck, ChevronLeft, Search, ChevronRight, ShoppingBag, CreditCard, Banknote, ChevronDown } from '@/components/icons-extra';
+import { Plus, Minus, Star, Info, Share2, Heart, ImageIcon, X, Truck, Eye, ShieldCheck, ChevronLeft, Search, ChevronRight, ChevronDown, ChevronUp, CreditCard, Banknote } from '@/components/icons-extra';
 
 export default function ProductView({ initialProduct, sourceCategory }) {
   const { id } = useParams();
@@ -53,13 +53,16 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   const touchStartX = useRef(null);
   const touchStartY = useRef(null);
   const colorsRef   = useRef(null);
-  const scrollContainerRef = useRef(null);
+  const thumbScrollRef = useRef(null);
 
   // 🔥 مراجع السحر لمنع السبام وتقليل الكتابة في فايربيز
   const likeTimeoutRef = useRef(null);
   const pendingActionRef = useRef(0);
 
-  const [showHiddenThumbs, setShowHiddenThumbs] = useState(false);
+  const [thumbScrollTop, setThumbScrollTop] = useState(0);
+  const THUMB_HEIGHT = 80; // w-[90px] aspect-[3/4] => ~120px height + 10px gap
+  const VISIBLE_THUMBS = 6;
+  const maxScroll = Math.max(0, gallery.length - VISIBLE_THUMBS);
 
   useEffect(() => {
     if (product?.id) {
@@ -124,7 +127,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
     localStorage.setItem('wind_wishlist', JSON.stringify(newWishlist));
 
     // 2. تجميع الطلبات (Debouncing) لمنع استنزاف الكوتا
-    // هنستنى 1.5 ثانية، لو العميل داس لايك ושال اللايك بسرعة (الصافي صفر)، مش هنكلم فايربيز أصلاً!
+    // هنستنى 1.5 ثانية، لو العميل داس لاיק ושال اللايك بسرعة (الصافي صفر)، مش هنكلم فايربيز أصلاً!
     if (likeTimeoutRef.current) clearTimeout(likeTimeoutRef.current);
 
     likeTimeoutRef.current = setTimeout(async () => {
@@ -357,6 +360,9 @@ export default function ProductView({ initialProduct, sourceCategory }) {
     return null;
   };
 
+  const thumbScrollUp = () => setThumbScrollTop(prev => Math.max(0, prev - 1));
+  const thumbScrollDown = () => setThumbScrollTop(prev => Math.min(maxScroll, prev + 1));
+
   // ---------- RENDER ----------
   return (
     <div className="bg-white min-h-screen text-[#111111] pb-10 selection:bg-black selection:text-white">
@@ -391,17 +397,17 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           </div>
         </div>
 
-        {/* Mobile Gallery Thumbnails */}
-        <div className="px-5 pt-3 pb-2 overflow-x-auto hide-scrollbar-horizontal" dir="rtl">
-          <div className="flex gap-2">
+        {/* Mobile Gallery Thumbnails - edge-aligned */}
+        <div className="overflow-x-auto hide-scrollbar-horizontal">
+          <div className="flex gap-2 px-5 pt-3 pb-2" dir="rtl">
             {gallery.map((img, idx) => (
               <button
                 key={idx}
                 onClick={() => { setActiveImage(img); setActiveIdx(idx); }}
-                className={`flex-shrink-0 w-16 h-20 overflow-hidden border transition-all duration-300 ${
+                className={`flex-shrink-0 w-[60px] h-[80px] overflow-hidden border transition-all duration-300 ${
                   activeIdx === idx
                     ? 'border-black opacity-100'
-                    : 'border-[#DDDDDD] opacity-50 hover:opacity-80'
+                    : 'border-[#DDDDDD] opacity-60 hover:opacity-90'
                 }`}
               >
                 <img src={getImageUrl(img)} alt="" className="w-full h-full object-cover" />
@@ -411,10 +417,10 @@ export default function ProductView({ initialProduct, sourceCategory }) {
         </div>
 
         {/* === MOBILE CONTENT === */}
-        <div className="px-5 py-4" dir="rtl">
+        <div className="px-5 pt-2 pb-4" dir="rtl">
 
           {/* Action Bar */}
-          <div className="mb-5 flex items-center gap-5">
+          <div className="mb-4 flex items-center gap-5">
             <button onClick={(e) => { e.stopPropagation(); openGallery(activeIdx); }} className="flex items-center gap-1.5 text-[#666666] hover:text-[#111111] transition-all duration-300">
               <ImageIcon size={17} />
               <span className="text-[11px] font-medium tracking-[0.08em]">{gallery.length} صور</span>
@@ -459,12 +465,24 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             return null;
           })()}
 
-          {/* Title - more editorial */}
+          {/* Title */}
           <h1 className="text-xl font-medium text-[#111111] tracking-tight leading-[1.1] mb-1">{product.title}</h1>
 
+          {/* Stars between title and price */}
+          <a href="#reviews-section" onClick={scrollToReviews} className="flex items-center gap-2 group w-fit hover:opacity-80 transition-opacity mt-2 mb-2">
+            <div className="flex gap-0.5 text-[#FDBA12]">
+              {[...Array(5)].map((_, i) => (
+                <Star key={i} size={13} fill={i < Math.round(realRating) ? "currentColor" : "none"} className={i >= Math.round(realRating) ? "text-[#DDDDDD]" : ""} />
+              ))}
+            </div>
+            <span className="text-[11px] text-[#666666] group-hover:text-black transition-colors">
+              {realReviewsCount > 0 ? `(${realReviewsCount})` : "(أضف أول تقييم)"}
+            </span>
+          </a>
+
           {/* Price + متوفر inline */}
-          <div className="flex items-baseline gap-1.5 mt-3">
-            <span className="text-xl font-normal text-[#333333] tracking-[0.02em]">{product.price}</span>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-xl font-normal text-[#E04040] tracking-[0.02em]">{product.price}</span>
             <span className="text-xs text-[#666666]">ج.م</span>
             {product.compareAtPrice && (
               <span className="text-xs text-[#999999] line-through mr-1">{product.compareAtPrice} ج.م</span>
@@ -477,21 +495,9 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             </span>
           </div>
 
-          {/* Star Rating - yellow stars */}
-          <a href="#reviews-section" onClick={scrollToReviews} className="flex items-center gap-2 group w-fit hover:opacity-80 transition-opacity mt-3">
-            <div className="flex gap-0.5 text-[#FDBA12]">
-              {[...Array(5)].map((_, i) => (
-                <Star key={i} size={13} fill={i < Math.round(realRating) ? "currentColor" : "none"} className={i >= Math.round(realRating) ? "text-[#DDDDDD]" : ""} />
-              ))}
-            </div>
-            <span className="text-[11px] text-[#666666] group-hover:text-black transition-colors">
-              {realReviewsCount > 0 ? `(${realReviewsCount})` : "(أضف أول تقييم)"}
-            </span>
-          </a>
-
           {/* Short Description */}
           {product.description && (
-            <div className="mt-5">
+            <div className="mt-4">
               <p className="text-sm leading-relaxed text-[#666666]">
                 {shortDescription}
               </p>
@@ -506,8 +512,8 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           )}
 
           {/* Unified Selectors Area (NO separator between color & size) */}
-          <div className="mt-8 border-t border-[#DDDDDD] pt-7">
-            {/* Color Selector - boxed style */}
+          <div className="mt-6 border-t border-[#DDDDDD] pt-6">
+            {/* Color Selector - larger boxed */}
             {safeColors.length > 0 && (
               <div className="mb-6">
                 <div className="flex items-baseline gap-2 mb-3">
@@ -516,7 +522,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                   </span>
                   {selectedColor && <span className="text-[#111111] text-[12px] font-medium capitalize">{selectedColor}</span>}
                 </div>
-                <div ref={colorsRef} className="flex flex-wrap gap-2">
+                <div ref={colorsRef} className="flex flex-wrap gap-3">
                   {safeColors.map((ci, i) => {
                     const name  = typeof ci === "string" ? ci : ci.name;
                     const hi    = product.colorSwatches?.[name] || (typeof ci === "object" ? ci.swatch : "#DDDDDD");
@@ -524,7 +530,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                     const isSel = selectedColor === name;
                     return (
                       <button key={i} onClick={() => { setSelectedColor(name); if (isImg) { setActiveImage(hi); setActiveIdx(0); } }} title={name} className="transition-all duration-200">
-                        <div className={`w-9 h-9 flex items-center justify-center border transition-all duration-200 bg-white ${isSel ? "border-black ring-1 ring-black" : "border-[#DDDDDD] hover:border-black/40"}`}>
+                        <div className={`w-11 h-11 flex items-center justify-center border transition-all duration-200 bg-white ${isSel ? "border-black ring-1 ring-black" : "border-[#DDDDDD] hover:border-black/40"}`}>
                           {isImg ? <img src={getImageUrl(hi)} alt={name} className="w-full h-full object-cover" /> : <div style={{backgroundColor:hi}} className="w-full h-full" />}
                         </div>
                       </button>
@@ -534,7 +540,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
               </div>
             )}
 
-            {/* Size Selector - no divider from colors */}
+            {/* Size Selector - larger */}
             {safeSizes.length > 0 && (
               <div>
                 <div className="flex items-center justify-between mb-3">
@@ -549,9 +555,9 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                   </button>
                 </div>
                 {safeSizes.length > 1 && (
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-3">
                     {safeSizes.map(sz => (
-                      <button key={sz} onClick={() => setSelectedSize(sz)} className={`min-w-[52px] h-9 text-sm font-medium border transition-all duration-200 capitalize ${selectedSize===sz ? "bg-black text-white border-black" : "bg-white text-[#666666] border-[#DDDDDD] hover:border-black hover:text-black"}`}>{sz}</button>
+                      <button key={sz} onClick={() => setSelectedSize(sz)} className={`min-w-[58px] h-10 text-sm font-medium border transition-all duration-200 capitalize ${selectedSize===sz ? "bg-black text-white border-black" : "bg-white text-[#666666] border-[#DDDDDD] hover:border-black hover:text-black"}`}>{sz}</button>
                     ))}
                   </div>
                 )}
@@ -560,7 +566,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           </div>
 
           {/* === MOBILE ADD TO CART === */}
-          <div className="mt-8 border-t border-[#DDDDDD] pt-7">
+          <div className="mt-6 border-t border-[#DDDDDD] pt-6">
             <div className="sticky bottom-0 pb-4 bg-white pt-2">
             <div className="flex gap-3">
               <button 
@@ -568,12 +574,12 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                   addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity});
                   setQuantity(1);
                 }} 
-                className="flex-1 text-sm font-medium py-[16px] flex items-center justify-center transition-all duration-200 relative overflow-hidden"
+                className="flex-1 text-base font-medium py-[18px] flex items-center justify-center transition-all duration-200 relative overflow-hidden btn-breathe"
                 style={{background:'#000', color:'#fff', border:'1px solid #000', letterSpacing:'0.02em'}}
                 onMouseEnter={e => { e.currentTarget.style.opacity = '0.9'; }}
                 onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
               >
-                <span className="relative z-10">أضف إلي السلة — {(product.price * quantity)} ج.م</span>
+                <span className="relative z-10">أضف إلى السلة</span>
                 <span className="absolute inset-0 bg-white/5 opacity-0 hover:opacity-100 transition-opacity"></span>
               </button>
               
@@ -587,7 +593,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             </div>
           </div>
 
-          {/* Trust Badges - cleaner */}
+          {/* Trust Badges */}
           <div className="mt-6 grid grid-cols-3 gap-px bg-[#E5E5E5]">
             <div className="flex items-center gap-1.5 text-[10px] text-[#666666] justify-center bg-white py-3">
               <Truck size={12} className="text-[#111111]" />
@@ -618,7 +624,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
           {/* Premium Accordion Section */}
           {product.description && (
-            <div className="mt-8 border-t border-[#DDDDDD] pt-6">
+            <div className="mt-6 border-t border-[#DDDDDD] pt-5">
               <div className="space-y-0">
                 <details className="group border-b border-[#E5E5E5] transition-all duration-500">
                   <summary className="flex items-center justify-between cursor-pointer text-sm text-[#111111] py-4 transition-all duration-300 list-none">
@@ -667,37 +673,42 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
       {/* ===== DESKTOP VIEW ===== */}
       <div className="hidden lg:block min-h-screen bg-white">
-        <div className="max-w-[1440px] mx-auto flex" dir="rtl">
+        <div className="max-w-[1440px] mx-auto flex flex-row-reverse" dir="ltr">
           
-          {/* LEFT: Gallery */}
-          <div className="w-[60%] flex gap-4 p-8 pl-0">
-            {/* Vertical Thumbnails - premium sizing */}
-            <div className="w-[72px] flex-shrink-0 flex flex-col gap-2.5 relative">
-              <div className={`flex flex-col gap-2.5 overflow-y-auto max-h-[70vh] ${showHiddenThumbs ? '' : 'overflow-hidden'}`} style={{maxHeight: showHiddenThumbs ? 'none' : '70vh'}}>
-                {gallery.slice(0, showHiddenThumbs ? gallery.length : 6).map((img, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => { setActiveImage(img); setActiveIdx(idx); }}
-                    className={`w-full aspect-[3/4] overflow-hidden border transition-all duration-500 ease-out ${
-                      activeIdx === idx 
-                        ? 'border-black opacity-100 grayscale-0' 
-                        : 'border-[#E5E5E5] opacity-40 grayscale hover:opacity-100 hover:grayscale-0 hover:border-[#999999]'
-                    }`}
-                  >
-                    <img 
-                      src={getImageUrl(img)} 
-                      alt="" 
-                      className="w-full h-full object-cover transition-all duration-500 ease-out"
-                    />
-                  </button>
-                ))}
+          {/* RIGHT: Gallery (now on LEFT visually due to flex-row-reverse, but in DOM order: first = right side) */}
+          <div className="w-[60%] flex gap-5 p-8 pr-0" dir="rtl">
+            {/* Vertical Thumbnails - scrollable carousel */}
+            <div className="w-[90px] flex-shrink-0 flex flex-col items-center gap-1.5 relative">
+              {thumbScrollTop > 0 && (
+                <button onClick={thumbScrollUp} className="w-full py-1 flex items-center justify-center border border-[#DDDDDD] bg-white hover:border-black transition-all duration-300 text-[#666666] hover:text-black">
+                  <ChevronUp size={14} />
+                </button>
+              )}
+              <div className="flex flex-col gap-2.5 overflow-hidden" style={{height: `${VISIBLE_THUMBS * 130}px`}}>
+                {gallery.slice(thumbScrollTop, thumbScrollTop + VISIBLE_THUMBS).map((img, relIdx) => {
+                  const idx = thumbScrollTop + relIdx;
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => { setActiveImage(img); setActiveIdx(idx); }}
+                      className={`w-full aspect-[3/4] overflow-hidden border transition-all duration-300 flex-shrink-0 ${
+                        activeIdx === idx 
+                          ? 'border-black scale-[1.02]' 
+                          : 'border-[#E5E5E5] hover:border-[#999999]'
+                      }`}
+                    >
+                      <img 
+                        src={getImageUrl(img)} 
+                        alt="" 
+                        className="w-full h-full object-cover transition-all duration-300"
+                      />
+                    </button>
+                  );
+                })}
               </div>
-              {gallery.length > 6 && (
-                <button 
-                  onClick={() => setShowHiddenThumbs(!showHiddenThumbs)}
-                  className="w-full py-1.5 flex items-center justify-center border border-[#DDDDDD] bg-white hover:border-black transition-all duration-300 text-[#666666] hover:text-black"
-                >
-                  <ChevronDown size={16} className={`transition-transform duration-300 ${showHiddenThumbs ? 'rotate-180' : ''}`} />
+              {thumbScrollTop < maxScroll && (
+                <button onClick={thumbScrollDown} className="w-full py-1 flex items-center justify-center border border-[#DDDDDD] bg-white hover:border-black transition-all duration-300 text-[#666666] hover:text-black">
+                  <ChevronDown size={14} />
                 </button>
               )}
             </div>
@@ -722,8 +733,8 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             </div>
           </div>
 
-          {/* RIGHT: Product Info */}
-          <div className="w-[40%] p-8 pl-0 flex flex-col justify-start pt-8">
+          {/* LEFT: Product Info (now on RIGHT visually due to flex-row-reverse) */}
+          <div className="w-[40%] p-8 pr-0 flex flex-col justify-start pt-8" dir="rtl">
             {renderCustomHtml('above_title')}
 
             {/* Category */}
@@ -750,12 +761,24 @@ export default function ProductView({ initialProduct, sourceCategory }) {
               return null;
             })()}
 
-            {/* Title - more editorial */}
+            {/* Title */}
             <h1 className="text-[24px] font-medium text-[#111111] tracking-tight leading-[1.1] mb-3">{product.title}</h1>
+
+            {/* Stars between title and price */}
+            <a href="#reviews-section" onClick={scrollToReviews} className="flex items-center gap-2 group w-fit hover:opacity-80 transition-opacity mb-3">
+              <div className="flex gap-0.5 text-[#FDBA12]">
+                {[...Array(5)].map((_, i) => (
+                  <Star key={i} size={14} fill={i < Math.round(realRating) ? "currentColor" : "none"} className={i >= Math.round(realRating) ? "text-[#DDDDDD]" : ""} />
+                ))}
+              </div>
+              <span className="text-xs text-[#666666] group-hover:text-black transition-colors">
+                {realReviewsCount > 0 ? `(${realReviewsCount})` : "(أضف أول تقييم)"}
+              </span>
+            </a>
 
             {/* Price + متوفر inline */}
             <div className="flex items-baseline gap-1.5">
-              <span className="text-[24px] font-normal text-[#333333] tracking-[0.02em]">{product.price}</span>
+              <span className="text-[24px] font-normal text-[#E04040] tracking-[0.02em]">{product.price}</span>
               <span className="text-sm text-[#666666]">ج.م</span>
               {product.compareAtPrice && (
                 <span className="text-sm text-[#999999] line-through mr-1">{product.compareAtPrice} ج.م</span>
@@ -767,18 +790,6 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                 </span>
               </span>
             </div>
-
-            {/* Rating - yellow stars */}
-            <a href="#reviews-section" onClick={scrollToReviews} className="flex items-center gap-2 group w-fit hover:opacity-80 transition-opacity mt-4">
-              <div className="flex gap-0.5 text-[#FDBA12]">
-                {[...Array(5)].map((_, i) => (
-                  <Star key={i} size={14} fill={i < Math.round(realRating) ? "currentColor" : "none"} className={i >= Math.round(realRating) ? "text-[#DDDDDD]" : ""} />
-                ))}
-              </div>
-              <span className="text-xs text-[#666666] group-hover:text-black transition-colors">
-                {realReviewsCount > 0 ? `(${realReviewsCount})` : "(أضف أول تقييم)"}
-              </span>
-            </a>
 
             {/* Short Description */}
             {product.description && (
@@ -797,8 +808,8 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             )}
 
             {/* Unified Selectors Area */}
-            <div className="mt-8 border-t border-[#DDDDDD] pt-7">
-              {/* Color Selector - boxed style */}
+            <div className="mt-8 border-t border-[#DDDDDD] pt-6">
+              {/* Color Selector - larger boxed */}
               {safeColors.length > 0 && (
                 <div className="mb-6">
                   <div className="flex items-baseline gap-2 mb-3">
@@ -807,7 +818,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                     </span>
                     {selectedColor && <span className="text-[#111111] text-sm font-medium capitalize">{selectedColor}</span>}
                   </div>
-                  <div ref={colorsRef} className="flex flex-wrap gap-2">
+                  <div ref={colorsRef} className="flex flex-wrap gap-3">
                     {safeColors.map((ci, i) => {
                       const name  = typeof ci === "string" ? ci : ci.name;
                       const hi    = product.colorSwatches?.[name] || (typeof ci === "object" ? ci.swatch : "#DDDDDD");
@@ -815,7 +826,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                       const isSel = selectedColor === name;
                       return (
                         <button key={i} onClick={() => { setSelectedColor(name); if (isImg) { setActiveImage(hi); setActiveIdx(0); } }} title={name} className="transition-all duration-200">
-                          <div className={`w-10 h-10 flex items-center justify-center border transition-all duration-200 bg-white ${isSel ? "border-black ring-1 ring-black" : "border-[#DDDDDD] hover:border-black/40"}`}>
+                          <div className={`w-12 h-12 flex items-center justify-center border transition-all duration-200 bg-white ${isSel ? "border-black ring-1 ring-black" : "border-[#DDDDDD] hover:border-black/40"}`}>
                             {isImg ? <img src={getImageUrl(hi)} alt={name} className="w-full h-full object-cover" /> : <div style={{backgroundColor:hi}} className="w-full h-full" />}
                           </div>
                         </button>
@@ -825,7 +836,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                 </div>
               )}
 
-              {/* Size Selector */}
+              {/* Size Selector - larger */}
               {safeSizes.length > 0 && (
                 <div>
                   <div className="flex items-center justify-between mb-3">
@@ -840,9 +851,9 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                     </button>
                   </div>
                   {safeSizes.length > 1 && (
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-3">
                       {safeSizes.map(sz => (
-                        <button key={sz} onClick={() => setSelectedSize(sz)} className={`min-w-[56px] h-10 text-sm font-medium border transition-all duration-200 capitalize ${selectedSize===sz ? "bg-black text-white border-black" : "bg-white text-[#666666] border-[#DDDDDD] hover:border-black hover:text-black"}`}>{sz}</button>
+                        <button key={sz} onClick={() => setSelectedSize(sz)} className={`min-w-[60px] h-11 text-sm font-medium border transition-all duration-200 capitalize ${selectedSize===sz ? "bg-black text-white border-black" : "bg-white text-[#666666] border-[#DDDDDD] hover:border-black hover:text-black"}`}>{sz}</button>
                       ))}
                     </div>
                   )}
@@ -850,20 +861,20 @@ export default function ProductView({ initialProduct, sourceCategory }) {
               )}
             </div>
 
-            {/* ADD TO CART - cleaner, no icon */}
-            <div className="mt-8 border-t border-[#DDDDDD] pt-7">
+            {/* ADD TO CART - clean, "أضف إلى السلة" only */}
+            <div className="mt-8 border-t border-[#DDDDDD] pt-6">
               <div className="flex gap-3">
                 <button 
                   onClick={() => {
                     addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity});
                     setQuantity(1);
                   }} 
-                  className="flex-1 text-sm font-medium py-[17px] flex items-center justify-center transition-all duration-200 relative overflow-hidden"
+                  className="flex-1 text-base font-medium py-[19px] flex items-center justify-center transition-all duration-200 relative overflow-hidden btn-breathe"
                   style={{background:'#000', color:'#fff', border:'1px solid #000', letterSpacing:'0.02em'}}
                   onMouseEnter={e => { e.currentTarget.style.opacity = '0.88'; }}
                   onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
                 >
-                  <span className="relative z-10">أضف إلي السلة — {(product.price * quantity)} ج.م</span>
+                  <span className="relative z-10">أضف إلى السلة</span>
                   <span className="absolute inset-0 bg-white/5 opacity-0 hover:opacity-100 transition-opacity"></span>
                 </button>
                 
@@ -907,7 +918,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
             {/* Premium Accordion Section Desktop */}
             {product.description && (
-              <div className="mt-8 border-t border-[#DDDDDD] pt-6">
+              <div className="mt-8 border-t border-[#DDDDDD] pt-5">
                 <div className="space-y-0">
                   <details className="group border-b border-[#E5E5E5] transition-all duration-500">
                     <summary className="flex items-center justify-between cursor-pointer text-sm text-[#111111] py-4 transition-all duration-300 list-none">
@@ -1013,26 +1024,26 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
       </div>
 
-      {/* ===== GALLERY MODAL - Redesigned ===== */}
+      {/* ===== GALLERY MODAL - Refined ===== */}
       {isGalleryOpen && (
         <div 
-          className="fixed inset-0 z-[99999] bg-[#111111]/95 flex flex-col gallery-enter"
+          className="fixed inset-0 z-[99999] bg-white flex flex-col gallery-enter"
           onClick={() => setGalleryOpen(false)} 
         >
-          <div className="flex items-center justify-between px-5 py-4 border-b border-white/10" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between px-5 py-4 border-b border-[#E5E5E5]" onClick={e => e.stopPropagation()}>
             <div className="flex items-center gap-3">
-              <span className="text-white/80 text-sm">{product.title}</span>
+              <span className="text-[#111111] text-sm">{product.title}</span>
             </div>
             <div className="flex items-center gap-4">
-              <span className="text-white/60 text-xs">{galleryIdx+1} / {gallery.length}</span>
-              <button onClick={() => setGalleryOpen(false)} className="bg-white/10 hover:bg-white/20 border border-white/20 p-2 rounded-full text-white transition-all duration-300">
+              <span className="text-[#666666] text-xs">{galleryIdx+1} / {gallery.length}</span>
+              <button onClick={() => setGalleryOpen(false)} className="bg-white hover:bg-gray-100 border border-[#DDDDDD] p-2 rounded-full text-[#111111] transition-all duration-300">
                 <X size={18} />
               </button>
             </div>
           </div>
           
           <div 
-            className="flex-1 relative flex items-center justify-center overflow-hidden bg-black/40" 
+            className="flex-1 relative flex items-center justify-center overflow-hidden bg-[#F5F5F5]" 
             onTouchStart={onTouchStart} 
             onTouchEnd={onTouchEnd}
             onClick={e => e.stopPropagation()} 
@@ -1047,13 +1058,13 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             
             {!isZoomed && (
               <>
-                <button onClick={galleryPrev} className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 border border-white/20 text-white p-3 rounded-full transition-all duration-300 opacity-60 hover:opacity-100"><ChevronRight size={22} strokeWidth={1.5} /></button>
-                <button onClick={galleryNext} className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 border border-white/20 text-white p-3 rounded-full transition-all duration-300 opacity-60 hover:opacity-100"><ChevronLeft size={22} strokeWidth={1.5} /></button>
+                <button onClick={galleryPrev} className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white border border-[#DDDDDD] text-[#111111] p-3 rounded-full transition-all duration-300 hover:border-black"><ChevronRight size={22} strokeWidth={1.5} /></button>
+                <button onClick={galleryNext} className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white border border-[#DDDDDD] text-[#111111] p-3 rounded-full transition-all duration-300 hover:border-black"><ChevronLeft size={22} strokeWidth={1.5} /></button>
               </>
             )}
             
-            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-1.5 pointer-events-none items-center bg-white/10 px-3 py-1.5 rounded-full border border-white/15">
-              {gallery.map((_,i) => <span key={i} className={`rounded-full bg-white transition-all duration-400 ease-out ${galleryIdx===i ? "w-5 h-1.5 opacity-100" : "w-1.5 h-1.5 opacity-30"}`} />)}
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-1.5 pointer-events-none items-center bg-white/90 px-3 py-1.5 rounded-full border border-[#DDDDDD]">
+              {gallery.map((_,i) => <span key={i} className={`rounded-full bg-black transition-all duration-400 ease-out ${galleryIdx===i ? "w-5 h-1.5 opacity-100" : "w-1.5 h-1.5 opacity-25"}`} />)}
             </div>
           </div>
         </div>
@@ -1062,19 +1073,19 @@ export default function ProductView({ initialProduct, sourceCategory }) {
       {/* ===== COLOR ZOOM MODAL ===== */}
       {isImageZoomModalOpen && (
         <div 
-          className="fixed inset-0 z-[99999] flex items-center justify-center bg-[#111111]/90 backdrop-blur-sm p-4 animate-[fadeIn_0.3s_ease-out]"
+          className="fixed inset-0 z-[99999] flex items-center justify-center bg-[#FAFAFA] p-4 animate-[fadeIn_0.3s_ease-out]"
           onClick={() => setImageZoomModalOpen(false)}
         >
-          <div className="relative w-full max-w-lg aspect-[3/4] overflow-hidden border border-white/10" onClick={e => e.stopPropagation()}>
+          <div className="relative w-full max-w-lg aspect-[3/4] overflow-hidden border border-[#DDDDDD]" onClick={e => e.stopPropagation()}>
             <img src={getImageUrl(currentColorImage())} alt="Zoomed Color" className="w-full h-full object-cover" />
             <button 
               onClick={() => setImageZoomModalOpen(false)} 
-              className="absolute top-4 left-4 bg-white/10 hover:bg-white/20 p-2.5 rounded-full text-white transition-all duration-300 border border-white/15"
+              className="absolute top-4 left-4 bg-white/90 hover:bg-white p-2.5 rounded-full text-[#111111] transition-all duration-300 border border-[#DDDDDD]"
             >
               <X size={20} />
             </button>
-            <div className="absolute bottom-4 right-4 bg-white/10 px-4 py-2 border border-white/15">
-              <span className="text-white text-sm font-medium">{selectedColor}</span>
+            <div className="absolute bottom-4 right-4 bg-white/90 px-4 py-2 border border-[#DDDDDD]">
+              <span className="text-[#111111] text-sm font-medium">{selectedColor}</span>
             </div>
           </div>
         </div>
@@ -1128,10 +1139,11 @@ export default function ProductView({ initialProduct, sourceCategory }) {
         /* Subtle breathing animation for CTA button */
         @keyframes breathe {
           0%, 100% { transform: translateX(0); }
-          50% { transform: translateX(1px); }
+          15%, 85% { transform: translateX(0); }
+          50% { transform: translateX(2px); }
         }
         .btn-breathe {
-          animation: breathe 4s ease-in-out infinite;
+          animation: breathe 5s ease-in-out infinite;
         }
         .btn-breathe:hover {
           animation: none;
