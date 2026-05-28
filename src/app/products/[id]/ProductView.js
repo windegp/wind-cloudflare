@@ -426,9 +426,38 @@ export default function ProductView({ initialProduct, sourceCategory }) {
       {/* ===== MOBILE VIEW ===== */}
       <div className="lg:hidden">
 
-        {/* Hero Image Gallery */}
-        <div 
-          className="relative w-full aspect-[3/4] bg-[#F5F5F5] overflow-hidden"
+        {/* Breadcrumb - Mobile */}
+      <div className="px-5 py-3 border-b border-[#F0F0F0]" dir="rtl">
+        <nav className="flex items-center gap-1.5 text-[10px] text-[#999999] flex-wrap">
+          <Link href="/" className="hover:text-[#111111] transition-colors">الرئيسية</Link>
+          {(() => {
+            const safeCollections = product?.collections || [];
+            const safeCategories = product?.categories || [];
+            const availableCats = safeCollections.length > 0 ? safeCollections : safeCategories;
+            let displayCategory = sourceCategory;
+            if (!displayCategory && availableCats.length > 0) {
+              const generalTerms = ['shop-all', 'best-sellers', 'new-arrivals', 'sale'];
+              const specific = availableCats.filter(c => typeof c === 'string' && !generalTerms.some(t => c.includes(t)));
+              displayCategory = specific.length > 0 ? specific[0] : availableCats[0];
+            }
+            if (!displayCategory) return null;
+            const cleanName = String(displayCategory).replace(/^\//, '').replace(/-/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+            const href = `/collections/${String(displayCategory).replace(/^\//, '')}`;
+            return (
+              <>
+                <span className="text-[#DDDDDD]">/</span>
+                <Link href={href} className="hover:text-[#111111] transition-colors">{cleanName}</Link>
+              </>
+            );
+          })()}
+          <span className="text-[#DDDDDD]">/</span>
+          <span className="text-[#111111] font-medium truncate max-w-[160px]">{product.title}</span>
+        </nav>
+      </div>
+
+      {/* Hero Image Gallery */}
+      <div 
+        className="relative w-full aspect-[3/4] bg-[#F5F5F5] overflow-hidden"
           onClick={() => openGallery(activeIdx)}
           onTouchStart={handleHeroTouchStart}
           onTouchMove={handleHeroTouchMove}
@@ -690,10 +719,95 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
       {/* ===== DESKTOP VIEW ===== */}
       <div className="hidden lg:block min-h-screen bg-white">
-        <div className="max-w-[1440px] mx-auto flex flex-row-reverse" dir="ltr">
+        <div className="max-w-[1440px] mx-auto px-8 pt-5 pb-2" dir="rtl">
+          <nav className="flex items-center gap-2 text-[11px] text-[#999999]">
+            <Link href="/" className="hover:text-[#111111] transition-colors">الرئيسية</Link>
+            {(() => {
+              const safeCollections = product?.collections || [];
+              const safeCategories = product?.categories || [];
+              const availableCats = safeCollections.length > 0 ? safeCollections : safeCategories;
+              let displayCategory = sourceCategory;
+              if (!displayCategory && availableCats.length > 0) {
+                const generalTerms = ['shop-all', 'best-sellers', 'new-arrivals', 'sale'];
+                const specific = availableCats.filter(c => typeof c === 'string' && !generalTerms.some(t => c.includes(t)));
+                displayCategory = specific.length > 0 ? specific[0] : availableCats[0];
+              }
+              if (!displayCategory) return null;
+              const cleanName = String(displayCategory).replace(/^\//, '').replace(/-/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+              const href = `/collections/${String(displayCategory).replace(/^\//, '')}`;
+              return (
+                <>
+                  <span className="text-[#DDDDDD]">/</span>
+                  <Link href={href} className="hover:text-[#111111] transition-colors">{cleanName}</Link>
+                </>
+              );
+            })()}
+            <span className="text-[#DDDDDD]">/</span>
+            <span className="text-[#111111] font-medium">{product.title}</span>
+          </nav>
+        </div>
+       <div className="max-w-[1440px] mx-auto flex gap-8" dir="ltr">
           
-          {/* RIGHT: Gallery */}
-          <div className="w-[60%] flex gap-5 p-8 pr-0" dir="rtl">
+          {/* Breadcrumb - Desktop */}
+          <div className="w-full px-8 pt-5 pb-0" dir="rtl">
+            <nav className="flex items-center gap-2 text-[11px] text-[#999999]">
+              <Link href="/" className="hover:text-[#111111] transition-colors">الرئيسية</Link>
+              {(() => {
+                const safeCollections = product?.collections || [];
+                const safeCategories = product?.categories || [];
+                const availableCats = safeCollections.length > 0 ? safeCollections : safeCategories;
+                let displayCategory = sourceCategory;
+                if (!displayCategory && availableCats.length > 0) {
+                  const generalTerms = ['shop-all', 'best-sellers', 'new-arrivals', 'sale'];
+                  const specific = availableCats.filter(c => typeof c === 'string' && !generalTerms.some(t => c.includes(t)));
+                  displayCategory = specific.length > 0 ? specific[0] : availableCats[0];
+                }
+                if (!displayCategory) return null;
+                const cleanName = String(displayCategory).replace(/^\//, '').replace(/-/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                const href = `/collections/${String(displayCategory).replace(/^\//, '')}`;
+                return (
+                  <>
+                    <span className="text-[#DDDDDD]">/</span>
+                    <Link href={href} className="hover:text-[#111111] transition-colors">{cleanName}</Link>
+                  </>
+                );
+              })()}
+              <span className="text-[#DDDDDD]">/</span>
+              <span className="text-[#111111] font-medium">{product.title}</span>
+            </nav>
+          </div>
+
+          {/* Breadcrumb - Desktop */}
+          <div className="w-full px-8 pt-5 pb-0" dir="rtl">
+            <nav className="flex items-center gap-2 text-[11px] text-[#999999]">
+              <Link href="/" className="hover:text-[#111111] transition-colors">الرئيسية</Link>
+              {(() => {
+                const safeCollections = product?.collections || [];
+                const safeCategories = product?.categories || [];
+                const availableCats = safeCollections.length > 0 ? safeCollections : safeCategories;
+                let displayCategory = sourceCategory;
+                if (!displayCategory && availableCats.length > 0) {
+                  const generalTerms = ['shop-all', 'best-sellers', 'new-arrivals', 'sale'];
+                  const specific = availableCats.filter(c => typeof c === 'string' && !generalTerms.some(t => c.includes(t)));
+                  displayCategory = specific.length > 0 ? specific[0] : availableCats[0];
+                }
+                if (!displayCategory) return null;
+                const cleanName = String(displayCategory).replace(/^\//, '').replace(/-/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                const href = `/collections/${String(displayCategory).replace(/^\//, '')}`;
+                return (
+                  <>
+                    <span className="text-[#DDDDDD]">/</span>
+                    <Link href={href} className="hover:text-[#111111] transition-colors">{cleanName}</Link>
+                  </>
+                );
+              })()}
+              <span className="text-[#DDDDDD]">/</span>
+              <span className="text-[#111111] font-medium">{product.title}</span>
+            </nav>
+          </div>
+
+          {/* LEFT: Gallery (sticky) */}
+          <div className="w-[60%] flex gap-5 p-8 pl-0 sticky top-0 self-start" dir="rtl">
             {/* Vertical Thumbnails */}
             <div className="w-[90px] flex-shrink-0 flex flex-col items-center gap-1.5 relative">
               {thumbScrollTop > 0 && (
@@ -751,8 +865,9 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             </div>
           </div>
 
-          {/* LEFT: Product Info */}
-          <div className="w-[40%] p-8 pr-0 flex flex-col justify-start pt-8" dir="rtl">
+          {/* RIGHT: Product Info */}
+          <div className="w-[40%] p-10 pl-0 pr-10 flex flex-col justify-start pt-10" dir="rtl">
+          
             {renderCustomHtml('above_title')}
 
             {/* Category */}
@@ -826,7 +941,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             )}
 
             {/* Selectors */}
-            <div className="mt-8 border-t border-[#DDDDDD] pt-6">
+            <div className="mt-8 border-t border-[#DDDDDD] pt-8">
               {safeColors.length > 0 && (
                 <div className="mb-6">
                   <div className="flex items-baseline gap-2 mb-3">
@@ -878,7 +993,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             </div>
 
             {/* Add to Cart */}
-            <div className="mt-8 border-t border-[#DDDDDD] pt-6">
+           <div className="mt-10 border-t border-[#DDDDDD] pt-8">
               <div className="flex gap-3">
                 <button 
                   onClick={() => {
@@ -1111,6 +1226,26 @@ export default function ProductView({ initialProduct, sourceCategory }) {
         .ql-editor-display summary { color:#111111!important; font-weight:500; padding:14px 0!important; cursor:pointer; }
         .ql-editor-display summary::-webkit-details-marker { display:none }
         .ql-editor-display div { color:#666666!important; line-height:1.8; padding-bottom: 16px; }
+
+        /* إصلاح read-more داخل الـ description */
+        .ql-editor-display .read-more-wrapper .less-text { display: none; }
+        .ql-editor-display .read-more-wrapper[open] .more-text { display: none; }
+        .ql-editor-display .read-more-wrapper[open] .less-text { display: inline; }
+        .ql-editor-display .read-more-wrapper > summary { 
+          font-size: 12px !important; 
+          font-weight: 400 !important; 
+          color: #666666 !important; 
+          text-decoration: underline !important;
+          text-underline-offset: 3px !important;
+          padding: 6px 0 !important;
+          border: none !important;
+        }
+        .ql-editor-display .read-more-wrapper { 
+          border: none !important; 
+          padding: 0 !important; 
+          margin-top: 6px !important;
+        }
+        .ql-editor-display .read-more-wrapper[open] { border: none !important; }
 
         /* ✅ زر الـ zoom يظهر عند hover على الصورة مباشرة */
         .img-zoom-btn { opacity: 0; transition: opacity 0.3s; }
