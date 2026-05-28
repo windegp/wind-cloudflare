@@ -10,7 +10,6 @@ import { doc, updateDoc, increment } from "firebase/firestore/lite";
 import { mutate } from 'swr'; 
 import SizeChartModal from "@/components/SizeChartModal";
 import ProductReviews from "@/components/products/ProductReviews";
-// استدعاء الهوكات الجديدة لتقليل استهلاك الكوتا
 import { useProduct, useRelatedProducts } from "@/hooks/useFirestore";
 import { Plus, Minus, Star, Info, Share2, Heart, ImageIcon, X, Truck, Eye, ShieldCheck, ChevronLeft, Search, ChevronRight, ChevronDown, ChevronUp, CreditCard, Banknote } from '@/components/icons-extra';
 
@@ -32,7 +31,6 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   const [isSizeGuideOpen, setSizeGuideOpen] = useState(false);
   const [isWishlisted, setIsWishlisted]     = useState(false);
   
-  // 🔥 حالة الإعجابات الفعلية المربوطة بالفايربيس 🔥
   const [realLikesCount, setRealLikesCount] = useState(0);
   const [isLikeProcessing, setIsLikeProcessing] = useState(false);
 
@@ -55,7 +53,6 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   const colorsRef   = useRef(null);
   const thumbScrollRef = useRef(null);
 
-  // 🔥 مراجع السحر لمنع السبام وتقليل الكتابة في فايربيز
   const likeTimeoutRef = useRef(null);
   const pendingActionRef = useRef(0);
 
@@ -67,12 +64,10 @@ export default function ProductView({ initialProduct, sourceCategory }) {
     if (product?.id) {
       const savedWishlist = JSON.parse(localStorage.getItem('wind_wishlist') || '[]');
       setIsWishlisted(savedWishlist.includes(product.id));
-      // ضبط عدد الإعجابات من بيانات المنتج الأساسية
       setRealLikesCount(product.likesCount || 0);
     }
   }, [product?.id, product?.likesCount]);
 
-  // 🔥 دالة مساعدة للحصول على رقم الأسبوع الحالي 🔥
   const getCurrentWeekString = () => {
     const d = new Date();
     d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay()||7));
@@ -81,7 +76,6 @@ export default function ProductView({ initialProduct, sourceCategory }) {
     return `${d.getUTCFullYear()}-W${weekNo}`;
   };
 
-  // --- إعادة دالة المشاركة التي فُقدت ---
   const handleShare = async (e) => {
     e.stopPropagation();
     const shareData = {
@@ -101,7 +95,6 @@ export default function ProductView({ initialProduct, sourceCategory }) {
     }
   };
 
-  // 🔥 دالة الإعجاب الذكية (Optimistic Update + Debounce) 🔥
   const handleWishlistToggle = (e) => {
     e.stopPropagation();
     if (!product?.id) return;
@@ -110,28 +103,25 @@ export default function ProductView({ initialProduct, sourceCategory }) {
     const isCurrentlyWishlisted = savedWishlist.includes(product.id);
     const currentWeekIdStr = getCurrentWeekString();
 
-    // 1. تحديث الواجهة فوراً بصاروخ (بدون انتظار فايربيز)
     let newWishlist;
     if (isCurrentlyWishlisted) {
       newWishlist = savedWishlist.filter(item => item !== product.id);
       setRealLikesCount(prev => Math.max(0, prev - 1));
       setIsWishlisted(false);
-      pendingActionRef.current -= 1; // تسجيل نية الإلغاء
+      pendingActionRef.current -= 1;
     } else {
       newWishlist = [...savedWishlist, product.id];
       setRealLikesCount(prev => prev + 1);
       setIsWishlisted(true);
-      pendingActionRef.current += 1; // تسجيل نية الإعجاب
+      pendingActionRef.current += 1;
     }
     localStorage.setItem('wind_wishlist', JSON.stringify(newWishlist));
 
-    // 2. تجميع الطلبات (Debouncing) لمنع استنزاف الكوتا
-    // هنستنى 1.5 ثانية، لو العميل داس لاיק ושال اللايك بسرعة (الصافي صفر)، مش هنكلم فايربيز أصلاً!
     if (likeTimeoutRef.current) clearTimeout(likeTimeoutRef.current);
 
     likeTimeoutRef.current = setTimeout(async () => {
       const netChange = pendingActionRef.current;
-      if (netChange === 0) return; // العميل بيلعب في الزرار، وفرنا الكوتا!
+      if (netChange === 0) return;
 
       try {
         const productRef = doc(getDb(), "products", product.id.toString());
@@ -140,7 +130,6 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           likesUpdatedAt: new Date().toISOString()
         };
 
-        // منطق الأسبوع الذكي
         if (product.currentWeekId === currentWeekIdStr) {
           updateData.weeklyLikesCount = increment(netChange);
         } else if (netChange > 0) {
@@ -148,11 +137,9 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           updateData.currentWeekId = currentWeekIdStr;
         }
 
-       // 1. استنى فايربيز يخلص حفظ الأول
         await updateDoc(productRef, updateData);
         pendingActionRef.current = 0; 
 
-        // 2. 🔥 هنا مكان الإضافة الصح! بعد التأكد إن الداتا الجديدة بقت في فايربيز
         fetch('/api/revalidate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -184,23 +171,18 @@ export default function ProductView({ initialProduct, sourceCategory }) {
     return () => { document.body.style.overflow = ''; };
   }, [isGalleryOpen, isImageZoomModalOpen, isDescModalOpen]);
 
-  // 1. جلب بيانات المنتج الأساسية (أو استخدام الـ Static لو موجود)
   const staticProd = useMemo(() => staticProducts.find(p => p.id.toString() === id?.toString()), [id]);
   const { data: fbProduct, isLoading: productLoading } = useProduct(id);
   
-  // دمج البيانات (الأولوية لفايربيز ثم الثابت ثم الـ Initial)
   const activeProduct = fbProduct || staticProd || initialProduct;
 
-  // 2. جلب المنتجات ذات الصلة عبر SWR
   const { data: swrRelated, isLoading: relatedLoading } = useRelatedProducts(activeProduct);
 
-  // تحديث حالة الصفحة والمنتج
   useEffect(() => {
     if (activeProduct) {
       setProduct(activeProduct);
       setRealLikesCount(activeProduct.likesCount || 0);
       
-      // ضبط الصور والخيارات الافتراضية مرة واحدة فقط عند تحميل المنتج
       if (!selectedSize || !selectedColor) {
         setActiveImage(activeProduct.images?.[0] || activeProduct.mainImage || activeProduct.image);
         
@@ -219,7 +201,6 @@ export default function ProductView({ initialProduct, sourceCategory }) {
     }
   }, [activeProduct, id]);
 
-  // تحديث المنتجات ذات الصلة عند جاهزيتها
   useEffect(() => {
     if (swrRelated) setRelatedProducts(swrRelated);
   }, [swrRelated]);
@@ -247,6 +228,59 @@ export default function ProductView({ initialProduct, sourceCategory }) {
     if (!product?.description) return "";
     return product.description.replace(/<details\s+open[^>]*>/gi, '<details>');
   }, [product?.description]);
+
+  // ✅ استخراج sections من الـ description HTML وتوزيعها على الـ accordions
+  const parsedSections = useMemo(() => {
+    if (!product?.description) return {};
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(product.description, 'text/html');
+    const map = {};
+    doc.querySelectorAll('.wind-tabs-container > details').forEach(det => {
+      // نجيب العنوان من الـ summary > span الأول
+      const summarySpan = det.querySelector('summary > span:first-child');
+      const key = summarySpan?.textContent?.trim();
+      if (!key) return;
+      // نجيب الـ div اللي جوا الـ details (المحتوى الفعلي) بس من غير الـ summary
+      const contentDiv = det.querySelector(':scope > div');
+      if (contentDiv) {
+        map[key] = contentDiv.innerHTML;
+      }
+    });
+    return map;
+  }, [product?.description]);
+
+  // ✅ بناء قائمة الـ accordions ديناميكياً من بيانات المنتج
+  const accordionSections = useMemo(() => {
+    const sections = [
+      {
+        key: "عن المنتج",
+        title: "عن المنتج",
+        html: parsedSections["عن المنتج"] || closedDescriptionHTML,
+        extraClass: "ql-editor-display",
+      },
+      {
+        key: "الخامة والمواصفات",
+        title: "الخامة والمواصفات",
+        html: parsedSections["الخامة والمواصفات"] || `<p>خامات عالية الجودة. يرجى مراجعة ملصق العناية المرفق بالمنتج للحصول على تعليمات الغسيل والاستخدام.</p>`,
+      },
+      {
+        key: "الشحن والاستبدال",
+        title: "الشحن والاسترجاع",
+        html: parsedSections["الشحن والاستبدال"] || `<p>شحن سريع خلال 3-7 أيام عمل. إرجاع مجاني خلال 14 يوم من تاريخ الاستلام.</p>`,
+      },
+    ];
+
+    // "العناية بالمنتج" تظهر فقط لو موجودة في بيانات المنتج
+    if (parsedSections["العناية بالمنتج"]) {
+      sections.push({
+        key: "العناية بالمنتج",
+        title: "العناية بالمنتج",
+        html: parsedSections["العناية بالمنتج"],
+      });
+    }
+
+    return sections;
+  }, [parsedSections, closedDescriptionHTML]);
 
   if (loading && !product) return null; 
   if (!product) return null;
@@ -362,12 +396,28 @@ export default function ProductView({ initialProduct, sourceCategory }) {
     return null;
   };
 
-  // Compute maxScroll inside callback to avoid TDZ issues with gallery
   const thumbScrollUp = () => setThumbScrollTop(prev => Math.max(0, prev - 1));
   const thumbScrollDown = () => setThumbScrollTop(prev => {
     const m = Math.max(0, gallery.length - VISIBLE_THUMBS);
     return Math.min(m, prev + 1);
   });
+
+  // ✅ Accordion component مشترك بين mobile وdesktop
+  const AccordionSections = ({ className = "" }) => (
+    <div className={`space-y-0 ${className}`}>
+      {accordionSections.map(({ key, title, html, extraClass = "" }) => (
+        <details key={key} className="group border-b border-[#E5E5E5] transition-all duration-500">
+          <summary className="flex items-center justify-between cursor-pointer text-sm text-[#111111] py-4 transition-all duration-300 list-none">
+            <span className="font-medium">{title}</span>
+            <span className="text-[#999999] group-open:rotate-45 transition-transform duration-500 text-sm">+</span>
+          </summary>
+          <div className={`pb-5 text-[13px] text-[#666666] leading-relaxed ${extraClass}`} dir="rtl">
+            <div dangerouslySetInnerHTML={{ __html: html }} />
+          </div>
+        </details>
+      ))}
+    </div>
+  );
 
   // ---------- RENDER ----------
   return (
@@ -378,12 +428,13 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
         {/* Hero Image Gallery */}
         <div 
-          className="relative w-full aspect-[3/4] bg-[#F5F5F5] group overflow-hidden"
+          className="relative w-full aspect-[3/4] bg-[#F5F5F5] overflow-hidden"
           onClick={() => openGallery(activeIdx)}
           onTouchStart={handleHeroTouchStart}
           onTouchMove={handleHeroTouchMove}
           onTouchEnd={handleHeroTouchEnd}
         >
+          {/* ✅ الـ hover:scale على الـ img مباشرة بدل group-hover */}
           <img 
             key={activeImage}
             src={getImageUrl(activeImage)} 
@@ -403,7 +454,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           </div>
         </div>
 
-        {/* Mobile Gallery Thumbnails - edge-aligned */}
+        {/* Mobile Gallery Thumbnails */}
         <div className="overflow-x-auto hide-scrollbar-horizontal">
           <div className="flex gap-2 px-5 pt-3 pb-2" dir="rtl">
             {gallery.map((img, idx) => (
@@ -474,7 +525,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           {/* Title */}
           <h1 className="text-xl font-medium text-[#111111] tracking-tight leading-[1.1] mb-1">{product.title}</h1>
 
-          {/* Stars between title and price */}
+          {/* Stars */}
           <a href="#reviews-section" onClick={scrollToReviews} className="flex items-center gap-2 group w-fit hover:opacity-80 transition-opacity mt-2 mb-2">
             <div className="flex gap-0.5 text-[#FDBA12]">
               {[...Array(5)].map((_, i) => (
@@ -486,9 +537,9 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             </span>
           </a>
 
-          {/* Price + متوفر inline */}
+          {/* Price — ✅ لون #C0392B بدل #E04040 */}
           <div className="flex items-baseline gap-1.5">
-            <span className="text-xl font-normal text-[#E04040] tracking-[0.02em]">{product.price}</span>
+            <span className="text-xl font-normal text-[#C0392B] tracking-[0.02em]">{product.price}</span>
             <span className="text-xs text-[#666666]">ج.م</span>
             {product.compareAtPrice && (
               <span className="text-xs text-[#999999] line-through mr-1">{product.compareAtPrice} ج.م</span>
@@ -517,9 +568,8 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             </div>
           )}
 
-          {/* Unified Selectors Area (NO separator between color & size) */}
+          {/* Selectors */}
           <div className="mt-6 border-t border-[#DDDDDD] pt-6">
-            {/* Color Selector - larger boxed */}
             {safeColors.length > 0 && (
               <div className="mb-6">
                 <div className="flex items-baseline gap-2 mb-3">
@@ -546,7 +596,6 @@ export default function ProductView({ initialProduct, sourceCategory }) {
               </div>
             )}
 
-            {/* Size Selector - larger */}
             {safeSizes.length > 0 && (
               <div>
                 <div className="flex items-center justify-between mb-3">
@@ -571,31 +620,31 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             )}
           </div>
 
-          {/* === MOBILE ADD TO CART === */}
+          {/* Mobile Add to Cart */}
           <div className="mt-6 border-t border-[#DDDDDD] pt-6">
             <div className="sticky bottom-0 pb-4 bg-white pt-2">
-            <div className="flex gap-3">
-              <button 
-                onClick={() => {
-                  addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity});
-                  setQuantity(1);
-                }} 
-                className="flex-1 text-base font-medium py-[18px] flex items-center justify-center transition-all duration-200 relative overflow-hidden btn-breathe"
-                style={{background:'#000', color:'#fff', border:'1px solid #000', letterSpacing:'0.02em'}}
-                onMouseEnter={e => { e.currentTarget.style.opacity = '0.9'; }}
-                onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
-              >
-                <span className="relative z-10">أضف إلى السلة</span>
-                <span className="absolute inset-0 bg-white/5 opacity-0 hover:opacity-100 transition-opacity"></span>
-              </button>
-              
-              <div className="flex items-center justify-between bg-white border border-[#DDDDDD] px-2 w-[85px] shrink-0">
-                <button onClick={() => setQuantity(q => q + 1)} className="text-[#666666] hover:text-black p-1 transition-colors"><Plus size={15} /></button>
-                <span className="text-[#111111] text-sm font-medium">{quantity}</span>
-                <button onClick={() => setQuantity(q => q > 1 ? q - 1 : 1)} className="text-[#666666] hover:text-black p-1 transition-colors"><Minus size={15} /></button>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => {
+                    addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity});
+                    setQuantity(1);
+                  }} 
+                  className="flex-1 text-base font-medium py-[18px] flex items-center justify-center transition-all duration-200 relative overflow-hidden btn-breathe"
+                  style={{background:'#000', color:'#fff', border:'1px solid #000', letterSpacing:'0.02em'}}
+                  onMouseEnter={e => { e.currentTarget.style.opacity = '0.9'; }}
+                  onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
+                >
+                  <span className="relative z-10">أضف إلى السلة</span>
+                  <span className="absolute inset-0 bg-white/5 opacity-0 hover:opacity-100 transition-opacity"></span>
+                </button>
+                
+                <div className="flex items-center justify-between bg-white border border-[#DDDDDD] px-2 w-[85px] shrink-0">
+                  <button onClick={() => setQuantity(q => q + 1)} className="text-[#666666] hover:text-black p-1 transition-colors"><Plus size={15} /></button>
+                  <span className="text-[#111111] text-sm font-medium">{quantity}</span>
+                  <button onClick={() => setQuantity(q => q > 1 ? q - 1 : 1)} className="text-[#666666] hover:text-black p-1 transition-colors"><Minus size={15} /></button>
+                </div>
               </div>
-            </div>
-            {renderCustomHtml('below_cart')}
+              {renderCustomHtml('below_cart')}
             </div>
           </div>
 
@@ -628,48 +677,10 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             </div>
           </div>
 
-          {/* Premium Accordion Section */}
+          {/* ✅ Accordion — mobile (مشترك عبر AccordionSections) */}
           {product.description && (
             <div className="mt-6 border-t border-[#DDDDDD] pt-5">
-              <div className="space-y-0">
-                <details className="group border-b border-[#E5E5E5] transition-all duration-500">
-                  <summary className="flex items-center justify-between cursor-pointer text-sm text-[#111111] py-4 transition-all duration-300 list-none">
-                    <span className="font-medium">عن المنتج</span>
-                    <span className="text-[#999999] group-open:rotate-45 transition-transform duration-500 text-sm">+</span>
-                  </summary>
-                  <div className="pb-5 text-[13px] text-[#666666] leading-relaxed ql-editor-display" dir="rtl">
-                    <div dangerouslySetInnerHTML={{__html: closedDescriptionHTML}} />
-                  </div>
-                </details>
-                <details className="group border-b border-[#E5E5E5] transition-all duration-500">
-                  <summary className="flex items-center justify-between cursor-pointer text-sm text-[#111111] py-4 transition-all duration-300 list-none">
-                    <span className="font-medium">الخامات</span>
-                    <span className="text-[#999999] group-open:rotate-45 transition-transform duration-500 text-sm">+</span>
-                  </summary>
-                  <div className="pb-5 text-[13px] text-[#666666] leading-relaxed">
-                    <p>خامات عالية الجودة. يرجى مراجعة ملصق العناية المرفق بالمنتج للحصول على تعليمات الغسيل والاستخدام.</p>
-                  </div>
-                </details>
-                <details className="group border-b border-[#E5E5E5] transition-all duration-500">
-                  <summary className="flex items-center justify-between cursor-pointer text-sm text-[#111111] py-4 transition-all duration-300 list-none">
-                    <span className="font-medium">المواصفات</span>
-                    <span className="text-[#999999] group-open:rotate-45 transition-transform duration-500 text-sm">+</span>
-                  </summary>
-                  <div className="pb-5 text-[13px] text-[#666666] leading-relaxed">
-                    <p>رمز المنتج: {product.id || product.handle || "—"}</p>
-                    {product.metafields?.specifications && <p>{product.metafields.specifications}</p>}
-                  </div>
-                </details>
-                <details className="group border-b border-[#E5E5E5] transition-all duration-500">
-                  <summary className="flex items-center justify-between cursor-pointer text-sm text-[#111111] py-4 transition-all duration-300 list-none">
-                    <span className="font-medium">الشحن والاسترجاع</span>
-                    <span className="text-[#999999] group-open:rotate-45 transition-transform duration-500 text-sm">+</span>
-                  </summary>
-                  <div className="pb-5 text-[13px] text-[#666666] leading-relaxed">
-                    <p>شحن سريع خلال 3-7 أيام عمل. إرجاع مجاني خلال 14 يوم من تاريخ الاستلام.</p>
-                  </div>
-                </details>
-              </div>
+              <AccordionSections />
               {renderCustomHtml('below_description')}
             </div>
           )}
@@ -681,9 +692,9 @@ export default function ProductView({ initialProduct, sourceCategory }) {
       <div className="hidden lg:block min-h-screen bg-white">
         <div className="max-w-[1440px] mx-auto flex flex-row-reverse" dir="ltr">
           
-          {/* RIGHT: Gallery (now on LEFT visually due to flex-row-reverse, but in DOM order: first = right side) */}
+          {/* RIGHT: Gallery */}
           <div className="w-[60%] flex gap-5 p-8 pr-0" dir="rtl">
-            {/* Vertical Thumbnails - scrollable carousel */}
+            {/* Vertical Thumbnails */}
             <div className="w-[90px] flex-shrink-0 flex flex-col items-center gap-1.5 relative">
               {thumbScrollTop > 0 && (
                 <button onClick={thumbScrollUp} className="w-full py-1 flex items-center justify-center border border-[#DDDDDD] bg-white hover:border-black transition-all duration-300 text-[#666666] hover:text-black">
@@ -719,27 +730,28 @@ export default function ProductView({ initialProduct, sourceCategory }) {
               )}
             </div>
 
-            {/* Main Image */}
-            <div className="flex-1 relative bg-[#F5F5F5] aspect-[3/4] cursor-zoom-in group overflow-hidden"
+            {/* Main Image — ✅ حذف group وgroup-hover، الـ hover:scale على الـ img مباشرة */}
+            <div
+              className="flex-1 relative bg-[#F5F5F5] aspect-[3/4] cursor-zoom-in overflow-hidden"
               onClick={() => openGallery(activeIdx)}
             >
               <img 
                 key={activeImage}
                 src={getImageUrl(activeImage)} 
                 alt={product.title} 
-                className="w-full h-full object-cover transition-all duration-500 ease-out group-hover:scale-[1.01]"
+                className="w-full h-full object-cover transition-all duration-500 ease-out hover:scale-[1.01]"
               />
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/[0.02] transition-colors"></div>
+              <div className="absolute inset-0 bg-black/0 hover:bg-black/[0.02] transition-colors pointer-events-none"></div>
               <button 
                 onClick={(e) => { e.stopPropagation(); openGallery(activeIdx); }} 
-                className="absolute top-4 right-4 z-10 bg-white/80 p-2 rounded-full border border-[#DDDDDD] text-[#111111] hover:bg-white transition-all duration-300 opacity-0 group-hover:opacity-100"
+                className="absolute top-4 right-4 z-10 bg-white/80 p-2 rounded-full border border-[#DDDDDD] text-[#111111] hover:bg-white transition-all duration-300 img-zoom-btn"
               >
                 <Search size={16} />
               </button>
             </div>
           </div>
 
-          {/* LEFT: Product Info (now on RIGHT visually due to flex-row-reverse) */}
+          {/* LEFT: Product Info */}
           <div className="w-[40%] p-8 pr-0 flex flex-col justify-start pt-8" dir="rtl">
             {renderCustomHtml('above_title')}
 
@@ -770,7 +782,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             {/* Title */}
             <h1 className="text-[24px] font-medium text-[#111111] tracking-tight leading-[1.1] mb-3">{product.title}</h1>
 
-            {/* Stars between title and price */}
+            {/* Stars */}
             <a href="#reviews-section" onClick={scrollToReviews} className="flex items-center gap-2 group w-fit hover:opacity-80 transition-opacity mb-3">
               <div className="flex gap-0.5 text-[#FDBA12]">
                 {[...Array(5)].map((_, i) => (
@@ -782,9 +794,9 @@ export default function ProductView({ initialProduct, sourceCategory }) {
               </span>
             </a>
 
-            {/* Price + متوفر inline */}
+            {/* Price — ✅ لون #C0392B بدل #E04040 */}
             <div className="flex items-baseline gap-1.5">
-              <span className="text-[24px] font-normal text-[#E04040] tracking-[0.02em]">{product.price}</span>
+              <span className="text-[24px] font-normal text-[#C0392B] tracking-[0.02em]">{product.price}</span>
               <span className="text-sm text-[#666666]">ج.م</span>
               {product.compareAtPrice && (
                 <span className="text-sm text-[#999999] line-through mr-1">{product.compareAtPrice} ج.م</span>
@@ -813,9 +825,8 @@ export default function ProductView({ initialProduct, sourceCategory }) {
               </div>
             )}
 
-            {/* Unified Selectors Area */}
+            {/* Selectors */}
             <div className="mt-8 border-t border-[#DDDDDD] pt-6">
-              {/* Color Selector - larger boxed */}
               {safeColors.length > 0 && (
                 <div className="mb-6">
                   <div className="flex items-baseline gap-2 mb-3">
@@ -842,7 +853,6 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                 </div>
               )}
 
-              {/* Size Selector - larger */}
               {safeSizes.length > 0 && (
                 <div>
                   <div className="flex items-center justify-between mb-3">
@@ -867,7 +877,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
               )}
             </div>
 
-            {/* ADD TO CART - clean, "أضف إلى السلة" only */}
+            {/* Add to Cart */}
             <div className="mt-8 border-t border-[#DDDDDD] pt-6">
               <div className="flex gap-3">
                 <button 
@@ -922,48 +932,10 @@ export default function ProductView({ initialProduct, sourceCategory }) {
               </div>
             </div>
 
-            {/* Premium Accordion Section Desktop */}
+            {/* ✅ Accordion — desktop (مشترك عبر AccordionSections) */}
             {product.description && (
               <div className="mt-8 border-t border-[#DDDDDD] pt-5">
-                <div className="space-y-0">
-                  <details className="group border-b border-[#E5E5E5] transition-all duration-500">
-                    <summary className="flex items-center justify-between cursor-pointer text-sm text-[#111111] py-4 transition-all duration-300 list-none">
-                      <span className="font-medium">عن المنتج</span>
-                      <span className="text-[#999999] group-open:rotate-45 transition-transform duration-500 text-sm">+</span>
-                    </summary>
-                    <div className="pb-5 text-[13px] text-[#666666] leading-relaxed ql-editor-display" dir="rtl">
-                      <div dangerouslySetInnerHTML={{__html: closedDescriptionHTML}} />
-                    </div>
-                  </details>
-                  <details className="group border-b border-[#E5E5E5] transition-all duration-500">
-                    <summary className="flex items-center justify-between cursor-pointer text-sm text-[#111111] py-4 transition-all duration-300 list-none">
-                      <span className="font-medium">الخامات</span>
-                      <span className="text-[#999999] group-open:rotate-45 transition-transform duration-500 text-sm">+</span>
-                    </summary>
-                    <div className="pb-5 text-[13px] text-[#666666] leading-relaxed">
-                      <p>خامات عالية الجودة. يرجى مراجعة ملصق العناية المرفق بالمنتج للحصول على تعليمات الغسيل والاستخدام.</p>
-                    </div>
-                  </details>
-                  <details className="group border-b border-[#E5E5E5] transition-all duration-500">
-                    <summary className="flex items-center justify-between cursor-pointer text-sm text-[#111111] py-4 transition-all duration-300 list-none">
-                      <span className="font-medium">المواصفات</span>
-                      <span className="text-[#999999] group-open:rotate-45 transition-transform duration-500 text-sm">+</span>
-                    </summary>
-                    <div className="pb-5 text-[13px] text-[#666666] leading-relaxed">
-                      <p>رمز المنتج: {product.id || product.handle || "—"}</p>
-                      {product.metafields?.specifications && <p>{product.metafields.specifications}</p>}
-                    </div>
-                  </details>
-                  <details className="group border-b border-[#E5E5E5] transition-all duration-500">
-                    <summary className="flex items-center justify-between cursor-pointer text-sm text-[#111111] py-4 transition-all duration-300 list-none">
-                      <span className="font-medium">الشحن والاسترجاع</span>
-                      <span className="text-[#999999] group-open:rotate-45 transition-transform duration-500 text-sm">+</span>
-                    </summary>
-                    <div className="pb-5 text-[13px] text-[#666666] leading-relaxed">
-                      <p>شحن سريع خلال 3-7 أيام عمل. إرجاع مجاني خلال 14 يوم من تاريخ الاستلام.</p>
-                    </div>
-                  </details>
-                </div>
+                <AccordionSections />
                 {renderCustomHtml('below_description')}
               </div>
             )}
@@ -972,10 +944,9 @@ export default function ProductView({ initialProduct, sourceCategory }) {
         </div>
       </div>
 
-      {/* ===== BOTTOM SECTIONS (Both Mobile & Desktop) ===== */}
+      {/* ===== BOTTOM SECTIONS ===== */}
       <div className="max-w-[1440px] mx-auto px-5 lg:px-8" dir="rtl">
 
-        {/* Reviews */}
         <div id="reviews-section" className="py-8 lg:py-12 mt-6 border-t border-[#DDDDDD]">
           <ProductReviews 
             productHandle={product.handle || product.id} 
@@ -986,7 +957,6 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           />
         </div>
 
-        {/* Related Products */}
         {product.metafields?.hideRelatedSection !== "Yes" && relatedProducts.length > 0 && (
           <div className="py-12 lg:py-16 border-t border-[#DDDDDD]">
             <h2 className="text-sm lg:text-base font-medium text-[#111111] tracking-[0.08em] uppercase mb-8 lg:mb-10">
@@ -1030,7 +1000,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
       </div>
 
-      {/* ===== GALLERY MODAL - Refined ===== */}
+      {/* ===== GALLERY MODAL ===== */}
       {isGalleryOpen && (
         <div 
           className="fixed inset-0 z-[99999] bg-white flex flex-col gallery-enter"
@@ -1142,7 +1112,10 @@ export default function ProductView({ initialProduct, sourceCategory }) {
         .ql-editor-display summary::-webkit-details-marker { display:none }
         .ql-editor-display div { color:#666666!important; line-height:1.8; padding-bottom: 16px; }
 
-        /* Subtle breathing animation for CTA button */
+        /* ✅ زر الـ zoom يظهر عند hover على الصورة مباشرة */
+        .img-zoom-btn { opacity: 0; transition: opacity 0.3s; }
+        .flex-1:hover .img-zoom-btn { opacity: 1; }
+
         @keyframes breathe {
           0%, 100% { transform: translateX(0); }
           15%, 85% { transform: translateX(0); }
