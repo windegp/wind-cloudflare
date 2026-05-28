@@ -60,9 +60,8 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   const pendingActionRef = useRef(0);
 
   const [thumbScrollTop, setThumbScrollTop] = useState(0);
-  const THUMB_HEIGHT = 80; // w-[90px] aspect-[3/4] => ~120px height + 10px gap
   const VISIBLE_THUMBS = 6;
-  const maxScroll = Math.max(0, gallery.length - VISIBLE_THUMBS);
+  const maxScroll = useRef(0);
 
   useEffect(() => {
     if (product?.id) {
@@ -270,7 +269,10 @@ export default function ProductView({ initialProduct, sourceCategory }) {
     return "/placeholder.png";
   };
 
-  const gallery = product.images || [product.mainImage, ...Array.from({length: product.imagesCount || 0}, (_, i) => `${i+1}.webp`)];
+  const gallery = useMemo(() => 
+    product.images || [product.mainImage, ...Array.from({length: product.imagesCount || 0}, (_, i) => `${i+1}.webp`)],
+    [product]
+  );
 
   const openGallery = idx => { setGalleryIdx(idx); setIsZoomed(false); setGalleryOpen(true); };
   const galleryNext = () => { setGalleryIdx(i => (i + 1) % gallery.length); setIsZoomed(false); };
@@ -360,8 +362,12 @@ export default function ProductView({ initialProduct, sourceCategory }) {
     return null;
   };
 
+  // Compute maxScroll inside callback to avoid TDZ issues with gallery
   const thumbScrollUp = () => setThumbScrollTop(prev => Math.max(0, prev - 1));
-  const thumbScrollDown = () => setThumbScrollTop(prev => Math.min(maxScroll, prev + 1));
+  const thumbScrollDown = () => setThumbScrollTop(prev => {
+    const m = Math.max(0, gallery.length - VISIBLE_THUMBS);
+    return Math.min(m, prev + 1);
+  });
 
   // ---------- RENDER ----------
   return (
@@ -706,7 +712,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                   );
                 })}
               </div>
-              {thumbScrollTop < maxScroll && (
+              {thumbScrollTop < Math.max(0, gallery.length - VISIBLE_THUMBS) && (
                 <button onClick={thumbScrollDown} className="w-full py-1 flex items-center justify-center border border-[#DDDDDD] bg-white hover:border-black transition-all duration-300 text-[#666666] hover:text-black">
                   <ChevronDown size={14} />
                 </button>
