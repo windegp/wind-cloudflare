@@ -98,6 +98,7 @@ mergedProduct;
   
   const [activeCardImage, setActiveCardImage] = useState(null);
   const [activeColorIdx, setActiveColorIdx] = useState(null);
+  const [isHovered, setIsHovered] = useState(false);
 
   // 🔥 تعديل WIND: جلب القسم من مصفوفة الأقسام بدلاً من الحقول المكررة
   const displayCategory = (collections && collections.length > 0) 
@@ -244,19 +245,38 @@ mergedProduct;
   const safeRating = Number(reviewsData.rating) || 5;
   const fullStarsCount = Math.round(safeRating);
 
+  // 🔥 Image hover preview: switch to second image on hover if gallery has > 1 image
+  const hasMultipleImages = images && images.length > 1;
+  const hoverImageUrl = hasMultipleImages && isHovered ? images[1] : null;
+
   return (
     <>
-      <div className="group flex flex-col h-full relative" dir="rtl">
+      <div
+        className="group flex flex-col h-full relative"
+        dir="rtl"
+        onMouseEnter={() => { if (hasMultipleImages) setIsHovered(true); }}
+        onMouseLeave={() => setIsHovered(false)}
+      >
         <div className="relative aspect-[4/5] bg-[#EFEFEF] overflow-hidden cursor-pointer" onClick={handleOpenQuickView}>
           {discount && <div className="absolute top-2.5 right-2.5 z-20 bg-[#E04040] text-white text-[11px] font-semibold px-2.5 py-1 rounded-full shadow-sm font-cairo">تخفيض</div>}
           <Link href={productLink} className="block w-full h-full" onClick={(e) => e.stopPropagation()}>
-            <img
-              src={getImageUrl(activeCardImage || defaultProductImage)}
-              alt={title}
-              onLoad={() => setImgLoaded(true)}
-              className={`w-full h-full object-cover transition-all duration-1000 ease-out ${imgLoaded ? 'scale-100 opacity-100' : 'scale-[1.15] opacity-0'} group-hover:scale-105`}
-              loading="lazy"
-            />
+            <div className="relative w-full h-full">
+              <img
+                src={getImageUrl(activeCardImage || defaultProductImage)}
+                alt={title}
+                onLoad={() => setImgLoaded(true)}
+                className={`absolute inset-0 w-full h-full object-cover transition-all duration-500 ease-out ${imgLoaded ? 'scale-100 opacity-100' : 'scale-[1.15] opacity-0'} group-hover:scale-105 ${hoverImageUrl ? (isHovered ? 'opacity-0' : 'opacity-100') : ''}`}
+                loading="lazy"
+              />
+              {hoverImageUrl && (
+                <img
+                  src={getImageUrl(hoverImageUrl)}
+                  alt={title}
+                  className={`absolute inset-0 w-full h-full object-cover transition-all duration-500 ease-out group-hover:scale-105 ${isHovered ? 'opacity-100' : 'opacity-0'}`}
+                  loading="lazy"
+                />
+              )}
+            </div>
           </Link>
           <div className="absolute bottom-3.5 left-1/2 -translate-x-1/2 flex items-center gap-2.5 z-10" dir="ltr">
             <button onClick={handleOpenQuickView} className="w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-md text-[#1A1A1A] hover:bg-[#1A1A1A] hover:text-white transition-colors"><ShoppingBag size={15} strokeWidth={1.5} /></button>
@@ -278,7 +298,7 @@ mergedProduct;
                 <span className="text-[#1A1A1A] text-[13px] font-bold mt-0.5 font-cairo">{reviewsData.rating}</span>
                 <div className="flex items-center gap-[2px]">
                   {[0, 1, 2, 3, 4].map((i) => (
-                    <Star key={i} className={`w-3.5 h-3.5 group-hover:scale-110 transition-transform ${i < fullStarsCount ? 'text-[#1A1A1A] fill-[#1A1A1A]' : 'text-gray-300 fill-gray-300'}`} />
+                    <Star key={i} className={`w-3.5 h-3.5 group-hover:scale-110 transition-transform ${i < fullStarsCount ? 'text-[#E8A500] fill-[#E8A500]' : 'text-gray-300 fill-gray-300'}`} />
                   ))}
                 </div>
               </div>
