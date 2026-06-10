@@ -17,9 +17,6 @@ let globalProductsCache = {
   isLoaded: false
 };
 
-// 🔍 DIAGNOSTIC COUNTERS
-let diagnosticPageCount = 0;
-
 // 🎯 OPTIMIZATION: Virtualization for large tables - limits rendered rows to prevent UI freeze
 const VIRTUALIZATION_THRESHOLD = 100; // Start virtualizing after 100 products
 const VIRTUALIZATION_PAGE_SIZE = 50;  // Render 50 products at a time
@@ -41,11 +38,7 @@ export default function ProductsList() {
   useEffect(() => {
     // 🔥 4. لا نسحب الداتا إلا إذا كانت الذاكرة فارغة (0 قراءات عند العودة للصفحة)
     if (!globalProductsCache.isLoaded) {
-      diagnosticPageCount = 0;
-      console.log("🔍 DIAGNOSTIC: Initial fetch, isLoaded=false");
       fetchProducts();
-    } else {
-      console.log("🔍 DIAGNOSTIC: Skipping fetch, isLoaded already true. Products in cache:", globalProductsCache.data.length);
     }
   }, []);
 
@@ -54,47 +47,35 @@ export default function ProductsList() {
       setIsLoading(true);
       const db = getDb();
       
-      diagnosticPageCount++;
-      
+      // 🔥 FIX: Order by createdAt descending so newest products appear first
       let q = query(
         collection(db, "products"),
-        orderBy(documentId()),
+        orderBy("createdAt", "desc"),
         limit(itemsPerPage)
       );
       
       if (loadMore && lastVisible) {
         q = query(q, startAfter(lastVisible));
-        console.log(`🔍 DIAGNOSTIC: Page ${diagnosticPageCount} - LOAD MORE mode`);
-        console.log(`🔍 DIAGNOSTIC: Cursor (lastVisible) =`, lastVisible.id);
-      } else {
-        console.log(`🔍 DIAGNOSTIC: Page ${diagnosticPageCount} - FIRST PAGE mode`);
       }
       
       const querySnapshot = await getDocs(q);
-      
-      console.log(`🔍 DIAGNOSTIC: Firestore returned ${querySnapshot.docs.length} documents`);
-      
-      const docIds = querySnapshot.docs.map(d => d.id);
-      console.log(`🔍 DIAGNOSTIC: Document IDs in this page (first 5 shown):`, docIds.slice(0, 5));
-      console.log(`🔍 DIAGNOSTIC: Document IDs in this page (last 5 shown):`, docIds.slice(-5));
-      console.log(`🔍 DIAGNOSTIC: FULL list of ${docIds.length} IDs:`, docIds);
-      
       const newProducts = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const newLastVisible = querySnapshot.docs[querySnapshot.docs.length - 1] || null;
       const newHasMore = querySnapshot.docs.length === itemsPerPage;
       
+      // 🔍 DIAGNOSTIC: Check for products missing createdAt
+      const missingCreatedAt = newProducts.filter(p => !p.createdAt);
+      if (missingCreatedAt.length > 0) {
+        console.warn(`⚠️ ${missingCreatedAt.length} products missing createdAt:`, missingCreatedAt.map(p => ({ id: p.id, title: p.title })));
+      }
+      
       let finalProductsList;
       if (loadMore) {
-        const existingIds = new Set(products.map(p => p.id));
-        const beforeCount = products.length;
         finalProductsList = [...products, ...newProducts];
-        const newIds = newProducts.filter(p => !existingIds.has(p.id)).map(p => p.id);
-        console.log(`🔍 DIAGNOSTIC: Before merge: ${beforeCount} products. Adding ${newProducts.length} new. Truly new IDs:`, newIds);
         setProducts(finalProductsList);
       } else {
         finalProductsList = newProducts;
         setProducts(finalProductsList);
-        console.log(`🔍 DIAGNOSTIC: Full initial list: ${finalProductsList.length} products. IDs:`, finalProductsList.map(p => p.id));
       }
       
       setLastVisible(newLastVisible);
@@ -106,14 +87,11 @@ export default function ProductsList() {
       globalProductsCache.hasMore = newHasMore;
       globalProductsCache.isLoaded = true;
       
-      console.log(`🔍 DIAGNOSTIC: Total products in state after page ${diagnosticPageCount}: ${finalProductsList.length}`);
-      console.log(`🔍 DIAGNOSTIC: hasMore = ${newHasMore}, lastVisible =`, newLastVisible?.id);
-      
       // 🎯 OPTIMIZATION: Reset display limit when loading more
       setDisplayLimit(VIRTUALIZATION_PAGE_SIZE);
       
     } catch (error) {
-      console.error("🔍 DIAGNOSTIC ERROR fetching products:", error);
+      console.error("Error fetching products:", error);
     } finally {
       setIsLoading(false);
     }
@@ -121,10 +99,7 @@ export default function ProductsList() {
 
   const loadMore = () => {
     if (!isLoading && hasMore) {
-      console.log("🔍 DIAGNOSTIC: Load More clicked");
       fetchProducts(true);
-    } else {
-      console.log(`🔍 DIAGNOSTIC: Load More blocked - isLoading: ${isLoading}, hasMore: ${hasMore}`);
     }
   };
 
@@ -177,7 +152,7 @@ export default function ProductsList() {
             <div className="relative">
               <input
                 type="text"
-                placeholder="بحث في المنتجات..."
+                placeholder="بحث في المنتجات (اسم، ID، slug)..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full sm:w-64 px-4 py-2.5 pr-10 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#008060]/20 focus:border-[#008060]"
@@ -223,7 +198,15 @@ export default function ProductsList() {
               <tbody className="divide-y divide-gray-100">
                 {/* 🎯 OPTIMIZATION: Virtualized rendering for large tables */}
                 {(searchQuery 
-                  ? products.filter(p => p.title && p.title.toLowerCase().includes(searchQuery.toLowerCase()))
+                  ? products.filter(p => {
+                      const q = searchQuery.toLowerCase();
+                      return (
+                        (p.title && p.title.toLowerCase().includes(q)) ||
+                        (p.id && p.id.toLowerCase().includes(q)) ||
+                        (p.slug && p.slug.toLowerCase().includes(q)) ||
+                        (p.seo?.handle && p.seo.handle.toLowerCase().includes(q))
+                      );
+                    })
                   : products.slice(0, Math.max(VIRTUALIZATION_PAGE_SIZE, displayLimit))
                 ).map((product) => {
                   
@@ -331,7 +314,15 @@ export default function ProductsList() {
               </div>
             )}
             
-            {searchQuery && products.filter(p => p.title && p.title.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
+            {searchQuery && products.filter(p => {
+              const q = searchQuery.toLowerCase();
+              return (
+                (p.title && p.title.toLowerCase().includes(q)) ||
+                (p.id && p.id.toLowerCase().includes(q)) ||
+                (p.slug && p.slug.toLowerCase().includes(q)) ||
+                (p.seo?.handle && p.seo.handle.toLowerCase().includes(q))
+              );
+            }).length === 0 && (
               <div className="p-8 text-center text-gray-500">
                 لا توجد منتجات مطابقة للبحث
               </div>
@@ -365,11 +356,6 @@ export default function ProductsList() {
               <p className="text-sm text-gray-500">يرجى الانتظار...</p>
             </div>
           )}
-        </div>
-        
-        {/* 🔍 DIAGNOSTIC: Footer showing total count */}
-        <div className="mt-4 text-xs text-gray-400 text-center" dir="ltr">
-          Total loaded: {products.length} | hasMore: {String(hasMore)} | isLoading: {String(isLoading)}
         </div>
       </div>
     </div>
