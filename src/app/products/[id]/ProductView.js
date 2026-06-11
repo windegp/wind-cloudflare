@@ -24,7 +24,6 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   const { isVisible: loaderActive } = useGlobalLoader();
   const { addToCart } = useCart();
 
-  /* ─────────── core state ─────────── */
   const [product, setProduct]           = useState(initialProduct || null);
   const [loading, setLoading]           = useState(!initialProduct);
   const [activeImage, setActiveImage]   = useState(initialProduct?.images?.[0] || initialProduct?.mainImage || "");
@@ -32,57 +31,40 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   const [selectedSize, setSelectedSize] = useState("");
   const [selectedColor, setSelectedColor] = useState("");
   const [quantity, setQuantity]         = useState(1);
-
-  /* ─────────── UI modals ─────────── */
   const [isSizeGuideOpen, setSizeGuideOpen] = useState(false);
   const [isGalleryOpen, setGalleryOpen]     = useState(false);
   const [galleryIdx, setGalleryIdx]         = useState(0);
   const [isZoomed, setIsZoomed]             = useState(false);
   const [isImageZoomModalOpen, setImageZoomModalOpen] = useState(false);
   const [isDescModalOpen, setDescModalOpen] = useState(false);
-
-  /* ─────────── wishlist / likes ─────────── */
   const [isWishlisted, setIsWishlisted]     = useState(false);
   const [realLikesCount, setRealLikesCount] = useState(0);
   const likeTimeoutRef   = useRef(null);
   const pendingActionRef = useRef(0);
-
-  /* ─────────── reviews ─────────── */
   const [realRating, setRealRating]           = useState(0);
   const [realReviewsCount, setRealReviewsCount] = useState(0);
-
-  /* ─────────── related ─────────── */
   const [relatedProducts, setRelatedProducts] = useState([]);
+  const [sizeError, setSizeError]       = useState(false);
+  const [addedFeedback, setAddedFeedback] = useState(false);
+  const [showStickyBar, setShowStickyBar] = useState(false);
+  const [viewersCount] = useState(() => Math.floor(Math.random() * 9) + 4);
 
-  /* ─────────── NEW UX state ─────────── */
-  const [sizeError, setSizeError]       = useState(false);           // shake on missing size
-  const [addedFeedback, setAddedFeedback] = useState(false);          // ✓ confirmed in button
-  const [showStickyBar, setShowStickyBar] = useState(false);          // sticky header on scroll
-  const [viewersCount] = useState(() => Math.floor(Math.random() * 9) + 4); // social proof
-
-  /* ─────────── refs ─────────── */
-  const isSwipingHero  = useRef(false);
   const heroTouchStartX = useRef(null);
   const touchStartX    = useRef(null);
   const touchStartY    = useRef(null);
   const colorsRef      = useRef(null);
-  const cartBtnRef     = useRef(null);        // sentinel for sticky bar
+  const cartBtnRef     = useRef(null);
   const [thumbScrollTop, setThumbScrollTop] = useState(0);
-  const VISIBLE_THUMBS = 6;
+  const VISIBLE_THUMBS = 5;
 
-  /* ─────────── sticky bar observer ─────────── */
   useEffect(() => {
     const sentinel = cartBtnRef.current;
     if (!sentinel) return;
-    const obs = new IntersectionObserver(
-      ([entry]) => setShowStickyBar(!entry.isIntersecting),
-      { threshold: 0 }
-    );
+    const obs = new IntersectionObserver(([e]) => setShowStickyBar(!e.isIntersecting), { threshold: 0 });
     obs.observe(sentinel);
     return () => obs.disconnect();
   }, [product]);
 
-  /* ─────────── wishlist init ─────────── */
   useEffect(() => {
     if (product?.id) {
       const saved = JSON.parse(localStorage.getItem('wind_wishlist') || '[]');
@@ -99,17 +81,14 @@ export default function ProductView({ initialProduct, sourceCategory }) {
     return `${d.getUTCFullYear()}-W${weekNo}`;
   };
 
-  /* ─────────── share ─────────── */
   const handleShare = async (e) => {
     e.stopPropagation();
-    const shareData = { title: product?.title || 'WIND', text: 'تسوق هذا المنتج من WIND', url: window.location.href };
     try {
-      if (navigator.share) { await navigator.share(shareData); }
+      if (navigator.share) { await navigator.share({ title: product?.title || 'WIND', text: 'تسوق من WIND', url: window.location.href }); }
       else { await navigator.clipboard.writeText(window.location.href); alert('تم نسخ الرابط!'); }
-    } catch { /* cancelled */ }
+    } catch { }
   };
 
-  /* ─────────── wishlist toggle ─────────── */
   const handleWishlistToggle = (e) => {
     e.stopPropagation();
     if (!product?.id) return;
@@ -134,31 +113,22 @@ export default function ProductView({ initialProduct, sourceCategory }) {
       try {
         const ref  = doc(getDb(), "products", product.id.toString());
         const data = { likesCount: increment(net), likesUpdatedAt: new Date().toISOString() };
-        if (product.currentWeekId === week)     { data.weeklyLikesCount = increment(net); }
+        if (product.currentWeekId === week) { data.weeklyLikesCount = increment(net); }
         else if (net > 0) { data.weeklyLikesCount = 1; data.currentWeekId = week; }
         await updateDoc(ref, data);
         pendingActionRef.current = 0;
-        fetch('/api/revalidate', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ type: 'likes', id: product.id, handle: product.handle || product.id })
-        }).then(() => {
-          sessionStorage.removeItem(`wind_stats_${product.handle || product.id}`);
-          mutate('homepage/data');
-          mutate('homepage-products-sections');
-          mutate(`product-${product.id}`);
-        }).catch(() => {});
+        fetch('/api/revalidate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'likes', id: product.id, handle: product.handle || product.id }) })
+          .then(() => { sessionStorage.removeItem(`wind_stats_${product.handle || product.id}`); mutate('homepage/data'); mutate('homepage-products-sections'); mutate(`product-${product.id}`); }).catch(() => {});
       } catch { pendingActionRef.current = 0; }
     }, 1500);
   };
 
-  /* ─────────── body scroll lock ─────────── */
   useEffect(() => {
     const locked = isGalleryOpen || isImageZoomModalOpen || isDescModalOpen;
     document.body.style.overflow = locked ? 'hidden' : '';
     return () => { document.body.style.overflow = ''; };
   }, [isGalleryOpen, isImageZoomModalOpen, isDescModalOpen]);
 
-  /* ─────────── SWR data ─────────── */
   const staticProd = useMemo(() => staticProducts.find(p => p.id.toString() === id?.toString()), [id]);
   const { data: fbProduct }  = useProduct(id);
   const activeProduct        = fbProduct || staticProd || initialProduct;
@@ -189,39 +159,25 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   useEffect(() => { if (!loading && product) signalPageReady(); }, [loading, product, pathname, signalPageReady]);
   useEffect(() => { setQuantity(1); }, [id, selectedSize, selectedColor]);
 
-  /* ─────────── ADD TO CART with validation ─────────── */
   const handleAddToCart = () => {
-    if (safeSizes.length > 1 && !selectedSize) {
-      setSizeError(true);
-      setTimeout(() => setSizeError(false), 900);
-      return;
-    }
+    if (safeSizes.length > 1 && !selectedSize) { setSizeError(true); setTimeout(() => setSizeError(false), 900); return; }
     addToCart({ ...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity });
     setAddedFeedback(true);
     setTimeout(() => setAddedFeedback(false), 2200);
     setQuantity(1);
   };
 
-  /* ─────────── BUY NOW ─────────── */
   const handleBuyNow = () => {
-    if (safeSizes.length > 1 && !selectedSize) {
-      setSizeError(true);
-      setTimeout(() => setSizeError(false), 900);
-      return;
-    }
+    if (safeSizes.length > 1 && !selectedSize) { setSizeError(true); setTimeout(() => setSizeError(false), 900); return; }
     addToCart({ ...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity });
     window.location.href = '/cart';
   };
 
-  /* ─────────── computed ─────────── */
   const shortDescription = useMemo(() => {
     if (!product?.description) return "";
-    let text = product.description
-      .replace(/<h[1-6][^>]*>[\s\S]*?<\/h[1-6]>/gi, "")
-      .replace(/<[^>]+>/g, "");
-    [/^\s*عن المنتج\s*[:\-\s]*/i, /^\s*الوصف\s*[:\-\s]*/i, /^\s*وصف المنتج\s*[:\-\s]*/i]
-      .forEach(r => { text = text.replace(r, ""); });
-    return text.trim().substring(0, 110) + "... ";
+    let text = product.description.replace(/<h[1-6][^>]*>[\s\S]*?<\/h[1-6]>/gi, "").replace(/<[^>]+>/g, "");
+    [/^\s*عن المنتج\s*[:\-\s]*/i, /^\s*الوصف\s*[:\-\s]*/i].forEach(r => { text = text.replace(r, ""); });
+    return text.trim().substring(0, 110) + "...";
   }, [product?.description]);
 
   const closedDescriptionHTML = useMemo(() => {
@@ -245,9 +201,9 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
   const accordionSections = useMemo(() => {
     const base = [
-      { key: "عن المنتج",           title: "عن المنتج",          html: parsedSections["عن المنتج"] || closedDescriptionHTML, extraClass: "ql-editor-display" },
-      { key: "الخامة والمواصفات",   title: "الخامة والمواصفات",  html: parsedSections["الخامة والمواصفات"] || "<p>خامات عالية الجودة. راجع ملصق العناية للمزيد.</p>" },
-      { key: "الشحن والاستبدال",    title: "الشحن والاسترجاع",   html: parsedSections["الشحن والاستبدال"] || "<p>شحن خلال 3-7 أيام. إرجاع مجاني خلال 14 يوم.</p>" },
+      { key: "عن المنتج",         title: "عن المنتج",         html: parsedSections["عن المنتج"] || closedDescriptionHTML, extraClass: "ql-editor-display" },
+      { key: "الخامة والمواصفات", title: "الخامة والمواصفات", html: parsedSections["الخامة والمواصفات"] || "<p>خامات عالية الجودة.</p>" },
+      { key: "الشحن والاستبدال",  title: "الشحن والاسترجاع",  html: parsedSections["الشحن والاستبدال"] || "<p>شحن خلال 3-7 أيام. إرجاع مجاني خلال 14 يوم.</p>" },
     ];
     if (parsedSections["العناية بالمنتج"])
       base.push({ key: "العناية بالمنتج", title: "العناية بالمنتج", html: parsedSections["العناية بالمنتج"] });
@@ -257,7 +213,6 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   if (loading && !product) return null;
   if (!product) return null;
 
-  /* ─────────── helpers ─────────── */
   const getImageUrl = img => {
     if (!img) return "/placeholder.png";
     if (img.startsWith("http"))  return img;
@@ -281,9 +236,9 @@ export default function ProductView({ initialProduct, sourceCategory }) {
     [product]
   );
 
-  const openGallery  = idx => { setGalleryIdx(idx); setIsZoomed(false); setGalleryOpen(true); };
-  const galleryNext  = ()  => { setGalleryIdx(i => (i + 1) % gallery.length); setIsZoomed(false); };
-  const galleryPrev  = ()  => { setGalleryIdx(i => (i - 1 + gallery.length) % gallery.length); setIsZoomed(false); };
+  const openGallery = idx => { setGalleryIdx(idx); setIsZoomed(false); setGalleryOpen(true); };
+  const galleryNext = ()  => { setGalleryIdx(i => (i + 1) % gallery.length); setIsZoomed(false); };
+  const galleryPrev = ()  => { setGalleryIdx(i => (i - 1 + gallery.length) % gallery.length); setIsZoomed(false); };
 
   const handleHeroTouchStart = e => { heroTouchStartX.current = e.touches[0].clientX; };
   const handleHeroTouchMove  = () => {};
@@ -293,7 +248,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
     if (Math.abs(dx) > 40) {
       const ci = gallery.indexOf(activeImage);
       if (dx > 0) { const pi = (ci - 1 + gallery.length) % gallery.length; setActiveImage(gallery[pi]); setActiveIdx(pi); }
-      else         { const ni = (ci + 1) % gallery.length;                  setActiveImage(gallery[ni]); setActiveIdx(ni); }
+      else         { const ni = (ci + 1) % gallery.length; setActiveImage(gallery[ni]); setActiveIdx(ni); }
     }
     heroTouchStartX.current = null;
   };
@@ -308,7 +263,6 @@ export default function ProductView({ initialProduct, sourceCategory }) {
     touchStartX.current = null; touchStartY.current = null;
   };
 
-  /* ─────────── sizes / colors ─────────── */
   let safeSizes = [], safeColors = [];
   if (Array.isArray(product.options)) {
     product.options.forEach(opt => {
@@ -317,7 +271,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
       if (n.includes("color") || n === "اللون"  || n === "لون")  safeColors = opt.values.split(",").map(c => c.trim()).filter(Boolean);
     });
   }
-  if (!safeSizes.length)  safeSizes  = Array.isArray(product.sizes)  ? product.sizes  : [];
+  if (!safeSizes.length)  safeSizes  = Array.isArray(product.sizes) ? product.sizes : [];
   if (!safeColors.length) safeColors = [];
 
   const currentColorImage = () => {
@@ -334,15 +288,13 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
   const renderCustomHtml = position => {
     if (product?.metafields?.customHtmlSnippet && product?.metafields?.customHtmlPosition === position)
-      return <div className={`w-full custom-html-snippet ${position === 'below_cart' ? 'mt-5' : 'mb-5'}`}
-               dangerouslySetInnerHTML={{ __html: product.metafields.customHtmlSnippet }} />;
+      return <div className={`w-full custom-html-snippet ${position === 'below_cart' ? 'mt-4' : 'mb-4'}`} dangerouslySetInnerHTML={{ __html: product.metafields.customHtmlSnippet }} />;
     return null;
   };
 
   const thumbScrollUp   = () => setThumbScrollTop(p => Math.max(0, p - 1));
   const thumbScrollDown = () => setThumbScrollTop(p => Math.min(Math.max(0, gallery.length - VISIBLE_THUMBS), p + 1));
 
-  /* ─────────── breadcrumb helper ─────────── */
   const getBCat = () => {
     const cats = (product?.collections?.length ? product.collections : product?.categories) || [];
     let cat = sourceCategory;
@@ -357,60 +309,47 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   };
   const bcCat = getBCat();
 
-  /* ─────────── shared sub-components ─────────── */
-  const Breadcrumb = ({ cls = "" }) => (
-    <nav className={`flex items-center gap-2 text-[10px] text-[#AAAAAA] flex-wrap ${cls}`}>
+  const isInStock = product?.quantity > 0 || product?.sellOutOfStock === "Yes";
+
+  /* ── shared micro-components ── */
+  const Breadcrumb = () => (
+    <nav className="flex items-center gap-1.5 text-[11px] text-[#AAAAAA] flex-wrap" dir="rtl">
       <Link href="/" className="hover:text-[#111] transition-colors">الرئيسية</Link>
-      {bcCat && (<><span className="text-[#DDDDDD]">/</span><Link href={bcCat.href} className="hover:text-[#111] transition-colors">{bcCat.name}</Link></>)}
-      <span className="text-[#DDDDDD]">/</span>
-      <span className="text-[#333] font-medium truncate max-w-[240px]">{product.title}</span>
+      {bcCat && (<><span className="text-[#DDDDDD] mx-0.5">/</span><Link href={bcCat.href} className="hover:text-[#111] transition-colors">{bcCat.name}</Link></>)}
+      <span className="text-[#DDDDDD] mx-0.5">/</span>
+      <span className="text-[#555] font-medium truncate max-w-[200px]">{product.title}</span>
     </nav>
   );
 
-  const Stars = ({ size = 13 }) => (
-    <div className="flex gap-0.5 text-[#E8A500]">
-      {[...Array(5)].map((_, i) => (
-        <Star key={i} size={size} fill={i < Math.round(realRating) ? "currentColor" : "none"}
-          className={i >= Math.round(realRating) ? "text-[#DDDDDD]" : ""} />
-      ))}
+  const StarsRow = ({ size = 13 }) => (
+    <a href="#reviews-section" onClick={scrollToReviews} className="flex items-center gap-1.5 w-fit hover:opacity-75 transition-opacity">
+      <div className="flex gap-0.5 text-[#FBBC04]">
+        {[...Array(5)].map((_, i) => (
+          <Star key={i} size={size} fill={i < Math.round(realRating) ? "currentColor" : "none"} className={i >= Math.round(realRating) ? "text-[#E0E0E0]" : ""} />
+        ))}
+      </div>
+      <span className="text-[11px] text-[#AAAAAA]">
+        {realReviewsCount > 0 ? `(${realReviewsCount})` : "(أضف أول تقييم)"}
+      </span>
+    </a>
+  );
+
+  const StockBadge = () => (
+    <div className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-sm ${isInStock ? 'bg-[#F0FDF4] text-[#15803D]' : 'bg-[#FEF2F2] text-[#B91C1C]'}`}>
+      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isInStock ? 'bg-[#22C55E]' : 'bg-[#EF4444]'}`}></span>
+      {isInStock ? 'متوفر في المخزون' : 'غير متوفر في المخزون'}
     </div>
   );
 
-  const TrustGrid = ({ small = false }) => (
-    <>
-      <div className="grid grid-cols-3 gap-px bg-[#EBEBEB]">
-        {[
-          { icon: <Truck   size={small ? 11 : 13} />, label: "شحن سريع"   },
-          { icon: <Eye     size={small ? 11 : 13} />, label: "معاينة"     },
-          { icon: <ShieldCheck size={small ? 11 : 13} />, label: "استرجاع سهل" },
-        ].map(({ icon, label }) => (
-          <div key={label} className={`flex items-center gap-1.5 ${small ? 'text-[9px] py-2.5' : 'text-[10px] py-3'} text-[#777] justify-center bg-white`}>
-            <span className="text-[#333]">{icon}</span>{label}
-          </div>
-        ))}
-      </div>
-      <div className={`flex items-center justify-between bg-[#FAFAFA] ${small ? 'py-2 px-3' : 'py-2.5 px-4'} border border-[#EBEBEB]`}>
-        <div className={`flex items-center gap-1.5 ${small ? 'text-[9px]' : 'text-[10px]'} text-[#777]`}>
-          <ShieldCheck size={small ? 11 : 12} className="text-[#333]" /> دفع آمن 100%
-        </div>
-        <div className="flex items-center gap-2 text-[#AAAAAA]">
-          <CreditCard size={small ? 14 : 15} /><Banknote size={small ? 14 : 15} />
-          <span className="border border-[#E0E0E0] px-1.5 py-0.5 text-[7px] text-[#333]">INSTAPAY</span>
-          <span className="border border-[#E0E0E0] px-1.5 py-0.5 text-[7px] text-[#333]">VISA</span>
-        </div>
-      </div>
-    </>
-  );
-
   const AccordionSections = () => (
-    <div>
+    <div dir="rtl">
       {accordionSections.map(({ key, title, html, extraClass = "" }) => (
-        <details key={key} className="group border-b border-[#EBEBEB]">
-          <summary className="flex items-center justify-between cursor-pointer py-5 list-none select-none">
-            <span className="text-[12px] font-semibold text-[#111] tracking-[0.01em]">{title}</span>
-            <span className="text-[#BBBBBB] group-open:rotate-45 transition-transform duration-300 text-lg leading-none">+</span>
+        <details key={key} className="group border-b border-[#F0F0F0] wind-accordion">
+          <summary className="flex items-center justify-between cursor-pointer py-4 list-none select-none">
+            <span className="text-[13px] font-semibold text-[#111] tracking-[-0.01em]">{title}</span>
+            <ChevronDown size={15} className="text-[#AAAAAA] group-open:rotate-180 transition-transform duration-300 flex-shrink-0" />
           </summary>
-          <div className={`pb-6 text-[12px] text-[#777] leading-[1.9] ${extraClass}`} dir="rtl">
+          <div className={`pb-5 text-[12.5px] text-[#666] leading-[1.85] ${extraClass}`} dir="rtl">
             <div dangerouslySetInnerHTML={{ __html: html }} />
           </div>
         </details>
@@ -418,264 +357,277 @@ export default function ProductView({ initialProduct, sourceCategory }) {
     </div>
   );
 
-  /* ─────────── shared Selectors ─────────── */
-  const ColorSelector = ({ mobile = false }) => safeColors.length === 0 ? null : (
-    <div className={mobile ? "mb-6" : "mb-7"}>
-      <div className={`flex items-baseline gap-2 ${mobile ? 'mb-2.5' : 'mb-3'}`}>
-        <span className={`${mobile ? 'text-[10px]' : 'text-[10px]'} text-[#AAAAAA] tracking-[0.12em] uppercase font-semibold`}>
-          {safeColors.length > 1 ? "اختر اللون" : "اللون"}
-        </span>
-        {selectedColor && <span className={`text-[#111] ${mobile ? 'text-[11px]' : 'text-[12px]'} font-semibold capitalize`}>{selectedColor}</span>}
+  /* ── sticky bottom mobile bar ── */
+  const MobileStickyBar = () => !showStickyBar ? null : (
+    <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[9999] bg-white border-t border-[#EBEBEB] px-4 py-3 flex items-center gap-2.5 shadow-[0_-4px_20px_rgba(0,0,0,0.06)]" dir="rtl">
+      <div className="flex-1 min-w-0">
+        <p className="text-[11px] font-bold text-[#111] truncate">{product.title}</p>
+        <p className="text-[13px] text-[#C0392B] font-semibold">{product.price} ج.م</p>
       </div>
-      <div ref={colorsRef} className="flex flex-wrap gap-2.5">
-        {safeColors.map((ci, i) => {
-          const name  = typeof ci === "string" ? ci : ci.name;
-          const hi    = product.colorSwatches?.[name] || (typeof ci === "object" ? ci.swatch : "#DDDDDD");
-          const isImg = hi.startsWith("http") || hi.includes("/");
-          const isSel = selectedColor === name;
-          return (
-            <button key={i} onClick={() => { setSelectedColor(name); if (isImg) { setActiveImage(hi); setActiveIdx(0); } }} title={name}>
-              <div className={`${mobile ? 'w-10 h-10' : 'w-11 h-11'} border transition-all duration-200 ${isSel ? "border-black outline outline-1 outline-black outline-offset-2" : "border-[#E0E0E0] hover:border-[#999]"}`}>
-                {isImg ? <img src={getImageUrl(hi)} alt={name} className="w-full h-full object-cover" /> : <div style={{ backgroundColor: hi }} className="w-full h-full" />}
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-
-  const SizeSelector = ({ mobile = false }) => safeSizes.length === 0 ? null : (
-    <div className={mobile ? "mb-6" : "mb-7"}>
-      <div className={`flex items-center justify-between ${mobile ? 'mb-2.5' : 'mb-3'}`}>
-        <div className="flex items-baseline gap-2">
-          <span className="text-[10px] text-[#AAAAAA] tracking-[0.12em] uppercase font-semibold">
-            {safeSizes.length > 1 ? "اختر المقاس" : "المقاس"}
-          </span>
-          {selectedSize && <span className={`text-[#111] ${mobile ? 'text-[11px]' : 'text-[12px]'} font-semibold capitalize`}>{selectedSize}</span>}
-        </div>
-        <button onClick={() => setSizeGuideOpen(true)}
-          className="text-[10px] text-[#333] flex items-center gap-1 border border-[#E0E0E0] hover:border-black px-3 py-1 transition-all">
-          <Info size={9} /> دليل القياسات
-        </button>
-      </div>
-      {safeSizes.length > 1 && (
-        <div className={`flex flex-wrap gap-2 ${sizeError ? 'size-shake' : ''}`}>
-          {safeSizes.map(sz => (
-            <button key={sz} onClick={() => { setSelectedSize(sz); setSizeError(false); }}
-              className={`${mobile ? 'min-w-[46px] h-9' : 'min-w-[52px] h-10'} text-[12px] font-medium border transition-all duration-200 capitalize px-2
-                ${selectedSize === sz
-                  ? "bg-black text-white border-black"
-                  : sizeError
-                    ? "bg-white text-[#C0392B] border-[#C0392B]"
-                    : "bg-white text-[#666] border-[#E0E0E0] hover:border-black hover:text-black"
-                }`}>{sz}</button>
-          ))}
-        </div>
-      )}
-      {sizeError && (
-        <p className="text-[10px] text-[#C0392B] mt-2 flex items-center gap-1">
-          <Info size={10} /> يرجى اختيار المقاس أولاً
-        </p>
-      )}
-    </div>
-  );
-
-  /* ─────────── cart buttons ─────────── */
-  const CartButtons = ({ mobile = false }) => (
-    <div className="flex flex-col gap-2.5">
-      <div className="flex gap-3">
-        {/* outlined add to cart */}
-        <button ref={!mobile ? cartBtnRef : null}
-          id={!mobile ? "desktop-cart-btn" : undefined}
-          onClick={handleAddToCart}
-          className={`flex-1 ${mobile ? 'h-[46px]' : 'h-[52px]'} border-[1.5px] font-semibold tracking-[0.05em] transition-all duration-250 text-[12px]
-            ${addedFeedback
-              ? "bg-black text-white border-black"
-              : "bg-white text-black border-black hover:bg-black hover:text-white"
-            }`}
-        >
-          {addedFeedback ? "✓ تمت الإضافة" : "أضف إلى السلة"}
-        </button>
-
-        {/* quantity */}
-        <div className={`flex items-center justify-between bg-white border border-[#E0E0E0] px-1 ${mobile ? 'w-[72px] h-[46px]' : 'w-[80px] h-[52px]'} shrink-0`}>
-          <button onClick={() => setQuantity(q => q + 1)} className="text-[#888] hover:text-black p-1.5 transition-colors"><Plus size={13} /></button>
-          <span className="text-[#111] text-[12px] font-semibold">{quantity}</span>
-          <button onClick={() => setQuantity(q => q > 1 ? q - 1 : 1)} className="text-[#888] hover:text-black p-1.5 transition-colors"><Minus size={13} /></button>
-        </div>
-      </div>
-
-      {/* solid buy now */}
-      <button onClick={handleBuyNow}
-        className={`w-full ${mobile ? 'h-[46px]' : 'h-[52px]'} bg-black text-white border-[1.5px] border-black font-semibold tracking-[0.05em] text-[12px] hover:bg-[#222] transition-colors`}
-      >
-        اشتري الآن
+      <button onClick={handleAddToCart}
+        className={`h-10 px-5 text-[12px] font-bold tracking-[0.03em] transition-all ${addedFeedback ? 'bg-[#111] text-white' : 'bg-[#111] text-white hover:bg-[#333]'}`}>
+        {addedFeedback ? '✓ تمت' : 'أضف للسلة'}
+      </button>
+      <button onClick={handleBuyNow} className="h-10 px-5 text-[12px] font-bold border-2 border-[#111] text-[#111] hover:bg-[#111] hover:text-white transition-all">
+        اشتري
       </button>
     </div>
   );
 
-  /* ─────────── Sticky Desktop Bar ─────────── */
+  /* ── sticky desktop bar ── */
   const StickyDesktopBar = () => !showStickyBar ? null : (
-    <div className="hidden lg:flex fixed top-0 left-0 right-0 z-[9999] bg-white border-b border-[#EBEBEB] shadow-sm items-center px-12 py-3 gap-6" dir="rtl">
-      <img src={getImageUrl(activeImage)} alt="" className="w-10 h-14 object-cover border border-[#E0E0E0]" />
-      <div className="flex-1 min-w-0">
-        <p className="text-[12px] font-semibold text-[#111] truncate">{product.title}</p>
-        <p className="text-[13px] text-[#C0392B] font-medium">{product.price} ج.م</p>
-      </div>
-      <div className="flex gap-2.5 shrink-0">
-        <button onClick={handleAddToCart}
-          className="h-9 px-6 border-[1.5px] border-black bg-white text-black hover:bg-black hover:text-white transition-all text-[11px] font-semibold tracking-[0.05em]">
-          {addedFeedback ? "✓ تمت الإضافة" : "أضف إلى السلة"}
-        </button>
-        <button onClick={handleBuyNow}
-          className="h-9 px-6 bg-black text-white hover:bg-[#222] transition-colors text-[11px] font-semibold tracking-[0.05em]">
-          اشتري الآن
-        </button>
-      </div>
+    <div className="hidden lg:flex fixed top-0 left-0 right-0 z-[9999] bg-white border-b border-[#EBEBEB] shadow-sm items-center px-12 h-14 gap-5" dir="rtl">
+      <img src={getImageUrl(activeImage)} alt="" className="w-9 h-12 object-cover border border-[#E8E8E8]" />
+      <p className="flex-1 text-[13px] font-bold text-[#111] truncate">{product.title}</p>
+      <p className="text-[14px] text-[#C0392B] font-semibold shrink-0">{product.price} ج.م</p>
+      <button onClick={handleAddToCart}
+        className={`h-9 px-5 text-[11px] font-bold tracking-[0.04em] transition-all ${addedFeedback ? 'bg-[#111] text-white' : 'border-2 border-[#111] text-[#111] hover:bg-[#111] hover:text-white'}`}>
+        {addedFeedback ? '✓ تمت الإضافة' : 'أضف إلى السلة'}
+      </button>
+      <button onClick={handleBuyNow} className="h-9 px-5 bg-[#111] text-white text-[11px] font-bold tracking-[0.04em] hover:bg-[#333] transition-all">اشتري الآن</button>
     </div>
   );
 
-  /* ════════════════════════════════════════════════
-     RENDER
-  ════════════════════════════════════════════════ */
+  /* ══════════════════════════════════════ RENDER ══════════════════════════════════════ */
   return (
-    <div className="bg-white min-h-screen text-[#111] pb-16 selection:bg-black selection:text-white">
+    <div className="bg-white min-h-screen text-[#111] selection:bg-black selection:text-white" dir="rtl">
 
       <StickyDesktopBar />
+      <MobileStickyBar />
 
-      {/* ══════════ MOBILE VIEW ══════════ */}
-      <div className="lg:hidden">
+      {/* ══ BREADCRUMB ══ */}
+      <div className="border-b border-[#F5F5F5] px-4 lg:px-10 py-3">
+        <Breadcrumb />
+      </div>
 
-        {/* breadcrumb */}
-        <div className="px-4 py-3 border-b border-[#F2F2F2]" dir="rtl">
-          <Breadcrumb />
-        </div>
+      {/* ══ MOBILE + DESKTOP SHARED LAYOUT ══ */}
+      <div className="lg:grid lg:grid-cols-2 lg:items-start max-w-[1200px] mx-auto">
 
-        {/* hero */}
-        <div className="relative w-full aspect-[3/4] bg-[#F7F7F7] overflow-hidden"
-          onClick={() => openGallery(activeIdx)}
-          onTouchStart={handleHeroTouchStart}
-          onTouchMove={handleHeroTouchMove}
-          onTouchEnd={handleHeroTouchEnd}
-        >
-          <img key={activeImage} src={getImageUrl(activeImage)} alt={product.title}
-            className="w-full h-full object-cover transition-all duration-500" />
+        {/* ── GALLERY COLUMN ── */}
+        <div className="lg:sticky lg:top-0 lg:h-screen lg:overflow-hidden">
 
-          {/* top-right float buttons */}
-          <div className="absolute top-3 right-3 z-10 flex flex-col gap-2">
+          {/* Mobile hero */}
+          <div className="relative w-full aspect-square bg-[#F8F8F8] overflow-hidden lg:hidden"
+            onClick={() => openGallery(activeIdx)}
+            onTouchStart={handleHeroTouchStart}
+            onTouchMove={handleHeroTouchMove}
+            onTouchEnd={handleHeroTouchEnd}>
+            <img key={activeImage} src={getImageUrl(activeImage)} alt={product.title}
+              className="w-full h-full object-contain p-6 transition-all duration-500" />
             <button onClick={e => { e.stopPropagation(); openGallery(activeIdx); }}
-              className="w-8 h-8 bg-white/88 border border-[#E0E0E0] rounded-full flex items-center justify-center text-[#333] hover:bg-white transition-all">
-              <Search size={15} />
+              className="absolute top-3 left-3 w-8 h-8 bg-white border border-[#E8E8E8] rounded-full flex items-center justify-center text-[#555] shadow-sm">
+              <Search size={14} />
             </button>
             <button onClick={e => { e.stopPropagation(); handleWishlistToggle(e); }}
-              className="w-8 h-8 bg-white/88 border border-[#E0E0E0] rounded-full flex items-center justify-center transition-all hover:bg-white">
-              <Heart size={15} fill={isWishlisted ? "#111" : "none"} color={isWishlisted ? "#111" : "#555"} />
+              className="absolute top-3 right-3 w-8 h-8 bg-white border border-[#E8E8E8] rounded-full flex items-center justify-center shadow-sm">
+              <Heart size={14} fill={isWishlisted ? "#111" : "none"} color={isWishlisted ? "#111" : "#888"} />
             </button>
           </div>
 
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 pointer-events-none z-10 bg-white/88 border border-[#E0E0E0] px-3 py-1 rounded-full text-[9px] text-[#555] tracking-[0.08em]">
-            {activeIdx + 1} / {gallery.length}
-          </div>
-        </div>
-
-        {/* thumbnails */}
-        <div className="overflow-x-auto hide-scrollbar-horizontal border-b border-[#F5F5F5]">
-          <div className="flex gap-2 px-4 py-2.5" dir="rtl">
-            {gallery.map((img, idx) => (
-              <button key={idx} onClick={() => { setActiveImage(img); setActiveIdx(idx); }}
-                className={`flex-shrink-0 w-[52px] h-[68px] overflow-hidden border transition-all duration-200
-                  ${activeIdx === idx ? 'border-black' : 'border-[#E5E5E5] opacity-50 hover:opacity-80'}`}>
-                <img src={getImageUrl(img)} alt="" className="w-full h-full object-cover" />
-              </button>
+          {/* Mobile dots */}
+          <div className="flex justify-center gap-1.5 py-2.5 lg:hidden">
+            {gallery.map((_, i) => (
+              <button key={i} onClick={() => { setActiveImage(gallery[i]); setActiveIdx(i); }}
+                className={`rounded-full transition-all duration-200 ${activeIdx === i ? 'w-4 h-1.5 bg-[#111]' : 'w-1.5 h-1.5 bg-[#DDDDDD]'}`} />
             ))}
           </div>
+
+          {/* Desktop gallery */}
+          <div className="hidden lg:flex gap-3 p-6 h-full">
+            {/* thumbs */}
+            <div className="flex flex-col gap-2 w-[72px] flex-shrink-0">
+              {thumbScrollTop > 0 && (
+                <button onClick={thumbScrollUp} className="w-full h-6 flex items-center justify-center border border-[#E8E8E8] hover:border-[#111] transition-all text-[#AAA] hover:text-[#111]">
+                  <ChevronUp size={11} />
+                </button>
+              )}
+              <div className="flex flex-col gap-2 overflow-hidden" style={{ height: `${VISIBLE_THUMBS * 88}px` }}>
+                {gallery.slice(thumbScrollTop, thumbScrollTop + VISIBLE_THUMBS).map((img, ri) => {
+                  const idx = thumbScrollTop + ri;
+                  return (
+                    <button key={idx} onClick={() => { setActiveImage(img); setActiveIdx(idx); }}
+                      className={`w-full aspect-square overflow-hidden border-2 transition-all flex-shrink-0 ${activeIdx === idx ? 'border-[#111]' : 'border-transparent hover:border-[#DDDDDD]'}`}>
+                      <img src={getImageUrl(img)} alt="" className="w-full h-full object-cover" />
+                    </button>
+                  );
+                })}
+              </div>
+              {thumbScrollTop < Math.max(0, gallery.length - VISIBLE_THUMBS) && (
+                <button onClick={thumbScrollDown} className="w-full h-6 flex items-center justify-center border border-[#E8E8E8] hover:border-[#111] transition-all text-[#AAA] hover:text-[#111]">
+                  <ChevronDown size={11} />
+                </button>
+              )}
+            </div>
+
+            {/* main */}
+            <div className="flex-1 relative bg-[#F8F8F8] cursor-zoom-in overflow-hidden main-img-wrap"
+              onClick={() => openGallery(activeIdx)}>
+              <img key={activeImage} src={getImageUrl(activeImage)} alt={product.title}
+                className="w-full h-full object-contain p-8 main-img-zoom" />
+              <button onClick={e => { e.stopPropagation(); handleWishlistToggle(e); }}
+                className="absolute top-4 left-4 w-9 h-9 bg-white border border-[#E8E8E8] rounded-full flex items-center justify-center shadow-sm img-fade-btn hover:shadow-md transition-all">
+                <Heart size={15} fill={isWishlisted ? "#111" : "none"} color={isWishlisted ? "#111" : "#888"} />
+              </button>
+              <button onClick={e => { e.stopPropagation(); openGallery(activeIdx); }}
+                className="absolute top-4 right-4 w-9 h-9 bg-white border border-[#E8E8E8] rounded-full flex items-center justify-center shadow-sm img-fade-btn hover:shadow-md transition-all">
+                <Search size={14} className="text-[#555]" />
+              </button>
+            </div>
+          </div>
         </div>
 
-        {/* content */}
-        <div className="px-4 pt-5 pb-6" dir="rtl">
-
-          {/* action bar */}
-          <div className="flex items-center gap-5 mb-5">
-            <button onClick={e => { e.stopPropagation(); openGallery(activeIdx); }}
-              className="flex items-center gap-1.5 text-[#888] hover:text-[#111] transition-colors">
-              <ImageIcon size={15} />
-              <span className="text-[10px] tracking-[0.05em]">{gallery.length} صور</span>
-            </button>
-            <button onClick={handleWishlistToggle}
-              className="flex items-center gap-1.5 transition-colors hover:text-black text-[#888]">
-              <Heart size={15} fill={isWishlisted ? "#111" : "none"} color={isWishlisted ? "#111" : "currentColor"} />
-              <span className={`text-[10px] tracking-[0.05em] ${isWishlisted ? 'text-black' : ''}`}>
-                {realLikesCount > 0 ? (realLikesCount > 999 ? (realLikesCount / 1000).toFixed(1) + 'K' : realLikesCount) : "إعجاب"}
-              </span>
-            </button>
-            <button onClick={handleShare} className="flex items-center gap-1.5 text-[#888] hover:text-[#111] transition-colors">
-              <Share2 size={15} />
-              <span className="text-[10px] tracking-[0.05em]">مشاركة</span>
-            </button>
-          </div>
+        {/* ── INFO COLUMN ── */}
+        <div className="px-4 pt-5 pb-24 lg:px-8 lg:pt-8 lg:pb-16 lg:border-r lg:border-[#F5F5F5]">
 
           {renderCustomHtml('above_title')}
 
-          {bcCat && <p className="text-[9px] text-[#AAAAAA] tracking-[0.12em] uppercase mb-2 font-semibold">{bcCat.name}</p>}
+          {/* category */}
+          {bcCat && <p className="text-[10px] text-[#AAAAAA] tracking-[0.1em] uppercase mb-2 font-semibold reveal-item">{bcCat.name}</p>}
 
-          <h1 className="text-[20px] font-bold text-[#111] tracking-tight leading-[1.2] mb-3">{product.title}</h1>
+          {/* title */}
+          <h1 className="text-[18px] lg:text-[22px] font-bold text-[#111] leading-[1.25] mb-3 reveal-item">{product.title}</h1>
 
-          <a href="#reviews-section" onClick={scrollToReviews}
-            className="flex items-center gap-2 w-fit hover:opacity-70 transition-opacity mb-3">
-            <Stars size={12} />
-            <span className="text-[10px] text-[#999]">
-              {realReviewsCount > 0 ? `(${realReviewsCount})` : "(أضف أول تقييم)"}
-            </span>
-          </a>
+          {/* stars */}
+          <div className="mb-4 reveal-item"><StarsRow /></div>
 
           {/* price */}
-          <div className="flex items-baseline gap-2 mb-2">
-            <span className="text-[22px] font-light text-[#C0392B]">{product.price}</span>
-            <span className="text-[11px] text-[#999]">ج.م</span>
-            {product.compareAtPrice && <span className="text-[11px] text-[#BBBBBB] line-through">{product.compareAtPrice} ج.م</span>}
+          <div className="flex items-baseline gap-2 mb-1 reveal-item">
+            <span className="text-[22px] lg:text-[26px] font-bold text-[#111]">{product.price}</span>
+            <span className="text-[12px] text-[#AAA]">ج.م</span>
+            {product.compareAtPrice && <span className="text-[13px] text-[#BBBBBB] line-through">{product.compareAtPrice} ج.م</span>}
           </div>
 
-          <div className="flex items-center gap-4 mb-4">
-            <div className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0"></span>
-              <span className="text-[10px] text-[#888]">
-                {product?.quantity > 0 || product?.sellOutOfStock === "Yes" ? "متوفر" : "غير متوفر"}
-              </span>
-            </div>
-            {viewersCount > 0 && (
-              <div className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse flex-shrink-0"></span>
-                <span className="text-[10px] text-[#888]">{viewersCount} يشاهدون الآن</span>
+          {/* viewers */}
+          {viewersCount > 0 && (
+            <p className="text-[11px] text-[#777] mb-4 flex items-center gap-1.5 reveal-item">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E] animate-pulse inline-block"></span>
+              {viewersCount} أشخاص يشاهدون هذا المنتج الآن
+            </p>
+          )}
+
+          {/* colors */}
+          {safeColors.length > 0 && (
+            <div className="mb-5 reveal-item">
+              <p className="text-[11px] font-semibold text-[#111] mb-2.5">
+                اللون: <span className="font-normal text-[#555]">{selectedColor}</span>
+              </p>
+              <div ref={colorsRef} className="flex flex-wrap gap-2">
+                {safeColors.map((ci, i) => {
+                  const name  = typeof ci === "string" ? ci : ci.name;
+                  const hi    = product.colorSwatches?.[name] || (typeof ci === "object" ? ci.swatch : "#DDDDDD");
+                  const isImg = hi.startsWith("http") || hi.includes("/");
+                  const isSel = selectedColor === name;
+                  return (
+                    <button key={i} onClick={() => { setSelectedColor(name); if (isImg) { setActiveImage(hi); setActiveIdx(0); } }} title={name}
+                      className={`w-9 h-9 rounded-full border-2 transition-all overflow-hidden ${isSel ? 'border-[#111] scale-110' : 'border-transparent hover:border-[#AAAAAA]'}`}>
+                      {isImg ? <img src={getImageUrl(hi)} alt={name} className="w-full h-full object-cover rounded-full" /> : <div style={{ backgroundColor: hi }} className="w-full h-full rounded-full" />}
+                    </button>
+                  );
+                })}
               </div>
-            )}
-          </div>
-
-          {/* short desc */}
-          {product.description && (
-            <div className="pb-5 border-b border-[#F0F0F0] mb-5">
-              <p className="text-[12px] leading-[1.85] text-[#777]">{shortDescription}</p>
-              <button onClick={() => setDescModalOpen(true)}
-                className="text-[#333] text-[11px] flex items-center gap-1.5 hover:underline underline-offset-4 mt-2">
-                <Info size={11} /> عرض التفاصيل والخامات
-              </button>
             </div>
           )}
 
-          <ColorSelector mobile />
-          <SizeSelector mobile />
+          {/* sizes */}
+          {safeSizes.length > 0 && (
+            <div className="mb-5 reveal-item">
+              <div className="flex items-center justify-between mb-2.5">
+                <p className="text-[11px] font-semibold text-[#111]">
+                  المقاس: <span className="font-normal text-[#555]">{selectedSize}</span>
+                </p>
+                <button onClick={() => setSizeGuideOpen(true)} className="text-[10px] text-[#555] flex items-center gap-1 hover:text-[#111] transition-colors">
+                  <Info size={10} /> دليل المقاسات
+                </button>
+              </div>
+              {safeSizes.length > 1 && (
+                <div className={`flex flex-wrap gap-2 ${sizeError ? 'size-shake' : ''}`}>
+                  {safeSizes.map(sz => (
+                    <button key={sz} onClick={() => { setSelectedSize(sz); setSizeError(false); }}
+                      className={`min-w-[42px] h-9 text-[12px] font-semibold border transition-all duration-150 px-2
+                        ${selectedSize === sz ? 'bg-[#111] text-white border-[#111]' : sizeError ? 'border-[#EF4444] text-[#EF4444]' : 'bg-white text-[#444] border-[#E0E0E0] hover:border-[#111]'}`}>
+                      {sz}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {sizeError && <p className="text-[10px] text-[#EF4444] mt-1.5">يرجى اختيار المقاس</p>}
+            </div>
+          )}
 
-          {/* sticky bottom */}
-          <div className="sticky bottom-0 bg-white -mx-4 px-4 pt-3 pb-3 border-t border-[#F0F0F0] mt-1">
-            <CartButtons mobile />
-            {renderCustomHtml('below_cart')}
+          {/* stock */}
+          <div className="mb-5 reveal-item"><StockBadge /></div>
+
+          {/* quantity */}
+          <div className="flex items-center gap-3 mb-5 reveal-item">
+            <span className="text-[11px] font-semibold text-[#111]">الكمية</span>
+            <div className="flex items-center border border-[#E0E0E0] h-9">
+              <button onClick={() => setQuantity(q => q > 1 ? q - 1 : 1)} className="w-9 h-full flex items-center justify-center text-[#888] hover:text-[#111] hover:bg-[#F5F5F5] transition-colors border-l border-[#E0E0E0]">
+                <Minus size={13} />
+              </button>
+              <span className="w-10 text-center text-[13px] font-semibold text-[#111]">{quantity}</span>
+              <button onClick={() => setQuantity(q => q + 1)} className="w-9 h-full flex items-center justify-center text-[#888] hover:text-[#111] hover:bg-[#F5F5F5] transition-colors border-r border-[#E0E0E0]">
+                <Plus size={13} />
+              </button>
+            </div>
           </div>
 
-          <TrustGrid small />
+          {/* CTA buttons */}
+          <div className="flex flex-col gap-2.5 mb-5 reveal-item" ref={cartBtnRef}>
+            <button onClick={handleAddToCart}
+              className={`w-full h-12 text-[13px] font-bold tracking-[0.04em] border-2 transition-all duration-200
+                ${addedFeedback ? 'bg-[#111] text-white border-[#111]' : 'bg-white text-[#111] border-[#111] hover:bg-[#111] hover:text-white'}`}>
+              {addedFeedback ? '✓ تمت الإضافة إلى السلة' : 'أضف إلى السلة'}
+            </button>
+            <button onClick={handleBuyNow}
+              className="w-full h-12 bg-[#111] text-white text-[13px] font-bold tracking-[0.04em] hover:bg-[#333] transition-colors">
+              اشتري الآن
+            </button>
+          </div>
+
+          {renderCustomHtml('below_cart')}
+
+          {/* action links */}
+          <div className="flex items-center gap-5 text-[11px] text-[#777] mb-6 reveal-item">
+            <button onClick={handleShare} className="flex items-center gap-1.5 hover:text-[#111] transition-colors">
+              <Share2 size={13} /> مشاركة
+            </button>
+            <button onClick={handleWishlistToggle} className="flex items-center gap-1.5 hover:text-[#111] transition-colors">
+              <Heart size={13} fill={isWishlisted ? "#111" : "none"} color={isWishlisted ? "#111" : "currentColor"} />
+              {realLikesCount > 0 ? (realLikesCount > 999 ? (realLikesCount/1000).toFixed(1)+'K' : realLikesCount) : "إعجاب"}
+            </button>
+          </div>
+
+          {/* shipping info */}
+          <div className="border border-[#F0F0F0] rounded-sm p-4 mb-6 space-y-3 reveal-item">
+            <div className="flex items-center gap-2.5 text-[11px] text-[#555]">
+              <Truck size={14} className="text-[#111] flex-shrink-0" />
+              <span>الشحن المقدر: خلال 3-7 أيام عمل</span>
+            </div>
+            <div className="flex items-center gap-2.5 text-[11px] text-[#555]">
+              <ShieldCheck size={14} className="text-[#111] flex-shrink-0" />
+              <span>إرجاع مجاني خلال 14 يوم من الاستلام</span>
+            </div>
+            <div className="flex items-center gap-2.5 text-[11px] text-[#555]">
+              <Eye size={14} className="text-[#111] flex-shrink-0" />
+              <span>معاينة عند الاستلام متاحة</span>
+            </div>
+          </div>
+
+          {/* payment icons */}
+          <div className="border border-[#F0F0F0] rounded-sm px-4 py-3 flex items-center justify-between mb-7 reveal-item">
+            <div className="flex items-center gap-1.5 text-[10px] text-[#777]">
+              <ShieldCheck size={12} className="text-[#22C55E]" /> ضمان الدفع الآمن
+            </div>
+            <div className="flex items-center gap-2 text-[#AAAAAA]">
+              <CreditCard size={16} /><Banknote size={16} />
+              <span className="border border-[#E8E8E8] px-1.5 py-0.5 text-[8px] text-[#444]">INSTAPAY</span>
+              <span className="border border-[#E8E8E8] px-1.5 py-0.5 text-[8px] text-[#444]">VISA</span>
+            </div>
+          </div>
 
           {/* accordions */}
           {product.description && (
-            <div className="mt-7 border-t border-[#EBEBEB] pt-1">
+            <div className="border-t border-[#F0F0F0] reveal-item">
               <AccordionSections />
               {renderCustomHtml('below_description')}
             </div>
@@ -683,172 +635,33 @@ export default function ProductView({ initialProduct, sourceCategory }) {
         </div>
       </div>
 
-      {/* ══════════ DESKTOP VIEW ══════════ */}
-      <div className="hidden lg:block bg-white">
+      {/* ══ BOTTOM SECTIONS ══ */}
+      <div className="max-w-[1200px] mx-auto px-4 lg:px-8" dir="rtl">
 
-        {/* breadcrumb bar */}
-        <div className="border-b border-[#F2F2F2]">
-          <div className="max-w-[1440px] mx-auto px-14 py-4" dir="rtl">
-            <Breadcrumb />
-          </div>
-        </div>
-
-        {/* 2-column layout */}
-        <div className="max-w-[1440px] mx-auto flex items-start" dir="ltr">
-
-          {/* ── LEFT: Gallery (sticky) ── */}
-          <div className="w-[55%] sticky top-0 h-screen overflow-hidden flex gap-5 px-14 py-10" dir="rtl">
-
-            {/* vertical thumbs */}
-            <div className="w-[76px] flex-shrink-0 flex flex-col items-center gap-1.5">
-              {thumbScrollTop > 0 && (
-                <button onClick={thumbScrollUp}
-                  className="w-full py-1.5 flex items-center justify-center border border-[#E0E0E0] hover:border-black transition-all text-[#999] hover:text-black">
-                  <ChevronUp size={12} />
-                </button>
-              )}
-              <div className="flex flex-col gap-2 overflow-hidden" style={{ height: `${VISIBLE_THUMBS * 112}px` }}>
-                {gallery.slice(thumbScrollTop, thumbScrollTop + VISIBLE_THUMBS).map((img, ri) => {
-                  const idx = thumbScrollTop + ri;
-                  return (
-                    <button key={idx} onClick={() => { setActiveImage(img); setActiveIdx(idx); }}
-                      className={`w-full aspect-[3/4] overflow-hidden border transition-all duration-200 flex-shrink-0
-                        ${activeIdx === idx ? 'border-black' : 'border-[#E5E5E5] hover:border-[#999]'}`}>
-                      <img src={getImageUrl(img)} alt="" className="w-full h-full object-cover" />
-                    </button>
-                  );
-                })}
-              </div>
-              {thumbScrollTop < Math.max(0, gallery.length - VISIBLE_THUMBS) && (
-                <button onClick={thumbScrollDown}
-                  className="w-full py-1.5 flex items-center justify-center border border-[#E0E0E0] hover:border-black transition-all text-[#999] hover:text-black">
-                  <ChevronDown size={12} />
-                </button>
-              )}
-            </div>
-
-            {/* main image */}
-            <div className="flex-1 relative bg-[#F7F7F7] aspect-[3/4] cursor-zoom-in overflow-hidden main-img-wrap"
-              onClick={() => openGallery(activeIdx)}>
-              <img key={activeImage} src={getImageUrl(activeImage)} alt={product.title}
-                className="w-full h-full object-cover main-img-zoom" />
-
-              {/* wishlist overlay */}
-              <button onClick={e => { e.stopPropagation(); handleWishlistToggle(e); }}
-                className="absolute top-3.5 left-3.5 z-10 w-9 h-9 bg-white/88 border border-[#E0E0E0] rounded-full flex items-center justify-center hover:bg-white transition-all img-fade-btn">
-                <Heart size={16} fill={isWishlisted ? "#111" : "none"} color={isWishlisted ? "#111" : "#555"} />
-              </button>
-
-              <button onClick={e => { e.stopPropagation(); openGallery(activeIdx); }}
-                className="absolute top-3.5 right-3.5 z-10 w-9 h-9 bg-white/88 border border-[#E0E0E0] rounded-full flex items-center justify-center hover:bg-white transition-all img-fade-btn">
-                <Search size={15} />
-              </button>
-
-              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-white/88 border border-[#E0E0E0] px-3 py-1 rounded-full text-[9px] text-[#555] pointer-events-none">
-                {activeIdx + 1} / {gallery.length}
-              </div>
-            </div>
-          </div>
-
-          {/* ── RIGHT: Info ── */}
-          <div className="w-[45%] border-r border-[#F2F2F2] px-12 py-10 flex flex-col min-h-screen" dir="rtl">
-
-            {renderCustomHtml('above_title')}
-
-            {bcCat && <p className="text-[9px] text-[#AAAAAA] tracking-[0.14em] uppercase mb-3 font-semibold">{bcCat.name}</p>}
-
-            <h1 className="text-[26px] font-bold text-[#111] tracking-tight leading-[1.15] mb-4">{product.title}</h1>
-
-            <a href="#reviews-section" onClick={scrollToReviews}
-              className="flex items-center gap-2 w-fit hover:opacity-70 transition-opacity mb-5">
-              <Stars size={14} />
-              <span className="text-[11px] text-[#999] hover:text-black transition-colors">
-                {realReviewsCount > 0 ? `(${realReviewsCount})` : "(أضف أول تقييم)"}
-              </span>
-            </a>
-
-            {/* price */}
-            <div className="flex items-baseline gap-2 mb-2">
-              <span className="text-[28px] font-light text-[#C0392B]">{product.price}</span>
-              <span className="text-[13px] text-[#999]">ج.م</span>
-              {product.compareAtPrice && <span className="text-[13px] text-[#BBBBBB] line-through">{product.compareAtPrice} ج.م</span>}
-            </div>
-
-            <div className="flex items-center gap-5 mb-6">
-              <div className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0"></span>
-                <span className="text-[11px] text-[#888]">
-                  {product?.quantity > 0 || product?.sellOutOfStock === "Yes" ? "متوفر" : "غير متوفر"}
-                </span>
-              </div>
-              {viewersCount > 0 && (
-                <div className="flex items-center gap-1.5 bg-[#F9F9F9] border border-[#F0F0F0] px-3 py-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse flex-shrink-0"></span>
-                  <span className="text-[10px] text-[#777]">{viewersCount} أشخاص يشاهدون الآن</span>
-                </div>
-              )}
-            </div>
-
-            {/* short desc */}
-            {product.description && (
-              <div className="pb-7 border-b border-[#F0F0F0]">
-                <p className="text-[12px] leading-[1.95] text-[#777]">{shortDescription}</p>
-                <button onClick={() => setDescModalOpen(true)}
-                  className="text-[#333] text-[11px] flex items-center gap-1.5 hover:underline underline-offset-4 mt-2">
-                  <Info size={11} /> عرض التفاصيل والخامات
-                </button>
-              </div>
-            )}
-
-            <div className="pt-7">
-              <ColorSelector />
-              <SizeSelector />
-            </div>
-
-            {/* cart buttons */}
-            <div className="mb-6">
-              <CartButtons />
-              {renderCustomHtml('below_cart')}
-            </div>
-
-            <TrustGrid />
-
-            {/* accordions */}
-            {product.description && (
-              <div className="mt-8 border-t border-[#EBEBEB] pt-1">
-                <AccordionSections />
-                {renderCustomHtml('below_description')}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ══════════ BOTTOM SECTIONS ══════════ */}
-      <div className="max-w-[1440px] mx-auto px-4 lg:px-14" dir="rtl">
-
-        <div id="reviews-section" className="py-10 lg:py-16 border-t border-[#EBEBEB]">
+        {/* reviews */}
+        <div id="reviews-section" className="py-10 lg:py-14 border-t border-[#F0F0F0]">
           <ProductReviews
             productHandle={product.handle || product.id}
             onReviewStatsUpdate={(rating, count) => { setRealRating(rating); setRealReviewsCount(count); }}
           />
         </div>
 
+        {/* related */}
         {product.metafields?.hideRelatedSection !== "Yes" && relatedProducts.length > 0 && (
-          <div className="py-12 lg:py-16 border-t border-[#EBEBEB]">
-            <h2 className="text-[10px] font-semibold text-[#111] tracking-[0.14em] uppercase mb-8 lg:mb-10">منتجات قد تعجبك</h2>
-            <div className="flex gap-5 lg:gap-7 overflow-x-auto hide-scrollbar-horizontal pb-4 -mx-4 px-4 lg:mx-0 lg:px-0">
-              {relatedProducts.map(rp => (
-                <Link href={`/products/${rp.id}`} key={rp.id}
-                  className="flex-shrink-0 w-[130px] lg:w-[175px] group cursor-pointer block">
-                  <div className="relative aspect-[3/4] bg-[#F7F7F7] overflow-hidden border border-[#EBEBEB] mb-3 group-hover:border-[#999] transition-all duration-300">
+          <div className="py-10 lg:py-14 border-t border-[#F0F0F0]">
+            <h2 className="text-[11px] font-bold text-[#111] tracking-[0.12em] uppercase mb-6">منتجات قد تعجبك</h2>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
+              {relatedProducts.slice(0, 4).map(rp => (
+                <Link href={`/products/${rp.id}`} key={rp.id} className="group cursor-pointer block reveal-item">
+                  <div className="relative aspect-square bg-[#F8F8F8] overflow-hidden mb-2.5 group-hover:bg-[#F0F0F0] transition-colors">
                     <img src={getRelatedImageUrl(rp)} alt={rp.title} loading="lazy"
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]" />
+                      className="w-full h-full object-contain p-4 transition-transform duration-500 group-hover:scale-[1.04]" />
                   </div>
-                  <h3 className="text-[11px] lg:text-[12px] text-[#111] font-semibold line-clamp-2 mb-1">{rp.title}</h3>
+                  <p className="text-[11px] text-[#555] uppercase tracking-[0.06em] mb-0.5">{rp.category || bcCat?.name || ""}</p>
+                  <h3 className="text-[12px] lg:text-[13px] text-[#111] font-semibold line-clamp-2 mb-1">{rp.title}</h3>
                   <div className="flex items-center gap-1">
-                    <span className="text-[#111] font-medium text-[11px] lg:text-[12px]">{rp.price}</span>
-                    <span className="text-[#999] text-[9px]">ج.م</span>
+                    <span className="text-[13px] font-bold text-[#111]">{rp.price}</span>
+                    <span className="text-[10px] text-[#AAA]">ج.م</span>
                   </div>
                 </Link>
               ))}
@@ -859,107 +672,112 @@ export default function ProductView({ initialProduct, sourceCategory }) {
         {renderCustomHtml('bottom_page')}
       </div>
 
-      {/* ══════════ GALLERY MODAL ══════════ */}
+      {/* ══ GALLERY MODAL ══ */}
       {isGalleryOpen && (
-        <div className="fixed inset-0 z-[99999] bg-white flex flex-col gallery-enter"
-          onClick={() => setGalleryOpen(false)}>
-          <div className="flex items-center justify-between px-6 py-4 border-b border-[#EBEBEB]"
-            onClick={e => e.stopPropagation()}>
-            <span className="text-[#111] text-[13px] font-semibold">{product.title}</span>
+        <div className="fixed inset-0 z-[99999] bg-white flex flex-col modal-enter" onClick={() => setGalleryOpen(false)}>
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#F0F0F0]" onClick={e => e.stopPropagation()}>
+            <span className="text-[13px] font-bold text-[#111]">{product.title}</span>
             <div className="flex items-center gap-4">
-              <span className="text-[#999] text-[11px]">{galleryIdx + 1} / {gallery.length}</span>
-              <button onClick={() => setGalleryOpen(false)}
-                className="bg-white hover:bg-[#F5F5F5] border border-[#E0E0E0] p-2 rounded-full text-[#333] transition-all">
-                <X size={16} />
+              <span className="text-[11px] text-[#AAA]">{galleryIdx + 1} / {gallery.length}</span>
+              <button onClick={() => setGalleryOpen(false)} className="w-8 h-8 bg-[#F5F5F5] hover:bg-[#EBEBEB] border border-[#E8E8E8] rounded-full flex items-center justify-center text-[#333] transition-all">
+                <X size={15} />
               </button>
             </div>
           </div>
-          <div className="flex-1 relative flex items-center justify-center bg-[#F7F7F7]"
+          <div className="flex-1 relative flex items-center justify-center bg-[#F8F8F8]"
             onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} onClick={e => e.stopPropagation()}>
-            <img key={galleryIdx} src={getImageUrl(gallery[galleryIdx])} alt=""
-              onClick={() => setIsZoomed(!isZoomed)}
-              className={`max-h-[90vh] max-w-[90vw] object-contain gallery-img-enter transition-transform duration-500 ${isZoomed ? "scale-[1.5] cursor-zoom-out" : "cursor-zoom-in"}`} />
+            <img key={galleryIdx} src={getImageUrl(gallery[galleryIdx])} alt="" onClick={() => setIsZoomed(!isZoomed)}
+              className={`max-h-[88vh] max-w-[88vw] object-contain transition-transform duration-500 ${isZoomed ? "scale-[1.5] cursor-zoom-out" : "cursor-zoom-in"}`} />
             {!isZoomed && (
               <>
-                <button onClick={galleryPrev} className="absolute right-5 top-1/2 -translate-y-1/2 bg-white/90 border border-[#E0E0E0] text-[#333] p-3 rounded-full hover:border-black transition-all"><ChevronRight size={19} strokeWidth={1.5} /></button>
-                <button onClick={galleryNext} className="absolute left-5 top-1/2 -translate-y-1/2 bg-white/90 border border-[#E0E0E0] text-[#333] p-3 rounded-full hover:border-black transition-all"><ChevronLeft size={19} strokeWidth={1.5} /></button>
+                <button onClick={galleryPrev} className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white border border-[#E8E8E8] rounded-full flex items-center justify-center text-[#333] hover:border-[#111] transition-all shadow-sm"><ChevronRight size={18} /></button>
+                <button onClick={galleryNext} className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white border border-[#E8E8E8] rounded-full flex items-center justify-center text-[#333] hover:border-[#111] transition-all shadow-sm"><ChevronLeft size={18} /></button>
               </>
             )}
-            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-1.5 pointer-events-none bg-white/90 px-3 py-1.5 rounded-full border border-[#E0E0E0]">
-              {gallery.map((_, i) => <span key={i} className={`rounded-full bg-black transition-all ${galleryIdx === i ? "w-5 h-1.5 opacity-100" : "w-1.5 h-1.5 opacity-20"}`} />)}
+            <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex gap-1.5 bg-white/90 px-3 py-1.5 rounded-full border border-[#E8E8E8]">
+              {gallery.map((_, i) => <span key={i} className={`rounded-full bg-[#111] transition-all ${galleryIdx === i ? "w-4 h-1.5 opacity-100" : "w-1.5 h-1.5 opacity-20"}`} />)}
             </div>
           </div>
         </div>
       )}
 
-      {/* ══════════ COLOR ZOOM MODAL ══════════ */}
-      {isImageZoomModalOpen && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-[#FAFAFA] p-4 modal-enter"
-          onClick={() => setImageZoomModalOpen(false)}>
-          <div className="relative w-full max-w-lg aspect-[3/4] overflow-hidden border border-[#E0E0E0]"
-            onClick={e => e.stopPropagation()}>
-            <img src={getImageUrl(currentColorImage())} alt="" className="w-full h-full object-cover" />
-            <button onClick={() => setImageZoomModalOpen(false)}
-              className="absolute top-4 left-4 bg-white/90 p-2.5 rounded-full border border-[#E0E0E0] text-[#333]"><X size={17} /></button>
-            <div className="absolute bottom-4 right-4 bg-white/90 px-4 py-2 border border-[#E0E0E0]">
-              <span className="text-[#111] text-[12px] font-semibold">{selectedColor}</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ══════════ DESCRIPTION MODAL ══════════ */}
+      {/* ══ DESCRIPTION MODAL ══ */}
       {isDescModalOpen && (
-        <div className="fixed inset-0 z-[99999] flex items-end md:items-center justify-center bg-black/50 backdrop-blur-sm p-0 md:p-4">
-          <div className="bg-white w-full md:max-w-xl rounded-t-2xl md:rounded-none border border-[#E5E5E5] shadow-xl overflow-hidden flex flex-col max-h-[85vh] modal-enter">
-            <div className="px-5 py-4 border-b border-[#EBEBEB] flex justify-between items-center sticky top-0 bg-white z-10">
-              <h3 className="font-semibold text-[14px] text-[#111]">معلومات المنتج والتفاصيل</h3>
-              <button onClick={() => setDescModalOpen(false)}
-                className="bg-white border border-[#E0E0E0] hover:bg-[#F5F5F5] p-1.5 rounded-full text-[#666]"><X size={17} /></button>
+        <div className="fixed inset-0 z-[99999] flex items-end md:items-center justify-center bg-black/40 backdrop-blur-sm p-0 md:p-5">
+          <div className="bg-white w-full md:max-w-lg rounded-t-2xl md:rounded-none overflow-hidden flex flex-col max-h-[82vh] modal-enter shadow-xl">
+            <div className="px-5 py-4 border-b border-[#F0F0F0] flex justify-between items-center sticky top-0 bg-white z-10">
+              <h3 className="font-bold text-[14px] text-[#111]">تفاصيل المنتج</h3>
+              <button onClick={() => setDescModalOpen(false)} className="w-8 h-8 bg-[#F5F5F5] hover:bg-[#EBEBEB] rounded-full flex items-center justify-center text-[#555] transition-all"><X size={15} /></button>
             </div>
-            <div className="p-6 overflow-y-auto ql-editor-display" dir="rtl">
+            <div className="p-5 overflow-y-auto ql-editor-display" dir="rtl">
               <div dangerouslySetInnerHTML={{ __html: closedDescriptionHTML }} />
             </div>
           </div>
         </div>
       )}
 
+      {/* ══ COLOR ZOOM MODAL ══ */}
+      {isImageZoomModalOpen && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-[#FAFAFA] p-4 modal-enter" onClick={() => setImageZoomModalOpen(false)}>
+          <div className="relative w-full max-w-md aspect-square overflow-hidden border border-[#E8E8E8]" onClick={e => e.stopPropagation()}>
+            <img src={getImageUrl(currentColorImage())} alt="" className="w-full h-full object-contain p-4" />
+            <button onClick={() => setImageZoomModalOpen(false)} className="absolute top-3 left-3 w-8 h-8 bg-white rounded-full border border-[#E8E8E8] flex items-center justify-center text-[#333]"><X size={14} /></button>
+          </div>
+        </div>
+      )}
+
       <SizeChartModal isOpen={isSizeGuideOpen} onClose={() => setSizeGuideOpen(false)} product={product} />
 
-      {/* ══════════ GLOBAL STYLES ══════════ */}
+      {/* ══ STYLES ══ */}
       <style jsx global>{`
-        @keyframes fadeUp   { from { opacity:0; transform:translateY(14px) } to { opacity:1; transform:translateY(0) } }
+        @keyframes revealUp { from { opacity:0; transform:translateY(18px) } to { opacity:1; transform:translateY(0) } }
         @keyframes fadeIn   { from { opacity:0 } to { opacity:1 } }
-        @keyframes imgIn    { from { opacity:0.25 } to { opacity:1 } }
-        @keyframes shake    { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-5px)} 40%,80%{transform:translateX(5px)} }
+        @keyframes shake    { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-4px)} 40%,80%{transform:translateX(4px)} }
 
-        .gallery-enter    { animation: fadeIn .2s ease-out }
-        .gallery-img-enter{ animation: imgIn .25s cubic-bezier(.25,1,.5,1) }
-        .modal-enter      { animation: fadeUp .28s ease-out }
-        .size-shake       { animation: shake .4s ease-out }
+        .modal-enter { animation: revealUp .28s cubic-bezier(.25,1,.5,1) }
+        .size-shake  { animation: shake .4s ease-out }
 
-        .hide-scrollbar-horizontal::-webkit-scrollbar { height:0; background:transparent }
+        /* Scroll reveal */
+        .reveal-item {
+          opacity: 0;
+          transform: translateY(16px);
+          animation: revealUp .45s cubic-bezier(.25,1,.5,1) forwards;
+        }
+        .reveal-item:nth-child(1)  { animation-delay: .04s }
+        .reveal-item:nth-child(2)  { animation-delay: .08s }
+        .reveal-item:nth-child(3)  { animation-delay: .12s }
+        .reveal-item:nth-child(4)  { animation-delay: .16s }
+        .reveal-item:nth-child(5)  { animation-delay: .20s }
+        .reveal-item:nth-child(6)  { animation-delay: .24s }
+        .reveal-item:nth-child(7)  { animation-delay: .28s }
+        .reveal-item:nth-child(8)  { animation-delay: .32s }
+        .reveal-item:nth-child(9)  { animation-delay: .36s }
+        .reveal-item:nth-child(10) { animation-delay: .40s }
+        .reveal-item:nth-child(n+11) { animation-delay: .44s }
+
+        .hide-scrollbar-horizontal::-webkit-scrollbar { height:0 }
         .hide-scrollbar-horizontal { -ms-overflow-style:none; scrollbar-width:none }
 
-        /* Main image hover zoom — isolated */
+        /* Desktop gallery hover */
         .main-img-wrap { isolation: isolate }
-        .main-img-zoom { transition: transform .6s cubic-bezier(.25,1,.5,1) }
-        .main-img-wrap:hover .main-img-zoom { transform: scale(1.018) }
+        .main-img-zoom { transition: transform .7s cubic-bezier(.25,1,.5,1) }
+        .main-img-wrap:hover .main-img-zoom { transform: scale(1.03) }
+        .img-fade-btn { opacity:0; transition: opacity .2s }
+        .main-img-wrap:hover .img-fade-btn { opacity:1 }
 
-        /* Fade-in overlay buttons */
-        .img-fade-btn { opacity: 0; transition: opacity .25s }
-        .main-img-wrap:hover .img-fade-btn { opacity: 1 }
+        /* Accordion */
+        .wind-accordion summary::-webkit-details-marker { display:none }
 
-        /* Quill editor display */
-        .ql-editor-display ul { list-style-type:disc!important; padding-right:20px!important; margin-bottom:10px; color:#777 }
-        .ql-editor-display ol { list-style-type:decimal!important; padding-right:20px!important; margin-bottom:10px; color:#777 }
+        /* Quill display */
+        .ql-editor-display p  { margin-bottom:8px; line-height:1.85; color:#666; font-size:12.5px }
+        .ql-editor-display ul { list-style-type:disc!important; padding-right:18px!important; margin-bottom:10px; color:#666 }
+        .ql-editor-display ol { list-style-type:decimal!important; padding-right:18px!important; margin-bottom:10px; color:#666 }
         .ql-editor-display strong { font-weight:600; color:#333 }
-        .ql-editor-display p { margin-bottom:8px; line-height:1.9; color:#777 }
-        .ql-editor-display details { border:1px solid #E5E5E5!important; margin-bottom:10px; padding:0 14px!important; }
+        .ql-editor-display details { border:1px solid #EBEBEB!important; margin-bottom:8px; padding:0 12px!important }
         .ql-editor-display details[open] { border-color:#BBBBBB!important }
-        .ql-editor-display summary { color:#333!important; font-weight:600; font-size:12px!important; padding:12px 0!important; cursor:pointer }
+        .ql-editor-display summary { color:#333!important; font-weight:600; font-size:12px!important; padding:10px 0!important; cursor:pointer }
         .ql-editor-display summary::-webkit-details-marker { display:none }
-        .ql-editor-display div { color:#777!important; line-height:1.9; padding-bottom:12px }
+        .ql-editor-display div { color:#666!important; line-height:1.85; padding-bottom:10px; font-size:12.5px }
         .ql-editor-display .read-more-wrapper { border:none!important; padding:0!important; margin-top:4px!important }
         .ql-editor-display .read-more-wrapper[open] { border:none!important }
         .ql-editor-display .read-more-wrapper .less-text { display:none }
