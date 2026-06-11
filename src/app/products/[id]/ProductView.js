@@ -436,7 +436,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             onTouchMove={handleHeroTouchMove}
             onTouchEnd={handleHeroTouchEnd}>
             <img key={activeImage} src={getImageUrl(activeImage)} alt={product.title}
-              className="w-full h-full object-contain p-6 transition-all duration-500" />
+              className="w-full h-full object-contain p-2 transition-all duration-500" />
             <button onClick={e => { e.stopPropagation(); openGallery(activeIdx); }}
               className="absolute top-3 left-3 w-8 h-8 bg-white border border-[#E8E8E8] rounded-full flex items-center justify-center text-[#555] shadow-sm">
               <Search size={14} />
@@ -486,7 +486,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             <div className="flex-1 relative bg-[#F8F8F8] cursor-zoom-in overflow-hidden main-img-wrap"
               onClick={() => openGallery(activeIdx)}>
               <img key={activeImage} src={getImageUrl(activeImage)} alt={product.title}
-                className="w-full h-full object-contain p-4 main-img-zoom" />
+                className="w-full h-full object-contain p-1 main-img-zoom" />
               <div className="absolute top-4 left-4 flex flex-col gap-2">
                 <button onClick={e => { e.stopPropagation(); handleWishlistToggle(e); }}
                   className="w-9 h-9 bg-white border border-[#E8E8E8] rounded-full flex items-center justify-center shadow-sm img-fade-btn hover:shadow-md transition-all">
