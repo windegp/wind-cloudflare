@@ -12,9 +12,9 @@ import SizeChartModal from "@/components/SizeChartModal";
 import ProductReviews from "@/components/products/ProductReviews";
 import { useProduct, useRelatedProducts } from "@/hooks/useFirestore";
 import {
-  Plus, Minus, Star, Info, Share2, Heart, ImageIcon, X,
+  Plus, Minus, Star, Share2, Heart, ImageIcon, X,
   Truck, Eye, ShieldCheck, ChevronLeft, Search, ChevronRight,
-  ChevronDown, ChevronUp, CreditCard, Banknote
+  ChevronDown, ChevronUp, CreditCard, Banknote, Ruler
 } from '@/components/icons-extra';
 
 export default function ProductView({ initialProduct, sourceCategory }) {
@@ -335,8 +335,8 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   );
 
   const StockBadge = () => (
-    <div className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-sm ${isInStock ? 'bg-[#F0FDF4] text-[#15803D]' : 'bg-[#FEF2F2] text-[#B91C1C]'}`}>
-      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isInStock ? 'bg-[#22C55E]' : 'bg-[#EF4444]'}`}></span>
+    <div className={`inline-flex items-center gap-2 text-[12px] font-medium ${isInStock ? 'text-[#15803D]' : 'text-[#B91C1C]'}`}>
+      <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${isInStock ? 'bg-[#22C55E] animate-pulse' : 'bg-[#EF4444] animate-pulse'}`}></span>
       {isInStock ? 'متوفر في المخزون' : 'غير متوفر في المخزون'}
     </div>
   );
@@ -368,23 +368,46 @@ export default function ProductView({ initialProduct, sourceCategory }) {
         className={`h-10 px-5 text-[12px] font-bold tracking-[0.03em] transition-all ${addedFeedback ? 'bg-[#111] text-white' : 'bg-[#111] text-white hover:bg-[#333]'}`}>
         {addedFeedback ? '✓ تمت' : 'أضف للسلة'}
       </button>
-      <button onClick={handleBuyNow} className="h-10 px-5 text-[12px] font-bold border-2 border-[#111] text-[#111] hover:bg-[#111] hover:text-white transition-all">
-        اشتري
-      </button>
     </div>
   );
 
   /* ── sticky desktop bar ── */
   const StickyDesktopBar = () => !showStickyBar ? null : (
-    <div className="hidden lg:flex fixed top-0 left-0 right-0 z-[9999] bg-white border-b border-[#EBEBEB] shadow-sm items-center px-12 h-14 gap-5" dir="rtl">
-      <img src={getImageUrl(activeImage)} alt="" className="w-9 h-12 object-cover border border-[#E8E8E8]" />
-      <p className="flex-1 text-[13px] font-bold text-[#111] truncate">{product.title}</p>
-      <p className="text-[14px] text-[#C0392B] font-semibold shrink-0">{product.price} ج.م</p>
+    <div className="hidden lg:flex fixed top-0 left-0 right-0 z-[9999] bg-white border-b border-[#EBEBEB] shadow-sm items-center px-12 h-16 gap-6" dir="rtl">
+      <img src={getImageUrl(activeImage)} alt="" className="w-10 h-12 object-cover border border-[#E8E8E8] rounded" />
+      <div className="flex-1">
+        <p className="text-[13px] font-bold text-[#111] truncate">{product.title}</p>
+        <p className="text-[12px] text-[#C0392B] font-semibold">{product.price} ج.م</p>
+      </div>
+      {safeColors.length > 0 && (
+        <div className="flex items-center gap-1.5">
+          <label className="text-[11px] text-[#555] font-medium">اللون:</label>
+          <div className="flex gap-1">
+            {safeColors.slice(0, 3).map((c, i) => {
+              const name = typeof c === "string" ? c : c.name;
+              const isSel = selectedColor === name;
+              return (
+                <button key={i} onClick={() => setSelectedColor(name)} title={name}
+                  className={`w-6 h-6 rounded-full border-2 transition-all ${isSel ? 'border-[#111]' : 'border-[#DDD]'}`}
+                  style={{backgroundColor: product.colorSwatches?.[name] || "#DDD"}} />
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {safeSizes.length > 1 && (
+        <div className="flex items-center gap-1.5">
+          <label className="text-[11px] text-[#555] font-medium">المقاس:</label>
+          <select value={selectedSize} onChange={e => setSelectedSize(e.target.value)}
+            className="px-2 py-1.5 text-[11px] border border-[#E0E0E0] rounded">
+            {safeSizes.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+      )}
       <button onClick={handleAddToCart}
-        className={`h-9 px-5 text-[11px] font-bold tracking-[0.04em] transition-all ${addedFeedback ? 'bg-[#111] text-white' : 'border-2 border-[#111] text-[#111] hover:bg-[#111] hover:text-white'}`}>
+        className={`h-9 px-6 text-[11px] font-bold tracking-[0.04em] transition-all ${addedFeedback ? 'bg-[#111] text-white' : 'border-2 border-[#111] text-[#111] hover:bg-[#111] hover:text-white'}`}>
         {addedFeedback ? '✓ تمت الإضافة' : 'أضف إلى السلة'}
       </button>
-      <button onClick={handleBuyNow} className="h-9 px-5 bg-[#111] text-white text-[11px] font-bold tracking-[0.04em] hover:bg-[#333] transition-all">اشتري الآن</button>
     </div>
   );
 
@@ -425,10 +448,10 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           </div>
 
           {/* Mobile dots */}
-          <div className="flex justify-center gap-1.5 py-2.5 lg:hidden">
+          <div className="flex justify-center gap-2 py-3 lg:hidden">
             {gallery.map((_, i) => (
               <button key={i} onClick={() => { setActiveImage(gallery[i]); setActiveIdx(i); }}
-                className={`rounded-full transition-all duration-200 ${activeIdx === i ? 'w-4 h-1.5 bg-[#111]' : 'w-1.5 h-1.5 bg-[#DDDDDD]'}`} />
+                className={`rounded-full transition-all duration-200 ${activeIdx === i ? 'w-6 h-2.5 bg-[#111]' : 'w-2.5 h-2.5 bg-[#DDDDDD] hover:bg-[#AAAAAA]'}`} />
             ))}
           </div>
 
@@ -463,52 +486,65 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             <div className="flex-1 relative bg-[#F8F8F8] cursor-zoom-in overflow-hidden main-img-wrap"
               onClick={() => openGallery(activeIdx)}>
               <img key={activeImage} src={getImageUrl(activeImage)} alt={product.title}
-                className="w-full h-full object-contain p-8 main-img-zoom" />
-              <button onClick={e => { e.stopPropagation(); handleWishlistToggle(e); }}
-                className="absolute top-4 left-4 w-9 h-9 bg-white border border-[#E8E8E8] rounded-full flex items-center justify-center shadow-sm img-fade-btn hover:shadow-md transition-all">
-                <Heart size={15} fill={isWishlisted ? "#111" : "none"} color={isWishlisted ? "#111" : "#888"} />
-              </button>
-              <button onClick={e => { e.stopPropagation(); openGallery(activeIdx); }}
-                className="absolute top-4 right-4 w-9 h-9 bg-white border border-[#E8E8E8] rounded-full flex items-center justify-center shadow-sm img-fade-btn hover:shadow-md transition-all">
-                <Search size={14} className="text-[#555]" />
-              </button>
+                className="w-full h-full object-contain p-4 main-img-zoom" />
+              <div className="absolute top-4 left-4 flex flex-col gap-2">
+                <button onClick={e => { e.stopPropagation(); handleWishlistToggle(e); }}
+                  className="w-9 h-9 bg-white border border-[#E8E8E8] rounded-full flex items-center justify-center shadow-sm img-fade-btn hover:shadow-md transition-all">
+                  <Heart size={15} fill={isWishlisted ? "#111" : "none"} color={isWishlisted ? "#111" : "#888"} />
+                </button>
+                <button onClick={e => { e.stopPropagation(); openGallery(activeIdx); }}
+                  className="w-9 h-9 bg-white border border-[#E8E8E8] rounded-full flex items-center justify-center shadow-sm img-fade-btn hover:shadow-md transition-all">
+                  <Search size={14} className="text-[#555]" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
         {/* ── INFO COLUMN ── */}
-        <div className="px-4 pt-5 pb-24 lg:px-8 lg:pt-8 lg:pb-16 lg:border-r lg:border-[#F5F5F5]">
+        <div className="px-4 pt-6 pb-24 lg:px-10 lg:pt-10 lg:pb-20 lg:border-r lg:border-[#F5F5F5]">
 
           {renderCustomHtml('above_title')}
 
-          {/* category */}
-          {bcCat && <p className="text-[10px] text-[#AAAAAA] tracking-[0.1em] uppercase mb-2 font-semibold reveal-item">{bcCat.name}</p>}
-
           {/* title */}
-          <h1 className="text-[18px] lg:text-[22px] font-bold text-[#111] leading-[1.25] mb-3 reveal-item">{product.title}</h1>
+          <h1 className="text-[18px] lg:text-[22px] font-bold text-[#111] leading-[1.25] mb-4 reveal-item">{product.title}</h1>
 
           {/* stars */}
-          <div className="mb-4 reveal-item"><StarsRow /></div>
+          <div className="mb-6 reveal-item"><StarsRow /></div>
 
           {/* price */}
-          <div className="flex items-baseline gap-2 mb-1 reveal-item">
+          <div className="flex items-baseline gap-2 mb-6 reveal-item">
             <span className="text-[22px] lg:text-[26px] font-bold text-[#111]">{product.price}</span>
             <span className="text-[12px] text-[#AAA]">ج.م</span>
-            {product.compareAtPrice && <span className="text-[13px] text-[#BBBBBB] line-through">{product.compareAtPrice} ج.م</span>}
+            {product.compareAtPrice && (
+              <>
+                <span className="text-[13px] text-[#BBBBBB] line-through">{product.compareAtPrice} ج.م</span>
+                {(() => {
+                  const original = parseFloat(product.compareAtPrice);
+                  const current = parseFloat(product.price);
+                  if (original && current && original > current) {
+                    const percentage = Math.round(((original - current) / original) * 100);
+                    const amount = original - current;
+                    return <span className="ml-2 px-2 py-0.5 bg-[#C0392B] text-white text-[11px] font-bold rounded">{`-${percentage}%`}</span>;
+                  }
+                  return null;
+                })()}
+              </>
+            )}
           </div>
 
           {/* viewers */}
           {viewersCount > 0 && (
-            <p className="text-[11px] text-[#777] mb-4 flex items-center gap-1.5 reveal-item">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E] animate-pulse inline-block"></span>
+            <p className="text-[12px] text-[#777] mb-8 flex items-center gap-2 reveal-item">
+              <span className="w-2 h-2 rounded-full bg-[#22C55E] animate-pulse inline-block"></span>
               {viewersCount} أشخاص يشاهدون هذا المنتج الآن
             </p>
           )}
 
           {/* colors */}
           {safeColors.length > 0 && (
-            <div className="mb-5 reveal-item">
-              <p className="text-[11px] font-semibold text-[#111] mb-2.5">
+            <div className="mb-7 reveal-item">
+              <p className="text-[13px] font-semibold text-[#111] mb-3">
                 اللون: <span className="font-normal text-[#555]">{selectedColor}</span>
               </p>
               <div ref={colorsRef} className="flex flex-wrap gap-2">
@@ -530,13 +566,13 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
           {/* sizes */}
           {safeSizes.length > 0 && (
-            <div className="mb-5 reveal-item">
-              <div className="flex items-center justify-between mb-2.5">
-                <p className="text-[11px] font-semibold text-[#111]">
+            <div className="mb-7 reveal-item">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-[13px] font-semibold text-[#111]">
                   المقاس: <span className="font-normal text-[#555]">{selectedSize}</span>
                 </p>
                 <button onClick={() => setSizeGuideOpen(true)} className="text-[10px] text-[#555] flex items-center gap-1 hover:text-[#111] transition-colors">
-                  <Info size={10} /> دليل المقاسات
+                  <Ruler size={10} /> دليل المقاسات
                 </button>
               </div>
               {safeSizes.length > 1 && (
@@ -555,39 +591,32 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           )}
 
           {/* stock */}
-          <div className="mb-5 reveal-item"><StockBadge /></div>
+          <div className="mb-8 reveal-item"><StockBadge /></div>
 
-          {/* quantity */}
-          <div className="flex items-center gap-3 mb-5 reveal-item">
-            <span className="text-[11px] font-semibold text-[#111]">الكمية</span>
-            <div className="flex items-center border border-[#E0E0E0] h-9">
-              <button onClick={() => setQuantity(q => q > 1 ? q - 1 : 1)} className="w-9 h-full flex items-center justify-center text-[#888] hover:text-[#111] hover:bg-[#F5F5F5] transition-colors border-l border-[#E0E0E0]">
-                <Minus size={13} />
-              </button>
-              <span className="w-10 text-center text-[13px] font-semibold text-[#111]">{quantity}</span>
-              <button onClick={() => setQuantity(q => q + 1)} className="w-9 h-full flex items-center justify-center text-[#888] hover:text-[#111] hover:bg-[#F5F5F5] transition-colors border-r border-[#E0E0E0]">
-                <Plus size={13} />
+          {/* CTA buttons with quantity */}
+          <div className="flex flex-col gap-3 mb-6 reveal-item" ref={cartBtnRef}>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center border border-[#E0E0E0] h-10">
+                <button onClick={() => setQuantity(q => q > 1 ? q - 1 : 1)} className="w-10 h-full flex items-center justify-center text-[#888] hover:text-[#111] hover:bg-[#F5F5F5] transition-colors border-l border-[#E0E0E0]">
+                  <Minus size={13} />
+                </button>
+                <span className="w-12 text-center text-[13px] font-semibold text-[#111]">{quantity}</span>
+                <button onClick={() => setQuantity(q => q + 1)} className="w-10 h-full flex items-center justify-center text-[#888] hover:text-[#111] hover:bg-[#F5F5F5] transition-colors border-r border-[#E0E0E0]">
+                  <Plus size={13} />
+                </button>
+              </div>
+              <button onClick={handleAddToCart}
+                className={`flex-1 h-10 text-[13px] font-bold tracking-[0.04em] border-2 transition-all duration-200
+                  ${addedFeedback ? 'bg-[#111] text-white border-[#111]' : 'bg-white text-[#111] border-[#111] hover:bg-[#111] hover:text-white'}`}>
+                {addedFeedback ? '✓ تمت الإضافة إلى السلة' : 'أضف إلى السلة'}
               </button>
             </div>
-          </div>
-
-          {/* CTA buttons */}
-          <div className="flex flex-col gap-2.5 mb-5 reveal-item" ref={cartBtnRef}>
-            <button onClick={handleAddToCart}
-              className={`w-full h-12 text-[13px] font-bold tracking-[0.04em] border-2 transition-all duration-200
-                ${addedFeedback ? 'bg-[#111] text-white border-[#111]' : 'bg-white text-[#111] border-[#111] hover:bg-[#111] hover:text-white'}`}>
-              {addedFeedback ? '✓ تمت الإضافة إلى السلة' : 'أضف إلى السلة'}
-            </button>
-            <button onClick={handleBuyNow}
-              className="w-full h-12 bg-[#111] text-white text-[13px] font-bold tracking-[0.04em] hover:bg-[#333] transition-colors">
-              اشتري الآن
-            </button>
           </div>
 
           {renderCustomHtml('below_cart')}
 
           {/* action links */}
-          <div className="flex items-center gap-5 text-[11px] text-[#777] mb-6 reveal-item">
+          <div className="flex items-center gap-5 text-[11px] text-[#777] mb-8 reveal-item">
             <button onClick={handleShare} className="flex items-center gap-1.5 hover:text-[#111] transition-colors">
               <Share2 size={13} /> مشاركة
             </button>
@@ -598,7 +627,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           </div>
 
           {/* shipping info */}
-          <div className="border border-[#F0F0F0] rounded-sm p-4 mb-6 space-y-3 reveal-item">
+          <div className="border border-[#F0F0F0] rounded-sm p-5 mb-8 space-y-4 reveal-item">
             <div className="flex items-center gap-2.5 text-[11px] text-[#555]">
               <Truck size={14} className="text-[#111] flex-shrink-0" />
               <span>الشحن المقدر: خلال 3-7 أيام عمل</span>
@@ -614,7 +643,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           </div>
 
           {/* payment icons */}
-          <div className="border border-[#F0F0F0] rounded-sm px-4 py-3 flex items-center justify-between mb-7 reveal-item">
+          <div className="border border-[#F0F0F0] rounded-sm px-5 py-4 flex items-center justify-between mb-8 reveal-item">
             <div className="flex items-center gap-1.5 text-[10px] text-[#777]">
               <ShieldCheck size={12} className="text-[#22C55E]" /> ضمان الدفع الآمن
             </div>
@@ -694,8 +723,8 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                 <button onClick={galleryNext} className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white border border-[#E8E8E8] rounded-full flex items-center justify-center text-[#333] hover:border-[#111] transition-all shadow-sm"><ChevronLeft size={18} /></button>
               </>
             )}
-            <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex gap-1.5 bg-white/90 px-3 py-1.5 rounded-full border border-[#E8E8E8]">
-              {gallery.map((_, i) => <span key={i} className={`rounded-full bg-[#111] transition-all ${galleryIdx === i ? "w-4 h-1.5 opacity-100" : "w-1.5 h-1.5 opacity-20"}`} />)}
+            <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex gap-2 bg-white/90 px-3 py-1.5 rounded-full border border-[#E8E8E8]">
+              {gallery.map((_, i) => <span key={i} className={`rounded-full bg-[#111] transition-all ${galleryIdx === i ? "w-4 h-2 opacity-100" : "w-2 h-2 opacity-30"}`} />)}
             </div>
           </div>
         </div>
@@ -730,18 +759,18 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
       {/* ══ STYLES ══ */}
       <style jsx global>{`
-        @keyframes revealUp { from { opacity:0; transform:translateY(18px) } to { opacity:1; transform:translateY(0) } }
+        @keyframes revealUp { from { opacity:0; transform:translateY(24px) } to { opacity:1; transform:translateY(0) } }
         @keyframes fadeIn   { from { opacity:0 } to { opacity:1 } }
         @keyframes shake    { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-4px)} 40%,80%{transform:translateX(4px)} }
 
-        .modal-enter { animation: revealUp .28s cubic-bezier(.25,1,.5,1) }
+        .modal-enter { animation: revealUp .32s cubic-bezier(.25,1,.5,1) }
         .size-shake  { animation: shake .4s ease-out }
 
         /* Scroll reveal */
         .reveal-item {
           opacity: 0;
-          transform: translateY(16px);
-          animation: revealUp .45s cubic-bezier(.25,1,.5,1) forwards;
+          transform: translateY(24px);
+          animation: revealUp .5s cubic-bezier(.25,1,.5,1) forwards;
         }
         .reveal-item:nth-child(1)  { animation-delay: .04s }
         .reveal-item:nth-child(2)  { animation-delay: .08s }
