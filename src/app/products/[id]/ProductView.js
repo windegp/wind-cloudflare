@@ -436,7 +436,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             onTouchMove={handleHeroTouchMove}
             onTouchEnd={handleHeroTouchEnd}>
             <img key={activeImage} src={getImageUrl(activeImage)} alt={product.title}
-              className="w-full h-full object-contain p-2 transition-all duration-500" />
+              className="w-full h-full object-contain p-0 transition-all duration-500" />
             <button onClick={e => { e.stopPropagation(); handleWishlistToggle(e); }}
               className="absolute top-3 right-3 w-9 h-9 bg-white border border-[#DDD] rounded-full flex items-center justify-center shadow-sm hover:shadow-md transition-all z-10">
               <Heart size={15} fill={isWishlisted ? "#111" : "none"} color={isWishlisted ? "#111" : "#888"} />
@@ -456,7 +456,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           </div>
 
           {/* Desktop gallery */}
-          <div className="hidden lg:flex gap-3 p-6 h-full">
+          <div className="hidden lg:flex gap-3 p-0 h-full">
             {/* thumbs */}
             <div className="flex flex-col gap-2 w-[72px] flex-shrink-0">
               {thumbScrollTop > 0 && (
