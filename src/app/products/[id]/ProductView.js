@@ -419,7 +419,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
       <MobileStickyBar />
 
       {/* ══ BREADCRUMB ══ */}
-      <div className="border-b border-[#F5F5F5] px-4 lg:px-10 py-3">
+      <div className="border-b border-[#F5F5F5] px-4 lg:px-10 py-2.5">
         <Breadcrumb />
       </div>
 
@@ -437,21 +437,21 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             onTouchEnd={handleHeroTouchEnd}>
             <img key={activeImage} src={getImageUrl(activeImage)} alt={product.title}
               className="w-full h-full object-contain p-2 transition-all duration-500" />
-            <button onClick={e => { e.stopPropagation(); openGallery(activeIdx); }}
-              className="absolute top-3 left-3 w-8 h-8 bg-white border border-[#E8E8E8] rounded-full flex items-center justify-center text-[#555] shadow-sm">
-              <Search size={14} />
-            </button>
             <button onClick={e => { e.stopPropagation(); handleWishlistToggle(e); }}
-              className="absolute top-3 right-3 w-8 h-8 bg-white border border-[#E8E8E8] rounded-full flex items-center justify-center shadow-sm">
-              <Heart size={14} fill={isWishlisted ? "#111" : "none"} color={isWishlisted ? "#111" : "#888"} />
+              className="absolute top-3 right-3 w-9 h-9 bg-white border border-[#DDD] rounded-full flex items-center justify-center shadow-sm hover:shadow-md transition-all z-10">
+              <Heart size={15} fill={isWishlisted ? "#111" : "none"} color={isWishlisted ? "#111" : "#888"} />
+            </button>
+            <button onClick={e => { e.stopPropagation(); openGallery(activeIdx); }}
+              className="absolute top-[54px] right-3 w-9 h-9 bg-white border border-[#DDD] rounded-full flex items-center justify-center shadow-sm hover:shadow-md transition-all z-10">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
             </button>
           </div>
 
           {/* Mobile dots */}
-          <div className="flex justify-center gap-2 py-3 lg:hidden">
+          <div className="flex flex-wrap justify-center gap-x-2.5 gap-y-2 px-6 py-3 lg:hidden">
             {gallery.map((_, i) => (
               <button key={i} onClick={() => { setActiveImage(gallery[i]); setActiveIdx(i); }}
-                className={`rounded-full transition-all duration-200 ${activeIdx === i ? 'w-6 h-2.5 bg-[#111]' : 'w-2.5 h-2.5 bg-[#DDDDDD] hover:bg-[#AAAAAA]'}`} />
+                className={`rounded-full transition-all duration-200 ${activeIdx === i ? 'w-2.5 h-2.5 bg-white border-2 border-[#111]' : 'w-2 h-2 bg-[#111] border-2 border-transparent'}`} />
             ))}
           </div>
 
@@ -486,15 +486,15 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             <div className="flex-1 relative bg-[#F8F8F8] cursor-zoom-in overflow-hidden main-img-wrap"
               onClick={() => openGallery(activeIdx)}>
               <img key={activeImage} src={getImageUrl(activeImage)} alt={product.title}
-                className="w-full h-full object-contain p-1 main-img-zoom" />
+                className="w-full h-full object-contain p-0 main-img-zoom" />
               <div className="absolute top-4 left-4 flex flex-col gap-2">
                 <button onClick={e => { e.stopPropagation(); handleWishlistToggle(e); }}
-                  className="w-9 h-9 bg-white border border-[#E8E8E8] rounded-full flex items-center justify-center shadow-sm img-fade-btn hover:shadow-md transition-all">
+                  className="w-9 h-9 bg-white border border-[#DDD] rounded-full flex items-center justify-center shadow-sm img-fade-btn hover:shadow-md transition-all">
                   <Heart size={15} fill={isWishlisted ? "#111" : "none"} color={isWishlisted ? "#111" : "#888"} />
                 </button>
                 <button onClick={e => { e.stopPropagation(); openGallery(activeIdx); }}
-                  className="w-9 h-9 bg-white border border-[#E8E8E8] rounded-full flex items-center justify-center shadow-sm img-fade-btn hover:shadow-md transition-all">
-                  <Search size={14} className="text-[#555]" />
+                  className="w-9 h-9 bg-white border border-[#DDD] rounded-full flex items-center justify-center shadow-sm img-fade-btn hover:shadow-md transition-all">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
                 </button>
               </div>
             </div>
@@ -502,18 +502,18 @@ export default function ProductView({ initialProduct, sourceCategory }) {
         </div>
 
         {/* ── INFO COLUMN ── */}
-        <div className="px-4 pt-6 pb-24 lg:px-10 lg:pt-10 lg:pb-20 lg:border-r lg:border-[#F5F5F5]">
+        <div className="px-4 pt-5 pb-24 lg:px-10 lg:pt-8 lg:pb-20 lg:border-r lg:border-[#F5F5F5]">
 
           {renderCustomHtml('above_title')}
 
           {/* title */}
-          <h1 className="text-[18px] lg:text-[22px] font-bold text-[#111] leading-[1.25] mb-4 reveal-item">{product.title}</h1>
+          <h1 className="text-[20px] lg:text-[24px] font-semibold text-[#111] leading-[1.2] tracking-[-0.01em] mb-3 reveal-item">{product.title}</h1>
 
           {/* stars */}
-          <div className="mb-6 reveal-item"><StarsRow /></div>
+          <div className="mb-4 reveal-item"><StarsRow /></div>
 
           {/* price */}
-          <div className="flex items-baseline gap-2 mb-6 reveal-item">
+          <div className="flex items-baseline gap-2 mb-5 reveal-item">
             <span className="text-[22px] lg:text-[26px] font-bold text-[#111]">{product.price}</span>
             <span className="text-[12px] text-[#AAA]">ج.م</span>
             {product.compareAtPrice && (
@@ -535,7 +535,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
           {/* viewers */}
           {viewersCount > 0 && (
-            <p className="text-[12px] text-[#777] mb-8 flex items-center gap-2 reveal-item">
+            <p className="text-[12px] text-[#777] mb-6 flex items-center gap-2 reveal-item">
               <span className="w-2 h-2 rounded-full bg-[#22C55E] animate-pulse inline-block"></span>
               {viewersCount} أشخاص يشاهدون هذا المنتج الآن
             </p>
@@ -543,7 +543,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
           {/* colors */}
           {safeColors.length > 0 && (
-            <div className="mb-7 reveal-item">
+            <div className="mb-6 reveal-item">
               <p className="text-[13px] font-semibold text-[#111] mb-3">
                 اللون: <span className="font-normal text-[#555]">{selectedColor}</span>
               </p>
@@ -566,7 +566,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
           {/* sizes */}
           {safeSizes.length > 0 && (
-            <div className="mb-7 reveal-item">
+            <div className="mb-6 reveal-item">
               <div className="flex items-center justify-between mb-3">
                 <p className="text-[13px] font-semibold text-[#111]">
                   المقاس: <span className="font-normal text-[#555]">{selectedSize}</span>
@@ -591,7 +591,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           )}
 
           {/* stock */}
-          <div className="mb-8 reveal-item"><StockBadge /></div>
+          <div className="mb-6 reveal-item"><StockBadge /></div>
 
           {/* CTA buttons with quantity */}
           <div className="flex flex-col gap-3 mb-6 reveal-item" ref={cartBtnRef}>

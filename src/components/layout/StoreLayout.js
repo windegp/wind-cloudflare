@@ -18,7 +18,7 @@ export default function StoreLayout({ children }) {
       {!isAdmin && <CartDrawer />}
 
       {/* المحتوى الأساسي للصفحة (سواء أدمن أو متجر) */}
-      <main className="min-h-screen">
+      <main className={`min-h-screen ${!isAdmin ? 'pt-[120px]' : ''}`}>
         {children}
       </main>
 

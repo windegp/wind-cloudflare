@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useCart } from "@/context/CartContext"; 
@@ -15,6 +15,38 @@ export default function Navbar() {
   const { cartItems = [], toggleCart } = useCart() || {};
   
   const { settings: activeSettings } = useSettings();
+
+  // Smart sticky: hide on scroll down, show on scroll up
+  const [prevScrollY, setPrevScrollY] = useState(0);
+  const [navHidden, setNavHidden] = useState(false);
+  const tickingRef = useRef(false);
+  const HEADER_HEIGHT = 80; // announcement bar + nav bar
+  const TOTAL_HIDE = 40; // announcement bar height
+  const MIN_SCROLL = 80;
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (tickingRef.current) return;
+      window.requestAnimationFrame(() => {
+        const currentY = window.scrollY;
+        const delta = currentY - prevScrollY;
+        if (currentY > MIN_SCROLL) {
+          if (delta > 5 && currentY > TOTAL_HIDE) {
+            setNavHidden(true);
+          } else if (delta < -5) {
+            setNavHidden(false);
+          }
+        } else {
+          setNavHidden(false);
+        }
+        setPrevScrollY(currentY);
+        tickingRef.current = false;
+      });
+      tickingRef.current = true;
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [prevScrollY]);
 
   // دمج البيانات (الأولوية للبيانات الحية)
   const announcements = activeSettings?.announcements || ["WIND Shopping"];
@@ -101,7 +133,7 @@ export default function Navbar() {
   return (
     <>
       {/* 1. شريط الإعلانات العلوي */}
-      <div className="bg-[#FAF9F6] text-[#1A1A1A] h-10 flex items-center justify-center border-b border-[#EAEAEA] relative z-[110] px-4 shadow-sm transition-colors duration-700">
+      <div className={`bg-[#FAF9F6] text-[#1A1A1A] h-10 flex items-center justify-center border-b border-[#EAEAEA] fixed top-0 left-0 right-0 z-[110] px-4 shadow-sm transition-all duration-500 ${navHidden ? '-translate-y-full' : 'translate-y-0'}`}>
         <div className="flex items-center gap-4 md:gap-8 relative justify-center">
           <button onClick={prevAd} className="hover:scale-125 hover:text-[#1A1A1A] transition-all p-1 z-10">
             <ChevronLeft className="w-4 h-4 animate-arrow-slide-left cursor-pointer text-[#666]" />
@@ -126,7 +158,7 @@ export default function Navbar() {
       </div>
 
       {/* 2. النافبار الأساسي */}
-      <nav className="bg-white backdrop-blur-xl border-b border-black/5 sticky top-0 z-[100] h-20 w-full transition-all duration-500">
+      <nav className={`bg-white backdrop-blur-xl border-b border-black/5 fixed top-10 left-0 right-0 z-[100] h-20 w-full transition-all duration-500 ${navHidden ? '-translate-y-full' : 'translate-y-0'}`}>
         <div className="max-w-[1600px] mx-auto px-6 h-full flex items-center justify-between">
           <button onClick={() => setIsMenuOpen(true)} className="group flex items-center gap-3 text-black/70 hover:text-[#1A1A1A] transition-all">
             <div className="flex flex-col gap-1.5 overflow-hidden">
