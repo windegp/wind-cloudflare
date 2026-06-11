@@ -419,7 +419,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
       <MobileStickyBar />
 
       {/* ══ BREADCRUMB ══ */}
-      <div className="border-b border-[#F5F5F5] px-4 lg:px-10 py-2.5">
+      <div className="px-4 lg:px-10 py-2.5">
         <Breadcrumb />
       </div>
 
@@ -451,7 +451,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           <div className="flex flex-wrap justify-center gap-x-2.5 gap-y-2 px-6 py-3 lg:hidden">
             {gallery.map((_, i) => (
               <button key={i} onClick={() => { setActiveImage(gallery[i]); setActiveIdx(i); }}
-                className={`rounded-full transition-all duration-200 ${activeIdx === i ? 'w-2.5 h-2.5 bg-white border-2 border-[#111]' : 'w-2 h-2 bg-[#111] border-2 border-transparent'}`} />
+                className={`rounded-full transition-all duration-200 ${activeIdx === i ? 'w-3 h-3 bg-white border border-[#111]' : 'w-2 h-2 bg-[#111] border-2 border-transparent'}`} />
             ))}
           </div>
 

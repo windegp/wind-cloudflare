@@ -132,33 +132,34 @@ export default function Navbar() {
 
   return (
     <>
-      {/* 1. شريط الإعلانات العلوي */}
-      <div className={`bg-[#FAF9F6] text-[#1A1A1A] h-10 flex items-center justify-center border-b border-[#EAEAEA] fixed top-0 left-0 right-0 z-[110] px-4 shadow-sm transition-all duration-500 ${navHidden ? '-translate-y-full' : 'translate-y-0'}`}>
-        <div className="flex items-center gap-4 md:gap-8 relative justify-center">
-          <button onClick={prevAd} className="hover:scale-125 hover:text-[#1A1A1A] transition-all p-1 z-10">
-            <ChevronLeft className="w-4 h-4 animate-arrow-slide-left cursor-pointer text-[#666]" />
-          </button>
+      <div className={`fixed top-0 left-0 right-0 z-[110] transition-all duration-500 ${navHidden ? '-translate-y-full' : 'translate-y-0'}`}>
+        {/* 1. شريط الإعلانات العلوي */}
+        <div className="bg-[#FAF9F6] text-[#1A1A1A] h-10 flex items-center justify-center border-b border-[#EAEAEA] px-4 shadow-sm transition-colors duration-700">
+          <div className="flex items-center gap-4 md:gap-8 relative justify-center">
+            <button onClick={prevAd} className="hover:scale-125 hover:text-[#1A1A1A] transition-all p-1 z-10">
+              <ChevronLeft className="w-4 h-4 animate-arrow-slide-left cursor-pointer text-[#666]" />
+            </button>
 
-          <div className="overflow-hidden relative h-6 flex justify-center items-center w-[250px] md:w-[350px]">
-            {announcements.map((text, index) => (
-              <span 
-                key={index}
-                className={`text-[11px] md:text-sm font-bold tracking-wide absolute inset-0 flex items-center justify-center whitespace-nowrap font-tajawal
-                ${index === adIndex ? 'animate-slide-right-text' : 'opacity-0'}`}
-              >
-                {text}
-              </span>
-            ))}
+            <div className="overflow-hidden relative h-6 flex justify-center items-center w-[250px] md:w-[350px]">
+              {announcements.map((text, index) => (
+                <span 
+                  key={index}
+                  className={`text-[11px] md:text-sm font-bold tracking-wide absolute inset-0 flex items-center justify-center whitespace-nowrap font-tajawal
+                  ${index === adIndex ? 'animate-slide-right-text' : 'opacity-0'}`}
+                >
+                  {text}
+                </span>
+              ))}
+            </div>
+
+            <button onClick={nextAd} className="hover:scale-125 hover:text-[#1A1A1A] transition-all p-1 z-10">
+              <ChevronRight className="w-4 h-4 animate-arrow-slide-right cursor-pointer text-[#666]" />
+            </button>
           </div>
-
-          <button onClick={nextAd} className="hover:scale-125 hover:text-[#1A1A1A] transition-all p-1 z-10">
-            <ChevronRight className="w-4 h-4 animate-arrow-slide-right cursor-pointer text-[#666]" />
-          </button>
         </div>
-      </div>
 
-      {/* 2. النافبار الأساسي */}
-      <nav className={`bg-white backdrop-blur-xl border-b border-black/5 fixed top-10 left-0 right-0 z-[100] h-20 w-full transition-all duration-500 ${navHidden ? '-translate-y-full' : 'translate-y-0'}`}>
+        {/* 2. النافبار الأساسي */}
+        <nav className="bg-white backdrop-blur-xl border-b border-black/5 h-20 w-full">
         <div className="max-w-[1600px] mx-auto px-6 h-full flex items-center justify-between">
           <button onClick={() => setIsMenuOpen(true)} className="group flex items-center gap-3 text-black/70 hover:text-[#1A1A1A] transition-all">
             <div className="flex flex-col gap-1.5 overflow-hidden">
@@ -188,8 +189,9 @@ export default function Navbar() {
               )}
             </button>
           </div>
-        </div>
-      </nav>
+          </div>
+        </nav>
+      </div>
 
       {/* 3. المنيو الجانبي */}
       {isMenuOpen && (
