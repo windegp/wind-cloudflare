@@ -17,3 +17,6 @@
  ○ Compiling /api/site-settings ...
  ✓ Compiled /api/site-settings in 6.3s (885 modules)
  GET /api/site-settings 200 in 22105ms
+ ✓ Compiled in 3.5s (331 modules)
+ ✓ Compiled in 25.3s (331 modules)
+ ✓ Compiled in 4.4s (331 modules)
