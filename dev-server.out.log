@@ -1,0 +1,11 @@
+
+> wind-website@0.1.0 dev
+> next dev -p 3001
+
+   ▲ Next.js 15.5.14
+   - Local:        http://localhost:3001
+   - Network:      http://192.168.42.77:3001
+   - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 7.5s
