@@ -436,7 +436,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             onTouchMove={handleHeroTouchMove}
             onTouchEnd={handleHeroTouchEnd}>
             <img key={activeImage} src={getImageUrl(activeImage)} alt={product.title}
-              className="w-full h-full object-contain p-0 transition-all duration-500" />
+              className="w-full h-full object-cover transition-all duration-500" />
             <button onClick={e => { e.stopPropagation(); handleWishlistToggle(e); }}
               className="absolute top-3 right-3 w-9 h-9 bg-white border border-[#DDD] rounded-full flex items-center justify-center shadow-sm hover:shadow-md transition-all z-10">
               <Heart size={15} fill={isWishlisted ? "#111" : "none"} color={isWishlisted ? "#111" : "#888"} />
@@ -486,7 +486,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             <div className="flex-1 relative bg-[#F8F8F8] cursor-zoom-in overflow-hidden main-img-wrap"
               onClick={() => openGallery(activeIdx)}>
               <img key={activeImage} src={getImageUrl(activeImage)} alt={product.title}
-                className="w-full h-full object-contain p-0 main-img-zoom" />
+                className="w-full h-full object-cover main-img-zoom" />
               <div className="absolute top-4 left-4 flex flex-col gap-2">
                 <button onClick={e => { e.stopPropagation(); handleWishlistToggle(e); }}
                   className="w-9 h-9 bg-white border border-[#DDD] rounded-full flex items-center justify-center shadow-sm img-fade-btn hover:shadow-md transition-all">
@@ -684,7 +684,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                 <Link href={`/products/${rp.id}`} key={rp.id} className="group cursor-pointer block reveal-item">
                   <div className="relative aspect-square bg-[#F8F8F8] overflow-hidden mb-2.5 group-hover:bg-[#F0F0F0] transition-colors">
                     <img src={getRelatedImageUrl(rp)} alt={rp.title} loading="lazy"
-                      className="w-full h-full object-contain p-4 transition-transform duration-500 group-hover:scale-[1.04]" />
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" />
                   </div>
                   <p className="text-[11px] text-[#555] uppercase tracking-[0.06em] mb-0.5">{rp.category || bcCat?.name || ""}</p>
                   <h3 className="text-[12px] lg:text-[13px] text-[#111] font-semibold line-clamp-2 mb-1">{rp.title}</h3>
