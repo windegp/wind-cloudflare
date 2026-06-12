@@ -159,8 +159,8 @@ export default function Navbar() {
         </div>
 
         {/* 2. النافبار الأساسي */}
-        <nav className="bg-white backdrop-blur-xl h-20 w-full">
-        <div className="max-w-[1200px] mx-auto px-6 h-full flex items-center justify-between">
+        <nav className="bg-white backdrop-blur-xl h-16 w-full">
+        <div className="max-w-[1600px] mx-auto px-6 h-full flex items-center justify-between">
           <button onClick={() => setIsMenuOpen(true)} className="group flex items-center gap-3 text-black/70 hover:text-[#1A1A1A] transition-all">
             <div className="flex flex-col gap-1.5 overflow-hidden">
               <span className="w-8 h-[2px] bg-current transition-all group-hover:w-5"></span>
