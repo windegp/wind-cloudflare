@@ -159,7 +159,7 @@ export default function Navbar() {
         </div>
 
         {/* 2. النافبار الأساسي */}
-        <nav className="bg-white backdrop-blur-xl h-12 w-full">
+        <nav className="bg-white backdrop-blur-xl h-14 w-full">
         <div className="max-w-[1600px] mx-auto px-6 h-full flex items-center justify-between">
           <button onClick={() => setIsMenuOpen(true)} className="group flex items-center gap-3 text-black/70 hover:text-[#1A1A1A] transition-all">
             <div className="flex flex-col gap-1.5 overflow-hidden">
@@ -174,7 +174,7 @@ export default function Navbar() {
               <img 
                 src={activeSettings?.logoUrl || logo.src} 
                 alt={activeSettings?.brandName || "WIND Shopping"}
-                className="h-7 md:h-8 w-auto object-contain scale-[1.3] md:scale-[1.5] origin-center brightness-110 contrast-125 hover:scale-[1.4] md:hover:scale-[1.6] transition-all duration-700" 
+                className="h-12 md:h-14 w-auto object-contain scale-[1.3] md:scale-[1.5] origin-center brightness-110 contrast-125 hover:scale-[1.4] md:hover:scale-[1.6] transition-all duration-700" 
               />
             </Link>
           </div>
