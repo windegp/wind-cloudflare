@@ -128,29 +128,31 @@ export default function CategoryView({ initialSlug, initialCategoryData }) {
   const showToolbar = !loading && products.length > 0;
 
   return (
-    <main className="min-h-screen bg-white pt-16 pb-12" dir="rtl">
+    <main className="min-h-screen bg-white pb-12" dir="rtl">
+
       <div className="max-w-[1440px] mx-auto">
 
         {/* ── HERO BANNER ── */}
         {hasBanner ? (
           <div className="relative w-full bg-[#FAF8F3] overflow-hidden">
-            <div className="relative w-full aspect-[3/1] md:aspect-[4/1] max-h-[400px]">
+            <div className="relative w-full aspect-[4/3] md:aspect-[16/7] max-h-[600px]">
+
               <img
                 src={categoryData.bannerImage || categoryData.image}
                 alt={categoryData.name}
                 className="w-full h-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/20 to-transparent" />
-              <div className="absolute bottom-6 md:bottom-10 right-6 md:right-12 left-6 md:left-12">
-                <h1 className="text-white text-2xl md:text-4xl lg:text-5xl font-black mb-2" style={{ fontFamily: "'Cairo', sans-serif" }}>
-                  {categoryData.name}
-                </h1>
-                {categoryData.description && (
-                  <p className="text-white/80 text-sm md:text-base max-w-xl font-tajawal leading-relaxed">
-                    {categoryData.description}
-                  </p>
-                )}
-              </div>
+              <div className="absolute bottom-6 md:bottom-10 right-6 md:right-12">
+  <h1 className="text-white text-3xl md:text-5xl lg:text-6xl font-black tracking-tight leading-tight mb-2" style={{ fontFamily: "'Cairo', sans-serif" }}>
+    {categoryData.name}
+  </h1>
+  {categoryData.description && (
+    <p className="text-white/75 text-sm md:text-base max-w-sm font-tajawal leading-relaxed">
+      {categoryData.description}
+    </p>
+  )}
+</div>
             </div>
           </div>
         ) : (
@@ -186,7 +188,8 @@ export default function CategoryView({ initialSlug, initialCategoryData }) {
         {/* ── TOOLBAR (Sort + Grid View + Count) ── */}
         {showToolbar && (
           <div className="px-4 md:px-8 mb-8">
-            <div className="flex items-center justify-between border-t border-b border-[#EAEAEA] py-3">
+            <div className="flex items-center justify-between py-3">
+
               {/* Right side: Filter + Sort */}
               <div className="flex items-center gap-4">
                 <button className="flex items-center gap-2 text-[#1A1A1A] text-[13px] font-bold font-tajawal hover:text-[#888] transition-colors">
@@ -227,7 +230,8 @@ export default function CategoryView({ initialSlug, initialCategoryData }) {
                 <span className="text-[#888] text-[12px] font-tajawal">
                   {products.length} منتج
                 </span>
-                <div className="flex items-center gap-1.5 border-r border-[#EAEAEA] pr-4">
+                <div className="flex items-center gap-1.5">
+
                   <button
                     onClick={() => setGridColumns(4)}
                     className={`p-1.5 rounded-md transition-colors ${gridColumns === 4 ? 'bg-[#1A1A1A] text-white' : 'text-[#888] hover:text-[#1A1A1A] hover:bg-[#F5F5F5]'}`}
