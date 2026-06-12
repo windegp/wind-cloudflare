@@ -159,7 +159,7 @@ export default function Navbar() {
         </div>
 
         {/* 2. النافبار الأساسي */}
-        <nav className="bg-white backdrop-blur-xl h-14 flex items-center w-full">
+        <nav className="bg-white backdrop-blur-xl h-18 w-full">
         <div className="max-w-[1600px] mx-auto px-6 h-full flex items-center justify-between">
           <button onClick={() => setIsMenuOpen(true)} className="group flex items-center gap-3 text-black/70 hover:text-[#1A1A1A] transition-all">
             <div className="flex flex-col gap-1.5 overflow-hidden">
