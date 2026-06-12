@@ -1224,7 +1224,7 @@ export const TabbedHighlights = ({ data }) => {
             <button
               key={idx}
               onClick={() => setActiveTab(idx)}
-              className={`pb-2 text-[13px] md:text-[14px] relative transition-colors duration-300 font-tajawal whitespace-nowrap ${
+              className={`pb-2 text-[14px] md:text-[15px] relative transition-colors duration-300 font-tajawal whitespace-nowrap ${
   activeTab === idx ? 'text-[#1A1A1A] font-medium' : 'text-[#AAAAAA] hover:text-[#1A1A1A]'
 }`}
             >
