@@ -1,24 +1,31 @@
 "use client";
 import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { getDb } from "../../../lib/firebase"; 
+import { getDb } from "../../../lib/firebase";
 import { collection, query, where, getDocs, limit, orderBy, startAfter } from 'firebase/firestore/lite';
 import { usePageReady, useGlobalLoader } from "../../../context/GlobalLoaderContext";
 import ProductCard from "../../../components/products/ProductCard";
-// استدعاء الهوك الجديد لتقليل استهلاك الكوتا
 import { usePaginatedProducts } from "@/hooks/useFirestore";
 import Link from "next/link";
-import { ChevronDown } from '@/components/icons-extra';
+import { ChevronDown, Layout } from '@/components/icons-extra';
+import { Filter, Grid } from '@/components/icons';
 
-// 🔥 تحديد عدد المنتجات في كل سحبة (لحماية الكوتا)
 const PAGE_SIZE = 12;
+
+const SORT_OPTIONS = [
+  { value: 'featured', label: 'المميز' },
+  { value: 'newest', label: 'الأحدث' },
+  { value: 'best-selling', label: 'الأكثر مبيعاً' },
+  { value: 'price-asc', label: 'السعر: من الأقل إلى الأعلى' },
+  { value: 'price-desc', label: 'السعر: من الأعلى إلى الأقل' },
+];
 
 export default function CategoryView({ initialSlug, initialCategoryData }) {
   const pathname = usePathname();
-  const currentSlug = initialSlug; 
+  const currentSlug = initialSlug;
   const { signalPageReady } = usePageReady();
   const { isVisible: loaderActive } = useGlobalLoader();
-  
+
   const [products, setProducts] = useState([]);
   const [categoryData, setCategoryData] = useState(initialCategoryData);
   const [loading, setLoading] = useState(true);
@@ -27,10 +34,13 @@ export default function CategoryView({ initialSlug, initialCategoryData }) {
   const [hasMore, setHasMore] = useState(false);
   const [isSeoExpanded, setIsSeoExpanded] = useState(false);
 
-  // استخدام SWR لجلب البيانات أول مرة وتكييشها
+  // Toolbar state
+  const [sortBy, setSortBy] = useState('featured');
+  const [showSortDropdown, setShowSortDropdown] = useState(false);
+  const [gridColumns, setGridColumns] = useState(4); // 3 or 4 columns
+
   const { data: swrData, error, isValidating } = usePaginatedProducts(currentSlug, PAGE_SIZE, null);
 
-  // تحديث المنتجات عند استجابة SWR (لأول مرة)
   useEffect(() => {
     if (swrData && !lastDoc) {
       setProducts(swrData.products);
@@ -40,15 +50,22 @@ export default function CategoryView({ initialSlug, initialCategoryData }) {
     }
   }, [swrData]);
 
-  // دالة تحميل المزيد (تستخدم Firebase Lite مباشرة لتوفير الكوتا في التصفح العميق)
+  // Close sort dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = () => setShowSortDropdown(false);
+    if (showSortDropdown) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [showSortDropdown]);
+
   const fetchMore = async () => {
     if (!lastDoc || loadingMore) return;
     setLoadingMore(true);
     try {
       const db = getDb();
       let baseQ;
-      
-      // منطق الكويري الخاص بك (محفوظ 100%)
+
       if (currentSlug === 'top-rated-all-time' || currentSlug === 'top-rated-weekly') {
         baseQ = query(collection(db, "products"), orderBy("rating", "desc"));
       } else if (currentSlug === 'most-liked-all-time') {
@@ -59,16 +76,15 @@ export default function CategoryView({ initialSlug, initialCategoryData }) {
         baseQ = query(collection(db, "products"), where("currentWeekId", "==", weekStr), orderBy("weeklyLikesCount", "desc"));
       } else {
         baseQ = query(
-  collection(db, "products"), 
-  where("categories", "array-contains-any", [currentSlug, `/${currentSlug}`])
-);
+          collection(db, "products"),
+          where("categories", "array-contains-any", [currentSlug, `/${currentSlug}`])
+        );
       }
 
       const q = query(baseQ, startAfter(lastDoc), limit(PAGE_SIZE));
       const snap = await getDocs(q);
       let newItems = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-      // 🔥 Batch fetch stats for new products to prevent request storm
       if (newItems.length > 0) {
         try {
           const handles = newItems.map(p => p.handle || p.id).filter(Boolean);
@@ -76,7 +92,6 @@ export default function CategoryView({ initialSlug, initialCategoryData }) {
             const statsRes = await fetch(`/api/product-stats-batch?handles=${encodeURIComponent(handles.join(','))}`);
             if (statsRes.ok) {
               const { stats } = await statsRes.json();
-              // Enrich new items with stats
               newItems = newItems.map(p => {
                 const handle = p.handle || p.id;
                 const stat = stats[handle];
@@ -89,7 +104,6 @@ export default function CategoryView({ initialSlug, initialCategoryData }) {
           }
         } catch (e) {
           console.error("WIND: Batch stats fetch failed for more products", e);
-          // Continue without stats - ProductCard will fallback if needed
         }
       }
 
@@ -109,113 +123,199 @@ export default function CategoryView({ initialSlug, initialCategoryData }) {
     }
   }, [loading, products, categoryData.name, pathname, signalPageReady]);
 
+  const hasBanner = categoryData.image || categoryData.bannerImage;
+  const desktopGridCols = gridColumns === 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-3';
+  const showToolbar = !loading && products.length > 0;
+
   return (
-    <main className="min-h-screen bg-[#FAF9F6] pt-24 pb-12" dir="rtl">
-      <div className="max-w-[1400px] mx-auto px-4 md:px-6">
-        
-        {/* التاجات الذكية (Breadcrumbs) مطابقة للثيم الفاتح */}
-        <div className="flex flex-wrap items-center justify-center gap-3 text-[11px] md:text-[13px] font-medium text-gray-500 mb-8" style={{fontFamily:"Cairo,sans-serif"}}>
-          <span className="border border-gray-300 bg-white shadow-sm rounded-full px-3 py-1 text-gray-600">
-            ويند-{new Date().getFullYear().toString().slice(-2)}
-          </span>
-          <span className="w-1.5 h-1.5 bg-gray-300 rounded-full"></span>
-          <span className="text-gray-600">منتجات ويند</span>
-          <span className="w-1.5 h-1.5 bg-gray-300 rounded-full"></span>
-          <span className="capitalize text-[#E6AE00] font-bold">{categoryData.name}</span>
-        </div>
+    <main className="min-h-screen bg-white pt-16 pb-12" dir="rtl">
+      <div className="max-w-[1440px] mx-auto">
 
-        {/* Header */}
-        <div className="mb-16 text-center animate-in fade-in slide-in-from-bottom-4 duration-700">
-          <h1 className="text-3xl md:text-5xl font-black text-[#1A1A1A] mb-4 uppercase tracking-tighter" style={{fontFamily:"Cairo,sans-serif"}}>
-            {categoryData.name}
-          </h1>
-          <div className="flex justify-center items-center gap-4">
-            <span className="h-[2px] w-12 bg-gradient-to-l from-[#E6AE00] to-transparent rounded-full"></span>
-            <p className="text-[#E6AE00] font-bold tracking-[0.3em] text-[10px] md:text-xs uppercase">
-              {categoryData.subtitle || "WIND ESSENTIALS"}
-            </p>
-            <span className="h-[2px] w-12 bg-gradient-to-r from-[#E6AE00] to-transparent rounded-full"></span>
-          </div>
-          {categoryData.description && (
-            <p className="mt-6 text-gray-600 max-w-2xl mx-auto font-medium leading-relaxed font-tajawal">
-              {categoryData.description}
-            </p>
-          )}
-        </div>
-
-        {/* النتائج (عرض الكروت) */}
-        {!loading && products.length > 0 ? (
-          <>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6 lg:gap-8">
-              {products.map((product) => (
-                <ProductCard key={product.id} {...product} sourceCategory={currentSlug} /> 
-              ))}
-            </div>
-
-            {/* 🔥 زر تحميل المزيد - أيقونة سهم أسود فخم وانسيابي */}
-            {hasMore && (
-              <div className="mt-20 flex justify-center">
-                <button
-                  onClick={fetchMore}
-                  disabled={loadingMore}
-                  className={`group flex flex-col items-center gap-3 transition-all duration-300 ${loadingMore ? 'opacity-50 cursor-wait' : 'hover:translate-y-1'}`}
-                >
-                  <span className="text-[10px] md:text-[11px] font-bold text-[#1A1A1A] tracking-[0.4em] uppercase" style={{fontFamily:"Cairo,sans-serif"}}>
-                    {loadingMore ? 'جاري التحميل' : 'اكتشف المزيد'}
-                  </span>
-                  <div className="relative flex items-center justify-center w-12 h-12">
-                    {loadingMore && (
-                      <div className="absolute inset-0 border-2 border-[#1A1A1A]/10 border-t-[#1A1A1A] rounded-full animate-spin"></div>
-                    )}
-                    <ChevronDown 
-                      size={28} 
-                      strokeWidth={1.5} 
-                      className={`text-[#1A1A1A] transition-transform duration-500 ${loadingMore ? 'scale-75' : 'group-hover:translate-y-1'}`} 
-                    />
-                  </div>
-                </button>
+        {/* ── HERO BANNER ── */}
+        {hasBanner ? (
+          <div className="relative w-full bg-[#FAF8F3] overflow-hidden">
+            <div className="relative w-full aspect-[3/1] md:aspect-[4/1] max-h-[400px]">
+              <img
+                src={categoryData.bannerImage || categoryData.image}
+                alt={categoryData.name}
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/20 to-transparent" />
+              <div className="absolute bottom-6 md:bottom-10 right-6 md:right-12 left-6 md:left-12">
+                <h1 className="text-white text-2xl md:text-4xl lg:text-5xl font-black mb-2" style={{ fontFamily: "'Cairo', sans-serif" }}>
+                  {categoryData.name}
+                </h1>
+                {categoryData.description && (
+                  <p className="text-white/80 text-sm md:text-base max-w-xl font-tajawal leading-relaxed">
+                    {categoryData.description}
+                  </p>
+                )}
               </div>
-            )}
-          </>
-        ) : !loading ? (
-          /* حالة لو مفيش منتجات (Empty State) بالستايل الأبيض */
-          <div className="text-center py-24 md:py-32 border border-[#EAEAEA] rounded-3xl bg-white shadow-sm max-w-3xl mx-auto">
-            <p className="text-gray-500 mb-8 text-lg font-bold" style={{fontFamily:"Cairo,sans-serif"}}>
-              لا توجد قطع متوفرة في "{categoryData.name}" حالياً.
-            </p>
-            <Link 
-              href="/" 
-              className="bg-[#1A1A1A] text-white px-10 py-3.5 font-bold text-sm hover:bg-black transition-all duration-300 rounded-full shadow-md active:scale-95 inline-block"
-              style={{fontFamily:"Cairo,sans-serif"}}
-            >
-              اكتشف باقي المجموعات
-            </Link>
+            </div>
           </div>
-        ) : null}
+        ) : (
+          /* Fallback: Text-only header when no banner image */
+          <div className="px-4 md:px-8 pt-12 pb-8 text-center">
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <span className="h-px w-8 bg-[#1A1A1A]/30" />
+              <span className="text-[#888] text-[11px] font-bold tracking-[0.3em] uppercase font-tajawal">
+                {categoryData.subtitle || "WIND COLLECTION"}
+              </span>
+              <span className="h-px w-8 bg-[#1A1A1A]/30" />
+            </div>
+            <h1 className="text-3xl md:text-5xl font-black text-[#1A1A1A] mb-4" style={{ fontFamily: "'Cairo', sans-serif" }}>
+              {categoryData.name}
+            </h1>
+            {categoryData.description && (
+              <p className="text-[#888] max-w-2xl mx-auto font-tajawal text-sm md:text-base leading-relaxed">
+                {categoryData.description}
+              </p>
+            )}
+          </div>
+        )}
 
-        {/* سكشن الـ SEO السفلي (اقرأ المزيد) */}
+        {/* ── BREADCRUMBS ── */}
+        <div className="px-4 md:px-8 mt-6 mb-6">
+          <div className="flex flex-wrap items-center gap-2 text-[11px] md:text-[12px] text-[#888] font-tajawal">
+            <Link href="/" className="hover:text-[#1A1A1A] transition-colors">الرئيسية</Link>
+            <span className="text-[#CCC]">/</span>
+            <span className="text-[#1A1A1A] font-semibold">{categoryData.name}</span>
+          </div>
+        </div>
+
+        {/* ── TOOLBAR (Sort + Grid View + Count) ── */}
+        {showToolbar && (
+          <div className="px-4 md:px-8 mb-8">
+            <div className="flex items-center justify-between border-t border-b border-[#EAEAEA] py-3">
+              {/* Right side: Filter + Sort */}
+              <div className="flex items-center gap-4">
+                <button className="flex items-center gap-2 text-[#1A1A1A] text-[13px] font-bold font-tajawal hover:text-[#888] transition-colors">
+                  <Filter size={16} strokeWidth={1.5} />
+                  <span>تصفية</span>
+                </button>
+                <div className="relative" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    onClick={() => setShowSortDropdown(!showSortDropdown)}
+                    className="flex items-center gap-2 text-[#1A1A1A] text-[13px] font-bold font-tajawal hover:text-[#888] transition-colors"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 16l-4 4-4-4" /><path d="M17 20V4" /><path d="M3 8l4-4 4 4" /><path d="M7 4v16" />
+                    </svg>
+                    <span>{SORT_OPTIONS.find(o => o.value === sortBy)?.label || 'ترتيب'}</span>
+                    <ChevronDown size={14} strokeWidth={2} className={`transition-transform duration-200 ${showSortDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showSortDropdown && (
+                    <div className="absolute top-full right-0 mt-1.5 bg-white border border-[#EAEAEA] rounded-xl shadow-lg z-30 min-w-[220px] overflow-hidden">
+                      {SORT_OPTIONS.map((option) => (
+                        <button
+                          key={option.value}
+                          onClick={() => { setSortBy(option.value); setShowSortDropdown(false); }}
+                          className={`w-full text-right px-4 py-3 text-[13px] font-tajawal transition-colors hover:bg-[#FAF8F3] ${
+                            sortBy === option.value ? 'text-[#1A1A1A] font-bold bg-[#FAF8F3]' : 'text-[#666] font-medium'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Left side: Product count + Grid view */}
+              <div className="flex items-center gap-4">
+                <span className="text-[#888] text-[12px] font-tajawal">
+                  {products.length} منتج
+                </span>
+                <div className="flex items-center gap-1.5 border-r border-[#EAEAEA] pr-4">
+                  <button
+                    onClick={() => setGridColumns(4)}
+                    className={`p-1.5 rounded-md transition-colors ${gridColumns === 4 ? 'bg-[#1A1A1A] text-white' : 'text-[#888] hover:text-[#1A1A1A] hover:bg-[#F5F5F5]'}`}
+                    aria-label="عرض 4 أعمدة"
+                  >
+                    <Grid size={16} strokeWidth={1.5} />
+                  </button>
+                  <button
+                    onClick={() => setGridColumns(3)}
+                    className={`p-1.5 rounded-md transition-colors ${gridColumns === 3 ? 'bg-[#1A1A1A] text-white' : 'text-[#888] hover:text-[#1A1A1A] hover:bg-[#F5F5F5]'}`}
+                    aria-label="عرض 3 أعمدة"
+                  >
+                    <Layout size={16} strokeWidth={1.5} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── PRODUCT GRID ── */}
+        <div className="px-4 md:px-8">
+          {!loading && products.length > 0 ? (
+            <>
+              <div className={`grid grid-cols-2 md:grid-cols-3 ${desktopGridCols} gap-4 md:gap-6 lg:gap-7`}>
+                {products.map((product) => (
+                  <ProductCard key={product.id} {...product} sourceCategory={currentSlug} />
+                ))}
+              </div>
+
+              {hasMore && (
+                <div className="mt-16 flex justify-center">
+                  <button
+                    onClick={fetchMore}
+                    disabled={loadingMore}
+                    className={`group flex flex-col items-center gap-3 transition-all duration-300 ${loadingMore ? 'opacity-50 cursor-wait' : 'hover:translate-y-1'}`}
+                  >
+                    <span className="text-[10px] md:text-[11px] font-bold text-[#1A1A1A] tracking-[0.4em] uppercase font-cairo">
+                      {loadingMore ? 'جاري التحميل' : 'اكتشف المزيد'}
+                    </span>
+                    <div className="relative flex items-center justify-center w-12 h-12">
+                      {loadingMore && (
+                        <div className="absolute inset-0 border-2 border-[#1A1A1A]/10 border-t-[#1A1A1A] rounded-full animate-spin"></div>
+                      )}
+                      <ChevronDown
+                        size={28}
+                        strokeWidth={1.5}
+                        className={`text-[#1A1A1A] transition-transform duration-500 ${loadingMore ? 'scale-75' : 'group-hover:translate-y-1'}`}
+                      />
+                    </div>
+                  </button>
+                </div>
+              )}
+            </>
+          ) : !loading ? (
+            <div className="text-center py-24 md:py-32 border border-[#EAEAEA] rounded-3xl bg-white shadow-sm max-w-3xl mx-auto">
+              <p className="text-gray-500 mb-8 text-lg font-bold font-cairo">
+                لا توجد قطع متوفرة في &ldquo;{categoryData.name}&rdquo; حالياً.
+              </p>
+              <Link
+                href="/"
+                className="bg-[#1A1A1A] text-white px-10 py-3.5 font-bold text-sm hover:bg-black transition-all duration-300 rounded-full shadow-md active:scale-95 inline-block font-cairo"
+              >
+                اكتشف باقي المجموعات
+              </Link>
+            </div>
+          ) : null}
+        </div>
+
+        {/* ── SEO BOTTOM DESCRIPTION ── */}
         {categoryData.bottomDescription && products.length > 0 && (
-          <div className="mt-24 pt-10 border-t border-[#EAEAEA] max-w-4xl mx-auto">
+          <div className="mt-20 pt-10 border-t border-[#EAEAEA] max-w-4xl mx-auto px-4 md:px-8">
             <div className="relative">
               <div className={`overflow-hidden transition-all duration-700 ease-in-out ${isSeoExpanded ? 'max-h-[2000px]' : 'max-h-24'}`}>
-                <div className="text-gray-600 text-sm md:text-base leading-loose whitespace-pre-wrap px-4 text-justify font-tajawal">
+                <div className="text-[#666] text-sm md:text-base leading-loose whitespace-pre-wrap text-justify font-tajawal">
                   {categoryData.bottomDescription}
                 </div>
               </div>
-              
-              {/* التدرج الأبيض/الكريمي اللي بيخفي النص */}
               {!isSeoExpanded && (
-                <div className="absolute bottom-0 left-0 w-full h-16 bg-gradient-to-t from-[#FAF9F6] to-transparent pointer-events-none"></div>
+                <div className="absolute bottom-0 left-0 w-full h-16 bg-gradient-to-t from-white to-transparent pointer-events-none"></div>
               )}
             </div>
-
-            <button 
-              onClick={() => setIsSeoExpanded(!isSeoExpanded)} 
-              className="mt-6 mx-auto flex items-center gap-2 text-[#1A1A1A] font-bold text-xs md:text-sm uppercase tracking-widest hover:text-[#E6AE00] transition-colors bg-white border border-[#EAEAEA] px-6 py-2.5 rounded-full shadow-sm"
-              style={{fontFamily:"Cairo,sans-serif"}}
+            <button
+              onClick={() => setIsSeoExpanded(!isSeoExpanded)}
+              className="mt-6 mx-auto flex items-center gap-2 text-[#1A1A1A] font-bold text-xs md:text-sm uppercase tracking-widest hover:text-[#888] transition-colors bg-white border border-[#EAEAEA] px-6 py-2.5 rounded-full shadow-sm font-cairo"
             >
               {isSeoExpanded ? 'إخفاء التفاصيل' : 'اقرأ المزيد'}
-              <ChevronDown className={`transition-transform duration-300 ${isSeoExpanded ? 'rotate-180' : ''}`} size={16}/>
+              <ChevronDown className={`transition-transform duration-300 ${isSeoExpanded ? 'rotate-180' : ''}`} size={16} />
             </button>
           </div>
         )}
