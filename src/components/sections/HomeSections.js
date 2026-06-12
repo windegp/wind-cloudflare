@@ -1219,7 +1219,7 @@ export const TabbedHighlights = ({ data }) => {
             {data.title || "This Week's Highlights"}
           </h2>
         </div>
-        <div className={`flex justify-center gap-4 md:gap-10 mb-8 px-4 transition-all duration-[600ms] delay-100 ease-[cubic-bezier(0.22,1,0.36,1)] ${isSectionVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'}`}>
+        <div className={`flex justify-center gap-6 md:gap-8 mb-8 px-4 transition-all duration-[600ms] delay-100 ease-[cubic-bezier(0.22,1,0.36,1)] ${isSectionVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'}`}>
           {tabs.map((tab, idx) => (
             <button
               key={idx}
