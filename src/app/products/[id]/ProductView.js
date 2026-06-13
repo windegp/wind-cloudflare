@@ -352,9 +352,14 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           onTouchEnd={handleHeroTouchEnd}
         >
           <img key={activeImage} src={getImageUrl(activeImage)} alt={product.title} className="w-full h-full object-cover transition-all duration-500 ease-out" />
-          {/* Heart — top right, inside circle */}
-          <button onClick={handleWishlistToggle} className="absolute top-4 right-4 z-10 w-9 h-9 rounded-full bg-white flex items-center justify-center shadow-sm">
-            <Heart size={17} fill={isWishlisted ? "#111" : "none"} color={isWishlisted ? "#111" : "#333"} />
+          {/* Heart + likes count — top right */}
+          <button onClick={handleWishlistToggle} className="absolute top-4 right-4 z-10 flex items-center gap-1 bg-white rounded-full shadow-sm px-2.5 h-9">
+            <Heart size={15} fill={isWishlisted ? "#111" : "none"} color={isWishlisted ? "#111" : "#333"} />
+            {realLikesCount > 0 && (
+              <span className="text-[11px] text-[#333] font-medium leading-none">
+                {realLikesCount > 999 ? (realLikesCount/1000).toFixed(1)+'K' : realLikesCount}
+              </span>
+            )}
           </button>
 
           {/* Zoom Plus — bottom right, inside circle */}
@@ -391,30 +396,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
         {/* Mobile Content */}
         <div className="px-5 pt-5 pb-6" dir="rtl">
 
-          {/* Action Bar */}
-          <div className="mb-5 flex items-center gap-6">
-            <button onClick={(e) => { e.stopPropagation(); openGallery(activeIdx); }} className="flex items-center gap-1.5 text-[#888] hover:text-[#111] transition-colors">
-              <ImageIcon size={16} />
-              <span className="text-[11px] tracking-[0.06em]">{gallery.length} صور</span>
-            </button>
-            <button onClick={handleWishlistToggle} className="flex items-center gap-1.5 transition-colors hover:text-black text-[#888]">
-              <Heart size={16} fill={isWishlisted ? "#111" : "none"} color={isWishlisted ? "#111" : "currentColor"} />
-              <span className={`text-[11px] tracking-[0.06em] ${isWishlisted ? 'text-black' : 'text-[#888]'}`}>
-                {realLikesCount > 0 ? (realLikesCount > 999 ? (realLikesCount/1000).toFixed(1)+'K' : realLikesCount) : "إعجاب"}
-              </span>
-            </button>
-            <button onClick={handleShare} className="flex items-center gap-1.5 text-[#888] hover:text-[#111] transition-colors">
-              <Share2 size={16} />
-              <span className="text-[11px] tracking-[0.06em]">مشاركة</span>
-            </button>
-          </div>
-
           {renderCustomHtml('above_title')}
-
-          {/* Category label */}
-          {breadcrumbCat && (
-            <p className="text-[10px] text-[#AAAAAA] tracking-[0.1em] uppercase mb-2 font-medium">{breadcrumbCat.cleanName}</p>
-          )}
 
           {/* Title */}
           <h1 className="text-[22px] font-medium text-[#111] tracking-tight leading-[1.15] mb-3">{product.title}</h1>
