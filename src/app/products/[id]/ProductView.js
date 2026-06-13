@@ -665,16 +665,15 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           </div>
 
          {/* Trust Badges */}
-          <div className="mt-2 relative overflow-hidden border-t border-b border-[#1a1a1a]">
-            <div className="absolute top-0 left-0 right-0 h-[2px] bg-[#faecd8]" />
+          <div className="mt-2 trust-badges-wrap">
             <div className="flex">
               {[
-                { icon: <Truck size={19}/>, label: "شحن سريع", sub: "3-5 أيام عمل" },
-                { icon: <Eye size={19}/>, label: "معاينة الطلب", sub: "وقت الاستلام" },
-                { icon: <ShieldCheck size={19}/>, label: "استرجاع سهل", sub: "خلال 14 يوم" },
+                { icon: <Truck size={22}/>, label: "شحن سريع", sub: "3-5 أيام عمل" },
+                { icon: <Eye size={22}/>, label: "معاينة الطلب", sub: "وقت الاستلام" },
+                { icon: <ShieldCheck size={22}/>, label: "استرجاع سهل", sub: "خلال 14 يوم" },
               ].map(({ icon, label, sub }, i, arr) => (
-                <div key={label} className={`flex-1 flex flex-col items-center justify-center gap-[7px] py-4 px-2 text-center ${i < arr.length - 1 ? "border-l border-[#e8e8e8]" : ""}`}>
-                  <div className="w-9 h-9 bg-[#fdf6ec] border border-[#f0dfc4] flex items-center justify-center text-[#8a6a3a] shrink-0">
+                <div key={label} className={`trust-badge-item flex-1 flex flex-col items-center justify-center gap-[7px] py-4 px-2 text-center ${i < arr.length - 1 ? "border-l border-[#e8e8e8]" : ""}`}>
+                  <div className="w-10 h-10 bg-[#fdf6ec] border border-[#f0dfc4] flex items-center justify-center text-[#8a6a3a] shrink-0">
                     {icon}
                   </div>
                   <div>
@@ -867,16 +866,15 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             {renderCustomHtml('below_cart')}
 
             {/* Trust */}
-            <div className="relative overflow-hidden border-t border-b border-[#1a1a1a] mb-2">
-              <div className="absolute top-0 left-0 right-0 h-[2px] bg-[#faecd8]" />
+            <div className="mb-2 trust-badges-wrap">
               <div className="flex">
                 {[
-                  { icon: <Truck size={19}/>, label: "شحن سريع", sub: "3-5 أيام عمل" },
-                  { icon: <Eye size={19}/>, label: "معاينة الطلب", sub: "وقت الاستلام" },
-                  { icon: <ShieldCheck size={19}/>, label: "استرجاع سهل", sub: "خلال 14 يوم" },
+                  { icon: <Truck size={22}/>, label: "شحن سريع", sub: "3-5 أيام عمل" },
+                  { icon: <Eye size={22}/>, label: "معاينة الطلب", sub: "وقت الاستلام" },
+                  { icon: <ShieldCheck size={22}/>, label: "استرجاع سهل", sub: "خلال 14 يوم" },
                 ].map(({ icon, label, sub }, i, arr) => (
-                  <div key={label} className={`flex-1 flex flex-col items-center justify-center gap-[7px] py-4 px-2 text-center ${i < arr.length - 1 ? "border-l border-[#e8e8e8]" : ""}`}>
-                    <div className="w-9 h-9 bg-[#fdf6ec] border border-[#f0dfc4] flex items-center justify-center text-[#8a6a3a] shrink-0">
+                  <div key={label} className={`trust-badge-item flex-1 flex flex-col items-center justify-center gap-[7px] py-4 px-2 text-center ${i < arr.length - 1 ? "border-l border-[#e8e8e8]" : ""}`}>
+                    <div className="w-10 h-10 bg-[#fdf6ec] border border-[#f0dfc4] flex items-center justify-center text-[#8a6a3a] shrink-0">
                       {icon}
                     </div>
                     <div>
