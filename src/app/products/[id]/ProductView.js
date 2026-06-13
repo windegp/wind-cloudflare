@@ -298,15 +298,15 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
   // Breadcrumb مشترك
   const Breadcrumb = ({ className = "" }) => (
-    <nav className={`flex items-center gap-2 text-[11px] text-[#AAAAAA] flex-wrap ${className}`}>
+       <nav className={`flex items-center gap-4 text-[12px] text-[#AAAAAA] flex-wrap ${className}`}>You said: هل تم مراعاة فيها ان التجاه من اليمين للشمال ؟
       <Link href="/" className="hover:text-[#111111] transition-colors">الرئيسية</Link>
       {breadcrumbCat && (
         <>
-          <span className="text-[#DDDDDD]">/</span>
+          <span className="text-[#DDDDDD]">‹</span>
           <Link href={breadcrumbCat.href} className="hover:text-[#111111] transition-colors">{breadcrumbCat.cleanName}</Link>
         </>
       )}
-      <span className="text-[#DDDDDD]">/</span>
+      <span className="text-[#DDDDDD]">‹</span>
       <span className="text-[#333333] font-medium truncate max-w-[300px]">{product.title}</span>
     </nav>
   );
@@ -336,7 +336,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
       <div className="lg:hidden">
 
         {/* Breadcrumb Mobile */}
-        <div className="px-5 py-3" dir="rtl">
+        <div className="px-5 pt-3 pb-5" dir="rtl">
           <Breadcrumb />
         </div>
 
@@ -357,15 +357,15 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             <Heart size={17} fill={isWishlisted ? "#111" : "none"} color={isWishlisted ? "#111" : "#333"} />
           </button>
 
-          {/* Zoom Plus — bottom right, inside circle */}
+         {/* Zoom Plus — bottom right, inside circle */}
           <button onClick={(e) => { e.stopPropagation(); openGallery(activeIdx); }} className="absolute bottom-4 right-4 z-10 w-9 h-9 rounded-full bg-white flex items-center justify-center shadow-sm cursor-zoom-in">
-            <Search size={17} className="text-[#333]" strokeWidth={1.5} />
+            <span className="text-[#333] text-[20px] leading-none font-light">+</span>
           </button>
           </div>
         </div>
 
-        {/* Mobile Dots Navigation */}
-        <div className="flex items-center justify-center gap-2 py-3">
+         {/* Mobile Dots Navigation */}
+        <div className="flex items-center justify-center gap-2 py-5">
           {gallery.map((_, idx) => (
             <button
               key={idx}
@@ -374,8 +374,8 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             >
               <span className={`rounded-full block transition-all duration-300 ease-in-out ${
                 activeIdx === idx
-                  ? "w-4 h-4 bg-white border-2 border-black/30"
-                  : "w-2 h-2 bg-black/80"
+                  ? "w-5 h-5 bg-white border-2 border-black"
+                  : "w-2.5 h-2.5 bg-black/80"
               }`} />
             </button>
           ))}
