@@ -359,14 +359,9 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           onTouchEnd={handleHeroTouchEnd}
         >
           <img key={activeImage} src={getImageUrl(activeImage)} alt={product.title} className="w-full h-full object-cover transition-all duration-500 ease-out" />
-          {/* Heart + likes count — top right */}
-          <button onClick={handleWishlistToggle} className="absolute top-4 right-4 z-10 flex items-center gap-1 bg-white rounded-full shadow-sm px-2.5 h-9">
+          {/* Heart — top right */}
+          <button onClick={handleWishlistToggle} className="absolute top-4 right-4 z-10 w-9 h-9 rounded-full bg-white flex items-center justify-center shadow-sm">
             <Heart size={15} fill={isWishlisted ? "#111" : "none"} color={isWishlisted ? "#111" : "#333"} />
-            {realLikesCount > 0 && (
-              <span className="text-[11px] text-[#333] font-medium leading-none">
-                {realLikesCount > 999 ? (realLikesCount/1000).toFixed(1)+'K' : realLikesCount}
-              </span>
-            )}
           </button>
 
           {/* Zoom Plus — bottom right, inside circle */}
@@ -420,26 +415,44 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             </span>
           </a>
 
-          {/* Price */}
-          <div className="flex items-baseline gap-2 mb-1">
+           {/* Price */}
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             <span className="text-[22px] font-normal text-[#C0392B] tracking-[0.01em]">{product.price}</span>
             <span className="text-xs text-[#999]">ج.م</span>
             {product.compareAtPrice && <span className="text-xs text-[#BBBBBB] line-through">{product.compareAtPrice} ج.م</span>}
+            {product.compareAtPrice && (() => {
+              const orig = parseFloat(String(product.compareAtPrice).replace(/[^0-9.]/g, ''));
+              const curr = parseFloat(String(product.price).replace(/[^0-9.]/g, ''));
+              const pct = orig > curr ? Math.round((orig - curr) / orig * 100) : 0;
+              return pct > 0 ? (
+                <span className="text-[11px] font-bold bg-[#fdecea] text-[#C0392B] px-2 py-0.5 rounded-full">{pct}%</span>
+              ) : null;
+            })()}
           </div>
-          <div className="flex items-center gap-1.5 mb-5">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-            <span className="text-[11px] text-[#888]">{product?.quantity > 0 || product?.sellOutOfStock === "Yes" ? "متوفر" : "غير متوفر"}</span>
-          </div>
-
           {/* Short Desc */}
           {product.description && (
-            <div className="mb-6 pb-6 border-b border-[#F0F0F0]">
+            <div className="mb-5 pb-5 border-b border-[#F0F0F0]">
               <p className="text-[13px] leading-[1.8] text-[#777]">{shortDescription}</p>
-              <button onClick={() => setDescModalOpen(true)} className="text-[#333] text-[12px] flex items-center gap-1.5 hover:underline underline-offset-4 mt-2">
+              <button onClick={() => setDescModalOpen(true)} className="text-[12px] flex items-center gap-1.5 mt-2 px-3 py-1.5 rounded-full bg-[#fdf6ec]/80 text-[#8a6a3a] hover:bg-[#fdf6ec] transition-colors">
                 <Info size={12} /> عرض تفاصيل المنتج والخامات
               </button>
             </div>
           )}
+
+          {/* Stock Status */}
+          <div className="flex items-center gap-2 mb-5">
+            {product?.quantity > 0 || product?.sellOutOfStock === "Yes" ? (
+              <>
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_6px_2px_rgba(16,185,129,0.4)]"></span>
+                <span className="text-[13px] font-medium text-emerald-600">متوفر في المخزون</span>
+              </>
+            ) : (
+              <>
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500"></span>
+                <span className="text-[13px] font-medium text-red-500">غير متوفر في المخزون</span>
+              </>
+            )}
+          </div>
 
           {/* Colors */}
           {safeColors.length > 0 && (
