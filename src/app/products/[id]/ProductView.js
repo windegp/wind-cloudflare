@@ -530,7 +530,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                 </div>
               )}
             </div>
-          </div>
+          )}
 
           {/* Stock Status */}
           <div className="flex items-center gap-2 mb-7">
