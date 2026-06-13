@@ -298,16 +298,16 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
   // Breadcrumb مشترك
   const Breadcrumb = ({ className = "" }) => (
-    <nav className={`flex items-center gap-4 text-[12px] text-[#AAAAAA] flex-wrap ${className}`}>
-      <Link href="/" className="hover:text-[#111111] transition-colors">الرئيسية</Link>
+    <nav className={`flex items-center gap-4 text-[12px] text-[#AAAAAA] flex-nowrap overflow-hidden ${className}`}>
+      <span className="shrink-0"><Link href="/" className="hover:text-[#111111] transition-colors">الرئيسية</Link></span>
       {breadcrumbCat && (
         <>
-          <span className="text-[#DDDDDD]">‹</span>
-          <Link href={breadcrumbCat.href} className="hover:text-[#111111] transition-colors">{breadcrumbCat.cleanName}</Link>
+          <span className="text-[#DDDDDD] shrink-0">›</span>
+          <span className="shrink-0"><Link href={breadcrumbCat.href} className="hover:text-[#111111] transition-colors">{breadcrumbCat.cleanName}</Link></span>
         </>
       )}
-      <span className="text-[#DDDDDD]">‹</span>
-      <span className="text-[#333333] font-medium truncate max-w-[300px]">{product.title}</span>
+      <span className="text-[#DDDDDD] shrink-0">›</span>
+      <span className="text-[#333333] font-medium truncate min-w-0">{product.title}</span>
     </nav>
   );
 
@@ -380,7 +380,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
               >
                 <span className={`rounded-full block transition-all duration-300 ease-in-out ${
                   activeIdx === idx
-                    ? "w-3.5 h-3.5 bg-white border border-black/50"
+                    ? "w-4 h-4 bg-white border border-black/50"
                     : "w-2 h-2 bg-black/80"
                 }`} />
               </button>
