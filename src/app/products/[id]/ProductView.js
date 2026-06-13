@@ -340,7 +340,22 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           <Breadcrumb />
         </div>
 
+        {/* Mobile Content Top (before hero) */}
+        <div className="px-5 pt-5 pb-4" dir="rtl">
+          {renderCustomHtml('above_title')}
+          {breadcrumbCat && (
+            <p className="text-[10px] text-[#AAAAAA] tracking-[0.1em] uppercase mb-2 font-medium">{breadcrumbCat.cleanName}</p>
+          )}
+          <h1 className="text-[22px] font-medium text-[#111] tracking-tight leading-[1.15] mb-3">{product.title}</h1>
+          <div className="flex items-baseline gap-2 mb-1">
+            <span className="text-[22px] font-normal text-[#C0392B] tracking-[0.01em]">{product.price}</span>
+            <span className="text-xs text-[#999]">ج.م</span>
+            {product.compareAtPrice && <span className="text-xs text-[#BBBBBB] line-through">{product.compareAtPrice} ج.م</span>}
+          </div>
+        </div>
+
         {/* Hero Image */}
+        <div className="px-4 bg-white">
         <div
           className="relative w-full aspect-[3/4] bg-[#F7F7F7] overflow-hidden"
           onClick={() => openGallery(activeIdx)}
@@ -349,24 +364,33 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           onTouchEnd={handleHeroTouchEnd}
         >
           <img key={activeImage} src={getImageUrl(activeImage)} alt={product.title} className="w-full h-full object-cover transition-all duration-500 ease-out" />
-          <button onClick={(e) => { e.stopPropagation(); openGallery(activeIdx); }} className="absolute top-4 right-4 z-10 bg-white/85 p-2.5 rounded-full border border-[#E0E0E0] text-[#333] hover:bg-white transition-all duration-300 cursor-zoom-in">
-            <Search size={17} />
+          {/* Heart — top right */}
+          <button onClick={handleWishlistToggle} className="absolute top-3 right-3 z-10">
+            <Heart size={20} fill={isWishlisted ? "#111" : "none"} color={isWishlisted ? "#111" : "#333"} />
           </button>
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none z-10 bg-white/85 px-3 py-1.5 rounded-full border border-[#E0E0E0] text-[10px] text-[#555] tracking-[0.08em]">
-            {activeIdx + 1} / {gallery.length}
+
+          {/* Zoom — bottom left */}
+          <button onClick={(e) => { e.stopPropagation(); openGallery(activeIdx); }} className="absolute bottom-4 left-4 z-10 cursor-zoom-in">
+            <Search size={18} className="text-[#333]" />
+          </button>
           </div>
         </div>
 
-        {/* Mobile Thumbnails */}
-        <div className="overflow-x-auto hide-scrollbar-horizontal border-b border-[#F2F2F2]">
-          <div className="flex gap-2 px-5 py-3" dir="rtl">
-            {gallery.map((img, idx) => (
-              <button key={idx} onClick={() => { setActiveImage(img); setActiveIdx(idx); }}
-                className={`flex-shrink-0 w-[56px] h-[74px] overflow-hidden border transition-all duration-200 ${activeIdx === idx ? 'border-black' : 'border-[#E5E5E5] opacity-55 hover:opacity-80'}`}>
-                <img src={getImageUrl(img)} alt="" className="w-full h-full object-cover" />
-              </button>
-            ))}
-          </div>
+        {/* Mobile Dots Navigation */}
+        <div className="flex items-center justify-center gap-2 py-3">
+          {gallery.map((_, idx) => (
+            <button
+              key={idx}
+              onClick={() => { setActiveImage(gallery[idx]); setActiveIdx(idx); }}
+              className="flex items-center justify-center"
+            >
+              {activeIdx === idx ? (
+                <span className="w-3 h-3 rounded-full bg-white border border-black/40 block" />
+              ) : (
+                <span className="w-2 h-2 rounded-full bg-black/80 block" />
+              )}
+            </button>
+          ))}
         </div>
 
         {/* Mobile Content */}
