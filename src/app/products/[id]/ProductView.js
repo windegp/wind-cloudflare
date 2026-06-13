@@ -336,23 +336,11 @@ export default function ProductView({ initialProduct, sourceCategory }) {
       <div className="lg:hidden">
 
         {/* Breadcrumb Mobile */}
-        <div className="px-5 py-3 border-b border-[#F2F2F2]" dir="rtl">
+        <div className="px-5 py-3" dir="rtl">
           <Breadcrumb />
         </div>
 
-        {/* Mobile Content Top (before hero) */}
-        <div className="px-5 pt-5 pb-4" dir="rtl">
-          {renderCustomHtml('above_title')}
-          {breadcrumbCat && (
-            <p className="text-[10px] text-[#AAAAAA] tracking-[0.1em] uppercase mb-2 font-medium">{breadcrumbCat.cleanName}</p>
-          )}
-          <h1 className="text-[22px] font-medium text-[#111] tracking-tight leading-[1.15] mb-3">{product.title}</h1>
-          <div className="flex items-baseline gap-2 mb-1">
-            <span className="text-[22px] font-normal text-[#C0392B] tracking-[0.01em]">{product.price}</span>
-            <span className="text-xs text-[#999]">ج.م</span>
-            {product.compareAtPrice && <span className="text-xs text-[#BBBBBB] line-through">{product.compareAtPrice} ج.م</span>}
-          </div>
-        </div>
+      
 
         {/* Hero Image */}
         <div className="px-4 bg-white">
@@ -364,14 +352,14 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           onTouchEnd={handleHeroTouchEnd}
         >
           <img key={activeImage} src={getImageUrl(activeImage)} alt={product.title} className="w-full h-full object-cover transition-all duration-500 ease-out" />
-          {/* Heart — top right */}
-          <button onClick={handleWishlistToggle} className="absolute top-3 right-3 z-10">
-            <Heart size={20} fill={isWishlisted ? "#111" : "none"} color={isWishlisted ? "#111" : "#333"} />
+          {/* Heart — top right, inside circle */}
+          <button onClick={handleWishlistToggle} className="absolute top-4 right-4 z-10 w-9 h-9 rounded-full bg-white flex items-center justify-center shadow-sm">
+            <Heart size={17} fill={isWishlisted ? "#111" : "none"} color={isWishlisted ? "#111" : "#333"} />
           </button>
 
-          {/* Zoom — bottom left */}
-          <button onClick={(e) => { e.stopPropagation(); openGallery(activeIdx); }} className="absolute bottom-4 left-4 z-10 cursor-zoom-in">
-            <Search size={18} className="text-[#333]" />
+          {/* Zoom Plus — bottom right, inside circle */}
+          <button onClick={(e) => { e.stopPropagation(); openGallery(activeIdx); }} className="absolute bottom-4 right-4 z-10 w-9 h-9 rounded-full bg-white flex items-center justify-center shadow-sm cursor-zoom-in">
+            <Search size={17} className="text-[#333]" strokeWidth={1.5} />
           </button>
           </div>
         </div>
@@ -382,13 +370,13 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             <button
               key={idx}
               onClick={() => { setActiveImage(gallery[idx]); setActiveIdx(idx); }}
-              className="flex items-center justify-center"
+              className="flex items-center justify-center w-5 h-5"
             >
-              {activeIdx === idx ? (
-                <span className="w-3 h-3 rounded-full bg-white border border-black/40 block" />
-              ) : (
-                <span className="w-2 h-2 rounded-full bg-black/80 block" />
-              )}
+              <span className={`rounded-full block transition-all duration-300 ease-in-out ${
+                activeIdx === idx
+                  ? "w-4 h-4 bg-white border-2 border-black/30"
+                  : "w-2 h-2 bg-black/80"
+              }`} />
             </button>
           ))}
         </div>
