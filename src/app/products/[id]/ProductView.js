@@ -94,6 +94,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
       pendingActionRef.current += 1;
     }
     localStorage.setItem('wind_wishlist', JSON.stringify(newWishlist));
+     mutate(`product-${product.id}`);
     if (likeTimeoutRef.current) clearTimeout(likeTimeoutRef.current);
     likeTimeoutRef.current = setTimeout(async () => {
       const netChange = pendingActionRef.current;

@@ -239,13 +239,14 @@ export default function ReviewsAdminPage() {
       }
 
       // تحديث الواجهة أوتوماتيك
-      setProducts(products.map(p => p.id === productId ? { 
+       setProducts(products.map(p => p.id === productId ? { 
         ...p, 
         likesCount: newLikes, 
         likesUpdatedAt: updateTime,
         currentWeekId: updateData.currentWeekId || p.currentWeekId,
         weeklyLikesCount: updateData.weeklyLikesCount
       } : p));
+      setEditingLikes(prev => ({ ...prev, [productId]: newLikes }));
     } catch (error) {
       console.error("Error updating likes:", error);
       alert("حدث خطأ أثناء تحديث الإعجابات.");
