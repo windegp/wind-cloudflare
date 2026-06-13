@@ -431,7 +431,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           </div>
           {/* Short Desc */}
           {product.description && (
-            <div className="mb-8">
+            <div className="mb-10">
               <p className="text-[13px] leading-[1.8] text-[#777]">{shortDescription}</p>
               <button onClick={() => setDescModalOpen(true)} className="text-[12px] flex items-center gap-1.5 mt-2 px-3 py-1.5 rounded-full bg-[#fdf6ec] text-[#8a6a3a] hover:bg-[#faecd8] transition-colors">
                 <Info size={12} /> عرض تفاصيل المنتج والخامات
@@ -441,8 +441,8 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
         {/* Colors */}
           {safeColors.length > 0 && (
-            <div className="mb-7">
-              <div className="flex items-baseline gap-2 mb-4">
+            <div className="mb-9">
+              <div className="flex items-baseline gap-2 mb-5">
                 <span className="text-[15px] text-[#111] font-bold">اللون:</span>
                 {selectedColor && <span className="text-[15px] text-[#111] capitalize">{selectedColor}</span>}
               </div>
@@ -467,7 +467,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
            {/* Sizes */}
           {safeSizes.length > 0 && (
             <div className="mb-7">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-5">
                 <div className="flex items-baseline gap-2">
                   <span className="text-[15px] text-[#111] font-bold">المقاس:</span>
                   {selectedSize && <span className="text-[15px] text-[#111] capitalize">{selectedSize}</span>}
@@ -514,40 +514,54 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             <div className="flex gap-3">
               <button
                 onClick={() => { addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity}); setQuantity(1); }}
-                className="flex-1 text-[14px] font-medium py-3.5 flex items-center justify-center btn-shake border border-black/70 rounded-sm text-[#111] bg-white hover:bg-[#f5f5f5] transition-colors"
+                className="flex-1 text-[14px] font-medium py-3 flex items-center justify-center btn-shake border border-black/70 rounded-sm text-[#111] bg-white hover:bg-[#f5f5f5] transition-colors"
                 style={{letterSpacing:'0.04em'}}
               >
                 أضف إلى السلة
               </button>
-              <div className="flex items-center justify-between bg-white border border-[#E0E0E0] px-1 w-[72px] shrink-0 rounded-sm">
+              <div className="flex items-center justify-between bg-[#F2F2F2] border border-[#E0E0E0] px-1 w-[72px] shrink-0 rounded-sm">
                 <button onClick={() => setQuantity(q => q + 1)} className="text-[#888] hover:text-black p-1"><Plus size={13} /></button>
                 <span className="text-[#111] text-sm font-medium">{quantity}</span>
                 <button onClick={() => setQuantity(q => q > 1 ? q-1 : 1)} className="text-[#888] hover:text-black p-1"><Minus size={13} /></button>
               </div>
             </div>
+
+            {/* Secure Checkout Badge */}
+            <div className="mt-3 bg-[#fafafa] border border-[#e8e8e8] rounded-md px-4 py-3 flex items-center gap-3">
+              <div className="flex items-center justify-center shrink-0">
+                <div className="relative w-[18px] h-[20px]">
+                  <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[10px] h-[8px] border-2 border-[#1a1a1a] border-b-0 rounded-t-full"></div>
+                  <div className="absolute bottom-0 left-0 w-[18px] h-[13px] bg-[#1a1a1a] rounded-sm flex items-center justify-center">
+                    <div className="w-[3px] h-[5px] bg-[#fafafa] rounded-sm"></div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex-1 text-[12px] text-[#4a4a4a] leading-snug">
+                Guaranteed <span className="font-semibold text-[#1a1a1a]">secure & safe</span> checkout.
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <img src="https://cdn.shopify.com/s/files/1/0744/2726/9319/files/visa.svg?v=1766783643" alt="Visa" className="h-7 w-auto" />
+                <img src="https://cdn.shopify.com/s/files/1/0744/2726/9319/files/mastercard.svg?v=1766783719" alt="Mastercard" className="h-7 w-auto" />
+              </div>
+            </div>
+
+            {/* Trust Badges */}
+            <div className="mt-2 grid grid-cols-3 gap-px bg-[#EBEBEB]">
+              {[
+                { icon: <Truck size={12}/>, label: "شحن سريع" },
+                { icon: <Eye size={12}/>, label: "معاينة" },
+                { icon: <ShieldCheck size={12}/>, label: "استرجاع سهل" },
+              ].map(({ icon, label }) => (
+                <div key={label} className="flex items-center gap-1.5 text-[10px] text-[#777] justify-center bg-white py-3">
+                  <span className="text-[#333]">{icon}</span>{label}
+                </div>
+              ))}
+            </div>
+
             {renderCustomHtml('below_cart')}
           </div>
 
-          {/* Trust */}
-          <div className="mt-5 grid grid-cols-3 gap-px bg-[#EBEBEB]">
-            {[
-              { icon: <Truck size={12}/>, label: "شحن سريع" },
-              { icon: <Eye size={12}/>, label: "معاينة" },
-              { icon: <ShieldCheck size={12}/>, label: "استرجاع سهل" },
-            ].map(({ icon, label }) => (
-              <div key={label} className="flex items-center gap-1.5 text-[10px] text-[#777] justify-center bg-white py-3">
-                <span className="text-[#333]">{icon}</span>{label}
-              </div>
-            ))}
-          </div>
-          <div className="mt-2 flex items-center justify-between bg-[#FAFAFA] py-3 px-4 border border-[#EBEBEB]">
-            <div className="flex items-center gap-1.5 text-[10px] text-[#777]"><ShieldCheck size={12} className="text-[#333]" /> دفع آمن 100%</div>
-            <div className="flex items-center gap-2.5 text-[#AAAAAA]">
-              <CreditCard size={15} /><Banknote size={15} />
-              <span className="border border-[#E0E0E0] px-1.5 py-0.5 text-[8px] text-[#333]">INSTAPAY</span>
-              <span className="border border-[#E0E0E0] px-1.5 py-0.5 text-[8px] text-[#333]">VISA</span>
-            </div>
-          </div>
+          
 
           {/* Accordion Mobile */}
           {product.description && (
@@ -896,12 +910,12 @@ export default function ProductView({ initialProduct, sourceCategory }) {
         .btn-breathe { animation: breathe 5s ease-in-out infinite }
         .btn-breathe:hover { animation:none }
 
-        @keyframes shake {
-          0%,100% { transform:translateX(0) }
-          20% { transform:translateX(-3px) }
-          40% { transform:translateX(3px) }
-          60% { transform:translateX(-2px) }
-          80% { transform:translateX(2px) }
+         @keyframes shake {
+          0%, 90%, 100% { transform:translateX(0) }
+          92% { transform:translateX(-4px) }
+          94% { transform:translateX(4px) }
+          96% { transform:translateX(-3px) }
+          98% { transform:translateX(3px) }
         }
         .btn-shake { animation: shake 5s ease-in-out infinite }
         .btn-shake:hover { animation:none }
