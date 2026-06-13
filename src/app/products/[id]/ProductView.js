@@ -530,7 +530,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                 </div>
               )}
             </div>
-          )}
+          </div>
 
           {/* Stock Status */}
           <div className="flex items-center gap-2 mb-7">
@@ -574,8 +574,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           </div>
 
           {/* Add to Cart Mobile — New Sticky */}
-          {isStickyVisible && (
-            <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#E8E8E8] px-4 py-3 z-50 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]">
+          <div className={`fixed bottom-0 left-0 right-0 bg-white border-t border-[#E8E8E8] px-4 py-3 z-50 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] transition-transform duration-300 ease-out ${isStickyVisible ? "translate-y-0" : "translate-y-full"}`}>
 
               {/* Options Popup */}
               {isStickyOptionsOpen && stickyCombinations.length > 0 && (
