@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, usePathname } from "next/navigation";
 import Link from "next/link";
 import { products as staticProducts } from "../../../lib/products";
@@ -665,22 +665,20 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           </div>
 
          {/* Trust Badges */}
-          <div className="mt-2 trust-badges-wrap">
-            <div className="flex">
+          <div className="mt-2 border-t border-b border-[#111]">
+            <div className="flex items-center justify-center py-3 px-2 gap-0">
               {[
-                { icon: <Truck size={22}/>, label: "شحن سريع", sub: "3-5 أيام عمل" },
-                { icon: <Eye size={22}/>, label: "معاينة الطلب", sub: "وقت الاستلام" },
-                { icon: <ShieldCheck size={22}/>, label: "استرجاع سهل", sub: "خلال 14 يوم" },
-              ].map(({ icon, label, sub }, i, arr) => (
-                <div key={label} className={`trust-badge-item flex-1 flex flex-col items-center justify-center gap-[7px] py-4 px-2 text-center ${i < arr.length - 1 ? "border-l border-[#e8e8e8]" : ""}`}>
-                  <div className="w-10 h-10 bg-[#fdf6ec] border border-[#f0dfc4] flex items-center justify-center text-[#8a6a3a] shrink-0">
-                    {icon}
+                { icon: <Truck size={14}/>, label: "توصيل سريع" },
+                { icon: <Eye size={14}/>, label: "معاينة الطلبات" },
+                { icon: <ShieldCheck size={14}/>, label: "استرجاع سهل" },
+              ].map(({ icon, label }, i, arr) => (
+                <React.Fragment key={label}>
+                  <div className="flex items-center gap-1.5 px-3">
+                    <span className="text-[#111]">{icon}</span>
+                    <span className="text-[12px] font-medium text-[#111] whitespace-nowrap">{label}</span>
                   </div>
-                  <div>
-                    <span className="block text-[11.5px] font-semibold text-[#111] leading-tight">{label}</span>
-                    <span className="block text-[10px] text-[#999] leading-relaxed">{sub}</span>
-                  </div>
-                </div>
+                  {i < arr.length - 1 && <span className="w-[3px] h-[3px] rounded-full bg-[#ccc] shrink-0" />}
+                </React.Fragment>
               ))}
             </div>
           </div>
@@ -866,22 +864,20 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             {renderCustomHtml('below_cart')}
 
             {/* Trust */}
-            <div className="mb-2 trust-badges-wrap">
-              <div className="flex">
+            <div className="mb-2 border-t border-b border-[#111]">
+              <div className="flex items-center justify-center py-3 px-2 gap-0">
                 {[
-                  { icon: <Truck size={22}/>, label: "شحن سريع", sub: "3-5 أيام عمل" },
-                  { icon: <Eye size={22}/>, label: "معاينة الطلب", sub: "وقت الاستلام" },
-                  { icon: <ShieldCheck size={22}/>, label: "استرجاع سهل", sub: "خلال 14 يوم" },
-                ].map(({ icon, label, sub }, i, arr) => (
-                  <div key={label} className={`trust-badge-item flex-1 flex flex-col items-center justify-center gap-[7px] py-4 px-2 text-center ${i < arr.length - 1 ? "border-l border-[#e8e8e8]" : ""}`}>
-                    <div className="w-10 h-10 bg-[#fdf6ec] border border-[#f0dfc4] flex items-center justify-center text-[#8a6a3a] shrink-0">
-                      {icon}
+                  { icon: <Truck size={14}/>, label: "توصيل سريع" },
+                  { icon: <Eye size={14}/>, label: "معاينة الطلبات" },
+                  { icon: <ShieldCheck size={14}/>, label: "استرجاع سهل" },
+                ].map(({ icon, label }, i, arr) => (
+                  <>
+                    <div key={label} className="flex items-center gap-1.5 px-3">
+                      <span className="text-[#111]">{icon}</span>
+                      <span className="text-[12px] font-medium text-[#111] whitespace-nowrap">{label}</span>
                     </div>
-                    <div>
-                      <span className="block text-[11.5px] font-semibold text-[#111] leading-tight">{label}</span>
-                      <span className="block text-[10px] text-[#999] leading-relaxed">{sub}</span>
-                    </div>
-                  </div>
+                    {i < arr.length - 1 && <span key={`dot-${i}`} className="w-[3px] h-[3px] rounded-full bg-[#ccc] shrink-0" />}
+                  </>
                 ))}
               </div>
             </div>
@@ -1054,18 +1050,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
         .btn-shake { animation: shake 5s ease-in-out infinite }
         .btn-shake:hover { animation:none }
 
-        /* Trust badges reveal */
-        .trust-badge-item {
-          opacity: 0;
-          transform: translateY(18px);
-          transition: opacity 0.5s ease, transform 0.5s ease;
-        }
-        .trust-badge-item.is-visible {
-          opacity: 1;
-          transform: translateY(0);
-        }
-        .trust-badge-item:nth-child(2) { transition-delay: 0.1s; }
-        .trust-badge-item:nth-child(3) { transition-delay: 0.2s; }
+      
       `}</style>
     </div>
   );
