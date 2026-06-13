@@ -48,6 +48,9 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   const likeTimeoutRef   = useRef(null);
   const pendingActionRef = useRef(0);
   const [thumbScrollTop, setThumbScrollTop] = useState(0);
+  const [isStickyVisible, setIsStickyVisible] = useState(true);
+  const [isStickyOptionsOpen, setIsStickyOptionsOpen] = useState(false);
+  const addToCartBtnRef = useRef(null);
   const VISIBLE_THUMBS = 6;
 
    const likesFromServerRef = useRef(null);
@@ -155,6 +158,16 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   useEffect(() => { if (!loading && product) { signalPageReady(); } }, [loading, product, pathname, signalPageReady]);
   useEffect(() => { setQuantity(1); }, [id, selectedSize, selectedColor]);
 
+  useEffect(() => {
+    if (!addToCartBtnRef.current) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsStickyVisible(!entry.isIntersecting),
+      { threshold: 0 }
+    );
+    observer.observe(addToCartBtnRef.current);
+    return () => observer.disconnect();
+  }, [product]);
+
   const shortDescription = useMemo(() => {
     if (!product?.description) return "";
     let clean = product.description.replace(/<h[1-6][^>]*>[\s\S]*?<\/h[1-6]>/gi, "");
@@ -250,16 +263,40 @@ export default function ProductView({ initialProduct, sourceCategory }) {
     touchStartX.current = null; touchStartY.current = null;
   };
 
-  let safeSizes = [], safeColors = [];
-  if (product.options && Array.isArray(product.options)) {
-    product.options.forEach(opt => {
-      const n = (opt.name || "").toLowerCase();
-      if (n.includes("size") || n === "المقاس" || n === "مقاس") safeSizes  = opt.values.split(",").map(s => s.trim()).filter(Boolean);
-      if (n.includes("color")|| n === "اللون"  || n === "لون")  safeColors = opt.values.split(",").map(c => c.trim()).filter(Boolean);
-    });
-  }
-  if (!safeSizes.length)  safeSizes  = Array.isArray(product.options?.sizes)  ? product.options.sizes  : (Array.isArray(product.sizes)  ? product.sizes  : []);
-  if (!safeColors.length) safeColors = Array.isArray(product.options?.colors) ? product.options.colors : [];
+  const safeSizes = useMemo(() => {
+    let sizes = [];
+    if (product?.options && Array.isArray(product.options)) {
+      product.options.forEach(opt => {
+        const n = (opt.name || "").toLowerCase();
+        if (n.includes("size") || n === "المقاس" || n === "مقاس") sizes = opt.values.split(",").map(s => s.trim()).filter(Boolean);
+      });
+    }
+    if (!sizes.length) sizes = Array.isArray(product?.options?.sizes) ? product.options.sizes : (Array.isArray(product?.sizes) ? product.sizes : []);
+    return sizes;
+  }, [product]);
+
+  const safeColors = useMemo(() => {
+    let colors = [];
+    if (product?.options && Array.isArray(product.options)) {
+      product.options.forEach(opt => {
+        const n = (opt.name || "").toLowerCase();
+        if (n.includes("color") || n === "اللون" || n === "لون") colors = opt.values.split(",").map(c => c.trim()).filter(Boolean);
+      });
+    }
+    if (!colors.length) colors = Array.isArray(product?.options?.colors) ? product.options.colors : [];
+    return colors;
+  }, [product]);
+
+  const stickyCombinations = useMemo(() => {
+    const colorNames = safeColors.map(c => typeof c === "string" ? c : c.name).filter(Boolean);
+    const sizes = safeSizes.filter(Boolean);
+    if (!colorNames.length && !sizes.length) return [];
+    if (!colorNames.length) return sizes.map(size => ({ label: size, color: "", size }));
+    if (!sizes.length) return colorNames.map(color => ({ label: color, color, size: "" }));
+    const result = [];
+    colorNames.forEach(color => sizes.forEach(size => result.push({ label: `${color} / ${size}`, color, size })));
+    return result;
+  }, [safeColors, safeSizes]);
 
   const currentColorImage = () => {
     if (!selectedColor) return gallery[1] || activeImage;
@@ -509,23 +546,71 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             )}
           </div>
 
-          {/* Add to Cart Mobile */}
-          <div className="sticky bottom-0 bg-white pt-3 pb-2 -mx-5 px-5">
-            <div className="flex gap-3">
-              <button
-                onClick={() => { addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity}); setQuantity(1); }}
-                className="flex-1 text-[14px] font-medium py-3 flex items-center justify-center btn-shake border border-black/70 rounded-sm text-[#111] bg-white hover:bg-[#f5f5f5] transition-colors"
-                style={{letterSpacing:'0.04em'}}
-              >
-                أضف إلى السلة
-              </button>
-              <div className="flex items-center justify-between bg-[#F2F2F2] border border-[#E0E0E0] px-1 w-[72px] shrink-0 rounded-sm">
-                <button onClick={() => setQuantity(q => q + 1)} className="text-[#888] hover:text-black p-1"><Plus size={13} /></button>
-                <span className="text-[#111] text-sm font-medium">{quantity}</span>
-                <button onClick={() => setQuantity(q => q > 1 ? q-1 : 1)} className="text-[#888] hover:text-black p-1"><Minus size={13} /></button>
-              </div>
+          {/* Add to Cart Mobile — Original (not sticky) */}
+          <div ref={addToCartBtnRef} className="flex gap-3 mb-2">
+            <button
+              onClick={() => { addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity}); setQuantity(1); }}
+              className="flex-1 text-[14px] font-medium py-3 flex items-center justify-center btn-shake border border-black/70 rounded-sm text-[#111] bg-white hover:bg-[#f5f5f5] transition-colors"
+              style={{letterSpacing:'0.04em'}}
+            >
+              أضف إلى السلة
+            </button>
+            <div className="flex items-center justify-between bg-[#F2F2F2] border border-[#E0E0E0] px-1 w-[72px] shrink-0 rounded-sm">
+              <button onClick={() => setQuantity(q => q + 1)} className="text-[#888] hover:text-black p-1"><Plus size={13} /></button>
+              <span className="text-[#111] text-sm font-medium">{quantity}</span>
+              <button onClick={() => setQuantity(q => q > 1 ? q-1 : 1)} className="text-[#888] hover:text-black p-1"><Minus size={13} /></button>
             </div>
           </div>
+
+          {/* Add to Cart Mobile — New Sticky */}
+          {isStickyVisible && (
+            <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#E8E8E8] px-4 py-3 z-50 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]">
+
+              {/* Options Popup */}
+              {isStickyOptionsOpen && stickyCombinations.length > 0 && (
+                <div className="absolute bottom-full left-0 right-0 bg-white border border-[#E0E0E0] shadow-lg max-h-[50vh] overflow-y-auto mb-0 mx-0">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-[#F0F0F0]">
+                    <span className="text-[12px] text-[#999]">اختر المقاس واللون</span>
+                    <button onClick={() => setIsStickyOptionsOpen(false)}><X size={15} className="text-[#999]" /></button>
+                  </div>
+                  {stickyCombinations.map((combo, i) => {
+                    const isSelected = combo.color === selectedColor && combo.size === selectedSize;
+                    return (
+                      <button key={i} onClick={() => { if (combo.color) setSelectedColor(combo.color); if (combo.size) setSelectedSize(combo.size); setIsStickyOptionsOpen(false); }}
+                        className={`w-full flex items-center justify-between px-4 py-3.5 border-b border-[#F5F5F5] text-right transition-colors ${isSelected ? "bg-[#F5F5F5]" : "hover:bg-[#FAFAFA]"}`}>
+                        <span className={`text-[13px] ${isSelected ? "font-medium text-[#111]" : "text-[#444]"}`}>{combo.label}</span>
+                        {isSelected && <span className="w-2 h-2 rounded-full bg-black shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                {/* Options Button */}
+                {stickyCombinations.length > 0 && (
+                  <button
+                    onClick={() => setIsStickyOptionsOpen(o => !o)}
+                    className="flex items-center justify-between gap-2 border border-[#E0E0E0] px-3 h-[48px] bg-white rounded-sm flex-1"
+                  >
+                    <span className="text-[12px] text-[#444] truncate">
+                      {[selectedColor, selectedSize].filter(Boolean).join(' / ') || "اختر"}
+                    </span>
+                    <ChevronDown size={13} className="text-[#111] shrink-0" />
+                  </button>
+                )}
+
+                {/* Add to Cart */}
+                <button
+                  onClick={() => { addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity}); setQuantity(1); }}
+                  className="flex-1 text-[13px] font-medium h-[48px] flex items-center justify-center rounded-sm text-white bg-black hover:bg-[#222] transition-colors"
+                  style={{letterSpacing:'0.04em'}}
+                >
+                  أضف إلى السلة
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Secure Checkout Badge */}
           <div className="mt-3 bg-[#fafafa] border border-[#e8e8e8] rounded-md px-4 py-3 flex items-center gap-3">
