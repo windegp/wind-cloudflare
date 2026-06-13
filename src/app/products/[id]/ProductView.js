@@ -664,17 +664,26 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             </div>
           </div>
 
-          {/* Trust Badges */}
-          <div className="mt-2 grid grid-cols-3 gap-px bg-[#EBEBEB]">
-            {[
-              { icon: <Truck size={12}/>, label: "شحن سريع" },
-              { icon: <Eye size={12}/>, label: "معاينة" },
-              { icon: <ShieldCheck size={12}/>, label: "استرجاع سهل" },
-            ].map(({ icon, label }) => (
-              <div key={label} className="flex items-center gap-1.5 text-[10px] text-[#777] justify-center bg-white py-3">
-                <span className="text-[#333]">{icon}</span>{label}
-              </div>
-            ))}
+         {/* Trust Badges */}
+          <div className="mt-2 relative overflow-hidden border-t border-b border-[#1a1a1a]">
+            <div className="absolute top-0 left-0 right-0 h-[2px] bg-[#faecd8]" />
+            <div className="flex">
+              {[
+                { icon: <Truck size={19}/>, label: "شحن سريع", sub: "3-5 أيام عمل" },
+                { icon: <Eye size={19}/>, label: "معاينة الطلب", sub: "وقت الاستلام" },
+                { icon: <ShieldCheck size={19}/>, label: "استرجاع سهل", sub: "خلال 14 يوم" },
+              ].map(({ icon, label, sub }, i, arr) => (
+                <div key={label} className={`flex-1 flex flex-col items-center justify-center gap-[7px] py-4 px-2 text-center ${i < arr.length - 1 ? "border-l border-[#e8e8e8]" : ""}`}>
+                  <div className="w-9 h-9 bg-[#fdf6ec] border border-[#f0dfc4] flex items-center justify-center text-[#8a6a3a] shrink-0">
+                    {icon}
+                  </div>
+                  <div>
+                    <span className="block text-[11.5px] font-semibold text-[#111] leading-tight">{label}</span>
+                    <span className="block text-[10px] text-[#999] leading-relaxed">{sub}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           {renderCustomHtml('below_cart')}
@@ -858,16 +867,25 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             {renderCustomHtml('below_cart')}
 
             {/* Trust */}
-            <div className="grid grid-cols-3 gap-px bg-[#EBEBEB] mb-2">
-              {[
-                { icon: <Truck size={13}/>, label: "شحن سريع" },
-                { icon: <Eye size={13}/>, label: "معاينة للطلب" },
-                { icon: <ShieldCheck size={13}/>, label: "استرجاع سهل" },
-              ].map(({ icon, label }) => (
-                <div key={label} className="flex items-center gap-1.5 text-[11px] text-[#777] justify-center bg-white py-4">
-                  <span className="text-[#333]">{icon}</span>{label}
-                </div>
-              ))}
+            <div className="relative overflow-hidden border-t border-b border-[#1a1a1a] mb-2">
+              <div className="absolute top-0 left-0 right-0 h-[2px] bg-[#faecd8]" />
+              <div className="flex">
+                {[
+                  { icon: <Truck size={19}/>, label: "شحن سريع", sub: "3-5 أيام عمل" },
+                  { icon: <Eye size={19}/>, label: "معاينة الطلب", sub: "وقت الاستلام" },
+                  { icon: <ShieldCheck size={19}/>, label: "استرجاع سهل", sub: "خلال 14 يوم" },
+                ].map(({ icon, label, sub }, i, arr) => (
+                  <div key={label} className={`flex-1 flex flex-col items-center justify-center gap-[7px] py-4 px-2 text-center ${i < arr.length - 1 ? "border-l border-[#e8e8e8]" : ""}`}>
+                    <div className="w-9 h-9 bg-[#fdf6ec] border border-[#f0dfc4] flex items-center justify-center text-[#8a6a3a] shrink-0">
+                      {icon}
+                    </div>
+                    <div>
+                      <span className="block text-[11.5px] font-semibold text-[#111] leading-tight">{label}</span>
+                      <span className="block text-[10px] text-[#999] leading-relaxed">{sub}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
             <div className="flex items-center justify-between bg-[#FAFAFA] py-3 px-4 border border-[#EBEBEB] mb-8">
               <div className="flex items-center gap-1.5 text-[11px] text-[#777]"><ShieldCheck size={13} className="text-[#333]" /> دفع آمن 100%</div>
