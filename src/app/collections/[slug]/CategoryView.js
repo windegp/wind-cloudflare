@@ -132,10 +132,19 @@ export default function CategoryView({ initialSlug, initialCategoryData }) {
 
       <div className="max-w-[1440px] mx-auto">
 
-        {/* ── HERO BANNER ── */}
-        {hasBanner ? (
+        {/* ── BREADCRUMBS ── */}
+<div className="px-4 md:px-8 mt-4 mb-3">
+  <div className="flex flex-wrap items-center gap-2 text-[11px] md:text-[12px] text-[#888] font-tajawal">
+    <Link href="/" className="hover:text-[#1A1A1A] transition-colors">الرئيسية</Link>
+    <span className="text-[#CCC]">/</span>
+    <span className="text-[#1A1A1A] font-semibold">{categoryData.name}</span>
+  </div>
+</div>
+
+{/* ── HERO BANNER ── */}
+{hasBanner ? (
           <div className="relative w-full bg-[#FAF8F3] overflow-hidden">
-            <div className="relative w-full aspect-[4/3] md:aspect-[16/7] max-h-[600px]">
+            <div className="relative w-full aspect-[16/9] md:aspect-[16/6] max-h-[400px]">
 
               <img
                 src={categoryData.bannerImage || categoryData.image}
@@ -143,12 +152,12 @@ export default function CategoryView({ initialSlug, initialCategoryData }) {
                 className="w-full h-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/20 to-transparent" />
-              <div className="absolute bottom-6 md:bottom-10 right-6 md:right-12">
-  <h1 className="text-white text-3xl md:text-5xl lg:text-6xl font-black tracking-tight leading-tight mb-2" style={{ fontFamily: "'Cairo', sans-serif" }}>
+              <div className="absolute inset-y-0 right-6 md:right-12 flex flex-col justify-center max-w-xs md:max-w-sm">
+  <h1 className="text-white text-xl md:text-3xl font-black tracking-tight leading-tight mb-2" style={{ fontFamily: "'Cairo', sans-serif" }}>
     {categoryData.name}
   </h1>
   {categoryData.description && (
-    <p className="text-white/75 text-sm md:text-base max-w-sm font-tajawal leading-relaxed">
+    <p className="text-white/75 text-xs md:text-sm font-tajawal leading-relaxed">
       {categoryData.description}
     </p>
   )}
@@ -176,14 +185,6 @@ export default function CategoryView({ initialSlug, initialCategoryData }) {
           </div>
         )}
 
-        {/* ── BREADCRUMBS ── */}
-        <div className="px-4 md:px-8 mt-6 mb-6">
-          <div className="flex flex-wrap items-center gap-2 text-[11px] md:text-[12px] text-[#888] font-tajawal">
-            <Link href="/" className="hover:text-[#1A1A1A] transition-colors">الرئيسية</Link>
-            <span className="text-[#CCC]">/</span>
-            <span className="text-[#1A1A1A] font-semibold">{categoryData.name}</span>
-          </div>
-        </div>
 
         {/* ── TOOLBAR (Sort + Grid View + Count) ── */}
         {showToolbar && (
