@@ -50,11 +50,16 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   const [thumbScrollTop, setThumbScrollTop] = useState(0);
   const VISIBLE_THUMBS = 6;
 
+   const likesFromServerRef = useRef(null);
+
   useEffect(() => {
     if (product?.id) {
       const savedWishlist = JSON.parse(localStorage.getItem('wind_wishlist') || '[]');
       setIsWishlisted(savedWishlist.includes(product.id));
-      setRealLikesCount(product.likesCount || 0);
+      if (likesFromServerRef.current === null) {
+        setRealLikesCount(product.likesCount || 0);
+        likesFromServerRef.current = product.likesCount || 0;
+      }
     }
   }, [product?.id, product?.likesCount]);
 
@@ -105,6 +110,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
         if (product.currentWeekId === currentWeekIdStr) { updateData.weeklyLikesCount = increment(netChange); }
         else if (netChange > 0) { updateData.weeklyLikesCount = 1; updateData.currentWeekId = currentWeekIdStr; }
         await updateDoc(productRef, updateData);
+        likesFromServerRef.current = null;
         pendingActionRef.current = 0;
         fetch('/api/revalidate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'likes', id: product.id, handle: product.handle || product.id }) })
           .then(() => { sessionStorage.removeItem(`wind_stats_${product.handle || product.id}`); mutate('homepage/data'); mutate('homepage-products-sections'); mutate(`product-${product.id}`); })
