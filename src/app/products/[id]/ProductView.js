@@ -511,7 +511,19 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
           {/* Add to Cart Mobile */}
           <div className="sticky bottom-0 bg-white pt-3 pb-2 -mx-5 px-5">
-            <div className="flex gap-3">
+            <div className="flex gap-2 items-center">
+              <div className="flex items-center justify-between bg-[#F2F2F2] border border-[#E0E0E0] px-1 w-[72px] shrink-0 rounded-sm h-[46px]">
+                <button onClick={() => setQuantity(q => q + 1)} className="text-[#888] hover:text-black p-1"><Plus size={13} /></button>
+                <span className="text-[#111] text-sm font-medium">{quantity}</span>
+                <button onClick={() => setQuantity(q => q > 1 ? q-1 : 1)} className="text-[#888] hover:text-black p-1"><Minus size={13} /></button>
+              </div>
+              {(selectedColor || selectedSize) && (
+                <div className="flex items-center gap-1 shrink-0 border border-[#E0E0E0] rounded-sm px-2 h-[46px] bg-[#FAFAFA]">
+                  {selectedColor && <span className="text-[11px] text-[#444] font-medium">{selectedColor}</span>}
+                  {selectedColor && selectedSize && <span className="text-[#CCC] text-[10px]">·</span>}
+                  {selectedSize && <span className="text-[11px] text-[#444] font-medium">{selectedSize}</span>}
+                </div>
+              )}
               <button
                 onClick={() => { addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity}); setQuantity(1); }}
                 className="flex-1 text-[14px] font-medium py-3 flex items-center justify-center btn-shake border border-black/70 rounded-sm text-[#111] bg-white hover:bg-[#f5f5f5] transition-colors"
@@ -519,47 +531,42 @@ export default function ProductView({ initialProduct, sourceCategory }) {
               >
                 أضف إلى السلة
               </button>
-              <div className="flex items-center justify-between bg-[#F2F2F2] border border-[#E0E0E0] px-1 w-[72px] shrink-0 rounded-sm">
-                <button onClick={() => setQuantity(q => q + 1)} className="text-[#888] hover:text-black p-1"><Plus size={13} /></button>
-                <span className="text-[#111] text-sm font-medium">{quantity}</span>
-                <button onClick={() => setQuantity(q => q > 1 ? q-1 : 1)} className="text-[#888] hover:text-black p-1"><Minus size={13} /></button>
-              </div>
             </div>
-
-            {/* Secure Checkout Badge */}
-            <div className="mt-3 bg-[#fafafa] border border-[#e8e8e8] rounded-md px-4 py-3 flex items-center gap-3">
-              <div className="flex items-center justify-center shrink-0">
-                <div className="relative w-[18px] h-[20px]">
-                  <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[10px] h-[8px] border-2 border-[#1a1a1a] border-b-0 rounded-t-full"></div>
-                  <div className="absolute bottom-0 left-0 w-[18px] h-[13px] bg-[#1a1a1a] rounded-sm flex items-center justify-center">
-                    <div className="w-[3px] h-[5px] bg-[#fafafa] rounded-sm"></div>
-                  </div>
-                </div>
-              </div>
-              <div className="flex-1 text-[12px] text-[#4a4a4a] leading-snug">
-                Guaranteed <span className="font-semibold text-[#1a1a1a]">secure & safe</span> checkout.
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <img src="https://cdn.shopify.com/s/files/1/0744/2726/9319/files/visa.svg?v=1766783643" alt="Visa" className="h-7 w-auto" />
-                <img src="https://cdn.shopify.com/s/files/1/0744/2726/9319/files/mastercard.svg?v=1766783719" alt="Mastercard" className="h-7 w-auto" />
-              </div>
-            </div>
-
-            {/* Trust Badges */}
-            <div className="mt-2 grid grid-cols-3 gap-px bg-[#EBEBEB]">
-              {[
-                { icon: <Truck size={12}/>, label: "شحن سريع" },
-                { icon: <Eye size={12}/>, label: "معاينة" },
-                { icon: <ShieldCheck size={12}/>, label: "استرجاع سهل" },
-              ].map(({ icon, label }) => (
-                <div key={label} className="flex items-center gap-1.5 text-[10px] text-[#777] justify-center bg-white py-3">
-                  <span className="text-[#333]">{icon}</span>{label}
-                </div>
-              ))}
-            </div>
-
-            {renderCustomHtml('below_cart')}
           </div>
+
+          {/* Secure Checkout Badge */}
+          <div className="mt-3 bg-[#fafafa] border border-[#e8e8e8] rounded-md px-4 py-3 flex items-center gap-3">
+            <div className="flex items-center justify-center shrink-0">
+              <div className="relative w-[18px] h-[20px]">
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[10px] h-[8px] border-2 border-[#1a1a1a] border-b-0 rounded-t-full"></div>
+                <div className="absolute bottom-0 left-0 w-[18px] h-[13px] bg-[#1a1a1a] rounded-sm flex items-center justify-center">
+                  <div className="w-[3px] h-[5px] bg-[#fafafa] rounded-sm"></div>
+                </div>
+              </div>
+            </div>
+            <div className="flex-1 text-[12px] text-[#4a4a4a] leading-snug">
+              Guaranteed <span className="font-semibold text-[#1a1a1a]">secure & safe</span> checkout.
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <img src="https://cdn.shopify.com/s/files/1/0744/2726/9319/files/visa.svg?v=1766783643" alt="Visa" className="h-7 w-auto" />
+              <img src="https://cdn.shopify.com/s/files/1/0744/2726/9319/files/mastercard.svg?v=1766783719" alt="Mastercard" className="h-7 w-auto" />
+            </div>
+          </div>
+
+          {/* Trust Badges */}
+          <div className="mt-2 grid grid-cols-3 gap-px bg-[#EBEBEB]">
+            {[
+              { icon: <Truck size={12}/>, label: "شحن سريع" },
+              { icon: <Eye size={12}/>, label: "معاينة" },
+              { icon: <ShieldCheck size={12}/>, label: "استرجاع سهل" },
+            ].map(({ icon, label }) => (
+              <div key={label} className="flex items-center gap-1.5 text-[10px] text-[#777] justify-center bg-white py-3">
+                <span className="text-[#333]">{icon}</span>{label}
+              </div>
+            ))}
+          </div>
+
+          {renderCustomHtml('below_cart')}
 
           
 
