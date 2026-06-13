@@ -11,7 +11,7 @@ import { mutate } from 'swr';
 import SizeChartModal from "@/components/SizeChartModal";
 import ProductReviews from "@/components/products/ProductReviews";
 import { useProduct, useRelatedProducts } from "@/hooks/useFirestore";
-import { Plus, Minus, Star, Info, Share2, Heart, ImageIcon, X, Truck, Eye, ShieldCheck, ChevronLeft, Search, ChevronRight, ChevronDown, ChevronUp, CreditCard, Banknote } from '@/components/icons-extra';
+import { Plus, Minus, Star, Info, Share2, Heart, ImageIcon, X, Truck, Eye, ShieldCheck, ChevronLeft, Search, ChevronRight, ChevronDown, ChevronUp, CreditCard, Banknote, ArrowLeftRight } from '@/components/icons-extra';
 
 export default function ProductView({ initialProduct, sourceCategory }) {
   const { id } = useParams();
@@ -357,10 +357,10 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   );
 
   // Accordion مشترك
-  const AccordionSections = () => (
+ const AccordionSections = () => (
     <div className="space-y-0">
-      {accordionSections.map(({ key, title, html, extraClass = "" }) => (
-        <details key={key} className="group border-b border-[#EBEBEB]">
+      {accordionSections.map(({ key, title, html, extraClass = "" }, i, arr) => (
+        <details key={key} className={`group ${i < arr.length - 1 ? "border-b border-[#EBEBEB]" : ""}`}>
           <summary className="flex items-center justify-between cursor-pointer py-5 list-none select-none">
             <span className="text-[13px] font-medium text-[#111111] tracking-[0.02em]">{title}</span>
             <span className="text-[#BBBBBB] group-open:rotate-45 transition-transform duration-300 text-lg leading-none">+</span>
@@ -646,31 +646,31 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           )}
 
           {/* Secure Checkout Badge */}
-          <div className="mt-3 bg-[#fafafa] border border-[#e8e8e8] rounded-md px-4 py-3 flex items-center gap-3">
+          <div className="mt-3 bg-[#fafafa] border border-[#e8e8e8] rounded-md px-4 py-4 flex items-center gap-3">
             <div className="flex items-center justify-center shrink-0">
-              <div className="relative w-[18px] h-[20px]">
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[10px] h-[8px] border-2 border-[#1a1a1a] border-b-0 rounded-t-full"></div>
-                <div className="absolute bottom-0 left-0 w-[18px] h-[13px] bg-[#1a1a1a] rounded-sm flex items-center justify-center">
-                  <div className="w-[3px] h-[5px] bg-[#fafafa] rounded-sm"></div>
+              <div className="relative w-[22px] h-[25px]">
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[13px] h-[10px] border-2 border-[#1a1a1a] border-b-0 rounded-t-full"></div>
+                <div className="absolute bottom-0 left-0 w-[22px] h-[16px] bg-[#1a1a1a] rounded-sm flex items-center justify-center">
+                  <div className="w-[4px] h-[6px] bg-[#fafafa] rounded-sm"></div>
                 </div>
               </div>
             </div>
-            <div className="flex-1 text-[12px] text-[#4a4a4a] leading-snug">
-              Guaranteed <span className="font-semibold text-[#1a1a1a]">secure & safe</span> checkout.
+            <div className="flex-1 text-[13px] text-[#4a4a4a] leading-snug">
+              Guaranteed <span className="font-semibold text-[#1a1a1a]">secure & safe</span> checkout
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <img src="https://cdn.shopify.com/s/files/1/0744/2726/9319/files/visa.svg?v=1766783643" alt="Visa" className="h-7 w-auto" />
-              <img src="https://cdn.shopify.com/s/files/1/0744/2726/9319/files/mastercard.svg?v=1766783719" alt="Mastercard" className="h-7 w-auto" />
+              <img src="https://cdn.shopify.com/s/files/1/0744/2726/9319/files/visa.svg?v=1766783643" alt="Visa" className="h-8 w-auto" />
+              <img src="https://cdn.shopify.com/s/files/1/0744/2726/9319/files/mastercard.svg?v=1766783719" alt="Mastercard" className="h-8 w-auto" />
             </div>
           </div>
 
          {/* Trust Badges */}
-          <div className="mt-2 border-t border-b border-[#111]">
+          <div className="mt-2">
             <div className="flex items-center justify-center py-3 px-2 gap-0">
               {[
                 { icon: <Truck size={14}/>, label: "توصيل سريع" },
                 { icon: <Eye size={14}/>, label: "معاينة الطلبات" },
-                { icon: <ShieldCheck size={14}/>, label: "استرجاع سهل" },
+                { icon: <ArrowLeftRight size={14}/>, label: "استرجاع سهل" },
               ].map(({ icon, label }, i, arr) => (
                 <React.Fragment key={label}>
                   <div className="flex items-center gap-1.5 px-3">
@@ -689,7 +689,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
           {/* Accordion Mobile */}
           {product.description && (
-            <div className="mt-8 border-t border-[#EBEBEB] pt-2">
+            <div className="mt-8 pt-2">
               <AccordionSections />
               {renderCustomHtml('below_description')}
             </div>
@@ -864,12 +864,12 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             {renderCustomHtml('below_cart')}
 
             {/* Trust */}
-            <div className="mb-2 border-t border-b border-[#111]">
+            <div className="mb-2">
               <div className="flex items-center justify-center py-3 px-2 gap-0">
                 {[
                   { icon: <Truck size={14}/>, label: "توصيل سريع" },
                   { icon: <Eye size={14}/>, label: "معاينة الطلبات" },
-                  { icon: <ShieldCheck size={14}/>, label: "استرجاع سهل" },
+                  { icon: <ArrowLeftRight size={14}/>, label: "استرجاع سهل" },
                 ].map(({ icon, label }, i, arr) => (
                   <>
                     <div key={label} className="flex items-center gap-1.5 px-3">
@@ -892,7 +892,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
             {/* Accordion Desktop */}
             {product.description && (
-              <div className="border-t border-[#EBEBEB] pt-2">
+              <div className="pt-2">
                 <AccordionSections />
                 {renderCustomHtml('below_description')}
               </div>
