@@ -1053,6 +1053,19 @@ export default function ProductView({ initialProduct, sourceCategory }) {
         }
         .btn-shake { animation: shake 5s ease-in-out infinite }
         .btn-shake:hover { animation:none }
+
+        /* Trust badges reveal */
+        .trust-badge-item {
+          opacity: 0;
+          transform: translateY(18px);
+          transition: opacity 0.5s ease, transform 0.5s ease;
+        }
+        .trust-badge-item.is-visible {
+          opacity: 1;
+          transform: translateY(0);
+        }
+        .trust-badge-item:nth-child(2) { transition-delay: 0.1s; }
+        .trust-badge-item:nth-child(3) { transition-delay: 0.2s; }
       `}</style>
     </div>
   );
