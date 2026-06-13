@@ -357,28 +357,35 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             <Heart size={17} fill={isWishlisted ? "#111" : "none"} color={isWishlisted ? "#111" : "#333"} />
           </button>
 
-         {/* Zoom Plus — bottom right, inside circle */}
+          {/* Zoom Plus — bottom right, inside circle */}
           <button onClick={(e) => { e.stopPropagation(); openGallery(activeIdx); }} className="absolute bottom-4 right-4 z-10 w-9 h-9 rounded-full bg-white flex items-center justify-center shadow-sm cursor-zoom-in">
-            <span className="text-[#333] text-[20px] leading-none font-light">+</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#333" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="7"/>
+              <line x1="11" y1="8" x2="11" y2="14"/>
+              <line x1="8" y1="11" x2="14" y2="11"/>
+              <line x1="16.5" y1="16.5" x2="21" y2="21"/>
+            </svg>
           </button>
           </div>
         </div>
 
          {/* Mobile Dots Navigation */}
-        <div className="flex items-center justify-center gap-2 py-5">
-          {gallery.map((_, idx) => (
-            <button
-              key={idx}
-              onClick={() => { setActiveImage(gallery[idx]); setActiveIdx(idx); }}
-              className="flex items-center justify-center w-5 h-5"
-            >
-              <span className={`rounded-full block transition-all duration-300 ease-in-out ${
-                activeIdx === idx
-                  ? "w-5 h-5 bg-white border-2 border-black"
-                  : "w-2.5 h-2.5 bg-black/80"
-              }`} />
-            </button>
-          ))}
+        <div className="flex items-center justify-center py-5 px-4">
+          <div className="flex flex-wrap justify-center gap-2" style={{maxWidth:'calc(100% - 32px)'}}>
+            {gallery.map((_, idx) => (
+              <button
+                key={idx}
+                onClick={() => { setActiveImage(gallery[idx]); setActiveIdx(idx); }}
+                className="flex items-center justify-center w-4 h-4"
+              >
+                <span className={`rounded-full block transition-all duration-300 ease-in-out ${
+                  activeIdx === idx
+                    ? "w-3.5 h-3.5 bg-white border border-black/50"
+                    : "w-2 h-2 bg-black/80"
+                }`} />
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Mobile Content */}
