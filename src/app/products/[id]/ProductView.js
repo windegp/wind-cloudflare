@@ -298,7 +298,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
   // Breadcrumb مشترك
   const Breadcrumb = ({ className = "" }) => (
-       <nav className={`flex items-center gap-4 text-[12px] text-[#AAAAAA] flex-wrap ${className}`}>You said: هل تم مراعاة فيها ان التجاه من اليمين للشمال ؟
+    <nav className={`flex items-center gap-4 text-[12px] text-[#AAAAAA] flex-wrap ${className}`}>
       <Link href="/" className="hover:text-[#111111] transition-colors">الرئيسية</Link>
       {breadcrumbCat && (
         <>
