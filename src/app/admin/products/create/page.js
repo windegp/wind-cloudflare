@@ -367,6 +367,10 @@ function CreateProductForm() {
           collections: cleanCollections, // 🔥 وحفظها هنا كمان عشان التنظيم الجديد
           images,
           chargeTax,
+          options,
+          colorSwatches,
+          inventoryTracked,
+          physicalProduct,
           // 🔥 توحيد السعر: السعر الرئيسي يتبع دائماً سعر أول Variant لضمان دقة الكارت
           price: productData.variants && productData.variants.length > 0 
                  ? productData.variants[0].price.toString() 
