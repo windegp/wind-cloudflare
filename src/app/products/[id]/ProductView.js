@@ -48,8 +48,9 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   const likeTimeoutRef   = useRef(null);
   const pendingActionRef = useRef(0);
   const [thumbScrollTop, setThumbScrollTop] = useState(0);
-  const [isStickyVisible, setIsStickyVisible] = useState(true);
+ const [isStickyVisible, setIsStickyVisible] = useState(true);
   const [isStickyOptionsOpen, setIsStickyOptionsOpen] = useState(false);
+  const [isAddingToCart, setIsAddingToCart] = useState(false);
   const addToCartBtnRef = useRef(null);
   const VISIBLE_THUMBS = 6;
 
@@ -549,13 +550,23 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           {/* Add to Cart Mobile — Original (not sticky) */}
           <div ref={addToCartBtnRef} className="flex gap-3 mb-2">
             <button
-              onClick={() => { addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity}); setQuantity(1); }}
-              className="flex-1 text-[14px] font-medium py-3 flex items-center justify-center btn-shake border border-black/70 rounded-sm text-[#111] bg-white hover:bg-[#f5f5f5] transition-colors"
+              onClick={async () => {
+                setIsAddingToCart(true);
+                await addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity});
+                setQuantity(1);
+                setTimeout(() => setIsAddingToCart(false), 700);
+              }}
+              disabled={isAddingToCart}
+              className="flex-1 text-[14px] font-medium py-3 flex items-center justify-center btn-shake border border-black/70 rounded-lg text-[#111] bg-white hover:bg-[#f5f5f5] transition-colors disabled:opacity-80"
               style={{letterSpacing:'0.04em'}}
             >
-              أضف إلى السلة
+              {isAddingToCart ? (
+                <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#111" strokeWidth="2.5" strokeLinecap="round">
+                  <path d="M12 2a10 10 0 0 1 10 10" />
+                </svg>
+              ) : "أضف إلى السلة"}
             </button>
-            <div className="flex items-center justify-between bg-[#F2F2F2] border border-[#E0E0E0] px-1 w-[72px] shrink-0 rounded-sm">
+            <div className="flex items-center justify-between bg-[#F2F2F2] border border-[#E0E0E0] px-1 w-[72px] shrink-0 rounded-lg">
               <button onClick={() => setQuantity(q => q + 1)} className="text-[#888] hover:text-black p-1"><Plus size={13} /></button>
               <span className="text-[#111] text-sm font-medium">{quantity}</span>
               <button onClick={() => setQuantity(q => q > 1 ? q-1 : 1)} className="text-[#888] hover:text-black p-1"><Minus size={13} /></button>
@@ -576,7 +587,18 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                   {stickyCombinations.map((combo, i) => {
                     const isSelected = combo.color === selectedColor && combo.size === selectedSize;
                     return (
-                      <button key={i} onClick={() => { if (combo.color) setSelectedColor(combo.color); if (combo.size) setSelectedSize(combo.size); setIsStickyOptionsOpen(false); }}
+                      <button key={i} onClick={() => {
+                        if (combo.color) {
+                          setSelectedColor(combo.color);
+                          const swatchImg = product.colorSwatches?.[combo.color];
+                          if (swatchImg && (swatchImg.startsWith("http") || swatchImg.includes("/"))) {
+                            setActiveImage(swatchImg);
+                            setActiveIdx(0);
+                          }
+                        }
+                        if (combo.size) setSelectedSize(combo.size);
+                        setIsStickyOptionsOpen(false);
+                      }}
                         className={`w-full flex items-center justify-between px-4 py-3.5 border-b border-[#F5F5F5] text-right transition-colors ${isSelected ? "bg-[#F5F5F5]" : "hover:bg-[#FAFAFA]"}`}>
                         <span className={`text-[13px] ${isSelected ? "font-medium text-[#111]" : "text-[#444]"}`}>{combo.label}</span>
                         {isSelected && <span className="w-2 h-2 rounded-full bg-black shrink-0" />}
@@ -587,11 +609,31 @@ export default function ProductView({ initialProduct, sourceCategory }) {
               )}
 
               <div className="flex gap-2">
+                {/* Add to Cart */}
+{/* Add to Cart */}
+                <button
+                  onClick={async () => {
+                    setIsAddingToCart(true);
+                    await addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity});
+                    setQuantity(1);
+                    setTimeout(() => setIsAddingToCart(false), 700);
+                  }}
+                  disabled={isAddingToCart}
+                  className="flex-1 text-[13px] font-medium h-[42px] flex items-center justify-center rounded-lg text-white bg-black hover:bg-[#222] transition-colors disabled:opacity-80"
+                  style={{letterSpacing:'0.04em'}}
+                >
+                  {isAddingToCart ? (
+                    <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
+                      <path d="M12 2a10 10 0 0 1 10 10" />
+                    </svg>
+                  ) : "أضف إلى السلة"}
+                </button>
+
                 {/* Options Button */}
                 {stickyCombinations.length > 0 && (
                   <button
                     onClick={() => setIsStickyOptionsOpen(o => !o)}
-                    className="flex items-center justify-between gap-2 border border-[#E0E0E0] px-3 h-[48px] bg-white rounded-sm flex-1"
+                    className="flex items-center justify-between gap-2 border border-[#E0E0E0] px-3 h-[42px] bg-white rounded-lg w-[45%] shrink-0"
                   >
                     <span className="text-[12px] text-[#444] truncate">
                       {[selectedColor, selectedSize].filter(Boolean).join(' / ') || "اختر"}
@@ -599,15 +641,6 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                     <ChevronDown size={13} className="text-[#111] shrink-0" />
                   </button>
                 )}
-
-                {/* Add to Cart */}
-                <button
-                  onClick={() => { addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity}); setQuantity(1); }}
-                  className="flex-1 text-[13px] font-medium h-[48px] flex items-center justify-center rounded-sm text-white bg-black hover:bg-[#222] transition-colors"
-                  style={{letterSpacing:'0.04em'}}
-                >
-                  أضف إلى السلة
-                </button>
               </div>
             </div>
           )}
