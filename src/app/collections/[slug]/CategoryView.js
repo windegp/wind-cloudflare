@@ -8,7 +8,6 @@ import ProductCard from "../../../components/products/ProductCard";
 import { usePaginatedProducts } from "@/hooks/useFirestore";
 import Link from "next/link";
 import { ChevronDown, Layout } from '@/components/icons-extra';
-import { Filter, Grid } from '@/components/icons';
 
 const PAGE_SIZE = 12;
 
@@ -185,14 +184,13 @@ export default function CategoryView({ initialSlug, initialCategoryData }) {
 
         {/* ── TOOLBAR (Sort + Grid View + Count) ── */}
         {showToolbar && (
-          <div className="px-4 md:px-8 my-8">
-  <div className="flex items-center justify-between py-3 border-t border-b border-[#EAEAEA]">
+          <div className="px-4 md:px-8 my-4">
+  <div className="flex items-center justify-between py-2">
 
               {/* Right side: Filter + Sort */}
               <div className="flex items-center gap-4">
-                <button className="flex items-center gap-1.5 text-[#1A1A1A] text-[13px] font-bold font-tajawal hover:text-[#888] transition-colors">
-  <Filter size={16} strokeWidth={1.5} />
-  <span>Filter</span>
+                <button className="flex items-center gap-1.5 text-[#1A1A1A] text-[13px] font-tajawal hover:text-[#888] transition-colors">
+  <span>تصفية</span>
   <ChevronDown size={14} strokeWidth={2} />
 </button>
                 <div className="relative" onClick={(e) => e.stopPropagation()}>
@@ -200,9 +198,7 @@ export default function CategoryView({ initialSlug, initialCategoryData }) {
                     onClick={() => setShowSortDropdown(!showSortDropdown)}
                     className="flex items-center gap-2 text-[#1A1A1A] text-[13px] font-bold font-tajawal hover:text-[#888] transition-colors"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 16l-4 4-4-4" /><path d="M17 20V4" /><path d="M3 8l4-4 4 4" /><path d="M7 4v16" />
-                    </svg>
+                   
                     <span>{SORT_OPTIONS.find(o => o.value === sortBy)?.label || 'ترتيب'}</span>
                     <ChevronDown size={14} strokeWidth={2} className={`transition-transform duration-200 ${showSortDropdown ? 'rotate-180' : ''}`} />
                   </button>
@@ -229,23 +225,29 @@ export default function CategoryView({ initialSlug, initialCategoryData }) {
                 <span className="text-[#888] text-[12px] font-tajawal">
                   {products.length} منتج
                 </span>
-                <div className="flex items-center gap-1.5">
-
-                  <button
-                    onClick={() => setGridColumns(4)}
-                    className={`p-1.5 rounded-md transition-colors ${gridColumns === 4 ? 'bg-[#1A1A1A] text-white' : 'text-[#888] hover:text-[#1A1A1A] hover:bg-[#F5F5F5]'}`}
-                    aria-label="عرض 4 أعمدة"
-                  >
-                    <Grid size={16} strokeWidth={1.5} />
-                  </button>
-                  <button
-                    onClick={() => setGridColumns(3)}
-                    className={`p-1.5 rounded-md transition-colors ${gridColumns === 3 ? 'bg-[#1A1A1A] text-white' : 'text-[#888] hover:text-[#1A1A1A] hover:bg-[#F5F5F5]'}`}
-                    aria-label="عرض 3 أعمدة"
-                  >
-                    <Layout size={16} strokeWidth={1.5} />
-                  </button>
-                </div>
+               <div className="flex items-center gap-1">
+  <button
+    onClick={() => setGridColumns(4)}
+    className={`w-8 h-8 flex items-center justify-center transition-colors ${gridColumns === 4 ? 'bg-[#1A1A1A]' : 'bg-[#E8E8E8]'}`}
+    aria-label="عرض 4 أعمدة"
+  >
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+  <rect x="3" y="2" width="2" height="10" fill={gridColumns === 4 ? '#fff' : '#666'} />
+  <rect x="9" y="2" width="2" height="10" fill={gridColumns === 4 ? '#fff' : '#666'} />
+</svg>
+  </button>
+  <button
+    onClick={() => setGridColumns(3)}
+    className={`w-8 h-8 flex items-center justify-center transition-colors ${gridColumns === 3 ? 'bg-[#1A1A1A]' : 'bg-[#E8E8E8]'}`}
+    aria-label="عرض 3 أعمدة"
+  >
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+  <rect x="1" y="2" width="2" height="10" fill={gridColumns === 3 ? '#fff' : '#666'} />
+  <rect x="6" y="2" width="2" height="10" fill={gridColumns === 3 ? '#fff' : '#666'} />
+  <rect x="11" y="2" width="2" height="10" fill={gridColumns === 3 ? '#fff' : '#666'} />
+</svg>
+  </button>
+</div>
               </div>
             </div>
           </div>
