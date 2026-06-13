@@ -431,18 +431,18 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           </div>
           {/* Short Desc */}
           {product.description && (
-            <div className="mb-6">
+            <div className="mb-8">
               <p className="text-[13px] leading-[1.8] text-[#777]">{shortDescription}</p>
-              <button onClick={() => setDescModalOpen(true)} className="text-[12px] flex items-center gap-1.5 mt-2 px-3 py-1.5 rounded-full bg-[#E2EEF9] text-[#2a5a8a] hover:bg-[#d0e4f5] transition-colors">
+              <button onClick={() => setDescModalOpen(true)} className="text-[12px] flex items-center gap-1.5 mt-2 px-3 py-1.5 rounded-full bg-[#fdf6ec] text-[#8a6a3a] hover:bg-[#faecd8] transition-colors">
                 <Info size={12} /> عرض تفاصيل المنتج والخامات
               </button>
             </div>
           )}
 
-          {/* Colors */}
+        {/* Colors */}
           {safeColors.length > 0 && (
-            <div className="mb-5">
-              <div className="flex items-baseline gap-2 mb-3">
+            <div className="mb-7">
+              <div className="flex items-baseline gap-2 mb-4">
                 <span className="text-[15px] text-[#111] font-bold">اللون:</span>
                 {selectedColor && <span className="text-[15px] text-[#111] capitalize">{selectedColor}</span>}
               </div>
@@ -454,8 +454,8 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                   const isSel = selectedColor === name;
                   return (
                     <button key={i} onClick={() => { setSelectedColor(name); if (isImg) { setActiveImage(hi); setActiveIdx(0); } }} title={name}>
-                      <div className={`w-11 h-11 rounded-full overflow-hidden border-2 transition-all duration-200 ${isSel ? "border-black ring-2 ring-black ring-offset-2" : "border-transparent hover:border-[#999]"}`}>
-                        {isImg ? <img src={getImageUrl(hi)} alt={name} className="w-full h-full object-cover" /> : <div style={{backgroundColor:hi}} className="w-full h-full rounded-full" />}
+                      <div className={`w-11 h-11 rounded-full overflow-hidden transition-all duration-200 ${isSel ? "ring-1 ring-black ring-offset-2" : "ring-1 ring-transparent hover:ring-[#bbb] ring-offset-1"}`}>
+                        {isImg ? <img src={getImageUrl(hi)} alt={name} className="w-full h-full object-cover rounded-full" /> : <div style={{backgroundColor:hi}} className="w-full h-full rounded-full" />}
                       </div>
                     </button>
                   );
@@ -464,21 +464,21 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             </div>
           )}
 
-          {/* Sizes */}
+           {/* Sizes */}
           {safeSizes.length > 0 && (
-            <div className="mb-5">
-              <div className="flex items-center justify-between mb-3">
+            <div className="mb-7">
+              <div className="flex items-center justify-between mb-4">
                 <div className="flex items-baseline gap-2">
                   <span className="text-[15px] text-[#111] font-bold">المقاس:</span>
                   {selectedSize && <span className="text-[15px] text-[#111] capitalize">{selectedSize}</span>}
                 </div>
-                <button onClick={() => setSizeGuideOpen(true)} className="text-[12px] text-[#333] flex items-center gap-1.5 border border-[#E0E0E0] hover:border-black px-3 py-1.5 transition-all rounded-sm">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="2" y="7" width="20" height="10" rx="1"/>
-                    <line x1="6" y1="7" x2="6" y2="12"/>
-                    <line x1="10" y1="7" x2="10" y2="11"/>
-                    <line x1="14" y1="7" x2="14" y2="12"/>
-                    <line x1="18" y1="7" x2="18" y2="11"/>
+                <button onClick={() => setSizeGuideOpen(true)} className="text-[12px] text-[#555] flex items-center gap-1.5 hover:text-black transition-colors">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="1" y="6" width="22" height="12" rx="2"/>
+                    <line x1="6" y1="6" x2="6" y2="13"/>
+                    <line x1="10" y1="6" x2="10" y2="11"/>
+                    <line x1="14" y1="6" x2="14" y2="13"/>
+                    <line x1="18" y1="6" x2="18" y2="11"/>
                   </svg>
                   دليل القياسات
                 </button>
@@ -487,7 +487,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                 <div className="flex flex-wrap gap-2.5">
                   {safeSizes.map(sz => (
                     <button key={sz} onClick={() => setSelectedSize(sz)}
-                      className={`min-w-[56px] h-12 text-[14px] font-medium border transition-all duration-200 capitalize px-3 rounded-lg ${selectedSize===sz ? "bg-black text-white border-black" : "bg-white text-[#444] border-[#E0E0E0] hover:border-black hover:text-black"}`}>{sz}</button>
+                      className={`min-w-[56px] h-12 text-[14px] font-medium border transition-all duration-200 capitalize px-3 rounded-lg ${selectedSize===sz ? "bg-black text-white border border-black/60" : "bg-white text-[#444] border border-[#E0E0E0] hover:border-[#999] hover:text-black"}`}>{sz}</button>
                   ))}
                 </div>
               )}
@@ -495,7 +495,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           )}
 
           {/* Stock Status */}
-          <div className="flex items-center gap-2 mb-6">
+          <div className="flex items-center gap-2 mb-7">
             {product?.quantity > 0 || product?.sellOutOfStock === "Yes" ? (
               <>
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_6px_2px_rgba(16,185,129,0.4)]"></span>
@@ -510,21 +510,19 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           </div>
 
           {/* Add to Cart Mobile */}
-          <div className="sticky bottom-0 bg-white pt-3 pb-2 -mx-5 px-5 border-t border-[#F0F0F0]">
+          <div className="sticky bottom-0 bg-white pt-3 pb-2 -mx-5 px-5">
             <div className="flex gap-3">
               <button
                 onClick={() => { addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity}); setQuantity(1); }}
-                className="flex-1 text-[14px] font-medium py-4 flex items-center justify-center transition-opacity btn-breathe"
-                style={{background:'#111', color:'#fff', letterSpacing:'0.04em'}}
-                onMouseEnter={e => e.currentTarget.style.opacity='0.88'}
-                onMouseLeave={e => e.currentTarget.style.opacity='1'}
+                className="flex-1 text-[14px] font-medium py-3.5 flex items-center justify-center btn-shake border border-black/70 rounded-sm text-[#111] bg-white hover:bg-[#f5f5f5] transition-colors"
+                style={{letterSpacing:'0.04em'}}
               >
                 أضف إلى السلة
               </button>
-              <div className="flex items-center justify-between bg-white border border-[#E0E0E0] px-1 w-[80px] shrink-0">
-                <button onClick={() => setQuantity(q => q + 1)} className="text-[#888] hover:text-black p-1.5"><Plus size={14} /></button>
+              <div className="flex items-center justify-between bg-white border border-[#E0E0E0] px-1 w-[72px] shrink-0 rounded-sm">
+                <button onClick={() => setQuantity(q => q + 1)} className="text-[#888] hover:text-black p-1"><Plus size={13} /></button>
                 <span className="text-[#111] text-sm font-medium">{quantity}</span>
-                <button onClick={() => setQuantity(q => q > 1 ? q-1 : 1)} className="text-[#888] hover:text-black p-1.5"><Minus size={14} /></button>
+                <button onClick={() => setQuantity(q => q > 1 ? q-1 : 1)} className="text-[#888] hover:text-black p-1"><Minus size={13} /></button>
               </div>
             </div>
             {renderCustomHtml('below_cart')}
@@ -897,6 +895,16 @@ export default function ProductView({ initialProduct, sourceCategory }) {
         }
         .btn-breathe { animation: breathe 5s ease-in-out infinite }
         .btn-breathe:hover { animation:none }
+
+        @keyframes shake {
+          0%,100% { transform:translateX(0) }
+          20% { transform:translateX(-3px) }
+          40% { transform:translateX(3px) }
+          60% { transform:translateX(-2px) }
+          80% { transform:translateX(2px) }
+        }
+        .btn-shake { animation: shake 5s ease-in-out infinite }
+        .btn-shake:hover { animation:none }
       `}</style>
     </div>
   );
