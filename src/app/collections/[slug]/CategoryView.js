@@ -134,7 +134,7 @@ export default function CategoryView({ initialSlug, initialCategoryData }) {
         
 {/* ── HERO BANNER ── */}
 {hasBanner ? (
-          <div className="relative w-full bg-[#FAF8F3] overflow-hidden">
+          <div className="relative w-full bg-[#FAF8F3] overflow-hidden px-4 md:px-8">
             <div className="relative w-full aspect-[16/9] md:aspect-[16/6] max-h-[400px]">
 
               <img
@@ -188,7 +188,7 @@ export default function CategoryView({ initialSlug, initialCategoryData }) {
   <div className="flex items-center justify-between py-2">
 
               {/* Right side: Filter + Sort */}
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-8">
                 <button className="flex items-center gap-1.5 text-[#1A1A1A] text-[13px] font-tajawal hover:text-[#888] transition-colors">
   <span>تصفية</span>
   <ChevronDown size={14} strokeWidth={2} />
@@ -225,26 +225,26 @@ export default function CategoryView({ initialSlug, initialCategoryData }) {
                 <span className="text-[#888] text-[12px] font-tajawal">
                   {products.length} منتج
                 </span>
-               <div className="flex items-center gap-1">
+               <div className="flex items-center gap-1.5">
   <button
     onClick={() => setGridColumns(4)}
     className={`w-8 h-8 flex items-center justify-center transition-colors ${gridColumns === 4 ? 'bg-[#1A1A1A]' : 'bg-[#E8E8E8]'}`}
     aria-label="عرض 4 أعمدة"
   >
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-  <rect x="3" y="2" width="2" height="10" fill={gridColumns === 4 ? '#fff' : '#666'} />
-  <rect x="9" y="2" width="2" height="10" fill={gridColumns === 4 ? '#fff' : '#666'} />
+  <rect x="3" y="2" width="1.5" height="10" fill={gridColumns === 4 ? '#fff' : '#666'} />
+  <rect x="9" y="2" width="1.5" height="10" fill={gridColumns === 4 ? '#fff' : '#666'} />
 </svg>
   </button>
   <button
     onClick={() => setGridColumns(3)}
-    className={`w-8 h-8 flex items-center justify-center transition-colors ${gridColumns === 3 ? 'bg-[#1A1A1A]' : 'bg-[#E8E8E8]'}`}
+    className={`w-8 h-8 flex items-center justify-center transition-colors ${gridColumns === 3 ? 'bg-[#1A1A1A]' : 'bg-[#D0D0D0]'}`}
     aria-label="عرض 3 أعمدة"
   >
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-  <rect x="1" y="2" width="2" height="10" fill={gridColumns === 3 ? '#fff' : '#666'} />
-  <rect x="6" y="2" width="2" height="10" fill={gridColumns === 3 ? '#fff' : '#666'} />
-  <rect x="11" y="2" width="2" height="10" fill={gridColumns === 3 ? '#fff' : '#666'} />
+  <rect x="1" y="2" width="1.5" height="10" fill={gridColumns === 3 ? '#fff' : '#666'} />
+  <rect x="6" y="2" width="1.5" height="10" fill={gridColumns === 3 ? '#fff' : '#666'} />
+  <rect x="11" y="2" width="1.5" height="10" fill={gridColumns === 3 ? '#fff' : '#666'} />
 </svg>
   </button>
 </div>
