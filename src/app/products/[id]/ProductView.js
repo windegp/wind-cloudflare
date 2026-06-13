@@ -431,16 +431,71 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           </div>
           {/* Short Desc */}
           {product.description && (
-            <div className="mb-5 pb-5 border-b border-[#F0F0F0]">
+            <div className="mb-6">
               <p className="text-[13px] leading-[1.8] text-[#777]">{shortDescription}</p>
-              <button onClick={() => setDescModalOpen(true)} className="text-[12px] flex items-center gap-1.5 mt-2 px-3 py-1.5 rounded-full bg-[#fdf6ec]/80 text-[#8a6a3a] hover:bg-[#fdf6ec] transition-colors">
+              <button onClick={() => setDescModalOpen(true)} className="text-[12px] flex items-center gap-1.5 mt-2 px-3 py-1.5 rounded-full bg-[#E2EEF9] text-[#2a5a8a] hover:bg-[#d0e4f5] transition-colors">
                 <Info size={12} /> عرض تفاصيل المنتج والخامات
               </button>
             </div>
           )}
 
+          {/* Colors */}
+          {safeColors.length > 0 && (
+            <div className="mb-5">
+              <div className="flex items-baseline gap-2 mb-3">
+                <span className="text-[15px] text-[#111] font-bold">اللون:</span>
+                {selectedColor && <span className="text-[15px] text-[#111] capitalize">{selectedColor}</span>}
+              </div>
+              <div ref={colorsRef} className="flex flex-wrap gap-3">
+                {safeColors.map((ci, i) => {
+                  const name  = typeof ci === "string" ? ci : ci.name;
+                  const hi    = product.colorSwatches?.[name] || (typeof ci === "object" ? ci.swatch : "#DDDDDD");
+                  const isImg = hi.startsWith("http") || hi.includes("/");
+                  const isSel = selectedColor === name;
+                  return (
+                    <button key={i} onClick={() => { setSelectedColor(name); if (isImg) { setActiveImage(hi); setActiveIdx(0); } }} title={name}>
+                      <div className={`w-11 h-11 rounded-full overflow-hidden border-2 transition-all duration-200 ${isSel ? "border-black ring-2 ring-black ring-offset-2" : "border-transparent hover:border-[#999]"}`}>
+                        {isImg ? <img src={getImageUrl(hi)} alt={name} className="w-full h-full object-cover" /> : <div style={{backgroundColor:hi}} className="w-full h-full rounded-full" />}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Sizes */}
+          {safeSizes.length > 0 && (
+            <div className="mb-5">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[15px] text-[#111] font-bold">المقاس:</span>
+                  {selectedSize && <span className="text-[15px] text-[#111] capitalize">{selectedSize}</span>}
+                </div>
+                <button onClick={() => setSizeGuideOpen(true)} className="text-[12px] text-[#333] flex items-center gap-1.5 border border-[#E0E0E0] hover:border-black px-3 py-1.5 transition-all rounded-sm">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="7" width="20" height="10" rx="1"/>
+                    <line x1="6" y1="7" x2="6" y2="12"/>
+                    <line x1="10" y1="7" x2="10" y2="11"/>
+                    <line x1="14" y1="7" x2="14" y2="12"/>
+                    <line x1="18" y1="7" x2="18" y2="11"/>
+                  </svg>
+                  دليل القياسات
+                </button>
+              </div>
+              {safeSizes.length > 1 && (
+                <div className="flex flex-wrap gap-2.5">
+                  {safeSizes.map(sz => (
+                    <button key={sz} onClick={() => setSelectedSize(sz)}
+                      className={`min-w-[56px] h-12 text-[14px] font-medium border transition-all duration-200 capitalize px-3 rounded-lg ${selectedSize===sz ? "bg-black text-white border-black" : "bg-white text-[#444] border-[#E0E0E0] hover:border-black hover:text-black"}`}>{sz}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Stock Status */}
-          <div className="flex items-center gap-2 mb-5">
+          <div className="flex items-center gap-2 mb-6">
             {product?.quantity > 0 || product?.sellOutOfStock === "Yes" ? (
               <>
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_6px_2px_rgba(16,185,129,0.4)]"></span>
@@ -453,54 +508,6 @@ export default function ProductView({ initialProduct, sourceCategory }) {
               </>
             )}
           </div>
-
-          {/* Colors */}
-          {safeColors.length > 0 && (
-            <div className="mb-7">
-              <div className="flex items-baseline gap-2 mb-3">
-                <span className="text-[11px] text-[#AAAAAA] tracking-[0.1em] uppercase font-medium">{safeColors.length > 1 ? "اختر اللون" : "اللون"}</span>
-                {selectedColor && <span className="text-[#111] text-[12px] font-medium capitalize">{selectedColor}</span>}
-              </div>
-              <div ref={colorsRef} className="flex flex-wrap gap-2.5">
-                {safeColors.map((ci, i) => {
-                  const name  = typeof ci === "string" ? ci : ci.name;
-                  const hi    = product.colorSwatches?.[name] || (typeof ci === "object" ? ci.swatch : "#DDDDDD");
-                  const isImg = hi.startsWith("http") || hi.includes("/");
-                  const isSel = selectedColor === name;
-                  return (
-                    <button key={i} onClick={() => { setSelectedColor(name); if (isImg) { setActiveImage(hi); setActiveIdx(0); } }} title={name}>
-                      <div className={`w-11 h-11 border transition-all duration-200 ${isSel ? "border-black ring-1 ring-black ring-offset-1" : "border-[#E0E0E0] hover:border-[#999]"}`}>
-                        {isImg ? <img src={getImageUrl(hi)} alt={name} className="w-full h-full object-cover" /> : <div style={{backgroundColor:hi}} className="w-full h-full" />}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Sizes */}
-          {safeSizes.length > 0 && (
-            <div className="mb-7">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-[11px] text-[#AAAAAA] tracking-[0.1em] uppercase font-medium">{safeSizes.length > 1 ? "اختر المقاس" : "المقاس"}</span>
-                  {selectedSize && <span className="text-[#111] text-[12px] font-medium capitalize">{selectedSize}</span>}
-                </div>
-                <button onClick={() => setSizeGuideOpen(true)} className="text-[11px] text-[#333] flex items-center gap-1 border border-[#E0E0E0] hover:border-black px-3 py-1 transition-all">
-                  <Info size={10} /> دليل القياسات
-                </button>
-              </div>
-              {safeSizes.length > 1 && (
-                <div className="flex flex-wrap gap-2">
-                  {safeSizes.map(sz => (
-                    <button key={sz} onClick={() => setSelectedSize(sz)}
-                      className={`min-w-[54px] h-10 text-[13px] font-medium border transition-all duration-200 capitalize px-2 ${selectedSize===sz ? "bg-black text-white border-black" : "bg-white text-[#666] border-[#E0E0E0] hover:border-black hover:text-black"}`}>{sz}</button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
 
           {/* Add to Cart Mobile */}
           <div className="sticky bottom-0 bg-white pt-3 pb-2 -mx-5 px-5 border-t border-[#F0F0F0]">
