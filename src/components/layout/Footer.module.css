@@ -1,0 +1,204 @@
+/* ROOT */
+.root {
+  background: #F3F4F6;
+  color: #111;
+  font-family: 'Cairo', 'Tajawal', sans-serif;
+  direction: rtl;
+}
+
+/* ── NEWSLETTER ── */
+.nlWrap {
+  width: 100%;
+}
+.nlTitle {
+  font-size: 15px;
+  font-weight: 700;
+  color: #111;
+  margin: 0 0 4px;
+}
+.nlSub {
+  font-size: 12px;
+  color: #888;
+  margin: 0 0 14px;
+}
+.nlInputRow {
+  display: flex;
+  align-items: center;
+  background: #fff;
+  border-radius: 10px;
+  padding: 0 14px;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.nlIcon {
+  color: #bbb;
+  flex-shrink: 0;
+}
+.nlInput {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-family: inherit;
+  font-size: 13px;
+  color: #333;
+  background: transparent;
+  padding: 11px 0;
+  direction: rtl;
+  min-width: 0;
+}
+.nlInput::placeholder {
+  color: #bbb;
+}
+.nlBtn {
+  display: block;
+  width: 50%;
+  margin-top: 10px;
+  margin-right: 0;
+  margin-left: auto;
+  background: #111;
+  color: #fff;
+  border: none;
+  padding: 11px 0;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  border-radius: 10px;
+  text-align: center;
+  transition: background 0.2s;
+}
+.nlBtn:hover {
+  background: #333;
+}
+
+/* ── SOCIAL ── */
+.socRow {
+  display: flex;
+  gap: 8px;
+}
+.socBtn {
+  width: 34px;
+  height: 34px;
+  background: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #555;
+  text-decoration: none;
+  flex-shrink: 0;
+  transition: color 0.2s, background 0.2s;
+}
+.socBtn:hover {
+  background: #111;
+  color: #fff;
+}
+
+/* ── LINKS ── */
+.colLabel {
+  font-size: 10px;
+  color: #bbb;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  margin: 0 0 12px;
+  font-weight: 600;
+}
+.fLink {
+  display: block;
+  font-size: 13px;
+  color: #555;
+  text-decoration: none;
+  padding: 5px 0;
+  transition: color 0.15s;
+  white-space: nowrap;
+}
+.fLink:hover {
+  color: #111;
+}
+
+/* ── TAGLINE ── */
+.tagline {
+  font-size: 12px;
+  color: #999;
+  line-height: 1.8;
+  margin: 14px 0 0;
+}
+
+/* ── BOTTOM BAR ── */
+.bottom {
+  background: #E5E7EB;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 40px;
+}
+.payRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.payIcon {
+  height: 20px;
+  opacity: 0.55;
+}
+.copy {
+  font-size: 11px;
+  color: #aaa;
+  margin: 0;
+}
+
+/* ══════════ DESKTOP ══════════ */
+.desktop {
+  display: none;
+}
+.mobile {
+  display: block;
+}
+
+@media (min-width: 1024px) {
+  .desktop {
+    display: block;
+  }
+  .mobile {
+    display: none;
+  }
+}
+
+.inner {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 52px 40px 44px;
+  display: grid;
+  grid-template-columns: 1.6fr 1fr 1fr 1fr;
+  gap: 48px;
+  align-items: start;
+  box-sizing: border-box;
+}
+
+.desktopBottom {
+  padding: 12px 40px;
+}
+
+/* ══════════ MOBILE ══════════ */
+.mobNl {
+  padding: 28px 20px 24px;
+}
+.mobBody {
+  padding: 20px 20px 24px;
+}
+.mobSoc {
+  margin-bottom: 20px;
+}
+.mobCols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 16px;
+}
+.mobBottom {
+  padding: 12px 20px;
+}
+.mobPayIcon {
+  height: 16px;
+  opacity: 0.55;
+}
