@@ -634,11 +634,9 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                     onClick={() => setIsStickyOptionsOpen(o => !o)}
                     className="flex items-center justify-between gap-2 border border-[#E0E0E0] px-3 h-[42px] bg-white rounded-lg w-[45%] shrink-0"
                   >
-                    <span className="text-[12px] text-[#444] truncate">
-                      {[selectedColor, selectedSize].filter(Boolean).join(' / ') || "اختر"}
-                      {product.price && (
-                        <span className="text-[#111] font-semibold"> · {product.price} ج.م</span>
-                      )}
+                    <span className="text-[12px] text-[#444] truncate flex items-center gap-1.5 min-w-0">
+                      <span className="truncate">{[selectedColor, selectedSize].filter(Boolean).join(' / ') || "اختر"}</span>
+                      {product.price && <span className="text-[#111] font-semibold shrink-0">· {product.price} ج.م</span>}
                     </span>
                     <ChevronDown size={13} className="text-[#111] shrink-0" />
                   </button>
@@ -660,8 +658,8 @@ export default function ProductView({ initialProduct, sourceCategory }) {
               Guaranteed <span className="font-semibold text-[#1a1a1a]">secure & safe</span> checkout.
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <img src="https://cdn.shopify.com/s/files/1/0744/2726/9319/files/visa.svg?v=1766783643" alt="Visa" className="h-7 w-auto" />
-              <img src="https://cdn.shopify.com/s/files/1/0744/2726/9319/files/mastercard.svg?v=1766783719" alt="Mastercard" className="h-7 w-auto" />
+              <img src="https://ik.imagekit.io/windeg/WIND_Shopping/visa.svg" alt="Visa" className="h-8 w-auto" />
+              <img src="https://ik.imagekit.io/windeg/WIND_Shopping/mastercard.svg" alt="Mastercard" className="h-7 w-auto" />
             </div>
           </div>
 
