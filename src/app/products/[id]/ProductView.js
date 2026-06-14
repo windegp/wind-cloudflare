@@ -634,9 +634,8 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                     onClick={() => setIsStickyOptionsOpen(o => !o)}
                     className="flex items-center justify-between gap-2 border border-[#E0E0E0] px-3 h-[42px] bg-white rounded-lg w-[45%] shrink-0"
                   >
-                    <span className="text-[12px] text-[#444] truncate flex items-center gap-1.5 min-w-0">
-                      <span className="truncate">{[selectedColor, selectedSize].filter(Boolean).join(' / ') || "اختر"}</span>
-                      {product.price && <span className="text-[#111] font-semibold shrink-0">· {product.price} ج.م</span>}
+                    <span className="text-[12px] text-[#111] truncate" dir="rtl">
+                      {[selectedColor, selectedSize, product.price ? `${product.price} ج.م` : ""].filter(Boolean).join(' / ').replace(/\/([^/]*)$/, '- $1')}
                     </span>
                     <ChevronDown size={13} className="text-[#111] shrink-0" />
                   </button>
@@ -654,7 +653,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                 </div>
               </div>
             </div>
-            <div className="flex-1 text-[12px] text-[#4a4a4a] whitespace-nowrap overflow-hidden text-ellipsis">
+            <div className="flex-1 text-[12px] text-[#4a4a4a] leading-snug">
               Guaranteed <span className="font-semibold text-[#1a1a1a]">secure & safe</span> checkout.
             </div>
             <div className="flex items-center gap-2 shrink-0">
