@@ -10,7 +10,7 @@ import { doc, updateDoc, increment } from "firebase/firestore/lite";
 import { mutate } from 'swr'; 
 import SizeChartModal from "@/components/SizeChartModal";
 import ProductReviews from "@/components/products/ProductReviews";
-import ProductCard from '../products/ProductCard';
+import ProductCard from "@/components/products/ProductCard";
 import { useProduct, useRelatedProducts } from "@/hooks/useFirestore";
 import { Plus, Minus, Star, Info, Share2, Heart, ImageIcon, X, Truck, Eye, ShieldCheck, ChevronLeft, Search, ChevronRight, ChevronDown, ChevronUp, CreditCard, Banknote, ArrowLeftRight } from '@/components/icons-extra';
 
