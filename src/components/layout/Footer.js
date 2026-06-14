@@ -2,409 +2,356 @@
 import Link from "next/link";
 import { useState } from "react";
 
-export default function Footer() {
-  const [openSection, setOpenSection] = useState(null);
+const paymentIcons = [
+  { name: "Mastercard", url: "https://ik.imagekit.io/windeg/WIND_Shopping/mastercard.svg" },
+  { name: "Visa",       url: "https://ik.imagekit.io/windeg/WIND_Shopping/visa.svg" },
+  { name: "Meeza",      url: "https://ik.imagekit.io/windeg/WIND_Shopping/Meeza.svg" },
+  { name: "American Express", url: "https://ik.imagekit.io/windeg/WIND_Shopping/amex-svgrepo-com.svg" },
+];
+
+const quickLinks = [
+  { label: "الرئيسية",   href: "/" },
+  { label: "المنتجات",   href: "/collections/shop-all" },
+  { label: "العروض",     href: "/collections/sale" },
+  { label: "تتبع طلبك", href: "/track-order" },
+];
+
+const policies = [
+  { label: "سياسة الشحن والتوصيل", href: "/policies/shipping-policy" },
+  { label: "الاسترجاع والاستبدال",  href: "/policies/refund-policy" },
+  { label: "الشروط والأحكام",       href: "/policies/terms-of-service" },
+  { label: "سياسة الخصوصية",        href: "/policies/privacy-policy" },
+];
+
+const socials = [
+  { label: "Instagram", href: "https://www.instagram.com/windshoping",      icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="0.5" fill="currentColor" stroke="none"/></svg> },
+  { label: "TikTok",    href: "https://www.tiktok.com/@windshopping",        icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.69a8.18 8.18 0 0 0 4.78 1.52V6.75a4.85 4.85 0 0 1-1.01-.06z"/></svg> },
+  { label: "Facebook",  href: "https://www.facebook.com/WIND.EGY/",          icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg> },
+  { label: "WhatsApp",  href: "https://wa.me/201055737110",                  icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg> },
+];
+
+function NewsletterBlock() {
   const [email, setEmail] = useState("");
-
-  const toggle = (key) => setOpenSection((prev) => (prev === key ? null : key));
-
-  const quickLinks = [
-    { label: "الرئيسية", href: "/" },
-    { label: "المنتجات", href: "/collections/shop-all" },
-    { label: "العروض", href: "/collections/sale" },
-    { label: "تتبع طلبك", href: "/track-order" },
-  ];
-
-  const policies = [
-    { label: "سياسة الشحن والتوصيل", href: "/policies/shipping-policy" },
-    { label: "الاسترجاع والاستبدال", href: "/policies/refund-policy" },
-    { label: "الشروط والأحكام", href: "/policies/terms-of-service" },
-    { label: "سياسة الخصوصية", href: "/policies/privacy-policy" },
-  ];
-
-  const socials = [
-    {
-      label: "Instagram",
-      href: "https://www.instagram.com/windshoping",
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="2" y="2" width="20" height="20" rx="5" />
-          <circle cx="12" cy="12" r="4" />
-          <circle cx="17.5" cy="6.5" r="0.5" fill="currentColor" stroke="none" />
-        </svg>
-      ),
-    },
-    {
-      label: "TikTok",
-      href: "https://www.tiktok.com/@windshopping",
-      icon: (
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.69a8.18 8.18 0 0 0 4.78 1.52V6.75a4.85 4.85 0 0 1-1.01-.06z" />
-        </svg>
-      ),
-    },
-    {
-      label: "Facebook",
-      href: "https://www.facebook.com/WIND.EGY/",
-      icon: (
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />
-        </svg>
-      ),
-    },
-    {
-      label: "WhatsApp",
-      href: "https://wa.me/201055737110",
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-        </svg>
-      ),
-    },
-  ];
-
-  const sections = [
-    { key: "quick", label: "روابط سريعة", links: quickLinks },
-    { key: "policies", label: "سياساتنا", links: policies },
-  ];
-
   return (
-    <footer className="footer-root" dir="rtl">
-
-      {/* ── Newsletter ── */}
-      <div className="newsletter-bar">
-        <div className="newsletter-inner">
-          <div className="nl-text">
-            <p className="nl-title">تواصل معنا</p>
-            <p className="nl-sub">اشترك في القائمة واحصل على خصم 10% على أول طلب</p>
-          </div>
-          <div className="nl-form">
-            <input
-              type="email"
-              className="nl-input"
-              placeholder="أدخل بريدك الإلكتروني"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-            <button className="nl-btn">اشترك الآن</button>
-          </div>
-        </div>
+    <div className="nl-wrap">
+      <p className="nl-title">اشترك واحصل على خصم 10%</p>
+      <p className="nl-sub">على أول طلب</p>
+      <div className="nl-input-row">
+        <svg className="nl-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="2" y="4" width="20" height="16" rx="3"/><polyline points="2,4 12,13 22,4"/>
+        </svg>
+        <input
+          type="email"
+          className="nl-input"
+          placeholder="بريدك الإلكتروني"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
       </div>
+      <button className="nl-btn">اشترك الآن</button>
+    </div>
+  );
+}
 
-      {/* ── Desktop body ── */}
-      <div className="footer-desktop">
-        <div className="footer-inner">
+export default function Footer() {
+  return (
+    <footer className="f-root" dir="rtl">
 
-          {/* Brand col */}
+      {/* ══════════ DESKTOP ══════════ */}
+      <div className="f-desktop">
+        <div className="f-inner">
+
+          {/* col 1: newsletter */}
+          <div className="col-nl">
+            <NewsletterBlock />
+          </div>
+
+          {/* col 2: social + tagline */}
           <div className="col-brand">
-            <p className="footer-logo">WIND</p>
-            <p className="footer-tagline">
-              ملابس أصلية بتصاميم مختلفة<br />من القاهرة للعالم.
-            </p>
-            <div className="social-row">
+            <div className="soc-row">
               {socials.map((s) => (
                 <a key={s.label} href={s.href} target="_blank" rel="noopener noreferrer" className="soc-btn" aria-label={s.label}>
                   {s.icon}
                 </a>
               ))}
             </div>
+            <p className="f-tagline">ملابس أصلية بتصاميم مختلفة<br />من القاهرة للعالم.</p>
           </div>
 
-          {/* Quick links */}
+          {/* col 3: quick links */}
           <div className="col-links">
             <p className="col-label">روابط سريعة</p>
             {quickLinks.map((l) => (
-              <Link key={l.label} href={l.href} className="footer-link">{l.label}</Link>
+              <Link key={l.label} href={l.href} className="f-link">{l.label}</Link>
             ))}
           </div>
 
-          {/* Policies */}
+          {/* col 4: policies */}
           <div className="col-links">
             <p className="col-label">سياساتنا</p>
             {policies.map((l) => (
-              <Link key={l.label} href={l.href} className="footer-link">{l.label}</Link>
+              <Link key={l.label} href={l.href} className="f-link">{l.label}</Link>
             ))}
           </div>
 
         </div>
 
-        <div className="footer-bottom desktop-bottom">
-          <p className="copy">© {new Date().getFullYear()} WIND Shopping. جميع الحقوق محفوظة.</p>
+        {/* bottom bar */}
+        <div className="f-bottom">
           <div className="pay-row">
-            <span className="pay-badge">VISA</span>
-            <span className="pay-badge">MASTERCARD</span>
-            <span className="pay-badge">INSTAPAY</span>
+            {paymentIcons.map((p) => (
+              <img key={p.name} src={p.url} alt={p.name} className="pay-icon" />
+            ))}
           </div>
+          <p className="copy">© {new Date().getFullYear()} WIND Shopping. جميع الحقوق محفوظة.</p>
         </div>
       </div>
 
-      {/* ── Mobile body ── */}
-      <div className="footer-mobile">
+      {/* ══════════ MOBILE ══════════ */}
+      <div className="f-mobile">
 
-        {/* Brand */}
-        <div className="mob-brand">
-          <p className="footer-logo">WIND</p>
-          <p className="footer-tagline">ملابس أصلية بتصاميم مختلفة — من القاهرة للعالم.</p>
-          <div className="social-row">
+        {/* newsletter */}
+        <div className="mob-nl">
+          <NewsletterBlock />
+        </div>
+
+        {/* social + links */}
+        <div className="mob-body">
+          <div className="soc-row mob-soc">
             {socials.map((s) => (
               <a key={s.label} href={s.href} target="_blank" rel="noopener noreferrer" className="soc-btn" aria-label={s.label}>
                 {s.icon}
               </a>
             ))}
           </div>
+
+          <div className="mob-cols">
+            <div className="mob-col">
+              <p className="col-label">روابط سريعة</p>
+              {quickLinks.map((l) => (
+                <Link key={l.label} href={l.href} className="f-link">{l.label}</Link>
+              ))}
+            </div>
+            <div className="mob-col">
+              <p className="col-label">سياساتنا</p>
+              {policies.map((l) => (
+                <Link key={l.label} href={l.href} className="f-link">{l.label}</Link>
+              ))}
+            </div>
+          </div>
         </div>
 
-        {/* Accordion sections */}
-        {sections.map(({ key, label, links }) => (
-          <div key={key} className="accordion-item">
-            <button className="accordion-trigger" onClick={() => toggle(key)} aria-expanded={openSection === key}>
-              <span>{label}</span>
-              <svg
-                className={`chevron ${openSection === key ? "open" : ""}`}
-                width="14" height="14" viewBox="0 0 24 24"
-                fill="none" stroke="currentColor" strokeWidth="2"
-                strokeLinecap="round" strokeLinejoin="round"
-              >
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </button>
-            {openSection === key && (
-              <div className="accordion-body">
-                {links.map((l) => (
-                  <Link key={l.label} href={l.href} className="footer-link mob-link">{l.label}</Link>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-
-        {/* Mobile bottom */}
-        <div className="footer-bottom mob-bottom">
-          <p className="copy">© {new Date().getFullYear()} WIND Shopping</p>
+        {/* bottom bar */}
+        <div className="f-bottom mob-bottom">
           <div className="pay-row">
-            <span className="pay-badge">VISA</span>
-            <span className="pay-badge">MASTERCARD</span>
-            <span className="pay-badge">INSTAPAY</span>
+            {paymentIcons.map((p) => (
+              <img key={p.name} src={p.url} alt={p.name} className="pay-icon" />
+            ))}
           </div>
+          <p className="copy">© {new Date().getFullYear()} WIND Shopping</p>
         </div>
 
       </div>
 
       <style jsx>{`
         /* ─── ROOT ─── */
-        .footer-root {
-          background: #fff;
+        .f-root {
+          background: #F3F4F6;
           color: #111;
           font-family: 'Cairo', 'Tajawal', sans-serif;
-          border-top: 1px solid #e5e5e5;
         }
 
         /* ─── NEWSLETTER ─── */
-        .newsletter-bar {
-          background: #fff;
-          border-bottom: 1px solid #e5e5e5;
-          padding: 40px 48px;
-        }
-        .newsletter-inner {
-          max-width: 1440px;
-          margin: 0 auto;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 32px;
-          flex-wrap: wrap;
+        .nl-wrap {
+          width: 100%;
         }
         .nl-title {
-          font-size: 20px;
+          font-size: 15px;
           font-weight: 700;
-          margin: 0 0 4px;
           color: #111;
+          margin: 0 0 4px;
         }
         .nl-sub {
-          font-size: 13px;
-          color: #666;
-          margin: 0;
+          font-size: 12px;
+          color: #888;
+          margin: 0 0 14px;
         }
-        .nl-form {
+        .nl-input-row {
           display: flex;
-          gap: 0;
+          align-items: center;
+          background: #fff;
+          border-radius: 10px;
+          padding: 0 14px;
+          gap: 8px;
+          width: 100%;
+          box-sizing: border-box;
+        }
+        .nl-icon {
+          color: #bbb;
           flex-shrink: 0;
         }
         .nl-input {
-          border: 1px solid #ccc;
-          border-left: none;
-          padding: 10px 16px;
-          font-size: 13px;
-          font-family: inherit;
+          flex: 1;
+          border: none;
           outline: none;
-          width: 260px;
-          color: #111;
-          background: #fff;
+          font-family: inherit;
+          font-size: 13px;
+          color: #333;
+          background: transparent;
+          padding: 11px 0;
           direction: rtl;
         }
-        .nl-input:focus { border-color: #111; }
+        .nl-input::placeholder { color: #bbb; }
+        /* subscribe button: starts from right, ~half width */
         .nl-btn {
+          display: block;
+          width: 50%;
+          margin-top: 10px;
+          margin-right: 0;
+          margin-left: auto;
           background: #111;
           color: #fff;
           border: none;
-          padding: 10px 22px;
+          padding: 11px 0;
           font-size: 13px;
           font-family: inherit;
-          font-weight: 600;
+          font-weight: 700;
           cursor: pointer;
-          white-space: nowrap;
+          border-radius: 10px;
+          text-align: center;
           transition: background 0.2s;
         }
         .nl-btn:hover { background: #333; }
 
-        /* ─── DESKTOP ─── */
-        .footer-desktop { display: none; }
-        @media (min-width: 1024px) {
-          .footer-desktop { display: block; }
-          .footer-mobile  { display: none; }
-          .newsletter-bar { padding: 40px 48px; }
+        /* ─── SOCIAL ─── */
+        .soc-row {
+          display: flex;
+          gap: 8px;
         }
-
-        .footer-inner {
-          max-width: 1440px;
-          margin: 0 auto;
-          padding: 48px 48px 36px;
-          display: grid;
-          grid-template-columns: 1.6fr 1fr 1fr;
-          gap: 48px;
-        }
-
-        .footer-logo {
-          font-size: 20px;
-          font-weight: 800;
-          letter-spacing: 0.1em;
-          color: #111;
-          margin: 0 0 10px;
-        }
-
-        .footer-tagline {
-          font-size: 12px;
-          color: #888;
-          line-height: 1.9;
-          margin: 0 0 20px;
-        }
-
-        .social-row { display: flex; gap: 8px; }
-
         .soc-btn {
           width: 34px;
           height: 34px;
-          border: 1px solid #ddd;
+          background: #fff;
+          border-radius: 50%;
           display: flex;
           align-items: center;
           justify-content: center;
           color: #555;
           text-decoration: none;
-          transition: border-color 0.2s, color 0.2s;
+          transition: color 0.2s, background 0.2s;
         }
         .soc-btn:hover {
-          border-color: #111;
-          color: #111;
+          background: #111;
+          color: #fff;
         }
 
+        /* ─── LINKS ─── */
         .col-label {
-          font-size: 11px;
-          color: #999;
-          letter-spacing: 0.12em;
+          font-size: 10px;
+          color: #bbb;
+          letter-spacing: 0.13em;
           text-transform: uppercase;
-          margin: 0 0 14px;
+          margin: 0 0 12px;
           font-weight: 600;
         }
-
-        .footer-link {
+        .f-link {
           display: block;
           font-size: 13px;
-          color: #444;
+          color: #555;
           text-decoration: none;
           padding: 5px 0;
           transition: color 0.15s;
         }
-        .footer-link:hover { color: #111; }
+        .f-link:hover { color: #111; }
+
+        /* ─── TAGLINE ─── */
+        .f-tagline {
+          font-size: 12px;
+          color: #999;
+          line-height: 1.8;
+          margin: 14px 0 0;
+        }
 
         /* ─── BOTTOM BAR ─── */
-        .footer-bottom {
-          border-top: 1px solid #e5e5e5;
+        .f-bottom {
+          background: #E5E7EB;
           display: flex;
           align-items: center;
           justify-content: space-between;
+          padding: 12px 40px;
         }
-        .desktop-bottom { padding: 14px 48px; }
-
+        .pay-row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .pay-icon {
+          height: 20px;
+          opacity: 0.55;
+        }
         .copy {
           font-size: 11px;
           color: #aaa;
           margin: 0;
         }
 
-        .pay-row { display: flex; gap: 8px; align-items: center; }
-        .pay-badge {
-          font-size: 9px;
-          border: 1px solid #ddd;
-          padding: 3px 8px;
-          color: #888;
-          letter-spacing: 0.06em;
-          font-weight: 600;
+        /* ─── DESKTOP ─── */
+        .f-desktop { display: none; }
+
+        @media (min-width: 1024px) {
+          .f-desktop { display: block; }
+          .f-mobile  { display: none; }
         }
+
+        .f-inner {
+          max-width: 1440px;
+          margin: 0 auto;
+          padding: 52px 40px 44px;
+          display: grid;
+          grid-template-columns: 1.6fr 1fr 1fr 1fr;
+          gap: 40px;
+          align-items: start;
+        }
+
+        .col-nl { }
+        .col-brand { }
+        .col-links { }
 
         /* ─── MOBILE ─── */
-        .footer-mobile { display: block; }
+        .f-mobile { display: block; }
 
-        .mob-brand {
+        .mob-nl {
           padding: 28px 20px 24px;
-          border-bottom: 1px solid #e5e5e5;
+          background: #F3F4F6;
         }
 
-        /* Accordion */
-        .accordion-item {
-          border-bottom: 1px solid #e5e5e5;
+        .mob-body {
+          background: #F3F4F6;
+          padding: 20px 20px 24px;
         }
-        .accordion-trigger {
-          width: 100%;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 16px 20px;
-          background: none;
-          border: none;
-          font-family: inherit;
-          font-size: 14px;
-          font-weight: 600;
-          color: #111;
-          cursor: pointer;
-          text-align: right;
-        }
-        .chevron {
-          transition: transform 0.2s;
-          flex-shrink: 0;
-        }
-        .chevron.open { transform: rotate(180deg); }
 
-        .accordion-body {
-          padding: 0 20px 16px;
+        .mob-soc {
+          margin-bottom: 20px;
         }
-        .mob-link {
-          padding: 7px 0;
-          font-size: 13px;
-          color: #555;
+
+        .mob-cols {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 0 16px;
         }
+
+        .mob-col { }
 
         .mob-bottom {
-          padding: 14px 20px;
-          flex-direction: row-reverse;
+          padding: 12px 20px;
         }
 
-        /* Newsletter mobile */
-        @media (max-width: 1023px) {
-          .newsletter-bar { padding: 28px 20px; }
-          .newsletter-inner { flex-direction: column; align-items: flex-start; gap: 16px; }
-          .nl-form { width: 100%; }
-          .nl-input { flex: 1; min-width: 0; width: auto; border-left: 1px solid #ccc; }
-          .nl-btn { }
+        .pay-icon {
+          height: 16px;
+        }
+
+        @media (min-width: 1024px) {
+          .pay-icon { height: 20px; }
         }
       `}</style>
     </footer>
