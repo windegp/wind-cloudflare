@@ -10,6 +10,7 @@ import { doc, updateDoc, increment } from "firebase/firestore/lite";
 import { mutate } from 'swr'; 
 import SizeChartModal from "@/components/SizeChartModal";
 import ProductReviews from "@/components/products/ProductReviews";
+import ProductCard from "@/components/ProductCard";
 import { useProduct, useRelatedProducts } from "@/hooks/useFirestore";
 import { Plus, Minus, Star, Info, Share2, Heart, ImageIcon, X, Truck, Eye, ShieldCheck, ChevronLeft, Search, ChevronRight, ChevronDown, ChevronUp, CreditCard, Banknote, ArrowLeftRight } from '@/components/icons-extra';
 
@@ -912,19 +913,25 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
         {product.metafields?.hideRelatedSection !== "Yes" && relatedProducts.length > 0 && (
           <div className="py-12 lg:py-16 border-t border-[#EBEBEB]">
-            <h2 className="text-[11px] font-medium text-[#111] tracking-[0.12em] uppercase mb-8 lg:mb-10">منتجات قد تعجبك</h2>
-            <div className="flex gap-5 lg:gap-8 overflow-x-auto hide-scrollbar-horizontal pb-4 -mx-5 px-5 lg:mx-0 lg:px-0" dir="rtl">
+            <h2 className="text-[22px] lg:text-[26px] font-medium text-[#1A1A1A] tracking-wide mb-8 lg:mb-10" style={{fontFamily:"'Cairo', sans-serif"}}>منتجات قد تعجبك</h2>
+            <div className="flex lg:grid lg:grid-cols-4 gap-4 lg:gap-8 overflow-x-auto hide-scrollbar-horizontal pb-4 -mx-5 px-5 lg:mx-0 lg:px-0 snap-x snap-mandatory" dir="rtl">
               {relatedProducts.map(rp => (
-                <Link href={`/products/${rp.id}`} key={rp.id} className="flex-shrink-0 w-[130px] lg:w-[180px] group cursor-pointer block">
-                  <div className="relative aspect-[3/4] bg-[#F7F7F7] overflow-hidden border border-[#EBEBEB] mb-3 group-hover:border-[#999] transition-all duration-300">
-                    <img src={getRelatedImageUrl(rp)} alt={rp.title} loading="lazy" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]" />
-                  </div>
-                  <h3 className="text-[12px] lg:text-[13px] text-[#111] font-medium line-clamp-2 mb-1">{rp.title}</h3>
-                  <div className="flex items-center gap-1">
-                    <span className="text-[#111] font-medium text-xs lg:text-[13px]">{rp.price}</span>
-                    <span className="text-[#999] text-[10px]">ج.م</span>
-                  </div>
-                </Link>
+                <div key={rp.id} className="flex-shrink-0 w-[75vw] sm:w-[40vw] lg:w-auto snap-center">
+                  <ProductCard
+                    {...rp}
+                    id={rp.id}
+                    title={rp.title}
+                    price={rp.price}
+                    compareAtPrice={rp.compareAtPrice}
+                    mainImage={rp.mainImage || rp.image}
+                    images={rp.images}
+                    handle={rp.handle}
+                    folderName={rp.folderName}
+                    collections={rp.collections}
+                    colorSwatches={rp.colorSwatches}
+                    options={rp.options}
+                  />
+                </div>
               ))}
             </div>
           </div>
