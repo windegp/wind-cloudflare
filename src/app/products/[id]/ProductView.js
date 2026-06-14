@@ -634,12 +634,12 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                     onClick={() => setIsStickyOptionsOpen(o => !o)}
                     className="flex items-center justify-between gap-2 border border-[#E0E0E0] px-3 h-[42px] bg-white rounded-lg w-[45%] shrink-0"
                   >
-                    <div className="flex flex-col items-start min-w-0">
-                      <span className="text-[11px] text-[#444] truncate w-full">
-                        {[selectedColor, selectedSize].filter(Boolean).join(' / ') || "اختر"}
-                      </span>
-                      <span className="text-[12px] font-semibold text-[#111]">{product.price} ج.م</span>
-                    </div>
+                    <span className="text-[12px] text-[#444] truncate">
+                      {[selectedColor, selectedSize].filter(Boolean).join(' / ') || "اختر"}
+                      {product.price && (
+                        <span className="text-[#111] font-semibold"> · {product.price} ج.م</span>
+                      )}
+                    </span>
                     <ChevronDown size={13} className="text-[#111] shrink-0" />
                   </button>
                 )}
@@ -647,21 +647,21 @@ export default function ProductView({ initialProduct, sourceCategory }) {
            </div>
 
           {/* Secure Checkout Badge */}
-          <div className="mt-3 bg-[#fafafa] border border-[#e8e8e8] rounded-md px-3 py-2.5 flex items-center gap-2">
+          <div className="mt-3 bg-[#fafafa] border border-[#e8e8e8] rounded-md px-4 py-3 flex items-center gap-3 overflow-hidden">
             <div className="flex items-center justify-center shrink-0">
-              <div className="relative w-[16px] h-[18px]">
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[9px] h-[7px] border-2 border-[#1a1a1a] border-b-0 rounded-t-full"></div>
-                <div className="absolute bottom-0 left-0 w-[16px] h-[11px] bg-[#1a1a1a] rounded-sm flex items-center justify-center">
-                  <div className="w-[3px] h-[4px] bg-[#fafafa] rounded-sm"></div>
+              <div className="relative w-[18px] h-[20px]">
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[10px] h-[8px] border-2 border-[#1a1a1a] border-b-0 rounded-t-full"></div>
+                <div className="absolute bottom-0 left-0 w-[18px] h-[13px] bg-[#1a1a1a] rounded-sm flex items-center justify-center">
+                  <div className="w-[3px] h-[5px] bg-[#fafafa] rounded-sm"></div>
                 </div>
               </div>
             </div>
-            <div className="flex-1 text-[11px] text-[#4a4a4a] whitespace-nowrap">
+            <div className="flex-1 text-[12px] text-[#4a4a4a] whitespace-nowrap overflow-hidden text-ellipsis">
               Guaranteed <span className="font-semibold text-[#1a1a1a]">secure & safe</span> checkout.
             </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <img src="https://cdn.shopify.com/s/files/1/0744/2726/9319/files/visa.svg?v=1766783643" alt="Visa" className="h-6 w-auto" />
-              <img src="https://cdn.shopify.com/s/files/1/0744/2726/9319/files/mastercard.svg?v=1766783719" alt="Mastercard" className="h-6 w-auto" />
+            <div className="flex items-center gap-2 shrink-0">
+              <img src="https://cdn.shopify.com/s/files/1/0744/2726/9319/files/visa.svg?v=1766783643" alt="Visa" className="h-7 w-auto" />
+              <img src="https://cdn.shopify.com/s/files/1/0744/2726/9319/files/mastercard.svg?v=1766783719" alt="Mastercard" className="h-7 w-auto" />
             </div>
           </div>
 
