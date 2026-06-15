@@ -4,13 +4,13 @@ import { getDb } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore/lite";
 
 // ─── لوحة التحكم ──────────────────────────────────────────────
-// عدّل هنا فقط — أو خليها تتقرأ من metafields (شوف الـ props)
-const DEFAULT_DISCOUNT_PERCENT   = 0;     // نسبة خصم على المنتجات المقترحة (0 = بدون)
-const DEFAULT_FREE_SHIPPING_LIMIT = 1850; // حد الشحن المجاني بالجنيه (0 = مجاني دايماً)
+const DEFAULT_DISCOUNT_PERCENT   = 0;
+const DEFAULT_FREE_SHIPPING_LIMIT = 1850;
 
 // ─── Helpers ──────────────────────────────────────────────────
+// ✅ FIX 2: أرقام إنجليزية (en-EG بدل ar-EG)
 const fmt = (n) =>
-  Number(n).toLocaleString("ar-EG", {
+  Number(n).toLocaleString("en-EG", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }) + " LE";
@@ -19,36 +19,30 @@ const applyDiscount = (price, pct) =>
   pct > 0 ? price * (1 - pct / 100) : price;
 
 // ─── Component ────────────────────────────────────────────────
-export default function BundleWidget({ product }) {
-  // قراءة الإعدادات من metafields المنتج (مع fallback للـ defaults)
- const DISCOUNT  = parseFloat(product?.metafields?.bundleDiscount ?? DEFAULT_DISCOUNT_PERCENT);
+export default function BundleWidget({ product, onOpenQuickView }) {
+  const DISCOUNT  = parseFloat(product?.metafields?.bundleDiscount ?? DEFAULT_DISCOUNT_PERCENT);
   const LIMIT     = parseFloat(product?.metafields?.bundleFreeShipping ?? DEFAULT_FREE_SHIPPING_LIMIT);
   const TITLE     = product?.metafields?.bundleTitle || "منتجات يتم شراؤها معاً";
   const SUBTITLE  = product?.metafields?.bundleSubtitle || "";
 
-  // ── parse handles ──
   const handles = (product?.metafields?.bundleProducts || "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
 
-  // لو مفيش منتجات محددة، ما نعرضش الويدجت
   if (!handles.length) return null;
 
-  return <BundleWidgetInner product={product} handles={handles} discount={DISCOUNT} limit={LIMIT} title={TITLE} subtitle={SUBTITLE} />;
+  return <BundleWidgetInner product={product} handles={handles} discount={DISCOUNT} limit={LIMIT} title={TITLE} subtitle={SUBTITLE} onOpenQuickView={onOpenQuickView} />;
 }
 
-// ─── Inner (بعد التحقق من وجود handles) ──────────────────────
-function BundleWidgetInner({ product, handles, discount, limit, title, subtitle }) {
-  const [upsells, setUpsells]     = useState([]);   // بيانات المنتجات المقترحة
+// ─── Inner ──────────────────────────────────────────────────
+function BundleWidgetInner({ product, handles, discount, limit, title, subtitle, onOpenQuickView }) {
+  const [upsells, setUpsells]     = useState([]);
   const [loading, setLoading]     = useState(true);
-  const [zoomSrc, setZoomSrc]     = useState(null); // صورة مكبّرة
 
-  // variant و qty للمنتج الرئيسي
   const mainPrice = parseFloat(String(product?.price || "0").replace(/[^0-9.]/g, ""));
   const [mainQty, setMainQty]     = useState(1);
 
-  // state لكل upsell: { checked, variantIdx, qty }
   const [upsellStates, setUpsellStates] = useState([]);
 
   // ─── جلب بيانات المنتجات من Firebase ─────────────────────
@@ -65,30 +59,39 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
               if (!snap.exists()) return null;
               const d = snap.data();
 
-              // بناء variants من options أو من بيانات المنتج مباشرة
               let variants = [];
               if (d.options && Array.isArray(d.options)) {
-                // لو عنده options، اعمل variant لكل قيمة Color × Size
-                const colorOpt = d.options.find(o => o.name?.toLowerCase().includes("color"));
-                const sizeOpt  = d.options.find(o => o.name?.toLowerCase().includes("size"));
+                const colorOpt = d.options.find(o => o.name?.toLowerCase().includes("color") || o.name?.includes("لون"));
+                const sizeOpt  = d.options.find(o => o.name?.toLowerCase().includes("size") || o.name?.includes("مقاس"));
                 const colors   = colorOpt?.values?.split(",").map(s => s.trim()).filter(Boolean) || [""];
                 const sizes    = sizeOpt?.values?.split(",").map(s => s.trim()).filter(Boolean)  || [""];
                 colors.forEach(color => {
                   sizes.forEach(size => {
                     const label = [color, size].filter(Boolean).join(" / ") || "Default";
                     const img   = (color && d.colorSwatches?.[color]) || d.images?.[0] || "";
-                    variants.push({ label, img, price: parseFloat(d.price || 0), available: true });
+                    variants.push({ label, img, price: parseFloat(d.price || 0), available: true, color, size });
                   });
                 });
               }
-              // fallback: variant واحد
               if (!variants.length) {
                 variants.push({
                   label: "Default",
                   img: d.images?.[0] || "",
                   price: parseFloat(d.price || 0),
                   available: (d.quantity > 0) || d.sellOutOfStock === "Yes",
+                  color: "",
+                  size: "",
                 });
+              }
+
+              // استخراج الألوان والمقاسات المتاحة للكارت
+              let colors = [];
+              let sizes = [];
+              if (d.options && Array.isArray(d.options)) {
+                const colorOpt = d.options.find(o => o.name?.toLowerCase().includes("color") || o.name?.includes("لون"));
+                const sizeOpt  = d.options.find(o => o.name?.toLowerCase().includes("size") || o.name?.includes("مقاس"));
+                colors = colorOpt?.values?.split(",").map(s => s.trim()).filter(Boolean) || [];
+                sizes  = sizeOpt?.values?.split(",").map(s => s.trim()).filter(Boolean) || [];
               }
 
               return {
@@ -96,6 +99,10 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
                 title:  d.title || handle,
                 images: d.images || [],
                 variants,
+                colors,
+                sizes,
+                colorSwatches: d.colorSwatches || {},
+                rawData: d,
               };
             } catch (e) {
               console.warn("BundleWidget: فشل تحميل", handle, e);
@@ -106,7 +113,14 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
         if (cancelled) return;
         const valid = results.filter(Boolean);
         setUpsells(valid);
-        setUpsellStates(valid.map(() => ({ checked: true, variantIdx: 0, qty: 1 })));
+        setUpsellStates(valid.map((up) => ({
+          checked: true,
+          variantIdx: 0,
+          qty: 1,
+          selectedColor: up.colors[0] || "",
+          selectedSize:  up.sizes[0]  || "",
+          isOptionsOpen: false,
+        })));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -139,47 +153,54 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
     setUpsellStates(prev => prev.map((s, idx) => idx === i ? { ...s, ...patch } : s));
   }, []);
 
-  // ─── إضافة للسلة (fetch مباشر لـ /cart/add.js) ────────────
+  // ✅ FIX 1: إضافة للسلة بدون reload
   const [adding, setAdding] = useState(false);
+  const { addToCart } = (() => {
+    try {
+      // محاولة استخدام CartContext لو متاح
+      const { useCart } = require("@/context/CartContext");
+      return useCart();
+    } catch {
+      return { addToCart: null };
+    }
+  })();
+
   const handleAddToCart = async () => {
     if (hasUnavailable || adding) return;
     setAdding(true);
 
-    // المنتج الرئيسي — نستخدم الـ variant المختار في صفحة المنتج
-    // نقرأ الـ selected variant id من الـ DOM (input[name="id"])
-    const mainVariantEl = document.querySelector('[name="id"]');
-    const mainVariantId = mainVariantEl ? parseInt(mainVariantEl.value) : null;
-
-    const items = [];
-
-    if (mainVariantId) {
-      items.push({ id: mainVariantId, quantity: mainQty });
-    }
-
-    // المنتجات المقترحة
-    upsells.forEach((up, i) => {
-      const st = upsellStates[i];
-      if (!st?.checked) return;
-      const variant = up.variants[st.variantIdx];
-      if (!variant?.available) return;
-      // لو المنتج عنده variantId حقيقي من Shopify، استخدمه
-      // هنا بنفترض إن السعر وبيانات المنتج من Firebase فقط
-      // وإن الـ cart يشتغل بـ handle أو product id
-      items.push({
-        id: up.id,       // handle بيتبعت للـ cart
-        quantity: st.qty || 1,
-      });
-    });
-
     try {
-      await fetch("/cart/add.js", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: items.reverse() }),
-      });
-      window.location.reload();
-    } catch {
-      setAdding(false);
+      // المنتج الرئيسي
+      const mainSelectedSize  = product?.selectedSize  || "";
+      const mainSelectedColor = product?.selectedColor || "";
+
+      if (addToCart) {
+        // ✅ استخدام CartContext مثل صفحة المنتج
+        addToCart({
+          ...product,
+          selectedSize:  mainSelectedSize,
+          selectedColor: mainSelectedColor,
+          qty: mainQty,
+        });
+
+        upsells.forEach((up, i) => {
+          const st = upsellStates[i];
+          if (!st?.checked) return;
+          const variant = up.variants[st.variantIdx];
+          if (!variant?.available) return;
+          addToCart({
+            ...up.rawData,
+            id: up.id,
+            title: up.title,
+            images: up.images,
+            selectedSize:  st.selectedSize  || variant.size  || "",
+            selectedColor: st.selectedColor || variant.color || "",
+            qty: st.qty || 1,
+          });
+        });
+      }
+    } finally {
+      setTimeout(() => setAdding(false), 600);
     }
   };
 
@@ -198,7 +219,8 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
   const shippingDone = limit === 0 || total >= limit;
 
   return (
-    <div style={styles.root} dir="rtl">
+    // ✅ FIX 6: margin-top أكبر لإنزال السيكشن
+    <div style={{ ...styles.root, marginTop: 32 }} dir="rtl">
       {/* عنوان */}
       <h3 style={styles.title}>{title}</h3>
       {subtitle && (
@@ -214,12 +236,12 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
         mainPrice={mainPrice}
         mainQty={mainQty}
         setMainQty={setMainQty}
-        onZoom={setZoomSrc}
+        onOpenQuickView={onOpenQuickView}
       />
 
       {/* ── المنتجات المقترحة ── */}
       {upsells.map((up, i) => {
-        const st = upsellStates[i] || { checked: true, variantIdx: 0, qty: 1 };
+        const st = upsellStates[i] || { checked: true, variantIdx: 0, qty: 1, selectedColor: "", selectedSize: "", isOptionsOpen: false };
         const variant = up.variants[st.variantIdx];
         const discountedPrice = applyDiscount(variant?.price || 0, discount);
         return (
@@ -230,10 +252,13 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
             discount={discount}
             discountedPrice={discountedPrice}
             originalPrice={variant?.price || 0}
-            onCheck={(v)       => updateUpsell(i, { checked: v })}
+            onCheck={(v)         => updateUpsell(i, { checked: v })}
             onVariantChange={(v) => updateUpsell(i, { variantIdx: v, qty: 1 })}
-            onQtyChange={(v)   => updateUpsell(i, { qty: v })}
-            onZoom={setZoomSrc}
+            onQtyChange={(v)     => updateUpsell(i, { qty: v })}
+            onColorChange={(v)   => updateUpsell(i, { selectedColor: v })}
+            onSizeChange={(v)    => updateUpsell(i, { selectedSize: v })}
+            onToggleOptions={(v) => updateUpsell(i, { isOptionsOpen: v })}
+            onOpenQuickView={onOpenQuickView}
           />
         );
       })}
@@ -244,7 +269,6 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
           <span style={styles.summaryLabel}>{shippingDone ? "الإجمالي:" : "الإجمالي الفرعي:"}</span>
           <span style={styles.summaryPrice}>{fmt(total)}</span>
         </div>
-        {/* شريط الشحن */}
         <div style={styles.shippingBar}>
           <div style={{ ...styles.shippingProgress, width: shippingPct + "%", background: shippingDone ? "#28a745" : "#1a1a1a" }} />
         </div>
@@ -263,20 +287,12 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
       >
         {adding ? "جاري الإضافة..." : hasUnavailable ? "بعض المنتجات غير متوفرة" : "أضف المجموعة للسلة"}
       </button>
-
-      {/* ── Zoom Modal ── */}
-      {zoomSrc && (
-        <div style={styles.zoomOverlay} onClick={() => setZoomSrc(null)}>
-          <span style={styles.zoomClose}>&times;</span>
-          <img src={zoomSrc} style={styles.zoomImg} onClick={e => e.stopPropagation()} alt="zoom" />
-        </div>
-      )}
     </div>
   );
 }
 
 // ─── كارد المنتج الرئيسي ──────────────────────────────────────
-function MainProductCard({ product, discount, mainPrice, mainQty, setMainQty, onZoom }) {
+function MainProductCard({ product, discount, mainPrice, mainQty, setMainQty, onOpenQuickView }) {
   const discounted = applyDiscount(mainPrice, discount);
   const imgSrc     = product?.images?.[0] || product?.mainImage || "";
 
@@ -284,21 +300,36 @@ function MainProductCard({ product, discount, mainPrice, mainQty, setMainQty, on
     <div style={styles.card}>
       <input type="checkbox" checked disabled style={styles.checkbox} />
       <div style={styles.info}>
-        <div style={styles.titleRow}>
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <p style={styles.productTitle}>{product?.title}</p>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", flexShrink: 0, gap: 4 }}>
-            {discount > 0 && <span style={styles.badge}>-{discount}%</span>}
-            <span style={styles.price}>{fmt(discounted)}</span>
-          </div>
+        {/* ✅ FIX 4: عنوان المنتج كامل أولاً */}
+        <p style={styles.productTitle}>{product?.title}</p>
+
+        {/* ✅ FIX 4: السعر والبادج في صف منفصل تحت العنوان */}
+        <div style={styles.priceRow}>
+          <span style={styles.price}>{fmt(discounted)}</span>
+          {discount > 0 && (
+            <>
+              {/* ✅ FIX 3: بدون - سالب في البادج */}
+              <span style={styles.badge}>{discount}%</span>
+              <span style={styles.originalPrice}>{fmt(mainPrice)}</span>
+            </>
+          )}
         </div>
+
         <div style={styles.qtyRow}>
           <QtyControls qty={mainQty} onChange={setMainQty} />
         </div>
       </div>
-      <div style={styles.imgWrap} onClick={() => onZoom(imgSrc)}>
-        <img src="https://cdn.shopify.com/s/files/1/0744/2726/9319/files/zoomlens_4270.ico?v=1769116302" style={styles.zoomIcon} alt="" />
+
+      {/* ✅ FIX 7: الضغط على الصورة يفتح QuickView */}
+      <div
+        style={{ ...styles.imgWrap, cursor: onOpenQuickView ? "pointer" : "zoom-in" }}
+        onClick={() => onOpenQuickView && onOpenQuickView(product, true)}
+      >
+        <img
+          src="https://cdn.shopify.com/s/files/1/0744/2726/9319/files/zoomlens_4270.ico?v=1769116302"
+          style={styles.zoomIcon}
+          alt=""
+        />
         <img src={imgSrc} style={styles.productImg} alt={product?.title} loading="lazy" />
       </div>
     </div>
@@ -306,10 +337,21 @@ function MainProductCard({ product, discount, mainPrice, mainQty, setMainQty, on
 }
 
 // ─── كارد منتج مقترح ──────────────────────────────────────────
-function UpsellCard({ product, state, discount, discountedPrice, originalPrice, onCheck, onVariantChange, onQtyChange, onZoom }) {
+function UpsellCard({
+  product, state, discount, discountedPrice, originalPrice,
+  onCheck, onVariantChange, onQtyChange, onColorChange, onSizeChange, onToggleOptions, onOpenQuickView
+}) {
   const variant  = product.variants[state.variantIdx];
   const imgSrc   = variant?.img || product.images?.[0] || "";
   const isAvail  = variant?.available !== false;
+
+  // الخيارات المتاحة
+  const hasColors = product.colors && product.colors.length > 0;
+  const hasSizes  = product.sizes  && product.sizes.length  > 0;
+  const hasOptions = hasColors || hasSizes;
+
+  // نص الخيار المختار
+  const optionLabel = [state.selectedColor, state.selectedSize].filter(Boolean).join(" / ") || "اختر";
 
   return (
     <div style={styles.card}>
@@ -320,51 +362,117 @@ function UpsellCard({ product, state, discount, discountedPrice, originalPrice, 
         style={styles.checkbox}
       />
       <div style={styles.info}>
-        <div style={styles.titleRow}>
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <p style={styles.productTitle}>{product.title}</p>
-            {state.checked && !isAvail && (
-              <span style={{ fontSize: 10, color: "#d93025", fontWeight: "bold", display: "block" }}>غير متوفر حالياً</span>
-            )}
-          </div>
-          <div style={{ display: "flex", alignItems: "center", flexShrink: 0, gap: 4 }}>
-            {discount > 0 && (
-              <span style={{ fontSize: 11, color: "#999", textDecoration: "line-through", whiteSpace: "nowrap" }}>
-                {fmt(originalPrice)}
-              </span>
-            )}
-            {discount > 0 && <span style={styles.badge}>-{discount}%</span>}
-            <span style={styles.price}>{fmt(discountedPrice)}</span>
-          </div>
+        {/* ✅ FIX 4: عنوان كامل أولاً */}
+        <p style={styles.productTitle}>{product.title}</p>
+        {state.checked && !isAvail && (
+          <span style={{ fontSize: 10, color: "#d93025", fontWeight: "bold", display: "block", marginBottom: 2 }}>غير متوفر حالياً</span>
+        )}
+
+        {/* ✅ FIX 4: السعر والبادج في صف منفصل */}
+        <div style={styles.priceRow}>
+          <span style={styles.price}>{fmt(discountedPrice)}</span>
+          {discount > 0 && (
+            <>
+              {/* ✅ FIX 3: بدون - سالب */}
+              <span style={styles.badge}>{discount}%</span>
+              <span style={styles.originalPrice}>{fmt(originalPrice)}</span>
+            </>
+          )}
         </div>
+
+        {/* ✅ FIX 5: صف الكميات + خانة الخيارات */}
         <div style={styles.qtyRow}>
-          {/* Variant selector */}
-          {product.variants.length > 1 && (
-            <div style={styles.variantBox}>
-              <select
-                value={state.variantIdx}
-                onChange={e => onVariantChange(parseInt(e.target.value))}
-                style={styles.variantSelect}
+          <QtyControls qty={state.qty} onChange={onQtyChange} />
+
+          {/* خانة الخيارات (مقاس/لون) */}
+          {hasOptions && (
+            <div style={{ position: "relative", flex: 1, height: "100%" }}>
+              <button
+                onClick={() => onToggleOptions(!state.isOptionsOpen)}
+                style={styles.optionsBtn}
               >
-                {product.variants.map((v, i) => (
-                  <option key={i} value={i}>{v.label}{!v.available ? " - (غير متوفر)" : ""}</option>
-                ))}
-              </select>
-              <div style={styles.variantDisplay}>
-                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {variant?.label}
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
+                  {optionLabel}
                 </span>
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <path d="M6 9l6 6 6-6" />
+                  <path d={state.isOptionsOpen ? "M18 15l-6-6-6 6" : "M6 9l6 6 6-6"} />
                 </svg>
-              </div>
+              </button>
+
+              {/* Dropdown */}
+              {state.isOptionsOpen && (
+                <div style={styles.optionsDropdown}>
+                  {hasColors && (
+                    <div style={{ marginBottom: hasSizes ? 8 : 0 }}>
+                      <span style={styles.optionLabel}>اللون</span>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                        {product.colors.map((color, ci) => {
+                          const swatch = product.colorSwatches?.[color];
+                          const isImg  = swatch && (swatch.startsWith("http") || swatch.includes("/"));
+                          const isSel  = state.selectedColor === color;
+                          return (
+                            <button
+                              key={ci}
+                              onClick={() => { onColorChange(color); }}
+                              style={{
+                                ...styles.colorSwatch,
+                                outline: isSel ? "2px solid #1a1a1a" : "1px solid #ddd",
+                                outlineOffset: isSel ? 2 : 0,
+                                transform: isSel ? "scale(1.1)" : "scale(1)",
+                              }}
+                              title={color}
+                            >
+                              {isImg
+                                ? <img src={swatch} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }} alt={color} />
+                                : <div style={{ width: "100%", height: "100%", borderRadius: "50%", background: swatch || "#ddd" }} />
+                              }
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  {hasSizes && (
+                    <div>
+                      <span style={styles.optionLabel}>المقاس</span>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                        {product.sizes.map((sz, si) => {
+                          const isSel = state.selectedSize === sz;
+                          return (
+                            <button
+                              key={si}
+                              onClick={() => { onSizeChange(sz); }}
+                              style={{
+                                ...styles.sizeBtn,
+                                background: isSel ? "#1a1a1a" : "#fff",
+                                color:      isSel ? "#fff"    : "#333",
+                                borderColor: isSel ? "#1a1a1a" : "#ddd",
+                              }}
+                            >
+                              {sz}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
-          <QtyControls qty={state.qty} onChange={onQtyChange} />
         </div>
       </div>
-      <div style={styles.imgWrap} onClick={() => onZoom(imgSrc)}>
-        <img src="https://cdn.shopify.com/s/files/1/0744/2726/9319/files/zoomlens_4270.ico?v=1769116302" style={styles.zoomIcon} alt="" />
+
+      {/* ✅ FIX 7: الضغط على الصورة يفتح QuickView */}
+      <div
+        style={{ ...styles.imgWrap, cursor: onOpenQuickView ? "pointer" : "zoom-in" }}
+        onClick={() => onOpenQuickView && onOpenQuickView({ ...product.rawData, id: product.id, title: product.title, images: product.images }, true)}
+      >
+        <img
+          src="https://cdn.shopify.com/s/files/1/0744/2726/9319/files/zoomlens_4270.ico?v=1769116302"
+          style={styles.zoomIcon}
+          alt=""
+        />
         <img src={imgSrc} style={styles.productImg} alt={product.title} loading="lazy" />
       </div>
     </div>
@@ -376,6 +484,7 @@ function QtyControls({ qty, onChange }) {
   return (
     <div style={styles.qtyControls}>
       <button style={styles.qtyBtn} onClick={() => onChange(qty + 1)}>+</button>
+      {/* ✅ FIX 2: الرقم بالإنجليزي */}
       <span style={styles.qtyVal}>{qty}</span>
       <button style={styles.qtyBtn} onClick={() => onChange(Math.max(1, qty - 1))}>−</button>
     </div>
@@ -409,12 +518,13 @@ const styles = {
     padding: 12,
     marginBottom: 10,
     display: "flex",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 10,
     background: "#fff",
     boxSizing: "border-box",
-    overflow: "hidden",
+    overflow: "visible",  // allow dropdown overflow
     width: "100%",
+    position: "relative",
   },
   checkbox: {
     width: 18,
@@ -422,6 +532,7 @@ const styles = {
     accentColor: "#333",
     cursor: "pointer",
     flexShrink: 0,
+    marginTop: 3,
   },
   info: {
     flex: 1,
@@ -429,31 +540,34 @@ const styles = {
     textAlign: "right",
     display: "flex",
     flexDirection: "column",
-    justifyContent: "center",
+    justifyContent: "flex-start",
+    gap: 4,
   },
-  titleRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 8,
-    gap: 5,
-  },
+  // ✅ FIX 4: عنوان المنتج كامل (لا truncation)
   productTitle: {
     fontSize: 13,
     fontWeight: 600,
     margin: 0,
     color: "#333",
-    lineHeight: 1.3,
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
+    lineHeight: 1.4,
+    whiteSpace: "normal",
+    wordBreak: "break-word",
+  },
+  // ✅ FIX 4: صف السعر والبادج منفصل تحت العنوان
+  priceRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 5,
+    flexWrap: "wrap",
+    marginTop: 2,
   },
   price: {
     color: "#d93025",
     fontWeight: "bold",
-    fontSize: 12,
+    fontSize: 13,
     whiteSpace: "nowrap",
   },
+  // ✅ FIX 3: بدون - سالب
   badge: {
     background: "#d93025",
     color: "#fff",
@@ -461,50 +575,22 @@ const styles = {
     fontWeight: "bold",
     padding: "2px 5px",
     borderRadius: 3,
+    whiteSpace: "nowrap",
+  },
+  originalPrice: {
+    fontSize: 11,
+    color: "#999",
+    textDecoration: "line-through",
+    whiteSpace: "nowrap",
   },
   qtyRow: {
     display: "flex",
     alignItems: "center",
     gap: 6,
     height: 36,
-    marginTop: 5,
+    marginTop: 6,
     width: "100%",
-  },
-  variantBox: {
-    background: "#f8f9fa",
-    border: "1px solid #e0e0e0",
-    borderRadius: 6,
-    padding: "0 6px",
-    cursor: "pointer",
     position: "relative",
-    flex: 1,
-    height: "100%",
-    display: "flex",
-    alignItems: "center",
-    minWidth: 0,
-    overflow: "hidden",
-  },
-  variantSelect: {
-    position: "absolute",
-    opacity: 0,
-    width: "100%",
-    height: "100%",
-    top: 0,
-    left: 0,
-    cursor: "pointer",
-    zIndex: 10,
-  },
-  variantDisplay: {
-    fontSize: 10.5,
-    color: "#555",
-    display: "flex",
-    alignItems: "center",
-    gap: 4,
-    justifyContent: "space-between",
-    width: "100%",
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    pointerEvents: "none",
   },
   qtyControls: {
     display: "flex",
@@ -536,9 +622,67 @@ const styles = {
     fontSize: 13,
     fontWeight: "bold",
     color: "#333",
+    fontVariantNumeric: "tabular-nums",
+  },
+  // ✅ FIX 5: زر خيارات المقاس/اللون
+  optionsBtn: {
+    display: "flex",
+    alignItems: "center",
+    gap: 4,
+    justifyContent: "space-between",
+    background: "#f8f9fa",
+    border: "1px solid #e0e0e0",
+    borderRadius: 6,
+    padding: "0 8px",
+    fontSize: 10.5,
+    color: "#555",
+    cursor: "pointer",
+    height: "100%",
+    width: "100%",
+    textAlign: "right",
+  },
+  optionsDropdown: {
+    position: "absolute",
+    bottom: "calc(100% + 4px)",
+    right: 0,
+    left: 0,
+    background: "#fff",
+    border: "1px solid #e0e0e0",
+    borderRadius: 8,
+    padding: 10,
+    zIndex: 100,
+    boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+    minWidth: 160,
+  },
+  optionLabel: {
+    fontSize: 10,
+    fontWeight: "bold",
+    color: "#888",
+    display: "block",
+    marginBottom: 5,
+  },
+  colorSwatch: {
+    width: 26,
+    height: 26,
+    borderRadius: "50%",
+    border: "none",
+    cursor: "pointer",
+    padding: 0,
+    overflow: "hidden",
+    transition: "transform 0.15s, outline 0.15s",
+    background: "transparent",
+    flexShrink: 0,
+  },
+  sizeBtn: {
+    border: "1px solid #ddd",
+    borderRadius: 4,
+    padding: "3px 8px",
+    fontSize: 10,
+    fontWeight: "bold",
+    cursor: "pointer",
+    transition: "all 0.15s",
   },
   imgWrap: {
-    cursor: "zoom-in",
     position: "relative",
     width: 65,
     height: 85,
@@ -619,33 +763,5 @@ const styles = {
     background: "#ccc",
     cursor: "not-allowed",
     opacity: 0.8,
-  },
-  zoomOverlay: {
-    position: "fixed",
-    zIndex: 99999999,
-    top: 0,
-    left: 0,
-    width: "100%",
-    height: "100%",
-    background: "rgba(0,0,0,0.9)",
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  zoomClose: {
-    position: "absolute",
-    top: 40,
-    right: 25,
-    color: "white",
-    fontSize: 45,
-    cursor: "pointer",
-    fontWeight: "bold",
-    zIndex: 100000000,
-  },
-  zoomImg: {
-    maxWidth: "90%",
-    maxHeight: "85vh",
-    borderRadius: 4,
-    objectFit: "contain",
   },
 };
