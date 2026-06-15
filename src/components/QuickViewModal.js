@@ -7,8 +7,7 @@ import { useCart } from "@/context/CartContext";
 import SizeChartModal from "@/components/SizeChartModal"; 
 import ProductReviews from "@/components/products/ProductReviews";
 
-
-export default function QuickViewModal({ product, isOpen, onClose, isFromBundle = false }) {
+export default function QuickViewModal({ product, isOpen, onClose }) {
   const { addToCart } = useCart();
   
   const [mounted, setMounted] = useState(false);
@@ -278,7 +277,7 @@ export default function QuickViewModal({ product, isOpen, onClose, isFromBundle 
                         const isImg = swatch.startsWith("http") || swatch.includes("/");
                         const isSel = qvSelectedColor === name;
                         return (
-                          <button key={i} onClick={isFromBundle ? undefined : () => { setQvSelectedColor(name); if (isImg) setQvActiveImage(swatch); }} style={isFromBundle ? {pointerEvents:'none', cursor:'default'} : {}} className={`w-9 h-9 rounded-full overflow-hidden transition-all duration-200 bg-white flex items-center justify-center ${isSel ? "ring-2 ring-[#1A1A1A] ring-offset-2 scale-105 shadow-sm" : "ring-1 ring-gray-200 hover:scale-105"}`} title={formatVariable(name)}>
+                          <button key={i} onClick={() => { setQvSelectedColor(name); if (isImg) setQvActiveImage(swatch); }} className={`w-9 h-9 rounded-full overflow-hidden transition-all duration-200 bg-white flex items-center justify-center ${isSel ? "ring-2 ring-[#1A1A1A] ring-offset-2 scale-105 shadow-sm" : "ring-1 ring-gray-200 hover:scale-105"}`} title={formatVariable(name)}>
                             {isImg ? <img src={getImageUrl(product, swatch)} className="w-full h-full object-cover" alt={name} /> : <div style={{backgroundColor: swatch}} className="w-full h-full rounded-full border border-black/5" />}
                           </button>
                         );
@@ -297,14 +296,14 @@ export default function QuickViewModal({ product, isOpen, onClose, isFromBundle 
                   {qvSizes.length > 1 && (
                     <div className="flex flex-wrap gap-2">
                       {qvSizes.map(sz => (
-                        <button key={sz} onClick={isFromBundle ? undefined : () => setQvSelectedSize(sz)} style={isFromBundle ? {pointerEvents:'none', cursor:'default'} : {}} className={`min-w-[44px] h-9 px-3 text-xs font-bold rounded-lg transition-all duration-200 capitalize ${qvSelectedSize === sz ? "border-[#1A1A1A] ring-1 ring-[#1A1A1A] text-[#1A1A1A] bg-white shadow-sm scale-105" : "bg-white text-gray-500 border border-gray-200 hover:border-gray-300 hover:text-[#1A1A1A]"}`}>{formatVariable(sz)}</button>
+                        <button key={sz} onClick={() => setQvSelectedSize(sz)} className={`min-w-[44px] h-9 px-3 text-xs font-bold rounded-lg transition-all duration-200 capitalize ${qvSelectedSize === sz ? "border-[#1A1A1A] ring-1 ring-[#1A1A1A] text-[#1A1A1A] bg-white shadow-sm scale-105" : "bg-white text-gray-500 border border-gray-200 hover:border-gray-300 hover:text-[#1A1A1A]"}`}>{formatVariable(sz)}</button>
                       ))}
                     </div>
                   )}
                 </div>
               )}
 
-              <div className="flex gap-2 w-full mt-2" style={isFromBundle ? {display:'none'} : {}}>
+              <div className="flex gap-2 w-full mt-2">
                 <button onClick={handleAddToCartFromQuickView} disabled={isAdding} className="pay-btn-qv flex-1 font-black text-sm py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all" style={{fontFamily:"Cairo,sans-serif"}}><ShoppingBag size={16} />{isAdding ? "جاري الإضافة..." : `أضف إلي السلة — ${product.price * qvQuantity} ج.م`}</button>
                 <div className="flex items-center justify-between bg-white border border-gray-200 rounded-xl px-1 w-[90px] shrink-0 shadow-sm">
                   <button onClick={() => setQvQuantity(q => q + 1)} className="text-gray-500 hover:text-[#1A1A1A] p-2 transition-colors"><Plus size={16} /></button>
@@ -346,14 +345,6 @@ export default function QuickViewModal({ product, isOpen, onClose, isFromBundle 
 
       {/* 🌟 دليل القياسات سيعمل الآن بامتياز دون أي تجميد */}
       <SizeChartModal isOpen={isSizeGuideOpen} onClose={() => setSizeGuideOpen(false)} product={product} />
-      {quickViewProduct && (
-        <QuickViewModal
-          product={quickViewProduct}
-          isOpen={isQuickViewOpen}
-          onClose={() => { setIsQuickViewOpen(false); setQuickViewProduct(null); }}
-          isFromBundle={isQuickViewFromBundle}
-        />
-      )}
 
       {isReviewsModalOpen && (
         <div className="fixed inset-0 z-[1000000] flex items-end md:items-center justify-center bg-black/50 backdrop-blur-sm p-0 md:p-4" dir="rtl">
