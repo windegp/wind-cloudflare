@@ -102,6 +102,7 @@ function CreateProductForm() {
     pageCrossSellHandles: "",
     customHtmlSnippet: "",
     customHtmlPosition: "below_cart",
+    customHtmlProducts: "",
     hideRelatedSection: "No"
   });
 
@@ -225,7 +226,8 @@ function CreateProductForm() {
               pageCrossSellHandles: data.metafields?.pageCrossSellHandles || "",
               customHtmlSnippet: data.metafields?.customHtmlSnippet || "",
               customHtmlPosition: data.metafields?.customHtmlPosition || "below_cart",
-              hideRelatedSection: data.metafields?.hideRelatedSection || "No"
+    customHtmlProducts: data.metafields?.customHtmlProducts || "",
+    hideRelatedSection: data.metafields?.hideRelatedSection || "No"
             });
 
             if (data.options && data.options.length > 0) {
@@ -874,7 +876,7 @@ function CreateProductForm() {
               <h3 className="text-sm font-bold text-[#202223] mb-4">بيانات مخصصة (Metafields)</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                  {Object.keys(metafields).map((key) => {
-                   if (['customLikesCount', 'cartCrossSellHandles', 'pageCrossSellHandles', 'customHtmlSnippet', 'customHtmlPosition', 'hideRelatedSection'].includes(key)) {
+                  if (['customLikesCount', 'cartCrossSellHandles', 'pageCrossSellHandles', 'customHtmlSnippet', 'customHtmlPosition', 'customHtmlProducts', 'hideRelatedSection'].includes(key)) {
                      return null;
                    }
                    return (
@@ -1155,7 +1157,7 @@ function CreateProductForm() {
                 </select>
               </div>
 
-              <div>
+             <div>
                 <label className="block text-xs font-bold text-gray-600 mb-2">الكود البرمجي (للفيديوهات، بنرات الثقة... الخ)</label>
                 <textarea 
                   name="customHtmlSnippet"
@@ -1167,11 +1169,79 @@ function CreateProductForm() {
                   dir="ltr"
                 ></textarea>
               </div>
-            </div>
+
+              {/* Product Picker للكود المخصص */}
+              <div className="mt-5 pt-5 border-t border-gray-200">
+                <label className="block text-xs font-bold text-gray-600 mb-2">
+                  منتجات مرتبطة بهذا الكود
+                  <span className="text-gray-400 font-normal mr-1">(اختياري — للكودات اللي بتحتاج منتجات محددة)</span>
+                </label>
+
+                {/* فلتر */}
+                <select
+                  value={crossSellFilter}
+                  onChange={(e) => setCrossSellFilter(e.target.value)}
+                  className="w-full bg-gray-50 border border-gray-300 px-3 py-2 rounded-lg text-sm outline-none focus:border-[#008060] mb-3"
+                >
+                  <option value="all">كل المنتجات</option>
+                  {availableCollections.map(c => (
+                    <option key={c.id} value={c.slug}>{c.name}</option>
+                  ))}
+                </select>
+
+                {/* قائمة المنتجات */}
+                <div className="max-h-52 overflow-y-auto custom-scrollbar border border-gray-200 rounded-lg p-2 bg-gray-50 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {availableProducts
+                    .filter(p => p.id !== productId)
+                    .filter(p =>
+                      crossSellFilter === 'all' ||
+                      (p.collections || []).some(c => c === crossSellFilter || c === `/${crossSellFilter}`)
+                    )
+                    .map(prod => {
+                      const handle = prod.seo?.handle || prod.id;
+                      const isSelected = (metafields.customHtmlProducts || "")
+                        .split(',').map(s => s.trim()).includes(handle);
+                      return (
+                        <label
+                          key={prod.id}
+                          className={`flex items-center gap-2 p-2 rounded border cursor-pointer transition-all ${
+                            isSelected ? 'bg-green-50 border-green-500 shadow-sm' : 'bg-white border-gray-200 hover:bg-gray-100'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleDynamicCrossSellToggle(handle, 'customHtmlProducts')}
+                            className="w-4 h-4 text-[#008060] rounded cursor-pointer"
+                          />
+                          {prod.images?.[0]
+                            ? <img src={prod.images[0]} className="w-8 h-8 rounded object-cover border border-gray-200" alt="" />
+                            : <div className="w-8 h-8 bg-gray-200 rounded" />
+                          }
+                          <div className="flex flex-col flex-1 min-w-0">
+                            <span className="text-xs font-bold line-clamp-1 text-[#1a1a1a]">{prod.title}</span>
+                            <span className="text-[10px] text-gray-400" dir="ltr">{handle}</span>
+                          </div>
+                        </label>
+                      );
+                    })
+                  }
+                </div>
+
+                {/* عرض الـ handles المختارة + تعديل يدوي */}
+                <p className="text-[10px] text-gray-400 mt-2">الـ handles المحددة (يمكنك التعديل اليدوي):</p>
+                <textarea
+                  name="customHtmlProducts"
+                  value={metafields.customHtmlProducts}
+                  onChange={handleMetafieldChange}
+                  rows="2"
+                  className="w-full mt-1 bg-white border border-gray-300 px-3 py-2 rounded-lg text-xs focus:border-[#008060] outline-none text-[#1A1A1A] resize-none"
+                />
+              </div>
+                </div>
 
           </div>
         </div>
-
       </div>
 
       <datalist id="csv-collections">
