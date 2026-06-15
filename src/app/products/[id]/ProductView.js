@@ -9,7 +9,6 @@ import { getDb } from "../../../lib/firebase";
 import { doc, updateDoc, increment } from "firebase/firestore/lite";
 import { mutate } from 'swr'; 
 import SizeChartModal from "@/components/SizeChartModal";
-import QuickViewModal from "@/components/QuickViewModal";
 import BundleWidget from "@/components/BundleWidget";
 import ProductReviews from "@/components/products/ProductReviews";
 import ProductCard from "@/components/products/ProductCard";
@@ -54,9 +53,6 @@ export default function ProductView({ initialProduct, sourceCategory }) {
  const [isStickyVisible, setIsStickyVisible] = useState(true);
   const [isStickyOptionsOpen, setIsStickyOptionsOpen] = useState(false);
   const [isAddingToCart, setIsAddingToCart] = useState(false);
-  const [quickViewProduct, setQuickViewProduct] = useState(null);
-  const [isQuickViewOpen, setIsQuickViewOpen] = useState(false);
-  const [isQuickViewFromBundle, setIsQuickViewFromBundle] = useState(false);
   const addToCartBtnRef = useRef(null);
   const VISIBLE_THUMBS = 6;
 
@@ -688,7 +684,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             </div>
           </div>
 
-         <BundleWidget product={product} onOpenQuickView={(p, fromBundle) => { setQuickViewProduct(p); setIsQuickViewFromBundle(fromBundle || false); setIsQuickViewOpen(true); }} />
+          <BundleWidget product={product} />
 
           {/* Accordion Mobile */}
           {product.description && (
@@ -864,7 +860,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                 <button onClick={() => setQuantity(q => q>1?q-1:1)} className="text-[#888] hover:text-black p-2"><Minus size={14} /></button>
               </div>
             </div>
-          <BundleWidget product={product} onOpenQuickView={(p, fromBundle) => { setQuickViewProduct(p); setIsQuickViewFromBundle(fromBundle || false); setIsQuickViewOpen(true); }} />
+            <BundleWidget product={product} />
 
             {/* Trust */}
             <div className="mb-2">

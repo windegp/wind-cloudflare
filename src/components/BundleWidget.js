@@ -323,7 +323,7 @@ function MainProductCard({ product, discount, mainPrice, mainQty, setMainQty, on
       {/* ✅ FIX 7: الضغط على الصورة يفتح QuickView */}
       <div
         style={{ ...styles.imgWrap, cursor: onOpenQuickView ? "pointer" : "zoom-in" }}
-        onClick={() => onOpenQuickView && onOpenQuickView(product, true)}
+        onClick={() => onOpenQuickView ? onOpenQuickView(product) : null}
       >
         <img
           src="https://cdn.shopify.com/s/files/1/0744/2726/9319/files/zoomlens_4270.ico?v=1769116302"
@@ -466,7 +466,7 @@ function UpsellCard({
       {/* ✅ FIX 7: الضغط على الصورة يفتح QuickView */}
       <div
         style={{ ...styles.imgWrap, cursor: onOpenQuickView ? "pointer" : "zoom-in" }}
-        onClick={() => onOpenQuickView && onOpenQuickView({ ...product.rawData, id: product.id, title: product.title, images: product.images }, true)}
+        onClick={() => onOpenQuickView ? onOpenQuickView({ ...product.rawData, id: product.id, title: product.title, images: product.images }) : null}
       >
         <img
           src="https://cdn.shopify.com/s/files/1/0744/2726/9319/files/zoomlens_4270.ico?v=1769116302"
