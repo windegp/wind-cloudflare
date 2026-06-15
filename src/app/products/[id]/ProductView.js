@@ -9,6 +9,7 @@ import { getDb } from "../../../lib/firebase";
 import { doc, updateDoc, increment } from "firebase/firestore/lite";
 import { mutate } from 'swr'; 
 import SizeChartModal from "@/components/SizeChartModal";
+import BundleWidget from "@/components/BundleWidget";
 import ProductReviews from "@/components/products/ProductReviews";
 import ProductCard from "@/components/products/ProductCard";
 import { useProduct, useRelatedProducts } from "@/hooks/useFirestore";
@@ -683,9 +684,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             </div>
           </div>
 
-          {renderCustomHtml('below_cart')}
-
-          
+          <BundleWidget product={product} />
 
           {/* Accordion Mobile */}
           {product.description && (
@@ -861,7 +860,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                 <button onClick={() => setQuantity(q => q>1?q-1:1)} className="text-[#888] hover:text-black p-2"><Minus size={14} /></button>
               </div>
             </div>
-            {renderCustomHtml('below_cart')}
+            <BundleWidget product={product} />
 
             {/* Trust */}
             <div className="mb-2">

@@ -103,7 +103,12 @@ function CreateProductForm() {
     customHtmlSnippet: "",
     customHtmlPosition: "below_cart",
     customHtmlProducts: "",
-    hideRelatedSection: "No"
+    hideRelatedSection: "No",
+    bundleProducts: "",
+    bundleDiscount: "0",
+    bundleFreeShipping: "1850",
+    bundleTitle: "",
+    bundleSubtitle: "",
   });
 
   // ==========================================
@@ -227,7 +232,12 @@ function CreateProductForm() {
               customHtmlSnippet: data.metafields?.customHtmlSnippet || "",
               customHtmlPosition: data.metafields?.customHtmlPosition || "below_cart",
     customHtmlProducts: data.metafields?.customHtmlProducts || "",
-    hideRelatedSection: data.metafields?.hideRelatedSection || "No"
+    hideRelatedSection: data.metafields?.hideRelatedSection || "No",
+    bundleProducts: data.metafields?.bundleProducts || "",
+    bundleDiscount: data.metafields?.bundleDiscount || "0",
+    bundleFreeShipping: data.metafields?.bundleFreeShipping || "1850",
+    bundleTitle: data.metafields?.bundleTitle || "",
+    bundleSubtitle: data.metafields?.bundleSubtitle || "",
             });
 
             if (data.options && data.options.length > 0) {
@@ -876,7 +886,7 @@ function CreateProductForm() {
               <h3 className="text-sm font-bold text-[#202223] mb-4">بيانات مخصصة (Metafields)</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                  {Object.keys(metafields).map((key) => {
-                  if (['customLikesCount', 'cartCrossSellHandles', 'pageCrossSellHandles', 'customHtmlSnippet', 'customHtmlPosition', 'customHtmlProducts', 'hideRelatedSection'].includes(key)) {
+                  if (['customLikesCount', 'cartCrossSellHandles', 'pageCrossSellHandles', 'customHtmlSnippet', 'customHtmlPosition', 'customHtmlProducts', 'hideRelatedSection', 'bundleProducts', 'bundleDiscount', 'bundleFreeShipping', 'bundleTitle', 'bundleSubtitle'].includes(key)) {
                      return null;
                    }
                    return (
@@ -1033,7 +1043,115 @@ function CreateProductForm() {
         <div className={`grid-cols-1 lg:grid-cols-2 gap-6 relative items-start ${activeTab === 'advanced' ? 'grid' : 'hidden'}`}>
           
           <div className="space-y-6">
-            
+
+            {/* ══ Bundle Widget ══ */}
+            <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm col-span-1 lg:col-span-2">
+              <h3 className="text-base font-black text-[#1A1A1A] mb-1 flex items-center gap-2">
+                <div className="w-1 h-4 bg-[#d93025] rounded-full"></div>
+                Bundle — منتجات يتم شراؤها معاً
+              </h3>
+              <p className="text-xs text-gray-400 mb-5">المنتجات المختارة هنا هتظهر في ويدجت البنج أسفل زر "أضف للسلة".</p>
+
+              <div className="grid grid-cols-2 gap-4 mb-5 p-4 bg-gray-50 rounded-xl border border-gray-200">
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5">عنوان الباقة</label>
+                  <input
+                    type="text"
+                    name="bundleTitle"
+                    value={metafields.bundleTitle}
+                    onChange={handleMetafieldChange}
+                    placeholder="منتجات يتم شراؤها معاً"
+                    className="w-full bg-white border border-gray-300 px-3 py-2 rounded-lg text-sm outline-none focus:border-[#008060] focus:ring-1 focus:ring-[#008060] text-[#202223]"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5">عنوان فرعي (اختياري)</label>
+                  <input
+                    type="text"
+                    name="bundleSubtitle"
+                    value={metafields.bundleSubtitle}
+                    onChange={handleMetafieldChange}
+                    placeholder="مثال: وفّر أكتر لما تشتري مع بعض"
+                    className="w-full bg-white border border-gray-300 px-3 py-2 rounded-lg text-sm outline-none focus:border-[#008060] focus:ring-1 focus:ring-[#008060] text-[#202223]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5">نسبة الخصم على المنتجات المقترحة (%)</label>
+                  <input
+                    type="number"
+                    name="bundleDiscount"
+                    value={metafields.bundleDiscount}
+                    onChange={handleMetafieldChange}
+                    min="0" max="100"
+                    placeholder="0"
+                    className="w-full bg-white border border-gray-300 px-3 py-2 rounded-lg text-sm outline-none focus:border-[#008060] focus:ring-1 focus:ring-[#008060] text-[#202223]"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">0 = بدون خصم</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5">حد الشحن المجاني (بالجنيه)</label>
+                  <input
+                    type="number"
+                    name="bundleFreeShipping"
+                    value={metafields.bundleFreeShipping}
+                    onChange={handleMetafieldChange}
+                    min="0"
+                    placeholder="1850"
+                    className="w-full bg-white border border-gray-300 px-3 py-2 rounded-lg text-sm outline-none focus:border-[#008060] focus:ring-1 focus:ring-[#008060] text-[#202223]"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">0 = شحن مجاني دائماً</p>
+                </div>
+              </div>
+
+              <label className="block text-xs font-bold text-gray-600 mb-2">فلتر حسب القسم:</label>
+              <select
+                value={crossSellFilter}
+                onChange={(e) => setCrossSellFilter(e.target.value)}
+                className="w-full bg-gray-50 border border-gray-300 px-3 py-2 rounded-lg text-sm outline-none focus:border-[#008060] mb-3"
+              >
+                <option value="all">كل المنتجات</option>
+                {availableCollections.map(c => <option key={c.id} value={c.slug}>{c.name}</option>)}
+              </select>
+
+              <div className="max-h-64 overflow-y-auto custom-scrollbar border border-gray-200 rounded-lg p-2 bg-gray-50 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {availableProducts
+                  .filter(p => p.id !== productId)
+                  .filter(p => crossSellFilter === 'all' || (p.collections || []).some(c => c === crossSellFilter || c === `/${crossSellFilter}`))
+                  .map(prod => {
+                    const handle = prod.seo?.handle || prod.id;
+                    const isSelected = (metafields.bundleProducts || "").split(',').map(s => s.trim()).filter(Boolean).includes(handle);
+                    return (
+                      <label key={prod.id} className={`flex items-center gap-2 p-2 rounded border cursor-pointer transition-all ${isSelected ? 'bg-red-50 border-red-400 shadow-sm' : 'bg-white border-gray-200 hover:bg-gray-100'}`}>
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleDynamicCrossSellToggle(handle, 'bundleProducts')}
+                          className="w-4 h-4 text-[#d93025] rounded cursor-pointer"
+                        />
+                        {prod.images?.[0]
+                          ? <img src={prod.images[0]} className="w-8 h-8 rounded object-cover border border-gray-200" alt="" />
+                          : <div className="w-8 h-8 bg-gray-200 rounded" />
+                        }
+                        <div className="flex flex-col flex-1 min-w-0">
+                          <span className="text-xs font-bold line-clamp-1 text-[#1a1a1a]">{prod.title}</span>
+                          <span className="text-[10px] text-gray-400" dir="ltr">{handle}</span>
+                        </div>
+                      </label>
+                    );
+                  })
+                }
+              </div>
+
+              <p className="text-[10px] text-gray-400 mt-3">الـ handles المحددة (يمكنك التعديل اليدوي):</p>
+              <textarea
+                name="bundleProducts"
+                value={metafields.bundleProducts}
+                onChange={handleMetafieldChange}
+                rows="2"
+                placeholder="product-handle-1, product-handle-2"
+                className="w-full mt-1 bg-white border border-gray-300 px-3 py-2 rounded-lg text-xs focus:border-[#008060] outline-none text-[#1A1A1A] resize-none"
+              />
+            </div>
 
             <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
               <h3 className="text-base font-black text-[#1A1A1A] mb-4 flex items-center gap-2">
