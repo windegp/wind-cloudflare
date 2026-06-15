@@ -4,6 +4,7 @@
 // Global cart state management using React Context API
 // Single source of truth for cart data
 // ============================================
+import React from 'react';
 import { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { calculateSubtotal, calculateShipping, calculateAllTotals, validatePromoCode } from '@/lib/cartCalculations';
 
@@ -156,11 +157,10 @@ export function CartProvider({ children }) {
     applyPromoCode,
     discountError
   }), [cartItems, addToCart, removeFromCart, updateQty, clearCart, isCartOpen, toggleCart, openCart, closeCart, subtotal, shipping, total, appliedPromo, applyPromoCode, discountError]);
-
-  return (
-    <CartContext.Provider value={contextValue}>
-      {children}
-    </CartContext.Provider>
+return React.createElement(
+    CartContext.Provider,
+    { value: contextValue },
+    children
   );
 }
 
