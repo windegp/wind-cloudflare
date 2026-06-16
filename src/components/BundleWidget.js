@@ -11,9 +11,9 @@ const DEFAULT_FREE_SHIPPING_LIMIT = 1850;
 // ─── Helpers ──────────────────────────────────────────────────
 // أرقام إنجليزي + ج.م
 const fmt = (n) =>
-  Number(n).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+  Number(Math.round(n)).toLocaleString("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
   }) + " ج.م";
 
 const applyDiscount = (price, pct) =>
@@ -54,7 +54,27 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
   const [adding, setAdding]           = useState(false);
 
   const mainPrice = parseFloat(String(product?.price || "0").replace(/[^0-9.]/g, ""));
-  const [mainQty, setMainQty] = useState(1);
+  const [mainQty, setMainQty]               = useState(1);
+  const [mainVariantIdx, setMainVariantIdx] = useState(0);
+
+  // بناء variants للمنتج الأساسي
+  const mainVariants = (() => {
+    const d = product;
+    if (!d?.options || !Array.isArray(d.options)) return [];
+    const colorOpt = d.options.find(o => o.name?.toLowerCase().includes("color") || o.name?.includes("لون"));
+    const sizeOpt  = d.options.find(o => o.name?.toLowerCase().includes("size")  || o.name?.includes("مقاس"));
+    const colors   = colorOpt?.values?.split(",").map(s => s.trim()).filter(Boolean) || [""];
+    const sizes    = sizeOpt?.values?.split(",").map(s => s.trim()).filter(Boolean)  || [""];
+    const result   = [];
+    colors.forEach(color => {
+      sizes.forEach(size => {
+        const label = [color, size].filter(Boolean).join(" / ") || "Default";
+        const img   = (color && d.colorSwatches?.[color]) || d.images?.[0] || "";
+        result.push({ label, img, color, size });
+      });
+    });
+    return result;
+  })();
 
   // ─── جلب بيانات المنتجات من Firebase ─────────────────────
   useEffect(() => {
@@ -116,16 +136,19 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
     fetchAll();
     return () => { cancelled = true; };
   }, [handles.join(",")]);
+// لو كل الـ upsells مش checked → منتج واحد فقط → بدون خصم
+  const checkedCount = upsellStates.filter(s => s?.checked).length + 1; // +1 للمنتج الأساسي
+  const effectiveDiscount = checkedCount >= 2 ? discount : 0;
 
   // ─── حساب الإجمالي — الخصم على الكل ─────────────────────
   const total = (() => {
-    let sum = applyDiscount(mainPrice, discount) * mainQty;
+    let sum = applyDiscount(mainPrice, effectiveDiscount) * mainQty;
     upsells.forEach((up, i) => {
       const st = upsellStates[i];
       if (!st?.checked) return;
       const variant = up.variants[st.variantIdx];
       if (!variant?.available) return;
-      sum += applyDiscount(variant.price, discount) * (st.qty || 1);
+      sum += applyDiscount(variant.price, effectiveDiscount) * (st.qty || 1);
     });
     return Math.round(sum);
   })();
@@ -145,14 +168,15 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
     if (hasUnavailable || adding) return;
     setAdding(true);
 
-    // المنتج الأساسي بسعر مخفض
+    // المنتج الأساسي بسعر مخفض + الـ variant المختار
+    const selectedMainVariant = mainVariants?.[mainVariantIdx];
     addToCart({
       ...product,
-      selectedSize:   product.selectedSize  || "",
-      selectedColor:  product.selectedColor || "",
-      image:          product.images?.[0] || product.mainImage || "",
-      price:          applyDiscount(mainPrice, discount),
-      compareAtPrice: discount > 0 ? mainPrice : undefined,
+      selectedSize:   selectedMainVariant?.size  || product.selectedSize  || "",
+      selectedColor:  selectedMainVariant?.color || product.selectedColor || "",
+      image:          selectedMainVariant?.img   || product.images?.[0]   || product.mainImage || "",
+      price:          Math.round(applyDiscount(mainPrice, effectiveDiscount)),
+      compareAtPrice: effectiveDiscount > 0 ? Math.round(mainPrice) : undefined,
       qty:            mainQty,
     });
 
@@ -166,8 +190,8 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
       addToCart({
         id:             up.id,
         title:          up.title,
-        price:          applyDiscount(variant.price, discount),
-        compareAtPrice: discount > 0 ? variant.price : undefined,
+        price:          Math.round(applyDiscount(variant.price, effectiveDiscount)),
+        compareAtPrice: effectiveDiscount > 0 ? Math.round(variant.price) : undefined,
         images:         up.images,
         mainImage:      variant.img || up.images?.[0] || "",
         image:          variant.img || up.images?.[0] || "",
@@ -178,7 +202,7 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
     });
 
     setTimeout(() => setAdding(false), 700);
-  }, [hasUnavailable, adding, product, mainPrice, mainQty, upsells, upsellStates, discount, addToCart]);
+  }, [hasUnavailable, adding, product, mainPrice, mainQty, upsells, upsellStates, effectiveDiscount, addToCart]);
 
   // ─── Render ───────────────────────────────────────────────
   if (loading) {
@@ -205,14 +229,17 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
         </p>
       )}
 
-      {/* ── المنتج الأساسي ── */}
+      {/* ── المنتج الرئيسي ── */}
       <MainProductCard
         product={product}
-        discount={discount}
+        discount={effectiveDiscount}
         mainPrice={mainPrice}
         mainQty={mainQty}
         setMainQty={setMainQty}
         onZoom={setZoomSrc}
+        mainVariantIdx={mainVariantIdx}
+        setMainVariantIdx={setMainVariantIdx}
+        mainVariants={mainVariants}
       />
 
       {/* ── المنتجات المقترحة ── */}
@@ -224,7 +251,7 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
             key={up.id}
             product={up}
             state={st}
-            discount={discount}
+            discount={effectiveDiscount}
             originalPrice={variant?.price || 0}
             onCheck={(v)         => updateUpsell(i, { checked: v })}
             onVariantChange={(v) => updateUpsell(i, { variantIdx: v, qty: 1 })}
@@ -299,9 +326,10 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
 }
 
 // ─── كارد المنتج الرئيسي ──────────────────────────────────────
-function MainProductCard({ product, discount, mainPrice, mainQty, setMainQty, onZoom }) {
+function MainProductCard({ product, discount, mainPrice, mainQty, setMainQty, onZoom, mainVariantIdx, setMainVariantIdx, mainVariants }) {
   const discounted = applyDiscount(mainPrice, discount);
-  const imgSrc     = product?.images?.[0] || product?.mainImage || "";
+  const imgSrc     = mainVariants?.[mainVariantIdx]?.img || product?.images?.[0] || product?.mainImage || "";
+  const currentVariant = mainVariants?.[mainVariantIdx];
 
   return (
     <div style={styles.card}>
@@ -322,8 +350,29 @@ function MainProductCard({ product, discount, mainPrice, mainQty, setMainQty, on
           )}
         </div>
 
-        {/* Qty */}
+        {/* Variant + Qty */}
         <div style={styles.qtyRow}>
+          {mainVariants && mainVariants.length > 1 && (
+            <div style={styles.variantBox}>
+              <select
+                value={mainVariantIdx}
+                onChange={e => setMainVariantIdx(parseInt(e.target.value))}
+                style={styles.variantSelect}
+              >
+                {mainVariants.map((v, i) => (
+                  <option key={i} value={i}>{v.label}</option>
+                ))}
+              </select>
+              <div style={styles.variantDisplay}>
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {currentVariant?.label || "اختر"}
+                </span>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </div>
+            </div>
+          )}
           <QtyControls qty={mainQty} onChange={setMainQty} />
         </div>
       </div>
@@ -431,7 +480,7 @@ function QtyControls({ qty, onChange }) {
 // ─── Styles ───────────────────────────────────────────────────
 const styles = {
   root: {
-    margin: "24px 0",
+    margin: "32px 0",
     maxWidth: 500,
     direction: "rtl",
     fontFamily: "inherit",
@@ -537,7 +586,7 @@ const styles = {
     display: "flex",
     alignItems: "center",
     minWidth: 0,
-    overflow: "hidden",
+    overflow: "visible",
   },
   variantSelect: {
     position: "absolute",
@@ -566,7 +615,7 @@ const styles = {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    background: "#F2F2F2",
+    background: "#f9f9f9",
     border: "1px solid #E0E0E0",
     borderRadius: 8,
     overflow: "hidden",
@@ -584,7 +633,7 @@ const styles = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    color: "#888",
+    color: "#333",
     fontWeight: "bold",
     padding: 0,
     fontSize: 15,
