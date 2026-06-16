@@ -480,7 +480,7 @@ function QtyControls({ qty, onChange }) {
 // ─── Styles ───────────────────────────────────────────────────
 const styles = {
   root: {
-    margin: "32px 0",
+    margin: "40px 0",
     maxWidth: 500,
     direction: "rtl",
     fontFamily: "inherit",
