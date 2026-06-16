@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
+import { useCart } from "@/context/CartContext";
 import { getDb } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore/lite";
 
@@ -139,22 +140,21 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
     setUpsellStates(prev => prev.map((s, idx) => idx === i ? { ...s, ...patch } : s));
   }, []);
 
-  // ─── إضافة للسلة (fetch مباشر لـ /cart/add.js) ────────────
+  // ─── إضافة للسلة عبر CartContext ──────────────────────────
+  const { addToCart } = useCart();
   const [adding, setAdding] = useState(false);
-  const handleAddToCart = async () => {
+  const handleAddToCart = useCallback(() => {
     if (hasUnavailable || adding) return;
     setAdding(true);
 
-    // المنتج الرئيسي — نستخدم الـ variant المختار في صفحة المنتج
-    // نقرأ الـ selected variant id من الـ DOM (input[name="id"])
-    const mainVariantEl = document.querySelector('[name="id"]');
-    const mainVariantId = mainVariantEl ? parseInt(mainVariantEl.value) : null;
-
-    const items = [];
-
-    if (mainVariantId) {
-      items.push({ id: mainVariantId, quantity: mainQty });
-    }
+    // المنتج الرئيسي
+    addToCart({
+      ...product,
+      selectedSize:  product.selectedSize  || "",
+      selectedColor: product.selectedColor || "",
+      image: product.images?.[0] || product.mainImage || "",
+      qty: mainQty,
+    });
 
     // المنتجات المقترحة
     upsells.forEach((up, i) => {
@@ -162,26 +162,26 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
       if (!st?.checked) return;
       const variant = up.variants[st.variantIdx];
       if (!variant?.available) return;
-      // لو المنتج عنده variantId حقيقي من Shopify، استخدمه
-      // هنا بنفترض إن السعر وبيانات المنتج من Firebase فقط
-      // وإن الـ cart يشتغل بـ handle أو product id
-      items.push({
-        id: up.id,       // handle بيتبعت للـ cart
-        quantity: st.qty || 1,
+
+      const parts  = (variant.label || "").split("/").map(s => s.trim());
+      const hasTwo = parts.length >= 2;
+
+      addToCart({
+        id:            up.id,
+        title:         up.title,
+        price:         applyDiscount(variant.price, discount),
+        compareAtPrice: variant.price,
+        images:        up.images,
+        mainImage:     variant.img || up.images?.[0] || "",
+        image:         variant.img || up.images?.[0] || "",
+        selectedSize:  hasTwo ? parts[1] : (parts[0] || ""),
+        selectedColor: hasTwo ? parts[0] : "",
+        qty:           st.qty || 1,
       });
     });
 
-    try {
-      await fetch("/cart/add.js", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: items.reverse() }),
-      });
-      window.location.reload();
-    } catch {
-      setAdding(false);
-    }
-  };
+    setTimeout(() => setAdding(false), 700);
+  }, [hasUnavailable, adding, product, mainQty, upsells, upsellStates, discount, addToCart]);
 
   // ─── Render ───────────────────────────────────────────────
   if (loading) {
