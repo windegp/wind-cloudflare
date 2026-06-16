@@ -5,52 +5,56 @@ import { getDb } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore/lite";
 
 // ─── لوحة التحكم ──────────────────────────────────────────────
-// عدّل هنا فقط — أو خليها تتقرأ من metafields (شوف الـ props)
-const DEFAULT_DISCOUNT_PERCENT   = 0;     // نسبة خصم على المنتجات المقترحة (0 = بدون)
-const DEFAULT_FREE_SHIPPING_LIMIT = 1850; // حد الشحن المجاني بالجنيه (0 = مجاني دايماً)
+const DEFAULT_DISCOUNT_PERCENT    = 0;
+const DEFAULT_FREE_SHIPPING_LIMIT = 1850;
 
 // ─── Helpers ──────────────────────────────────────────────────
+// أرقام إنجليزي + ج.م
 const fmt = (n) =>
-  Number(n).toLocaleString("ar-EG", {
+  Number(n).toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }) + " LE";
+  }) + " ج.م";
 
 const applyDiscount = (price, pct) =>
   pct > 0 ? price * (1 - pct / 100) : price;
 
-// ─── Component ────────────────────────────────────────────────
+// ─── Wrapper ──────────────────────────────────────────────────
 export default function BundleWidget({ product }) {
-  // قراءة الإعدادات من metafields المنتج (مع fallback للـ defaults)
- const DISCOUNT  = parseFloat(product?.metafields?.bundleDiscount ?? DEFAULT_DISCOUNT_PERCENT);
-  const LIMIT     = parseFloat(product?.metafields?.bundleFreeShipping ?? DEFAULT_FREE_SHIPPING_LIMIT);
-  const TITLE     = product?.metafields?.bundleTitle || "منتجات يتم شراؤها معاً";
-  const SUBTITLE  = product?.metafields?.bundleSubtitle || "";
+  const DISCOUNT = parseFloat(product?.metafields?.bundleDiscount ?? DEFAULT_DISCOUNT_PERCENT);
+  const LIMIT    = parseFloat(product?.metafields?.bundleFreeShipping ?? DEFAULT_FREE_SHIPPING_LIMIT);
+  const TITLE    = product?.metafields?.bundleTitle || "منتجات يتم شراؤها معاً";
+  const SUBTITLE = product?.metafields?.bundleSubtitle || "";
 
-  // ── parse handles ──
   const handles = (product?.metafields?.bundleProducts || "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+    .split(",").map((s) => s.trim()).filter(Boolean);
 
-  // لو مفيش منتجات محددة، ما نعرضش الويدجت
   if (!handles.length) return null;
 
-  return <BundleWidgetInner product={product} handles={handles} discount={DISCOUNT} limit={LIMIT} title={TITLE} subtitle={SUBTITLE} />;
+  return (
+    <BundleWidgetInner
+      product={product}
+      handles={handles}
+      discount={DISCOUNT}
+      limit={LIMIT}
+      title={TITLE}
+      subtitle={SUBTITLE}
+    />
+  );
 }
 
-// ─── Inner (بعد التحقق من وجود handles) ──────────────────────
+// ─── Inner ────────────────────────────────────────────────────
 function BundleWidgetInner({ product, handles, discount, limit, title, subtitle }) {
-  const [upsells, setUpsells]     = useState([]);   // بيانات المنتجات المقترحة
-  const [loading, setLoading]     = useState(true);
-  const [zoomSrc, setZoomSrc]     = useState(null); // صورة مكبّرة
+  const { addToCart } = useCart();
 
-  // variant و qty للمنتج الرئيسي
-  const mainPrice = parseFloat(String(product?.price || "0").replace(/[^0-9.]/g, ""));
-  const [mainQty, setMainQty]     = useState(1);
-
-  // state لكل upsell: { checked, variantIdx, qty }
+  const [upsells, setUpsells]         = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [zoomSrc, setZoomSrc]         = useState(null);
   const [upsellStates, setUpsellStates] = useState([]);
+  const [adding, setAdding]           = useState(false);
+
+  const mainPrice = parseFloat(String(product?.price || "0").replace(/[^0-9.]/g, ""));
+  const [mainQty, setMainQty] = useState(1);
 
   // ─── جلب بيانات المنتجات من Firebase ─────────────────────
   useEffect(() => {
@@ -66,38 +70,35 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
               if (!snap.exists()) return null;
               const d = snap.data();
 
-              // بناء variants من options أو من بيانات المنتج مباشرة
               let variants = [];
               if (d.options && Array.isArray(d.options)) {
-                // لو عنده options، اعمل variant لكل قيمة Color × Size
-                const colorOpt = d.options.find(o => o.name?.toLowerCase().includes("color"));
-                const sizeOpt  = d.options.find(o => o.name?.toLowerCase().includes("size"));
-                const colors   = colorOpt?.values?.split(",").map(s => s.trim()).filter(Boolean) || [""];
-                const sizes    = sizeOpt?.values?.split(",").map(s => s.trim()).filter(Boolean)  || [""];
+                const colorOpt = d.options.find(o =>
+                  o.name?.toLowerCase().includes("color") || o.name?.includes("لون")
+                );
+                const sizeOpt = d.options.find(o =>
+                  o.name?.toLowerCase().includes("size") || o.name?.includes("مقاس")
+                );
+                const colors = colorOpt?.values?.split(",").map(s => s.trim()).filter(Boolean) || [""];
+                const sizes  = sizeOpt?.values?.split(",").map(s => s.trim()).filter(Boolean)  || [""];
                 colors.forEach(color => {
                   sizes.forEach(size => {
                     const label = [color, size].filter(Boolean).join(" / ") || "Default";
                     const img   = (color && d.colorSwatches?.[color]) || d.images?.[0] || "";
-                    variants.push({ label, img, price: parseFloat(d.price || 0), available: true });
+                    variants.push({ label, img, color, size, price: parseFloat(d.price || 0), available: true });
                   });
                 });
               }
-              // fallback: variant واحد
               if (!variants.length) {
                 variants.push({
                   label: "Default",
                   img: d.images?.[0] || "",
+                  color: "", size: "",
                   price: parseFloat(d.price || 0),
                   available: (d.quantity > 0) || d.sellOutOfStock === "Yes",
                 });
               }
 
-              return {
-                id:     snap.id,
-                title:  d.title || handle,
-                images: d.images || [],
-                variants,
-              };
+              return { id: snap.id, title: d.title || handle, images: d.images || [], variants };
             } catch (e) {
               console.warn("BundleWidget: فشل تحميل", handle, e);
               return null;
@@ -116,7 +117,7 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
     return () => { cancelled = true; };
   }, [handles.join(",")]);
 
-  // ─── حساب الإجمالي ────────────────────────────────────────
+  // ─── حساب الإجمالي — الخصم على الكل ─────────────────────
   const total = (() => {
     let sum = applyDiscount(mainPrice, discount) * mainQty;
     upsells.forEach((up, i) => {
@@ -135,25 +136,24 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
     return !up.variants[st.variantIdx]?.available;
   });
 
-  // ─── handlers ─────────────────────────────────────────────
   const updateUpsell = useCallback((i, patch) => {
     setUpsellStates(prev => prev.map((s, idx) => idx === i ? { ...s, ...patch } : s));
   }, []);
 
-  // ─── إضافة للسلة عبر CartContext ──────────────────────────
-  const { addToCart } = useCart();
-  const [adding, setAdding] = useState(false);
+  // ─── إضافة للسلة — الخصم يتطبق على السعر المبعوت ─────────
   const handleAddToCart = useCallback(() => {
     if (hasUnavailable || adding) return;
     setAdding(true);
 
-    // المنتج الرئيسي
+    // المنتج الأساسي بسعر مخفض
     addToCart({
       ...product,
-      selectedSize:  product.selectedSize  || "",
-      selectedColor: product.selectedColor || "",
-      image: product.images?.[0] || product.mainImage || "",
-      qty: mainQty,
+      selectedSize:   product.selectedSize  || "",
+      selectedColor:  product.selectedColor || "",
+      image:          product.images?.[0] || product.mainImage || "",
+      price:          applyDiscount(mainPrice, discount),
+      compareAtPrice: discount > 0 ? mainPrice : undefined,
+      qty:            mainQty,
     });
 
     // المنتجات المقترحة
@@ -163,42 +163,40 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
       const variant = up.variants[st.variantIdx];
       if (!variant?.available) return;
 
-      const parts  = (variant.label || "").split("/").map(s => s.trim());
-      const hasTwo = parts.length >= 2;
-
       addToCart({
-        id:            up.id,
-        title:         up.title,
-        price:         applyDiscount(variant.price, discount),
-        compareAtPrice: variant.price,
-        images:        up.images,
-        mainImage:     variant.img || up.images?.[0] || "",
-        image:         variant.img || up.images?.[0] || "",
-        selectedSize:  hasTwo ? parts[1] : (parts[0] || ""),
-        selectedColor: hasTwo ? parts[0] : "",
-        qty:           st.qty || 1,
+        id:             up.id,
+        title:          up.title,
+        price:          applyDiscount(variant.price, discount),
+        compareAtPrice: discount > 0 ? variant.price : undefined,
+        images:         up.images,
+        mainImage:      variant.img || up.images?.[0] || "",
+        image:          variant.img || up.images?.[0] || "",
+        selectedSize:   variant.size  || "",
+        selectedColor:  variant.color || "",
+        qty:            st.qty || 1,
       });
     });
 
     setTimeout(() => setAdding(false), 700);
-  }, [hasUnavailable, adding, product, mainQty, upsells, upsellStates, discount, addToCart]);
+  }, [hasUnavailable, adding, product, mainPrice, mainQty, upsells, upsellStates, discount, addToCart]);
 
   // ─── Render ───────────────────────────────────────────────
   if (loading) {
     return (
       <div style={styles.loading}>
-        <span>⏳ جاري تحميل المجموعة...</span>
+        <span>جاري تحميل المجموعة...</span>
       </div>
     );
   }
 
   if (!upsells.length) return null;
 
-  const shippingPct = limit > 0 ? Math.min((total / limit) * 100, 100) : 100;
+  const shippingPct  = limit > 0 ? Math.min((total / limit) * 100, 100) : 100;
   const shippingDone = limit === 0 || total >= limit;
 
   return (
     <div style={styles.root} dir="rtl">
+
       {/* عنوان */}
       <h3 style={styles.title}>{title}</h3>
       {subtitle && (
@@ -207,7 +205,7 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
         </p>
       )}
 
-      {/* ── المنتج الرئيسي ── */}
+      {/* ── المنتج الأساسي ── */}
       <MainProductCard
         product={product}
         discount={discount}
@@ -219,20 +217,18 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
 
       {/* ── المنتجات المقترحة ── */}
       {upsells.map((up, i) => {
-        const st = upsellStates[i] || { checked: true, variantIdx: 0, qty: 1 };
+        const st      = upsellStates[i] || { checked: true, variantIdx: 0, qty: 1 };
         const variant = up.variants[st.variantIdx];
-        const discountedPrice = applyDiscount(variant?.price || 0, discount);
         return (
           <UpsellCard
             key={up.id}
             product={up}
             state={st}
             discount={discount}
-            discountedPrice={discountedPrice}
             originalPrice={variant?.price || 0}
-            onCheck={(v)       => updateUpsell(i, { checked: v })}
+            onCheck={(v)         => updateUpsell(i, { checked: v })}
             onVariantChange={(v) => updateUpsell(i, { variantIdx: v, qty: 1 })}
-            onQtyChange={(v)   => updateUpsell(i, { qty: v })}
+            onQtyChange={(v)     => updateUpsell(i, { qty: v })}
             onZoom={setZoomSrc}
           />
         );
@@ -244,9 +240,12 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
           <span style={styles.summaryLabel}>{shippingDone ? "الإجمالي:" : "الإجمالي الفرعي:"}</span>
           <span style={styles.summaryPrice}>{fmt(total)}</span>
         </div>
-        {/* شريط الشحن */}
         <div style={styles.shippingBar}>
-          <div style={{ ...styles.shippingProgress, width: shippingPct + "%", background: shippingDone ? "#28a745" : "#1a1a1a" }} />
+          <div style={{
+            ...styles.shippingProgress,
+            width: shippingPct + "%",
+            background: shippingDone ? "#28a745" : "#1a1a1a",
+          }} />
         </div>
         <span style={styles.shippingText}>
           {shippingDone
@@ -255,22 +254,46 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
         </span>
       </div>
 
-      {/* ── زر الإضافة ── */}
+      {/* ── زر الإضافة — sticky cart style ── */}
       <button
         onClick={handleAddToCart}
         disabled={hasUnavailable || adding}
-        style={{ ...styles.addBtn, ...(hasUnavailable || adding ? styles.addBtnDisabled : {}) }}
+        style={{
+          ...styles.addBtn,
+          ...(hasUnavailable || adding ? styles.addBtnDisabled : {}),
+        }}
       >
-        {adding ? "جاري الإضافة..." : hasUnavailable ? "بعض المنتجات غير متوفرة" : "أضف المجموعة للسلة"}
+        {adding ? (
+          <svg
+            style={{ animation: "spin 0.7s linear infinite" }}
+            width="18" height="18" viewBox="0 0 24 24"
+            fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round"
+          >
+            <path d="M12 2a10 10 0 0 1 10 10" />
+          </svg>
+        ) : hasUnavailable ? (
+          "بعض المنتجات غير متوفرة"
+        ) : (
+          "أضف المجموعة للسلة"
+        )}
       </button>
 
       {/* ── Zoom Modal ── */}
       {zoomSrc && (
         <div style={styles.zoomOverlay} onClick={() => setZoomSrc(null)}>
           <span style={styles.zoomClose}>&times;</span>
-          <img src={zoomSrc} style={styles.zoomImg} onClick={e => e.stopPropagation()} alt="zoom" />
+          <img
+            src={zoomSrc}
+            style={styles.zoomImg}
+            onClick={e => e.stopPropagation()}
+            alt="zoom"
+          />
         </div>
       )}
+
+      <style>{`
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      `}</style>
     </div>
   );
 }
@@ -283,22 +306,34 @@ function MainProductCard({ product, discount, mainPrice, mainQty, setMainQty, on
   return (
     <div style={styles.card}>
       <input type="checkbox" checked disabled style={styles.checkbox} />
+
       <div style={styles.info}>
-        <div style={styles.titleRow}>
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <p style={styles.productTitle}>{product?.title}</p>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", flexShrink: 0, gap: 4 }}>
-            {discount > 0 && <span style={styles.badge}>-{discount}%</span>}
-            <span style={styles.price}>{fmt(discounted)}</span>
-          </div>
+        {/* اسم المنتج — سطر مستقل */}
+        <p style={styles.productTitle}>{product?.title}</p>
+
+        {/* السعر الجديد ← القديم مشطوب ← بادج */}
+        <div style={styles.priceRow}>
+          <span style={styles.price}>{fmt(discounted)}</span>
+          {discount > 0 && (
+            <>
+              <span style={styles.originalPrice}>{fmt(mainPrice)}</span>
+              <span style={styles.badge}>{discount}%</span>
+            </>
+          )}
         </div>
+
+        {/* Qty */}
         <div style={styles.qtyRow}>
           <QtyControls qty={mainQty} onChange={setMainQty} />
         </div>
       </div>
+
+      {/* صورة */}
       <div style={styles.imgWrap} onClick={() => onZoom(imgSrc)}>
-        <img src="https://cdn.shopify.com/s/files/1/0744/2726/9319/files/zoomlens_4270.ico?v=1769116302" style={styles.zoomIcon} alt="" />
+        <img
+          src="https://cdn.shopify.com/s/files/1/0744/2726/9319/files/zoomlens_4270.ico?v=1769116302"
+          style={styles.zoomIcon} alt=""
+        />
         <img src={imgSrc} style={styles.productImg} alt={product?.title} loading="lazy" />
       </div>
     </div>
@@ -306,10 +341,11 @@ function MainProductCard({ product, discount, mainPrice, mainQty, setMainQty, on
 }
 
 // ─── كارد منتج مقترح ──────────────────────────────────────────
-function UpsellCard({ product, state, discount, discountedPrice, originalPrice, onCheck, onVariantChange, onQtyChange, onZoom }) {
-  const variant  = product.variants[state.variantIdx];
-  const imgSrc   = variant?.img || product.images?.[0] || "";
-  const isAvail  = variant?.available !== false;
+function UpsellCard({ product, state, discount, originalPrice, onCheck, onVariantChange, onQtyChange, onZoom }) {
+  const variant        = product.variants[state.variantIdx];
+  const imgSrc         = variant?.img || product.images?.[0] || "";
+  const isAvail        = variant?.available !== false;
+  const discountedPrice = applyDiscount(originalPrice, discount);
 
   return (
     <div style={styles.card}>
@@ -319,26 +355,29 @@ function UpsellCard({ product, state, discount, discountedPrice, originalPrice, 
         onChange={e => onCheck(e.target.checked)}
         style={styles.checkbox}
       />
+
       <div style={styles.info}>
-        <div style={styles.titleRow}>
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <p style={styles.productTitle}>{product.title}</p>
-            {state.checked && !isAvail && (
-              <span style={{ fontSize: 10, color: "#d93025", fontWeight: "bold", display: "block" }}>غير متوفر حالياً</span>
-            )}
-          </div>
-          <div style={{ display: "flex", alignItems: "center", flexShrink: 0, gap: 4 }}>
-            {discount > 0 && (
-              <span style={{ fontSize: 11, color: "#999", textDecoration: "line-through", whiteSpace: "nowrap" }}>
-                {fmt(originalPrice)}
-              </span>
-            )}
-            {discount > 0 && <span style={styles.badge}>-{discount}%</span>}
-            <span style={styles.price}>{fmt(discountedPrice)}</span>
-          </div>
+        {/* اسم المنتج — سطر مستقل */}
+        <p style={styles.productTitle}>{product.title}</p>
+        {state.checked && !isAvail && (
+          <span style={{ fontSize: 10, color: "#C0392B", fontWeight: "bold", display: "block", marginBottom: 2 }}>
+            غير متوفر حالياً
+          </span>
+        )}
+
+        {/* السعر الجديد ← القديم مشطوب ← بادج */}
+        <div style={styles.priceRow}>
+          <span style={styles.price}>{fmt(discountedPrice)}</span>
+          {discount > 0 && (
+            <>
+              <span style={styles.originalPrice}>{fmt(originalPrice)}</span>
+              <span style={styles.badge}>{discount}%</span>
+            </>
+          )}
         </div>
+
+        {/* Variant + Qty — sticky cart style */}
         <div style={styles.qtyRow}>
-          {/* Variant selector */}
           {product.variants.length > 1 && (
             <div style={styles.variantBox}>
               <select
@@ -347,7 +386,9 @@ function UpsellCard({ product, state, discount, discountedPrice, originalPrice, 
                 style={styles.variantSelect}
               >
                 {product.variants.map((v, i) => (
-                  <option key={i} value={i}>{v.label}{!v.available ? " - (غير متوفر)" : ""}</option>
+                  <option key={i} value={i}>
+                    {v.label}{!v.available ? " - (غير متوفر)" : ""}
+                  </option>
                 ))}
               </select>
               <div style={styles.variantDisplay}>
@@ -363,15 +404,20 @@ function UpsellCard({ product, state, discount, discountedPrice, originalPrice, 
           <QtyControls qty={state.qty} onChange={onQtyChange} />
         </div>
       </div>
+
+      {/* صورة */}
       <div style={styles.imgWrap} onClick={() => onZoom(imgSrc)}>
-        <img src="https://cdn.shopify.com/s/files/1/0744/2726/9319/files/zoomlens_4270.ico?v=1769116302" style={styles.zoomIcon} alt="" />
+        <img
+          src="https://cdn.shopify.com/s/files/1/0744/2726/9319/files/zoomlens_4270.ico?v=1769116302"
+          style={styles.zoomIcon} alt=""
+        />
         <img src={imgSrc} style={styles.productImg} alt={product.title} loading="lazy" />
       </div>
     </div>
   );
 }
 
-// ─── Qty Controls ─────────────────────────────────────────────
+// ─── Qty Controls — sticky cart style ─────────────────────────
 function QtyControls({ qty, onChange }) {
   return (
     <div style={styles.qtyControls}>
@@ -397,19 +443,19 @@ const styles = {
     direction: "rtl",
   },
   title: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "bold",
     marginBottom: 15,
     textAlign: "right",
-    color: "#333",
+    color: "#111",
   },
   card: {
-    border: "1px solid #e0e0e0",
+    border: "1px solid #E0E0E0",
     borderRadius: 8,
     padding: 12,
     marginBottom: 10,
     display: "flex",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 10,
     background: "#fff",
     boxSizing: "border-box",
@@ -417,11 +463,12 @@ const styles = {
     width: "100%",
   },
   checkbox: {
-    width: 18,
-    height: 18,
-    accentColor: "#333",
+    width: 16,
+    height: 16,
+    accentColor: "#111",
     cursor: "pointer",
     flexShrink: 0,
+    marginTop: 3,
   },
   info: {
     flex: 1,
@@ -429,52 +476,60 @@ const styles = {
     textAlign: "right",
     display: "flex",
     flexDirection: "column",
-    justifyContent: "center",
   },
-  titleRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 8,
-    gap: 5,
-  },
+  // اسم المنتج — سطر مستقل كامل
   productTitle: {
     fontSize: 13,
     fontWeight: 600,
     margin: 0,
-    color: "#333",
-    lineHeight: 1.3,
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
+    marginBottom: 6,
+    color: "#111",
+    lineHeight: 1.4,
+    whiteSpace: "normal",      // يكسر السطر لو محتاج
+    wordBreak: "break-word",
+  },
+  // صف السعر: الجديد ← القديم مشطوب ← بادج
+  priceRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    flexWrap: "wrap",
+    marginBottom: 8,
   },
   price: {
-    color: "#d93025",
+    color: "#C0392B",
     fontWeight: "bold",
-    fontSize: 12,
+    fontSize: 13,
+    whiteSpace: "nowrap",
+  },
+  originalPrice: {
+    fontSize: 11,
+    color: "#BBBBBB",
+    textDecoration: "line-through",
     whiteSpace: "nowrap",
   },
   badge: {
-    background: "#d93025",
-    color: "#fff",
-    fontSize: 9,
+    background: "#fdecea",
+    color: "#C0392B",
+    fontSize: 10,
     fontWeight: "bold",
-    padding: "2px 5px",
-    borderRadius: 3,
+    padding: "2px 6px",
+    borderRadius: 99,
+    whiteSpace: "nowrap",
   },
   qtyRow: {
     display: "flex",
     alignItems: "center",
     gap: 6,
-    height: 36,
-    marginTop: 5,
+    height: 42,
     width: "100%",
   },
+  // Variant box — sticky cart style (أبيض + border)
   variantBox: {
-    background: "#f8f9fa",
-    border: "1px solid #e0e0e0",
-    borderRadius: 6,
-    padding: "0 6px",
+    background: "#fff",
+    border: "1px solid #E0E0E0",
+    borderRadius: 8,
+    padding: "0 10px",
     cursor: "pointer",
     position: "relative",
     flex: 1,
@@ -495,8 +550,8 @@ const styles = {
     zIndex: 10,
   },
   variantDisplay: {
-    fontSize: 10.5,
-    color: "#555",
+    fontSize: 12,
+    color: "#111",
     display: "flex",
     alignItems: "center",
     gap: 4,
@@ -506,36 +561,40 @@ const styles = {
     overflow: "hidden",
     pointerEvents: "none",
   },
+  // Qty controls — sticky cart style (رمادي فاتح + border)
   qtyControls: {
     display: "flex",
     alignItems: "center",
-    background: "#f8f9fa",
-    border: "1px solid #e0e0e0",
-    borderRadius: 6,
+    justifyContent: "space-between",
+    background: "#F2F2F2",
+    border: "1px solid #E0E0E0",
+    borderRadius: 8,
     overflow: "hidden",
     height: "100%",
+    width: 80,
     flexShrink: 0,
+    padding: "0 4px",
   },
   qtyBtn: {
     border: "none",
     background: "none",
-    width: 28,
+    width: 24,
     height: "100%",
     cursor: "pointer",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    color: "#333",
+    color: "#888",
     fontWeight: "bold",
     padding: 0,
-    fontSize: 16,
+    fontSize: 15,
   },
   qtyVal: {
     width: 22,
     textAlign: "center",
     fontSize: 13,
-    fontWeight: "bold",
-    color: "#333",
+    fontWeight: "500",
+    color: "#111",
   },
   imgWrap: {
     cursor: "zoom-in",
@@ -580,14 +639,13 @@ const styles = {
     alignItems: "center",
     marginBottom: 10,
   },
-  summaryLabel: { fontSize: 14, fontWeight: "bold", color: "#333" },
-  summaryPrice: { fontSize: 16, fontWeight: "bold", color: "#d93025" },
+  summaryLabel: { fontSize: 13, fontWeight: "bold", color: "#333" },
+  summaryPrice: { fontSize: 15, fontWeight: "bold", color: "#C0392B" },
   shippingBar: {
     background: "#eee",
-    height: 8,
+    height: 6,
     borderRadius: 10,
     overflow: "hidden",
-    position: "relative",
     marginTop: 8,
   },
   shippingProgress: {
@@ -598,22 +656,27 @@ const styles = {
   shippingText: {
     fontSize: 11,
     color: "#666",
-    marginTop: 5,
+    marginTop: 6,
     display: "block",
     textAlign: "center",
   },
+  // زر الإضافة — sticky cart style
   addBtn: {
     width: "100%",
-    background: "#1a1a1a",
+    background: "#111",
     color: "#fff",
     border: "none",
-    padding: 14,
-    fontSize: 15,
-    fontWeight: "bold",
-    borderRadius: 6,
+    height: 42,
+    fontSize: 13,
+    fontWeight: "500",
+    borderRadius: 8,
     cursor: "pointer",
     marginTop: 5,
-    transition: "0.3s",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    letterSpacing: "0.04em",
+    transition: "background 0.2s",
   },
   addBtnDisabled: {
     background: "#ccc",
@@ -623,10 +686,8 @@ const styles = {
   zoomOverlay: {
     position: "fixed",
     zIndex: 99999999,
-    top: 0,
-    left: 0,
-    width: "100%",
-    height: "100%",
+    top: 0, left: 0,
+    width: "100%", height: "100%",
     background: "rgba(0,0,0,0.9)",
     display: "flex",
     justifyContent: "center",
@@ -634,8 +695,7 @@ const styles = {
   },
   zoomClose: {
     position: "absolute",
-    top: 40,
-    right: 25,
+    top: 40, right: 25,
     color: "white",
     fontSize: 45,
     cursor: "pointer",
