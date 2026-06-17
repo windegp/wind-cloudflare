@@ -187,8 +187,8 @@ export default function CartDrawer() {
                   )}
                 </div>
                 <div>
-                  <h2 className="font-black text-[#1A1A1A] text-base leading-tight">حقيبة التسوق</h2>
-                  <p className="text-[11px] text-gray-400 font-medium">
+                  <h2 className="font-light text-[#1A1A1A] text-base leading-tight">حقيبة التسوق</h2>
+                  <p className="text-[11px] text-gray-500 font-normal">
                     {cartItems.length === 0 ? 'لا توجد منتجات' : `${cartItems.length} منتجات`}
                   </p>
                 </div>
@@ -223,7 +223,7 @@ export default function CartDrawer() {
                           )}
                           <div className="flex items-center gap-1 text-gray-500 text-sm mt-1.5 font-medium whitespace-nowrap">
                             <span className="font-bold text-[#1A1A1A]">{item.price}</span><span className="text-[#1A1A1A] font-light">ج.م</span>
-                            <span className="mx-1 text-xs text-gray-300">×</span><span>{item.qty}</span>
+                            <span className="mx-1 text-xs text-[#555]">×</span><span>{item.qty}</span>
                           </div>
                         </div>
                         <div className="flex items-center justify-between mt-3">
@@ -245,7 +245,7 @@ export default function CartDrawer() {
 
               {cartItems.length > 0 && suggestedProducts.length > 0 && (
                 <div className="bg-[#FAF9F6] border-t border-gray-100 pt-5 pb-6 px-5">
-                  <h3 className="text-base font-black text-[#1A1A1A] flex items-center gap-2 mb-4"><div className="w-1.5 h-5 bg-[#1A1A1A] rounded-full"></div> أكمل إطلالتك</h3>
+                  <h3 className="text-sm font-light text-[#1A1A1A] mb-4">أكمل إطلالتك</h3>
                   {isLoadingSuggestions ? (
                     <div className="flex justify-center py-6"><Loader2 className="animate-spin text-gray-400" size={24} /></div>
                   ) : (
@@ -273,8 +273,8 @@ export default function CartDrawer() {
                   <span className="font-normal text-[#1A1A1A] text-lg whitespace-nowrap">{subtotal} <span className="text-sm font-light">ج.م</span></span>
                 </div>
                 <p className="text-[12px] text-gray-400 mb-5 font-medium">مصاريف الشحن تُحسب عند الدفع</p>
-                <Link href="/checkout" onClick={toggleCart} className="checkout-btn block w-full text-center font-normal py-4 rounded-xl text-sm shadow-md tracking-wide whitespace-nowrap overflow-hidden text-ellipsis">إتمام الطلب — {subtotal} ج.م</Link>
-                <button onClick={toggleCart} className="block w-full text-center text-[13px] font-bold text-gray-400 hover:text-[#1A1A1A] mt-4">متابعة التسوق</button>
+                <Link href="/checkout" onClick={toggleCart} className="checkout-btn block w-full text-center font-medium py-4 rounded-xl text-[15px] shadow-md tracking-wider whitespace-nowrap overflow-hidden text-ellipsis">إتمام الطلب — {subtotal} ج.م</Link>
+                <button onClick={toggleCart} className="block w-full text-center text-[13px] font-normal text-[#555] hover:text-[#1A1A1A] mt-4">متابعة التسوق</button>
                 <div className="flex items-center justify-center gap-3 mt-4 pt-4 border-t border-gray-100">
                   {[
                     { name: "Mastercard", url: "https://ik.imagekit.io/windeg/WIND_Shopping/mastercard.svg" },
