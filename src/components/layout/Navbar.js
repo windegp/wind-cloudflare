@@ -134,17 +134,17 @@ export default function Navbar() {
     <>
       <div className={`fixed top-0 left-0 right-0 z-[110] transition-all duration-500 ${navHidden ? '-translate-y-full' : 'translate-y-0'}`}>
         {/* 1. شريط الإعلانات العلوي */}
-        <div className="bg-[#FAF9F6] text-[#1A1A1A] h-10 flex items-center justify-center border-b border-[#EAEAEA] px-4 shadow-sm transition-colors duration-700">
+        <div className="bg-[#111] text-white h-9 flex items-center justify-center border-b border-[#222] px-4 transition-colors duration-700">
           <div className="flex items-center gap-4 md:gap-8 relative justify-center">
-            <button onClick={prevAd} className="hover:scale-125 hover:text-[#1A1A1A] transition-all p-1 z-10">
-              <ChevronLeft className="w-4 h-4 animate-arrow-slide-left cursor-pointer text-[#666]" />
+            <button onClick={prevAd} className="hover:scale-125 hover:text-white transition-all p-1 z-10">
+              <ChevronLeft className="w-4 h-4 animate-arrow-slide-left cursor-pointer text-white/40" />
             </button>
 
             <div className="overflow-hidden relative h-6 flex justify-center items-center w-[250px] md:w-[350px]">
               {announcements.map((text, index) => (
                 <span 
                   key={index}
-                  className={`text-[11px] md:text-sm font-bold tracking-wide absolute inset-0 flex items-center justify-center whitespace-nowrap font-tajawal
+                  className={`text-[10px] md:text-[11px] font-semibold tracking-[0.2em] uppercase absolute inset-0 flex items-center justify-center whitespace-nowrap font-tajawal
                   ${index === adIndex ? 'animate-slide-right-text' : 'opacity-0'}`}
                 >
                   {text}
@@ -152,19 +152,19 @@ export default function Navbar() {
               ))}
             </div>
 
-            <button onClick={nextAd} className="hover:scale-125 hover:text-[#1A1A1A] transition-all p-1 z-10">
-              <ChevronRight className="w-4 h-4 animate-arrow-slide-right cursor-pointer text-[#666]" />
+            <button onClick={nextAd} className="hover:scale-125 hover:text-white transition-all p-1 z-10">
+              <ChevronRight className="w-4 h-4 animate-arrow-slide-right cursor-pointer text-white/40" />
             </button>
           </div>
         </div>
 
         {/* 2. النافبار الأساسي */}
-        <nav className="bg-white backdrop-blur-xl h-14 w-full">
+        <nav className="bg-white border-b border-[#EBEBEB] h-14 w-full">
         <div className="max-w-[1600px] mx-auto px-6 h-full flex items-center justify-between">
           <button onClick={() => setIsMenuOpen(true)} className="group flex items-center gap-3 text-black/70 hover:text-[#1A1A1A] transition-all">
-            <div className="flex flex-col gap-1.5 overflow-hidden">
-              <span className="w-8 h-[2px] bg-current transition-all group-hover:w-5"></span>
-              <span className="w-5 h-[2px] bg-current transition-all group-hover:w-8"></span>
+            <div className="flex flex-col gap-[5px] overflow-hidden">
+              <span className="w-[22px] h-[1.5px] bg-current transition-all group-hover:w-[14px]"></span>
+              <span className="w-[14px] h-[1.5px] bg-current transition-all group-hover:w-[22px]"></span>
             </div>
             <span className="hidden md:block text-[10px] font-black tracking-widest uppercase">Menu</span>
           </button>
@@ -196,38 +196,36 @@ export default function Navbar() {
       {/* 3. المنيو الجانبي */}
       {isMenuOpen && (
         <div className="fixed inset-0 z-[1000] overflow-hidden" dir="rtl">
-          <div className="absolute inset-0 bg-black/80 transition-opacity duration-300" onClick={closeMenu}></div>
-          <div className="absolute top-0 right-0 w-full max-w-[400px] h-full bg-[#0a0a0a] border-l border-white/5 shadow-2xl flex flex-col animate-slide-in">
-            <div className="p-6 border-b border-white/10 bg-[#111] flex justify-between items-center min-h-[80px]">
+          <div className="absolute inset-0 bg-black/40 transition-opacity duration-300" onClick={closeMenu}></div>
+          <div className="absolute top-0 right-0 w-full max-w-[85%] md:max-w-[400px] h-full bg-white border-l border-[#EBEBEB] shadow-xl flex flex-col animate-slide-in">
+            <div className="px-6 border-b border-[#EBEBEB] bg-white flex justify-between items-center min-h-[72px]">
               {history.length > 0 ? (
-                <button onClick={goBack} className="flex items-center gap-2 bg-[#1A1A1A] text-white px-4 py-2 rounded-lg font-black text-xs hover:bg-gray-200 transition-colors">
-                  <ArrowRight size={16} strokeWidth={3} />
+                <button onClick={goBack} className="flex items-center gap-2 border border-[#E0E0E0] text-[#111] px-4 py-2 rounded-lg font-bold text-xs hover:bg-[#F5F5F5] transition-colors">
+                  <ArrowRight size={14} strokeWidth={2.5} />
                   <span>رجوع</span>
                 </button>
               ) : (
-                <span className="text-[10px] font-black text-white/30 tracking-[0.4em] uppercase italic">WIND Catalogue</span>
+                <span className="text-[9px] font-bold text-[#bbb] tracking-[0.4em] uppercase">WIND</span>
               )}
-              <button onClick={closeMenu} className="text-white/50 hover:text-red-500 transition-colors p-2 bg-[#1a1a1a] rounded-full">
-                <X size={24} />
+              <button onClick={closeMenu} className="text-[#999] hover:text-[#111] transition-colors p-2 border border-[#E8E8E8] rounded-full">
+                <X size={18} />
               </button>
             </div>
-            <div className="px-8 pt-6">
-              <h2 className="text-3xl font-black text-white italic animate-fade-in">{activeLayer.title}</h2>
-              <div className="h-1 w-12 bg-[#1A1A1A] mt-2 mb-4"></div>
+            <div className="px-6 pt-5 pb-2">
+              <h2 className="text-xl font-black text-[#111] animate-fade-in tracking-tight">{activeLayer.title}</h2>
+              <div className="h-[1px] w-8 bg-[#111] mt-2 mb-1"></div>
             </div>
-            <div className="flex-1 overflow-y-auto px-6 pb-10 custom-scrollbar">
-              <ul className="space-y-3">
+            <div className="flex-1 overflow-y-auto px-4 pb-10 custom-scrollbar">
+              <ul className="space-y-0">
                 {activeLayer.items.map((item, i) => (
                   <li key={item.id || i} className="animate-fade-up" style={{ animationDelay: `${i * 0.03}s` }}>
                     {item.children?.length > 0 ? (
-                      <button onClick={() => openSubMenu(item)} className="w-full flex items-center justify-between p-4 bg-[#f5f5f5] border border-[#e5e5e5] rounded-xl hover:border-[#1A1A1A] hover:bg-[#eee] group transition-all">
-                        <span className="text-lg font-bold text-gray-200 group-hover:text-white">{item.title}</span>
-                        <div className="flex items-center text-[#1A1A1A]">
-                          <ChevronLeft size={20} />
-                        </div>
+                      <button onClick={() => openSubMenu(item)} className="w-full flex items-center justify-between py-4 px-2 border-b border-[#F0F0F0] hover:bg-[#FAFAF8] group transition-all">
+                        <span className="text-[15px] font-bold text-[#111] group-hover:text-[#333]">{item.title}</span>
+                        <ChevronLeft size={16} className="text-[#bbb] group-hover:text-[#111] transition-colors" />
                       </button>
                     ) : (
-                      <Link href={item.link} onClick={closeMenu} className="block p-4 border-b border-gray-200 text-lg font-bold text-gray-600 hover:text-[#1A1A1A] transition-all">
+                      <Link href={item.link} onClick={closeMenu} className="block py-4 px-2 border-b border-[#F0F0F0] text-[15px] font-semibold text-[#444] hover:text-[#111] transition-all">
                         {item.title}
                       </Link>
                     )}
@@ -235,8 +233,8 @@ export default function Navbar() {
                 ))}
               </ul>
             </div>
-            <div className="p-6 border-t border-white/5 bg-[#0f0f0f] text-center">
-              <p className="text-[8px] text-white/20 font-black uppercase tracking-[0.5em]">WIND PREMIUM WEAR</p>
+            <div className="p-5 border-t border-[#EBEBEB] bg-white text-center">
+              <p className="text-[8px] text-[#ccc] font-bold uppercase tracking-[0.5em]">WIND PREMIUM WEAR</p>
             </div>
           </div>
         </div>
@@ -261,8 +259,8 @@ export default function Navbar() {
         .animate-fade-up { animation: fade-up 0.2s ease-out forwards; opacity: 0; }
         @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
         .animate-fade-in { animation: fade-in 0.3s ease-out; }
-        .custom-scrollbar::-webkit-scrollbar { width: 3px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 2px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #ddd; border-radius: 10px; }
       `}</style>
     </>
   );
