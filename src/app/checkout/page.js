@@ -632,7 +632,9 @@ export default function CheckoutPage() {
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-semibold text-gray-800 leading-tight">{item.title}</p>
-                  <p className="text-xs text-gray-400">{item.selectedSize}</p>
+                  <p className="text-xs text-gray-400">
+                    {[item.selectedSize, item.selectedColor].filter(Boolean).join(' / ')}
+                  </p>
                 </div>
                 <span className="text-sm font-bold text-gray-800">ج.م {item.price * item.qty}.00</span>
               </div>
@@ -862,10 +864,7 @@ export default function CheckoutPage() {
 
                 <label className={`pay-opt flex flex-col px-4 py-4 cursor-pointer relative !overflow-visible ${paymentMethod === 'card' ? 'active' : ''}`}>
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${paymentMethod === 'card' ? 'border-blue-600' : 'border-gray-300'}`}>
-                        {paymentMethod === 'card' && <div className="w-2 h-2 rounded-full bg-blue-600"></div>}
-                      </div>
+                   <div className="flex items-center gap-3">
                       <input type="radio" checked={paymentMethod === 'card'} onChange={() => setPaymentMethod('card')} className="sr-only" style={{ accentColor: '#2563eb' }} />
                       <div className="flex items-center gap-2">
                         <CreditCard size={16} className="text-gray-600" />
@@ -949,9 +948,6 @@ export default function CheckoutPage() {
                 </label>
 
                 <label className={`pay-opt flex items-center gap-3 px-4 py-4 cursor-pointer ${paymentMethod === 'cod' ? 'active' : ''}`}>
-                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${paymentMethod === 'cod' ? 'border-blue-600' : 'border-gray-300'}`}>
-                    {paymentMethod === 'cod' && <div className="w-2 h-2 rounded-full bg-blue-600"></div>}
-                  </div>
                   <input type="radio" checked={paymentMethod === 'cod'} onChange={() => setPaymentMethod('cod')} className="sr-only" style={{ accentColor: '#2563eb' }} />
                   <Banknote size={16} className="text-gray-600" />
                   <div>
@@ -962,9 +958,6 @@ export default function CheckoutPage() {
 
                 <label className={`pay-opt flex flex-col px-4 py-4 cursor-pointer ${paymentMethod === 'instapay' ? 'active' : ''}`}>
                   <div className="flex items-center gap-3">
-                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${paymentMethod === 'instapay' ? 'border-blue-600' : 'border-gray-300'}`}>
-                      {paymentMethod === 'instapay' && <div className="w-2 h-2 rounded-full bg-blue-600"></div>}
-                    </div>
                     <input type="radio" checked={paymentMethod === 'instapay'} onChange={() => setPaymentMethod('instapay')} className="sr-only" style={{ accentColor: '#2563eb' }} />
                     <Smartphone size={16} className="text-gray-600" />
                     <div>
@@ -997,7 +990,7 @@ export default function CheckoutPage() {
             {/* ORDER DETAILS — مقفول، فوق زر الدفع — الإجمالي شامل الشحن */}
             <div className="mb-4">
               <div
-                className="interactive-box bg-white border border-gray-200 rounded-xl px-4 py-3 flex items-center gap-3 cursor-pointer"
+                className="px-2 py-3 flex items-center gap-3 cursor-pointer"
                 onClick={() => setPayAreaSummaryOpen(!payAreaSummaryOpen)}
               >
                 <div className="relative w-12 h-12 bg-gray-100 rounded-lg overflow-hidden shrink-0">
@@ -1008,14 +1001,14 @@ export default function CheckoutPage() {
                   />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-black text-gray-900 text-base leading-tight">الإجمالي</p>
-                  <p className="text-xs text-gray-400 mt-0.5">
+                  <p className="font-medium text-gray-700 text-base leading-tight">الإجمالي</p>
+                  <p className="text-xs text-gray-400 mt-0.5 font-normal">
                     {cartItems.reduce((s, it) => s + it.qty, 0)} {cartItems.reduce((s, it) => s + it.qty, 0) === 1 ? 'منتج' : 'منتجات'}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className="bg-gray-100 text-gray-500 text-[11px] font-bold px-2 py-1 rounded-full">EGP</span>
                   <span className="font-black text-xl text-gray-900">ج.م {finalTotal}.00</span>
+                  <span className="bg-gray-100 text-gray-500 text-[11px] font-bold px-2 py-1 rounded-full">EGP</span>
                   <ChevronDown size={18} className={`text-gray-400 transition-transform ${payAreaSummaryOpen ? 'rotate-180' : ''}`} />
                 </div>
               </div>
@@ -1029,8 +1022,19 @@ export default function CheckoutPage() {
                         <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-[10px] min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-sm font-black shadow">{item.qty}</span>
                       </div>
                       <div className="flex-1 min-w-0">
+
                         <p className="text-sm font-semibold text-gray-800 leading-tight truncate">{item.title}</p>
-                        {item.selectedSize && <p className="text-xs text-gray-400">{item.selectedSize}</p>}
+
+                        {(item.selectedSize || item.selectedColor) && (
+
+                          <p className="text-xs text-gray-400">
+
+                            {[item.selectedSize, item.selectedColor].filter(Boolean).join(' / ')}
+
+                          </p>
+
+                        )}
+
                       </div>
                       <span className="text-sm font-bold text-gray-800 shrink-0">ج.م {item.price * item.qty}.00</span>
                     </div>
@@ -1090,8 +1094,19 @@ export default function CheckoutPage() {
                     <span className="absolute -top-2 -right-2 bg-gray-900 text-white text-[10px] min-w-[20px] h-[20px] px-1 flex items-center justify-center rounded-sm font-black shadow">{item.qty}</span>
                   </div>
                   <div className="flex-1 min-w-0">
+
                     <h4 className="font-semibold text-gray-800 text-sm leading-tight truncate">{item.title}</h4>
-                    {item.selectedSize && <p className="text-xs text-gray-400 mt-0.5">المقاس: {item.selectedSize}</p>}
+
+                    {(item.selectedSize || item.selectedColor) && (
+
+                      <p className="text-xs text-gray-400 mt-0.5">
+
+                        {[item.selectedSize ? `المقاس: ${item.selectedSize}` : null, item.selectedColor].filter(Boolean).join(' • ')}
+
+                      </p>
+
+                    )}
+
                   </div>
                   <span className="text-sm font-bold text-gray-800 shrink-0">ج.م {item.price * item.qty}.00</span>
                 </div>
