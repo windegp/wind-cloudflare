@@ -90,7 +90,7 @@ function KashierIframeModal({ iframeData, onClose }) {
     // ── Overlay ──
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
+      style={{ backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       {/* ── Modal Container ── */}
@@ -100,8 +100,8 @@ function KashierIframeModal({ iframeData, onClose }) {
         {/* ── Modal Header ── */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-white">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 bg-[#F5C518]/10 rounded-full flex items-center justify-center">
-              <Lock size={14} className="text-[#F5C518]" />
+            <div className="w-7 h-7 bg-gray-100 rounded-full flex items-center justify-center">
+              <Lock size={14} className="text-gray-700" />
             </div>
             <div>
               <p className="font-bold text-gray-900 text-sm">بوابة الدفع الآمنة</p>
@@ -161,7 +161,7 @@ export default function CheckoutPage() {
   const [summaryOpen, setSummaryOpen] = useState(false);
 
   // ── state جديد للـ iFrame ──
-  const [iframeData, setIframeData] = useState(null); // بيانات الـ iFrame من السيرفر
+  const [iframeData, setIframeData] = useState(null);
 
   const [formData, setFormData] = useState({
     email: '',
@@ -187,7 +187,6 @@ export default function CheckoutPage() {
   // 🔥 توحيد رقم الطلب من البداية (استراتيجية المستند الواحد)
   const activeOrderIdRef = useRef(null);
   if (!activeOrderIdRef.current && typeof window !== 'undefined') {
-    // ننشئ رقم الطلب فور فتح الصفحة، وهيفضل ثابت مع العميل طول ما هو في الصفحة
     activeOrderIdRef.current = `WIND-${Date.now().toString().slice(-5)}-${Math.random().toString(36).substring(2, 4).toUpperCase()}`;
   }
   const activeOrderId = activeOrderIdRef.current;
@@ -195,7 +194,7 @@ export default function CheckoutPage() {
   // 🔥 متغير لإيقاف رادار السلة المتروكة بمجرد ضغط زر الدفع
   const isOrderSubmittedRef = useRef(false);
 
- // ============================================================
+  // ============================================================
   // 🚀 رادار السلة المتروكة المطور (استراتيجية المستند الواحد)
   // ============================================================
   const lastSavedDraftRef = useRef(""); 
@@ -220,7 +219,6 @@ export default function CheckoutPage() {
         if (lastSavedDraftRef.current === currentSnapshot) return; 
 
         try {
-          // 1. تحديث الأوردر (نفس المستند الثابت)
           const orderRef = doc(getDb(), "Orders", activeOrderId);
           
           const draftData = {
@@ -250,7 +248,6 @@ export default function CheckoutPage() {
 
           await setDoc(orderRef, draftData, { merge: true });
 
-          // 2. تحديث العميل (الجزء اللي كان ساقط مننا وبسببه العميل مكنش بيظهر في الداشبورد) 🔥
           const cleanPhone = formData.phone.replace(/[^0-9]/g, '');
           const uniqueId = isValidEmail ? formData.email.toLowerCase().trim() : cleanPhone;
           
@@ -270,13 +267,6 @@ export default function CheckoutPage() {
               last_active: new Date().toLocaleString('en-US', { timeZone: 'Africa/Cairo' })
             }, { merge: true });
           }
-
-          // The abandoned cart snapshot uses a locale-based date
-          // which differs from "YYYY-MM-DD HH:MM:SS" format used in dashboard queries.
-          // To maintain backward compatibility, we keep this as-is but the dashboard
-          // uses parseDateToMs() which handles both formats correctly via Firestore fallback.
-          // ⚠️ The dashboard uses ">=" string comparison on Firestore, so for reliable
-          // date-range queries, the main submit flow below uses "YYYY-MM-DD HH:MM:SS" format.
 
           lastSavedDraftRef.current = currentSnapshot;
 
@@ -311,13 +301,10 @@ export default function CheckoutPage() {
     if (!validate()) return window.scrollTo(0, 0);
     setLoading(true);
     
-    // 🔥 إيقاف رادار السلة المتروكة فوراً عشان ميسجلش الداتا تاني بعد ما نعمل الأوردر
     isOrderSubmittedRef.current = true;
 
-    // 1. استخدام نفس رقم الطلب اللي بدأنا بيه الصفحة
     const orderId = activeOrderId;
 
-    // 2. تجهيز البيانات للتخزين المؤقت
     const pendingOrder = {
       orderId,
       formData,
@@ -329,9 +316,6 @@ export default function CheckoutPage() {
     };
 
     try {
-      // ============================================================
-      // 🚀 رفع الداتا للفايربيس (Orders & Customers)
-      // ============================================================
       const orderData = {
         Name: orderId,
         Email: formData.email ? formData.email.toLowerCase() : '',
@@ -349,9 +333,7 @@ export default function CheckoutPage() {
         "Financial Status": paymentMethod === 'card' ? "pending_payment" : "pending",
         "Payment Method": paymentMethod,
         "Created at": getCairoTimestamp(),
-        data_source: "WIND_Web", // عشان الأدمن يفصلهم عن شوبيفاي
-        
-        // جلب الصور الدقيقة من سلة المشتريات
+        data_source: "WIND_Web",
         lineItems: cartItems.map(item => ({
           name: `${item.title} ${item.selectedSize ? '- ' + item.selectedSize : ''}`,
           price: item.price,
@@ -362,12 +344,9 @@ export default function CheckoutPage() {
 
       if (appliedPromo) orderData['Discount Code'] = appliedPromo;
 
-     // 1. إنشاء الأوردر أو تحديثه
       try {
         await setDoc(doc(getDb(), "Orders", orderId), orderData, { merge: true });
 
-        // 🔥 بوابة الأمان المنيعة: نمنع زيادة العداد لو الدفع "فيزا" عشان لو هرب من الصفحة!
-        // العداد هيزيد فقط في الدفع عند الاستلام وإنستا باي
         if (paymentMethod !== 'card') {
           const orderCountKey = `counted_${orderId}`;
           const isAlreadyCounted = sessionStorage.getItem(orderCountKey);
@@ -389,7 +368,6 @@ export default function CheckoutPage() {
         return;
       }
 
-      // 2. تحديث ملف العميل (للدفع عند الاستلام وإنستا باي فقط)
       if (paymentMethod !== 'card') {
         const cleanPhone = formData.phone.replace(/[^0-9]/g, '');
         const customerId = formData.email ? formData.email.toLowerCase().trim() : cleanPhone;
@@ -405,8 +383,6 @@ export default function CheckoutPage() {
             const newSegment = currentOrders >= 1 ? "VIP_Customer" : "Purchased_Once";
 
             try {
-              // ⚠️ If customer had 0 orders (abandoned cart only), this is their
-              // FIRST purchase → must increment counters.customers
               if (currentOrders === 0) {
                 const sRef = doc(getDb(), "settings", "siteSettings");
                 await updateDoc(sRef, {
@@ -422,7 +398,6 @@ export default function CheckoutPage() {
                 Phone: formData.phone,
                 "Default Address City": formData.city || "",
                 "Default Address Province": formData.governorate || "",
-                // 🔥 تحديث الشريحة وتمسح السلة المتروكة
                 segments: [newSegment],
                 status: newSegment,
                 last_active: getCairoTimestamp()
@@ -431,9 +406,7 @@ export default function CheckoutPage() {
               console.error('Error updating customer:', error);
             }
           } else {
-            // عميل جديد تماماً
             try {
-              // 🔥 بوابة الأمان: منع تكرار حساب العميل الجديد
               const customerCountKey = `cust_counted_${customerId}`;
               const isCustCounted = sessionStorage.getItem(customerCountKey);
 
@@ -467,11 +440,6 @@ export default function CheckoutPage() {
           }
         }
       }
-
-      // ============================================================
-      // 🔥 تم إلغاء كود حذف المسودات نهائياً!
-      // لأننا بنستخدم (مستند واحد) من البداية، بمجرد الدفع المستند بيتحول من abandoned لـ pending فوراً
-      // ============================================================
 
       if (paymentMethod === 'card') {
         localStorage.setItem('pendingOrder', JSON.stringify(pendingOrder));
@@ -509,7 +477,6 @@ export default function CheckoutPage() {
         setLoading(false);
 
       } else {
-        // للدفع عند الاستلام وإنستا باي
         const res = await fetch('/api/create-order', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -540,11 +507,11 @@ export default function CheckoutPage() {
 
   const inputClass = (field) =>
     `w-full px-4 py-3 border rounded-lg outline-none transition-all text-sm bg-white placeholder-gray-400 text-gray-800
-     focus:ring-2 focus:ring-[#F5C518]/40 focus:border-[#F5C518]
+     focus:ring-2 focus:ring-gray-300 focus:border-gray-400
      ${errors[field] ? 'border-red-400 bg-red-50/40' : 'border-gray-300 hover:border-gray-400'}`;
 
   return (
-    <div className="min-h-screen bg-[#f5f5f0] text-gray-800" dir="rtl">
+    <div className="min-h-screen bg-white text-gray-800" dir="rtl">
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;900&display=swap');
         * { font-family: 'Cairo', sans-serif; }
@@ -560,7 +527,7 @@ export default function CheckoutPage() {
 
         .pay-opt { transition: border-color 0.18s, background 0.18s; }
         .pay-opt:hover { border-color: #d1d5db; }
-        .pay-opt.active { border-color: #F5C518 !important; background: #fffef5; }
+        .pay-opt.active { border-color: #111827 !important; background: #f9fafb; }
 
         @keyframes slideDown {
           from { opacity: 0; transform: translateY(-6px); }
@@ -575,8 +542,8 @@ export default function CheckoutPage() {
           100% { background-position: 200% center; }
         }
         .pay-btn {
-          background: #F5C518;
-          color: #1a1a1a;
+          background: #111827;
+          color: #ffffff;
           position: relative;
           overflow: hidden;
         }
@@ -584,11 +551,11 @@ export default function CheckoutPage() {
           content: '';
           position: absolute;
           inset: 0;
-          background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.35) 50%, transparent 60%);
+          background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.08) 50%, transparent 60%);
           background-size: 200% auto;
         }
         .pay-btn:hover::after { animation: shine 0.7s linear; }
-        .pay-btn:hover { background: #e6b800; }
+        .pay-btn:hover { background: #1f2937; }
         .pay-btn:active { transform: scale(0.995); }
 
         select { appearance: none; }
@@ -611,14 +578,14 @@ export default function CheckoutPage() {
           <div className="hidden md:flex items-center gap-2 text-xs text-gray-400 font-medium select-none">
             <span className="text-gray-900 font-semibold">السلة</span>
             <span className="mx-1 opacity-40">›</span>
-            <span className="text-[#F5C518] font-semibold">معلومات</span>
+            <span className="text-gray-900 font-semibold">معلومات</span>
             <span className="mx-1 opacity-40">›</span>
             <span>الشحن</span>
             <span className="mx-1 opacity-40">›</span>
             <span>الدفع</span>
           </div>
           <div className="flex items-center gap-1.5 text-gray-500 text-xs font-medium">
-            <ShoppingBag size={15} className="text-[#F5C518]" />
+            <ShoppingBag size={15} className="text-gray-700" />
             <span>دفع آمن</span>
           </div>
         </div>
@@ -626,12 +593,12 @@ export default function CheckoutPage() {
 
       {/* MOBILE: Order Summary Toggle */}
       <div
-        className="lg:hidden bg-white border-b border-gray-200 px-5 py-3.5 cursor-pointer"
+        className="lg:hidden bg-gray-50 border-b border-gray-200 px-5 py-3.5 cursor-pointer"
         onClick={() => setSummaryOpen(!summaryOpen)}
       >
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-[#F5C518] font-semibold">
-            <ShoppingBag size={15} />
+          <div className="flex items-center gap-2 text-sm text-gray-800 font-semibold">
+            <ShoppingBag size={15} className="text-gray-600" />
             <span>{summaryOpen ? 'إخفاء تفاصيل الطلب' : 'عرض تفاصيل الطلب'}</span>
             <ChevronDown size={14} className={`transition-transform ${summaryOpen ? 'rotate-180' : ''} text-gray-500`} />
           </div>
@@ -644,7 +611,7 @@ export default function CheckoutPage() {
               <div key={idx} className="flex items-center gap-3">
                 <div className="relative w-12 h-12 bg-gray-100 rounded-lg overflow-hidden shrink-0 border border-gray-200">
                   <img src={item.image || item.images?.[0] || 'https://placehold.co/100'} alt={item.title} className="w-full h-full object-cover" />
-                  <span className="absolute -top-1.5 -right-1.5 bg-[#F5C518] text-black text-[9px] w-4 h-4 flex items-center justify-center rounded-full font-bold">{item.qty}</span>
+                  <span className="absolute -top-1.5 -right-1.5 bg-gray-900 text-white text-[9px] w-4 h-4 flex items-center justify-center rounded-full font-bold">{item.qty}</span>
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-semibold text-gray-800 leading-tight">{item.title}</p>
@@ -661,7 +628,7 @@ export default function CheckoutPage() {
                   <input
                     type="text" placeholder="كود الخصم"
                     value={discountCode} onChange={e => setDiscountCode(e.target.value)}
-                    className="w-full pr-8 pl-3 py-2.5 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#F5C518]/30 focus:border-[#F5C518] placeholder-gray-400 bg-gray-50 uppercase transition"
+                    className="w-full pr-8 pl-3 py-2.5 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-gray-300 focus:border-gray-400 placeholder-gray-400 bg-white uppercase transition"
                   />
                 </div>
                 <button
@@ -715,7 +682,7 @@ export default function CheckoutPage() {
               </div>
               {errors.email && <p className="text-red-500 text-xs mt-1.5 flex items-center gap-1 pr-1"><span>⚠</span> هذا الحقل مطلوب</p>}
               <label className="flex items-center gap-2 cursor-pointer mt-3 pr-1">
-                <input type="checkbox" className="w-4 h-4 accent-[#F5C518] rounded" />
+                <input type="checkbox" className="w-4 h-4 rounded" />
                 <span className="text-xs text-gray-500">أرسل لي أحدث العروض والمنتجات الجديدة</span>
               </label>
             </div>
@@ -854,10 +821,10 @@ export default function CheckoutPage() {
             {/* SECTION: Shipping Method */}
             <div className="mb-8">
               <p className="section-label">طريقة الشحن</p>
-              <div className="bg-white border border-[#F5C518] rounded-xl px-4 py-3.5 flex justify-between items-center">
+              <div className="bg-white border border-gray-300 rounded-xl px-4 py-3.5 flex justify-between items-center">
                 <div className="flex items-center gap-3">
-                  <div className="w-4 h-4 rounded-full border-2 border-[#F5C518] flex items-center justify-center shrink-0">
-                    <div className="w-2 h-2 rounded-full bg-[#F5C518]"></div>
+                  <div className="w-4 h-4 rounded-full border-2 border-gray-900 flex items-center justify-center shrink-0">
+                    <div className="w-2 h-2 rounded-full bg-gray-900"></div>
                   </div>
                   <div>
                     <p className="font-semibold text-sm text-gray-800">شحن قياسي</p>
@@ -882,8 +849,8 @@ export default function CheckoutPage() {
                 <label className={`pay-opt flex flex-col px-4 py-4 cursor-pointer relative !overflow-visible ${paymentMethod === 'card' ? 'active' : ''}`}>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${paymentMethod === 'card' ? 'border-[#F5C518]' : 'border-gray-300'}`}>
-                        {paymentMethod === 'card' && <div className="w-2 h-2 rounded-full bg-[#F5C518]"></div>}
+                      <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${paymentMethod === 'card' ? 'border-gray-900' : 'border-gray-300'}`}>
+                        {paymentMethod === 'card' && <div className="w-2 h-2 rounded-full bg-gray-900"></div>}
                       </div>
                       <input type="radio" checked={paymentMethod === 'card'} onChange={() => setPaymentMethod('card')} className="sr-only" />
                       <div className="flex items-center gap-2">
@@ -961,15 +928,15 @@ export default function CheckoutPage() {
                   </div>
                   {paymentMethod === 'card' && (
                     <div className="mt-3 slide-down px-3 py-3 bg-gray-50 rounded-lg text-center text-xs text-gray-600 font-medium border border-gray-100 flex items-center justify-center gap-1.5">
-                      <Lock size={11} className="text-[#F5C518]" />
+                      <Lock size={11} className="text-gray-500" />
                       ستظهر بوابة الدفع الآمنة مباشرةً في نفس الصفحة
                     </div>
                   )}
                 </label>
 
                 <label className={`pay-opt flex items-center gap-3 px-4 py-4 cursor-pointer ${paymentMethod === 'cod' ? 'active' : ''}`}>
-                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${paymentMethod === 'cod' ? 'border-[#F5C518]' : 'border-gray-300'}`}>
-                    {paymentMethod === 'cod' && <div className="w-2 h-2 rounded-full bg-[#F5C518]"></div>}
+                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${paymentMethod === 'cod' ? 'border-gray-900' : 'border-gray-300'}`}>
+                    {paymentMethod === 'cod' && <div className="w-2 h-2 rounded-full bg-gray-900"></div>}
                   </div>
                   <input type="radio" checked={paymentMethod === 'cod'} onChange={() => setPaymentMethod('cod')} className="sr-only" />
                   <Banknote size={16} className="text-gray-600" />
@@ -981,8 +948,8 @@ export default function CheckoutPage() {
 
                 <label className={`pay-opt flex flex-col px-4 py-4 cursor-pointer ${paymentMethod === 'instapay' ? 'active' : ''}`}>
                   <div className="flex items-center gap-3">
-                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${paymentMethod === 'instapay' ? 'border-[#F5C518]' : 'border-gray-300'}`}>
-                      {paymentMethod === 'instapay' && <div className="w-2 h-2 rounded-full bg-[#F5C518]"></div>}
+                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${paymentMethod === 'instapay' ? 'border-gray-900' : 'border-gray-300'}`}>
+                      {paymentMethod === 'instapay' && <div className="w-2 h-2 rounded-full bg-gray-900"></div>}
                     </div>
                     <input type="radio" checked={paymentMethod === 'instapay'} onChange={() => setPaymentMethod('instapay')} className="sr-only" />
                     <Smartphone size={16} className="text-gray-600" />
@@ -998,7 +965,7 @@ export default function CheckoutPage() {
                         <li>افتح تطبيق إنستا باي</li>
                         <li>
                           حوّل المبلغ <strong>ج.م {finalTotal}.00</strong> للرقم:{' '}
-                          <span className="font-mono font-black text-black bg-[#F5C518] px-2 py-0.5 rounded select-all">01026628476</span>
+                          <span className="font-mono font-black text-white bg-gray-900 px-2 py-0.5 rounded select-all">01026628476</span>
                         </li>
                         <li>أرسل صورة الإيصال على واتساب للتأكيد</li>
                       </ol>
@@ -1021,7 +988,7 @@ export default function CheckoutPage() {
             >
               {loading ? (
                 <>
-                  <span className="animate-spin h-5 w-5 border-2 border-black border-t-transparent rounded-full"></span>
+                  <span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></span>
                   {paymentMethod === 'card' ? 'جارٍ تحضير بوابة الدفع...' : 'جارٍ المعالجة...'}
                 </>
               ) : paymentMethod === 'card' ? (
@@ -1041,7 +1008,7 @@ export default function CheckoutPage() {
         </div>
 
         {/* RIGHT COLUMN — Order Summary */}
-        <div className="hidden lg:block w-full lg:w-[42%] bg-white border-r border-gray-200 order-1 lg:order-2">
+        <div className="hidden lg:block w-full lg:w-[42%] bg-gray-50 border-r border-gray-200 order-1 lg:order-2">
           <div className="sticky top-[65px] px-8 py-10">
 
             <div className="space-y-5 mb-6 max-h-[320px] overflow-y-auto">
@@ -1049,7 +1016,7 @@ export default function CheckoutPage() {
                 <div key={idx} className="flex items-center gap-4">
                   <div className="relative w-14 h-14 bg-gray-100 rounded-xl overflow-hidden shrink-0 border border-gray-200">
                     <img src={item.image || item.images?.[0] || 'https://placehold.co/100'} alt={item.title} className="w-full h-full object-cover" />
-                    <span className="absolute -top-1.5 -right-1.5 bg-[#F5C518] text-black text-[9px] w-5 h-5 flex items-center justify-center rounded-full font-black shadow-sm">{item.qty}</span>
+                    <span className="absolute -top-1.5 -right-1.5 bg-gray-900 text-white text-[9px] w-5 h-5 flex items-center justify-center rounded-full font-black shadow-sm">{item.qty}</span>
                   </div>
                   <div className="flex-1 min-w-0">
                     <h4 className="font-semibold text-gray-800 text-sm leading-tight truncate">{item.title}</h4>
@@ -1060,14 +1027,14 @@ export default function CheckoutPage() {
               ))}
             </div>
 
-            <div className="mb-6 pb-6 border-b border-gray-100">
+            <div className="mb-6 pb-6 border-b border-gray-200">
               <div className="flex gap-2">
                 <div className="relative flex-1">
                   <Tag size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
                   <input
                     type="text" placeholder="كود الخصم"
                     value={discountCode} onChange={e => setDiscountCode(e.target.value)}
-                    className="w-full pr-8 pl-3 py-2.5 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#F5C518]/30 focus:border-[#F5C518] placeholder-gray-400 bg-gray-50 uppercase transition"
+                    className="w-full pr-8 pl-3 py-2.5 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-gray-300 focus:border-gray-400 placeholder-gray-400 bg-white uppercase transition"
                   />
                 </div>
                 <button
@@ -1093,7 +1060,7 @@ export default function CheckoutPage() {
                   {SHIPPING_COST === 0 ? 'مجاناً' : `ج.م ${SHIPPING_COST}.00`}
                 </span>
               </div>
-              <div className="flex justify-between items-center pt-4 border-t border-gray-100">
+              <div className="flex justify-between items-center pt-4 border-t border-gray-200">
                 <div>
                   <span className="text-base font-black text-gray-900">الإجمالي</span>
                   <span className="text-xs text-gray-400 mr-1.5">• جنيه مصري</span>
@@ -1102,14 +1069,14 @@ export default function CheckoutPage() {
               </div>
             </div>
 
-            <div className="mt-8 pt-6 border-t border-gray-100 flex justify-around text-center">
+            <div className="mt-8 pt-6 border-t border-gray-200 flex justify-around text-center">
               {[
                 { icon: <Shield size={15} />, label: 'دفع آمن' },
                 { icon: <Truck size={15} />, label: 'استرجاع سهل' },
                 { icon: <Phone size={15} />, label: 'دعم سريع' },
               ].map(b => (
                 <div key={b.label} className="flex flex-col items-center gap-1.5">
-                  <div className="w-8 h-8 bg-[#F5C518]/10 rounded-full flex items-center justify-center text-[#F5C518]">
+                  <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-700">
                     {b.icon}
                   </div>
                   <span className="text-[10px] text-gray-400 font-medium">{b.label}</span>
