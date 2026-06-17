@@ -517,11 +517,11 @@ export default function CheckoutPage() {
         * { font-family: 'Cairo', sans-serif; }
 
         .section-label {
-          font-size: 11px;
-          font-weight: 700;
-          letter-spacing: 0.08em;
+          font-size: 13px;
+          font-weight: 800;
+          letter-spacing: 0.06em;
           text-transform: uppercase;
-          color: #6b7280;
+          color: #374151;
           margin-bottom: 14px;
         }
 
@@ -537,26 +537,13 @@ export default function CheckoutPage() {
 
         .promo-success { color: #059669; font-size: 11px; margin-top: 5px; font-weight: 600; }
 
-        @keyframes shine {
-          0%   { background-position: -200% center; }
-          100% { background-position: 200% center; }
-        }
         .pay-btn {
-          background: #111827;
+          background: #000000;
           color: #ffffff;
           position: relative;
-          overflow: hidden;
         }
-        .pay-btn::after {
-          content: '';
-          position: absolute;
-          inset: 0;
-          background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.08) 50%, transparent 60%);
-          background-size: 200% auto;
-        }
-        .pay-btn:hover::after { animation: shine 0.7s linear; }
-        .pay-btn:hover { background: #1f2937; }
-        .pay-btn:active { transform: scale(0.995); }
+        .pay-btn:hover { background: #111111; }
+        .pay-btn:active { transform: scale(0.997); }
 
         select { appearance: none; }
         select option { background: white; }
@@ -572,8 +559,8 @@ export default function CheckoutPage() {
       {/* HEADER */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-20">
         <div className="max-w-[1080px] mx-auto px-6 py-4 flex items-center justify-between">
-          <Link href="/" className="text-lg font-black text-gray-900 tracking-tight">
-            WIND <span className="font-light text-gray-400">Shopping</span>
+          <Link href="/" className="text-2xl font-black text-gray-900 tracking-tight">
+            WIND <span className="font-black text-gray-900">Shopping</span>
           </Link>
           <div className="hidden md:flex items-center gap-2 text-xs text-gray-400 font-medium select-none">
             <span className="text-gray-900 font-semibold">السلة</span>
@@ -584,8 +571,8 @@ export default function CheckoutPage() {
             <span className="mx-1 opacity-40">›</span>
             <span>الدفع</span>
           </div>
-          <div className="flex items-center gap-1.5 text-gray-500 text-xs font-medium">
-            <ShoppingBag size={15} className="text-gray-700" />
+          <div className="flex items-center gap-2 text-gray-500 text-sm font-semibold">
+            <ShoppingBag size={20} className="text-blue-600" />
             <span>دفع آمن</span>
           </div>
         </div>
@@ -597,21 +584,21 @@ export default function CheckoutPage() {
         onClick={() => setSummaryOpen(!summaryOpen)}
       >
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-gray-800 font-semibold">
-            <ShoppingBag size={15} className="text-gray-600" />
+          <div className="flex items-center gap-2 text-sm font-bold" style={{ color: '#2563eb' }}>
+            <ShoppingBag size={16} style={{ color: '#2563eb' }} />
             <span>{summaryOpen ? 'إخفاء تفاصيل الطلب' : 'عرض تفاصيل الطلب'}</span>
-            <ChevronDown size={14} className={`transition-transform ${summaryOpen ? 'rotate-180' : ''} text-gray-500`} />
+            <ChevronDown size={15} className={`transition-transform ${summaryOpen ? 'rotate-180' : ''}`} style={{ color: '#2563eb' }} />
           </div>
-          <span className="font-black text-base text-gray-900">ج.م {subtotal}.00</span>
+          <span className="font-black text-lg text-gray-900">ج.م {subtotal}.00</span>
         </div>
 
         {summaryOpen && (
           <div className="mt-4 pb-2 slide-down space-y-3" onClick={e => e.stopPropagation()}>
             {cartItems.map((item, idx) => (
               <div key={idx} className="flex items-center gap-3">
-                <div className="relative w-12 h-12 bg-gray-100 rounded-lg overflow-hidden shrink-0 border border-gray-200">
-                  <img src={item.image || item.images?.[0] || 'https://placehold.co/100'} alt={item.title} className="w-full h-full object-cover" />
-                  <span className="absolute -top-1.5 -right-1.5 bg-gray-900 text-white text-[9px] w-4 h-4 flex items-center justify-center rounded-full font-bold">{item.qty}</span>
+                <div className="relative w-12 h-12 bg-gray-100 rounded-lg overflow-visible shrink-0">
+                  <img src={item.image || item.images?.[0] || 'https://placehold.co/100'} alt={item.title} className="w-full h-full object-cover rounded-lg border border-gray-200" />
+                  <span className="absolute -top-2 -right-2 bg-gray-900 text-white text-[10px] min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-sm font-black shadow">{item.qty}</span>
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-semibold text-gray-800 leading-tight">{item.title}</p>
@@ -628,13 +615,13 @@ export default function CheckoutPage() {
                   <input
                     type="text" placeholder="كود الخصم"
                     value={discountCode} onChange={e => setDiscountCode(e.target.value)}
-                    className="w-full pr-8 pl-3 py-2.5 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-gray-300 focus:border-gray-400 placeholder-gray-400 bg-white uppercase transition"
+                    className="w-full pr-8 pl-3 py-3 border border-gray-400 rounded-lg text-sm outline-none focus:ring-2 focus:ring-gray-400 focus:border-gray-500 placeholder-gray-400 bg-gray-100 uppercase transition"
                   />
                 </div>
                 <button
                   type="button"
                   onClick={() => applyPromoCode(discountCode)}
-                  className="bg-gray-900 text-white px-4 py-2 rounded-lg font-bold text-xs hover:bg-black transition-colors"
+                  className="bg-gray-200 text-gray-800 border border-gray-400 px-4 py-3 rounded-lg font-bold text-xs hover:bg-gray-300 transition-colors"
                 >
                   تطبيق
                 </button>
@@ -698,21 +685,21 @@ export default function CheckoutPage() {
                     style={{ border:'none', boxShadow:'none' }}
                     defaultValue="EG"
                   >
-                    <option value="EG">🇪🇬 مصر</option>
-                    <option value="SA">🇸🇦 المملكة العربية السعودية</option>
-                    <option value="AE">🇦🇪 الإمارات العربية المتحدة</option>
-                    <option value="KW">🇰🇼 الكويت</option>
-                    <option value="QA">🇶🇦 قطر</option>
-                    <option value="BH">🇧🇭 البحرين</option>
-                    <option value="OM">🇴🇲 عُمان</option>
-                    <option value="JO">🇯🇴 الأردن</option>
-                    <option value="LB">🇱🇧 لبنان</option>
-                    <option value="IQ">🇮🇶 العراق</option>
-                    <option value="LY">🇱🇾 ليبيا</option>
-                    <option value="TN">🇹🇳 تونس</option>
-                    <option value="MA">🇲🇦 المغرب</option>
-                    <option value="DZ">🇩🇿 الجزائر</option>
-                    <option value="SD">🇸🇩 السودان</option>
+                    <option value="EG">مصر</option>
+                    <option value="SA">المملكة العربية السعودية</option>
+                    <option value="AE">الإمارات العربية المتحدة</option>
+                    <option value="KW">الكويت</option>
+                    <option value="QA">قطر</option>
+                    <option value="BH">البحرين</option>
+                    <option value="OM">عُمان</option>
+                    <option value="JO">الأردن</option>
+                    <option value="LB">لبنان</option>
+                    <option value="IQ">العراق</option>
+                    <option value="LY">ليبيا</option>
+                    <option value="TN">تونس</option>
+                    <option value="MA">المغرب</option>
+                    <option value="DZ">الجزائر</option>
+                    <option value="SD">السودان</option>
                   </select>
                   <ChevronDown className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
                 </div>
@@ -1008,15 +995,15 @@ export default function CheckoutPage() {
         </div>
 
         {/* RIGHT COLUMN — Order Summary */}
-        <div className="hidden lg:block w-full lg:w-[42%] bg-gray-50 border-r border-gray-200 order-1 lg:order-2">
+        <div className="hidden lg:block w-full lg:w-[42%] bg-gray-100 border-r border-gray-200 order-1 lg:order-2">
           <div className="sticky top-[65px] px-8 py-10">
 
             <div className="space-y-5 mb-6 max-h-[320px] overflow-y-auto">
               {cartItems.map((item, idx) => (
                 <div key={idx} className="flex items-center gap-4">
-                  <div className="relative w-14 h-14 bg-gray-100 rounded-xl overflow-hidden shrink-0 border border-gray-200">
-                    <img src={item.image || item.images?.[0] || 'https://placehold.co/100'} alt={item.title} className="w-full h-full object-cover" />
-                    <span className="absolute -top-1.5 -right-1.5 bg-gray-900 text-white text-[9px] w-5 h-5 flex items-center justify-center rounded-full font-black shadow-sm">{item.qty}</span>
+                  <div className="relative w-14 h-14 bg-gray-200 rounded-xl overflow-visible shrink-0">
+                    <img src={item.image || item.images?.[0] || 'https://placehold.co/100'} alt={item.title} className="w-full h-full object-cover rounded-xl border border-gray-300" />
+                    <span className="absolute -top-2 -right-2 bg-gray-900 text-white text-[10px] min-w-[20px] h-[20px] px-1 flex items-center justify-center rounded-sm font-black shadow">{item.qty}</span>
                   </div>
                   <div className="flex-1 min-w-0">
                     <h4 className="font-semibold text-gray-800 text-sm leading-tight truncate">{item.title}</h4>
@@ -1027,20 +1014,20 @@ export default function CheckoutPage() {
               ))}
             </div>
 
-            <div className="mb-6 pb-6 border-b border-gray-200">
+            <div className="mb-6 pb-6 border-b border-gray-300">
               <div className="flex gap-2">
                 <div className="relative flex-1">
                   <Tag size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
                   <input
                     type="text" placeholder="كود الخصم"
                     value={discountCode} onChange={e => setDiscountCode(e.target.value)}
-                    className="w-full pr-8 pl-3 py-2.5 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-gray-300 focus:border-gray-400 placeholder-gray-400 bg-white uppercase transition"
+                    className="w-full pr-8 pl-3 py-3 border border-gray-400 rounded-lg text-sm outline-none focus:ring-2 focus:ring-gray-400 focus:border-gray-500 placeholder-gray-400 bg-gray-50 uppercase transition"
                   />
                 </div>
                 <button
                   type="button"
                   onClick={() => applyPromoCode(discountCode)}
-                  className="bg-gray-900 text-white px-4 py-2 rounded-lg font-bold text-xs hover:bg-black transition-colors"
+                  className="bg-gray-200 text-gray-800 border border-gray-400 px-4 py-3 rounded-lg font-bold text-xs hover:bg-gray-300 transition-colors"
                 >
                   تطبيق
                 </button>
@@ -1052,31 +1039,31 @@ export default function CheckoutPage() {
             <div className="space-y-3">
               <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-500">سعر المنتج</span>
-                <span className="font-medium text-gray-800">ج.م {subtotal}.00</span>
+                <span className="font-semibold text-gray-800">ج.م {subtotal}.00</span>
               </div>
               <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-500">سعر الشحن</span>
-                <span className={`font-medium ${SHIPPING_COST === 0 ? 'text-green-600' : 'text-gray-800'}`}>
+                <span className={`font-semibold ${SHIPPING_COST === 0 ? 'text-green-600' : 'text-gray-800'}`}>
                   {SHIPPING_COST === 0 ? 'مجاناً' : `ج.م ${SHIPPING_COST}.00`}
                 </span>
               </div>
-              <div className="flex justify-between items-center pt-4 border-t border-gray-200">
+              <div className="flex justify-between items-center pt-4 border-t border-gray-300">
                 <div>
-                  <span className="text-base font-black text-gray-900">الإجمالي</span>
+                  <span className="text-lg font-black text-gray-900">الإجمالي</span>
                   <span className="text-xs text-gray-400 mr-1.5">• جنيه مصري</span>
                 </div>
                 <span className="text-2xl font-black text-gray-900">ج.م {finalTotal}.00</span>
               </div>
             </div>
 
-            <div className="mt-8 pt-6 border-t border-gray-200 flex justify-around text-center">
+            <div className="mt-8 pt-6 border-t border-gray-300 flex justify-around text-center">
               {[
                 { icon: <Shield size={15} />, label: 'دفع آمن' },
                 { icon: <Truck size={15} />, label: 'استرجاع سهل' },
                 { icon: <Phone size={15} />, label: 'دعم سريع' },
               ].map(b => (
                 <div key={b.label} className="flex flex-col items-center gap-1.5">
-                  <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-700">
+                  <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center text-gray-700">
                     {b.icon}
                   </div>
                   <span className="text-[10px] text-gray-400 font-medium">{b.label}</span>
