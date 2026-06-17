@@ -110,7 +110,7 @@ function KashierIframeModal({ iframeData, onClose }) {
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
+            className="rounded-focus w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
           >
             <X size={16} className="text-gray-600" />
           </button>
@@ -159,6 +159,7 @@ export default function CheckoutPage() {
   const [showAllIcons, setShowAllIcons] = useState(false);
   const [discountCode, setDiscountCode] = useState('');
   const [summaryOpen, setSummaryOpen] = useState(false);
+  const [payAreaSummaryOpen, setPayAreaSummaryOpen] = useState(false);
 
   // ── state جديد للـ iFrame ──
   const [iframeData, setIframeData] = useState(null);
@@ -526,8 +527,8 @@ export default function CheckoutPage() {
         }
 
         .pay-opt { transition: outline-color 0.18s, border-color 0.18s, background 0.18s; outline: 2px solid transparent; outline-offset: -1px; }
-        .pay-opt:hover { outline-color: #2563eb; }
-        .pay-opt.active { border-color: #111827 !important; background: #f9fafb; }
+        .pay-opt:hover, .pay-opt:focus-within { outline-color: #2563eb; }
+        .pay-opt.active { border-color: #2563eb !important; background: #eff6ff; }
 
         @keyframes slideDown {
           from { opacity: 0; transform: translateY(-6px); }
@@ -548,12 +549,7 @@ export default function CheckoutPage() {
         select { appearance: none; }
         select option { background: white; }
 
-        /* ── تأثير التركيز/الوقوف بالأزرق الموحّد على كل العناصر التفاعلية ── */
-        input:focus, select:focus, textarea:focus, button:focus, button:focus-visible {
-          outline: 2px solid #2563eb !important;
-          outline-offset: 1px;
-        }
-
+        /* ── تأثير التركيز/الوقوف بالأزرق الموحّد — حد واحد فقط بحواف دائرية، بدون تكرار ── */
         .interactive-box {
           transition: outline-color 0.18s, border-color 0.18s;
           outline: 2px solid transparent;
@@ -562,6 +558,21 @@ export default function CheckoutPage() {
         .interactive-box:hover,
         .interactive-box:focus-within {
           outline-color: #2563eb;
+        }
+        /* الحقول الداخلية لا تأخذ حد خاص بها، فقط الصندوق الأب المستدير */
+        .interactive-box input:focus,
+        .interactive-box select:focus,
+        .interactive-box textarea:focus {
+          outline: none !important;
+          box-shadow: none !important;
+        }
+
+        /* عناصر لها حواف مستديرة خاصة بها (حقل الكود، زر تطبيق، الأزرار) */
+        .rounded-focus:focus,
+        .rounded-focus:focus-visible {
+          outline: 2px solid #2563eb !important;
+          outline-offset: 1px;
+          box-shadow: none !important;
         }
 
         .policy-link { color: #2563eb; }
@@ -634,13 +645,13 @@ export default function CheckoutPage() {
                   <input
                     type="text" placeholder="كود الخصم"
                     value={discountCode} onChange={e => setDiscountCode(e.target.value)}
-                    className="w-full pr-8 pl-3 py-3.5 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-gray-400 focus:border-gray-500 placeholder-gray-400 bg-gray-100 uppercase transition"
+                    className="rounded-focus w-full pr-8 pl-3 py-3.5 border border-gray-200 rounded-lg text-sm outline-none placeholder-gray-400 bg-gray-100 uppercase transition"
                   />
                 </div>
                 <button
                   type="button"
                   onClick={() => applyPromoCode(discountCode)}
-                  className="bg-gray-50 text-gray-800 border border-gray-200 px-4 py-3.5 rounded-lg font-bold text-xs hover:bg-gray-100 transition-colors"
+                  className="rounded-focus bg-gray-50 text-gray-800 border border-gray-200 px-4 py-3.5 rounded-lg font-bold text-xs hover:bg-gray-100 transition-colors"
                 >
                   تطبيق
                 </button>
@@ -675,20 +686,17 @@ export default function CheckoutPage() {
                   <InputField error={errors.email}>
                     <input
                       type="email" name="email"
-                      placeholder="example@email.com"
+                      placeholder="البريد الإلكتروني"
                       value={formData.email} onChange={handleInputChange}
                       className="w-full py-3 text-sm bg-transparent outline-none placeholder-gray-400 text-gray-800 border-0"
                       style={{ border: 'none', boxShadow: 'none' }}
                     />
                   </InputField>
                 </div>
-                <div className="px-4 py-3.5 border-t border-gray-100">
-                  <span className="text-sm text-gray-500">البريد الإلكتروني</span>
-                </div>
               </div>
               {errors.email && <p className="text-red-500 text-xs mt-1.5 flex items-center gap-1 pr-1"><span>⚠</span> هذا الحقل مطلوب</p>}
               <label className="flex items-center gap-2 cursor-pointer mt-3 pr-1">
-                <input type="checkbox" className="w-4 h-4 rounded" />
+                <input type="checkbox" className="w-4 h-4 rounded accent-blue-600" style={{ accentColor: '#2563eb' }} />
                 <span className="text-xs text-gray-500">أرسل لي أحدث العروض والمنتجات الجديدة</span>
               </label>
             </div>
@@ -829,8 +837,8 @@ export default function CheckoutPage() {
               <p className="section-label">طريقة الشحن</p>
               <div className="interactive-box bg-white border border-gray-300 rounded-xl px-4 py-3.5 flex justify-between items-center">
                 <div className="flex items-center gap-3">
-                  <div className="w-4 h-4 rounded-full border-2 border-gray-900 flex items-center justify-center shrink-0">
-                    <div className="w-2 h-2 rounded-full bg-gray-900"></div>
+                  <div className="w-4 h-4 rounded-full border-2 border-blue-600 flex items-center justify-center shrink-0">
+                    <div className="w-2 h-2 rounded-full bg-blue-600"></div>
                   </div>
                   <div>
                     <p className="font-semibold text-sm text-gray-800">شحن قياسي</p>
@@ -855,10 +863,10 @@ export default function CheckoutPage() {
                 <label className={`pay-opt flex flex-col px-4 py-4 cursor-pointer relative !overflow-visible ${paymentMethod === 'card' ? 'active' : ''}`}>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${paymentMethod === 'card' ? 'border-gray-900' : 'border-gray-300'}`}>
-                        {paymentMethod === 'card' && <div className="w-2 h-2 rounded-full bg-gray-900"></div>}
+                      <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${paymentMethod === 'card' ? 'border-blue-600' : 'border-gray-300'}`}>
+                        {paymentMethod === 'card' && <div className="w-2 h-2 rounded-full bg-blue-600"></div>}
                       </div>
-                      <input type="radio" checked={paymentMethod === 'card'} onChange={() => setPaymentMethod('card')} className="sr-only" />
+                      <input type="radio" checked={paymentMethod === 'card'} onChange={() => setPaymentMethod('card')} className="sr-only" style={{ accentColor: '#2563eb' }} />
                       <div className="flex items-center gap-2">
                         <CreditCard size={16} className="text-gray-600" />
                         <span className="font-semibold text-sm text-gray-800">كارت / محفظة إلكترونية</span>
@@ -889,7 +897,7 @@ export default function CheckoutPage() {
               e.stopPropagation();
               setShowAllIcons(!showAllIcons);
             }}
-            className="w-8 h-4 bg-gray-50 border border-gray-300 rounded-sm flex items-center justify-center shadow-sm hover:bg-gray-100 cursor-pointer transition-all"
+            className="rounded-focus w-8 h-4 bg-gray-50 border border-gray-300 rounded-sm flex items-center justify-center shadow-sm hover:bg-gray-100 cursor-pointer transition-all"
           >
             <span className="text-[11px] font-black text-gray-600">+{hiddenIcons.length}</span>
           </button>
@@ -941,10 +949,10 @@ export default function CheckoutPage() {
                 </label>
 
                 <label className={`pay-opt flex items-center gap-3 px-4 py-4 cursor-pointer ${paymentMethod === 'cod' ? 'active' : ''}`}>
-                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${paymentMethod === 'cod' ? 'border-gray-900' : 'border-gray-300'}`}>
-                    {paymentMethod === 'cod' && <div className="w-2 h-2 rounded-full bg-gray-900"></div>}
+                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${paymentMethod === 'cod' ? 'border-blue-600' : 'border-gray-300'}`}>
+                    {paymentMethod === 'cod' && <div className="w-2 h-2 rounded-full bg-blue-600"></div>}
                   </div>
-                  <input type="radio" checked={paymentMethod === 'cod'} onChange={() => setPaymentMethod('cod')} className="sr-only" />
+                  <input type="radio" checked={paymentMethod === 'cod'} onChange={() => setPaymentMethod('cod')} className="sr-only" style={{ accentColor: '#2563eb' }} />
                   <Banknote size={16} className="text-gray-600" />
                   <div>
                     <p className="font-semibold text-sm text-gray-800">الدفع عند الاستلام</p>
@@ -954,10 +962,10 @@ export default function CheckoutPage() {
 
                 <label className={`pay-opt flex flex-col px-4 py-4 cursor-pointer ${paymentMethod === 'instapay' ? 'active' : ''}`}>
                   <div className="flex items-center gap-3">
-                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${paymentMethod === 'instapay' ? 'border-gray-900' : 'border-gray-300'}`}>
-                      {paymentMethod === 'instapay' && <div className="w-2 h-2 rounded-full bg-gray-900"></div>}
+                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${paymentMethod === 'instapay' ? 'border-blue-600' : 'border-gray-300'}`}>
+                      {paymentMethod === 'instapay' && <div className="w-2 h-2 rounded-full bg-blue-600"></div>}
                     </div>
-                    <input type="radio" checked={paymentMethod === 'instapay'} onChange={() => setPaymentMethod('instapay')} className="sr-only" />
+                    <input type="radio" checked={paymentMethod === 'instapay'} onChange={() => setPaymentMethod('instapay')} className="sr-only" style={{ accentColor: '#2563eb' }} />
                     <Smartphone size={16} className="text-gray-600" />
                     <div>
                       <p className="font-semibold text-sm text-gray-800">إنستا باي</p>
@@ -986,11 +994,67 @@ export default function CheckoutPage() {
               </div>
             </div>
 
+            {/* ORDER DETAILS — مقفول، فوق زر الدفع — الإجمالي شامل الشحن */}
+            <div className="mb-4">
+              <div
+                className="interactive-box bg-white border border-gray-200 rounded-xl px-4 py-3 flex items-center gap-3 cursor-pointer"
+                onClick={() => setPayAreaSummaryOpen(!payAreaSummaryOpen)}
+              >
+                <div className="relative w-12 h-12 bg-gray-100 rounded-lg overflow-hidden shrink-0">
+                  <img
+                    src={cartItems[0]?.image || cartItems[0]?.images?.[0] || 'https://placehold.co/100'}
+                    alt={cartItems[0]?.title || ''}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-black text-gray-900 text-base leading-tight">الإجمالي</p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {cartItems.reduce((s, it) => s + it.qty, 0)} {cartItems.reduce((s, it) => s + it.qty, 0) === 1 ? 'منتج' : 'منتجات'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="bg-gray-100 text-gray-500 text-[11px] font-bold px-2 py-1 rounded-full">EGP</span>
+                  <span className="font-black text-xl text-gray-900">ج.م {finalTotal}.00</span>
+                  <ChevronDown size={18} className={`text-gray-400 transition-transform ${payAreaSummaryOpen ? 'rotate-180' : ''}`} />
+                </div>
+              </div>
+
+              {payAreaSummaryOpen && (
+                <div className="mt-3 slide-down bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+                  {cartItems.map((item, idx) => (
+                    <div key={idx} className="flex items-center gap-3">
+                      <div className="relative w-10 h-10 bg-gray-100 rounded-lg overflow-visible shrink-0">
+                        <img src={item.image || item.images?.[0] || 'https://placehold.co/100'} alt={item.title} className="w-full h-full object-cover rounded-lg border border-gray-200" />
+                        <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-[10px] min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-sm font-black shadow">{item.qty}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-800 leading-tight truncate">{item.title}</p>
+                        {item.selectedSize && <p className="text-xs text-gray-400">{item.selectedSize}</p>}
+                      </div>
+                      <span className="text-sm font-bold text-gray-800 shrink-0">ج.م {item.price * item.qty}.00</span>
+                    </div>
+                  ))}
+                  <div className="border-t border-gray-100 pt-3 space-y-1.5 text-sm">
+                    <div className="flex justify-between text-gray-500"><span>سعر المنتج</span><span className="text-gray-800 font-medium">ج.م {subtotal}.00</span></div>
+                    <div className="flex justify-between text-gray-500">
+                      <span>سعر الشحن</span>
+                      <span className={`font-medium ${SHIPPING_COST === 0 ? 'text-green-600' : 'text-gray-800'}`}>{SHIPPING_COST === 0 ? 'مجاناً' : `ج.م ${SHIPPING_COST}.00`}</span>
+                    </div>
+                    <div className="flex justify-between font-black text-base pt-2 border-t border-gray-100">
+                      <span>الإجمالي</span>
+                      <span>ج.م {finalTotal}.00</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* SUBMIT BUTTON */}
             <button
               type="submit"
               disabled={loading}
-              className="pay-btn w-full font-black py-4 rounded-xl text-base transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed mb-6"
+              className="pay-btn rounded-focus w-full font-black py-4 rounded-xl text-base transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed mb-6"
             >
               {loading ? (
                 <>
@@ -1041,13 +1105,13 @@ export default function CheckoutPage() {
                   <input
                     type="text" placeholder="كود الخصم"
                     value={discountCode} onChange={e => setDiscountCode(e.target.value)}
-                    className="w-full pr-8 pl-3 py-3.5 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-gray-400 focus:border-gray-500 placeholder-gray-400 bg-gray-50 uppercase transition"
+                    className="rounded-focus w-full pr-8 pl-3 py-3.5 border border-gray-200 rounded-lg text-sm outline-none placeholder-gray-400 bg-gray-50 uppercase transition"
                   />
                 </div>
                 <button
                   type="button"
                   onClick={() => applyPromoCode(discountCode)}
-                  className="bg-gray-100 text-gray-800 border border-gray-200 px-4 py-3.5 rounded-lg font-bold text-xs hover:bg-gray-200 transition-colors"
+                  className="rounded-focus bg-gray-100 text-gray-800 border border-gray-200 px-4 py-3.5 rounded-lg font-bold text-xs hover:bg-gray-200 transition-colors"
                 >
                   تطبيق
                 </button>
