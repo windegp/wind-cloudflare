@@ -213,17 +213,17 @@ export default function CartDrawer() {
                       </div>
                       <div className="flex-1 flex flex-col justify-between py-0.5 text-right">
                         <div>
-                          <h3 className="font-bold text-[#1A1A1A] text-sm leading-snug line-clamp-2">
-                            {item.title} 
-                            {(item.selectedColor || item.selectedSize) && (
-                              <span className="text-gray-500 font-medium mr-1">
-                                - {formatVariable(item.selectedColor)} / {formatVariable(item.selectedSize)}
-                              </span>
-                            )}
+                          <h3 className="font-bold text-[#1A1A1A] text-sm leading-snug line-clamp-1">
+                            {item.title}
                           </h3>
-                          <div className="flex items-center gap-1 text-gray-500 text-sm mt-1.5 font-medium">
-                            <span className="font-bold text-[#1A1A1A]">{item.price}</span><span>ج.م</span>
-                            <span className="mx-1 text-xs text-gray-400">x</span><span>{item.qty}</span>
+                          {(item.selectedColor || item.selectedSize) && (
+                            <p className="text-[11px] text-gray-400 font-medium mt-0.5 line-clamp-1">
+                              {formatVariable(item.selectedColor)}{item.selectedColor && item.selectedSize ? ' / ' : ''}{formatVariable(item.selectedSize)}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-1 text-gray-500 text-sm mt-1.5 font-medium whitespace-nowrap">
+                            <span className="font-bold text-[#1A1A1A]">{item.price}</span><span className="text-[#1A1A1A] font-light">ج.م</span>
+                            <span className="mx-1 text-xs text-gray-300">×</span><span>{item.qty}</span>
                           </div>
                         </div>
                         <div className="flex items-center justify-between mt-3">
@@ -269,11 +269,11 @@ export default function CartDrawer() {
             {cartItems.length > 0 && (
               <div className="bg-white border-t border-gray-100 px-5 pt-4 pb-6 z-10 shadow-lg">
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-base font-light text-[#1A1A1A]">المجموع الفرعي</span>
-                  <span className="font-normal text-[#1A1A1A] text-xl">{subtotal}</span> <span className="text-sm font-light text-[#1A1A1A]">ج.م</span>
+                  <span className="text-sm font-light text-[#1A1A1A] whitespace-nowrap">المجموع الفرعي</span>
+                  <span className="font-normal text-[#1A1A1A] text-lg whitespace-nowrap">{subtotal} <span className="text-sm font-light">ج.م</span></span>
                 </div>
                 <p className="text-[12px] text-gray-400 mb-5 font-medium">مصاريف الشحن تُحسب عند الدفع</p>
-                <Link href="/checkout" onClick={toggleCart} className="checkout-btn block w-full text-center font-normal py-4 rounded-xl text-base shadow-md tracking-wide">إتمام الطلب — {subtotal} ج.م</Link>
+                <Link href="/checkout" onClick={toggleCart} className="checkout-btn block w-full text-center font-normal py-4 rounded-xl text-sm shadow-md tracking-wide whitespace-nowrap overflow-hidden text-ellipsis">إتمام الطلب — {subtotal} ج.م</Link>
                 <button onClick={toggleCart} className="block w-full text-center text-[13px] font-bold text-gray-400 hover:text-[#1A1A1A] mt-4">متابعة التسوق</button>
                 <div className="flex items-center justify-center gap-3 mt-4 pt-4 border-t border-gray-100">
                   {[
