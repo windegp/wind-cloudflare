@@ -171,8 +171,8 @@ export default function CartDrawer() {
 
       <div className="cart-drawer fixed inset-0 z-[1000] overflow-hidden" dir="rtl">
         <div className="cart-overlay absolute inset-0" style={{ background: 'rgba(0,0,0,0.4)' }} onClick={toggleCart} />
-        <div className="absolute inset-y-0 left-0 flex max-w-full pt-[86px]">
-          <div className="cart-panel w-screen max-w-[400px] bg-white flex flex-col shadow-2xl">
+        <div className="absolute inset-y-0 left-0 flex max-w-full">
+          <div className="cart-panel w-[85vw] max-w-[390px] bg-white flex flex-col shadow-2xl">
             
             <div className="bg-white px-5 py-4 flex items-center justify-between border-b border-gray-100 z-10">
               <div className="flex items-center gap-3">
