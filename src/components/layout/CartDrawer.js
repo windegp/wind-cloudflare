@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useCart } from "../../context/CartContext";
 import Link from "next/link";
-import { ShoppingBag, Trash2, X, Plus, ZoomIn, Loader2, Minus } from '@/components/icons-extra';
+import { ShoppingBag, Trash2, X, Plus, ZoomIn, Loader2, Minus, Eye } from '@/components/icons-extra';
 import { getDb } from "../../lib/firebase";
 import { doc, getDoc, collection, query, where, getDocs, documentId } from "firebase/firestore/lite";
 import { products as staticProducts } from "../../lib/products";
@@ -254,7 +254,7 @@ export default function CartDrawer() {
                         <div key={product.id} onClick={() => openQuickView(product)} className="suggested-item w-[110px] shrink-0 cursor-pointer">
                           <div className="w-full h-[140px] rounded-xl overflow-hidden bg-white border border-gray-100 mb-2 relative">
                             <img src={getImageUrl(product)} alt={product.title} className="w-full h-full object-cover" />
-                            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-8 h-8 bg-white/90 rounded-full flex items-center justify-center shadow-sm text-gray-800"><Plus size={16} /></div>
+                            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-8 h-8 bg-white/90 rounded-full flex items-center justify-center shadow-sm text-gray-800"><Eye size={14} /></div>
                           </div>
                           <h4 className="text-xs font-bold text-gray-800 line-clamp-1 mb-1">{formatVariable(product.title)}</h4>
                           <p className="text-xs text-gray-500 font-bold">{product.price} ج.م</p>
