@@ -517,7 +517,7 @@ export default function CheckoutPage() {
         * { font-family: 'Cairo', sans-serif; }
 
         .section-label {
-          font-size: 13px;
+          font-size: 15px;
           font-weight: 800;
           letter-spacing: 0.06em;
           text-transform: uppercase;
@@ -525,8 +525,8 @@ export default function CheckoutPage() {
           margin-bottom: 14px;
         }
 
-        .pay-opt { transition: border-color 0.18s, background 0.18s; }
-        .pay-opt:hover { border-color: #d1d5db; }
+        .pay-opt { transition: outline-color 0.18s, border-color 0.18s, background 0.18s; outline: 2px solid transparent; outline-offset: -1px; }
+        .pay-opt:hover { outline-color: #2563eb; }
         .pay-opt.active { border-color: #111827 !important; background: #f9fafb; }
 
         @keyframes slideDown {
@@ -538,15 +538,34 @@ export default function CheckoutPage() {
         .promo-success { color: #059669; font-size: 11px; margin-top: 5px; font-weight: 600; }
 
         .pay-btn {
-          background: #000000;
+          background: #2563eb;
           color: #ffffff;
           position: relative;
         }
-        .pay-btn:hover { background: #111111; }
+        .pay-btn:hover { background: #1d4ed8; }
         .pay-btn:active { transform: scale(0.997); }
 
         select { appearance: none; }
         select option { background: white; }
+
+        /* ── تأثير التركيز/الوقوف بالأزرق الموحّد على كل العناصر التفاعلية ── */
+        input:focus, select:focus, textarea:focus, button:focus, button:focus-visible {
+          outline: 2px solid #2563eb !important;
+          outline-offset: 1px;
+        }
+
+        .interactive-box {
+          transition: outline-color 0.18s, border-color 0.18s;
+          outline: 2px solid transparent;
+          outline-offset: -1px;
+        }
+        .interactive-box:hover,
+        .interactive-box:focus-within {
+          outline-color: #2563eb;
+        }
+
+        .policy-link { color: #2563eb; }
+        .policy-link:hover { color: #1d4ed8; }
       `}</style>
 
       {iframeData && (
@@ -580,7 +599,7 @@ export default function CheckoutPage() {
 
       {/* MOBILE: Order Summary Toggle */}
       <div
-        className="lg:hidden bg-gray-50 border-b border-gray-200 px-5 py-3.5 cursor-pointer"
+        className="lg:hidden bg-gray-50 border-b border-gray-200 px-5 py-4 cursor-pointer"
         onClick={() => setSummaryOpen(!summaryOpen)}
       >
         <div className="flex items-center justify-between">
@@ -589,7 +608,7 @@ export default function CheckoutPage() {
             <span>{summaryOpen ? 'إخفاء تفاصيل الطلب' : 'عرض تفاصيل الطلب'}</span>
             <ChevronDown size={15} className={`transition-transform ${summaryOpen ? 'rotate-180' : ''}`} style={{ color: '#2563eb' }} />
           </div>
-          <span className="font-black text-lg text-gray-900">ج.م {subtotal}.00</span>
+          <span className="font-black text-xl text-gray-900">ج.م {subtotal}.00</span>
         </div>
 
         {summaryOpen && (
@@ -615,13 +634,13 @@ export default function CheckoutPage() {
                   <input
                     type="text" placeholder="كود الخصم"
                     value={discountCode} onChange={e => setDiscountCode(e.target.value)}
-                    className="w-full pr-8 pl-3 py-3 border border-gray-400 rounded-lg text-sm outline-none focus:ring-2 focus:ring-gray-400 focus:border-gray-500 placeholder-gray-400 bg-gray-100 uppercase transition"
+                    className="w-full pr-8 pl-3 py-3.5 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-gray-400 focus:border-gray-500 placeholder-gray-400 bg-gray-100 uppercase transition"
                   />
                 </div>
                 <button
                   type="button"
                   onClick={() => applyPromoCode(discountCode)}
-                  className="bg-gray-200 text-gray-800 border border-gray-400 px-4 py-3 rounded-lg font-bold text-xs hover:bg-gray-300 transition-colors"
+                  className="bg-gray-50 text-gray-800 border border-gray-200 px-4 py-3.5 rounded-lg font-bold text-xs hover:bg-gray-100 transition-colors"
                 >
                   تطبيق
                 </button>
@@ -630,10 +649,10 @@ export default function CheckoutPage() {
               {appliedPromo && <p className="promo-success pr-1">✓ تم تطبيق كود: {appliedPromo}</p>}
             </div>
 
-            <div className="border-t border-gray-100 pt-3 space-y-1.5 text-sm">
+            <div className="border-t border-gray-100 pt-3 space-y-1.5 text-base">
               <div className="flex justify-between text-gray-500"><span>سعر المنتج</span><span className="text-gray-800 font-medium">ج.م {subtotal}.00</span></div>
               <div className="flex justify-between text-gray-500"><span>سعر الشحن</span><span className={`font-medium ${SHIPPING_COST === 0 ? 'text-green-600' : 'text-gray-800'}`}>{SHIPPING_COST === 0 ? 'مجاناً' : `ج.م ${SHIPPING_COST}.00`}</span></div>
-              <div className="flex justify-between font-black text-base pt-2 border-t border-gray-100">
+              <div className="flex justify-between font-black text-lg pt-2 border-t border-gray-100">
                 <span>الإجمالي</span>
                 <span>ج.م {finalTotal}.00</span>
               </div>
@@ -651,10 +670,7 @@ export default function CheckoutPage() {
             {/* SECTION: Contact */}
             <div className="mb-8">
               <p className="section-label">التواصل</p>
-              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-                <div className="px-4 py-3.5 border-b border-gray-100">
-                  <span className="text-sm text-gray-500">البريد الإلكتروني</span>
-                </div>
+              <div className="interactive-box bg-white border border-gray-200 rounded-xl overflow-hidden">
                 <div className="px-4 py-1">
                   <InputField error={errors.email}>
                     <input
@@ -665,6 +681,9 @@ export default function CheckoutPage() {
                       style={{ border: 'none', boxShadow: 'none' }}
                     />
                   </InputField>
+                </div>
+                <div className="px-4 py-3.5 border-t border-gray-100">
+                  <span className="text-sm text-gray-500">البريد الإلكتروني</span>
                 </div>
               </div>
               {errors.email && <p className="text-red-500 text-xs mt-1.5 flex items-center gap-1 pr-1"><span>⚠</span> هذا الحقل مطلوب</p>}
@@ -677,9 +696,9 @@ export default function CheckoutPage() {
             {/* SECTION: Delivery */}
             <div className="mb-8">
               <p className="section-label">عنوان التوصيل</p>
-              <div className="bg-white border border-gray-200 rounded-xl divide-y divide-gray-100">
+              <div className="space-y-2">
 
-                <div className="px-4 py-1 relative">
+                <div className="interactive-box bg-white border border-gray-200 rounded-xl px-4 py-1 relative">
                   <select
                     className="w-full py-3 text-sm bg-transparent outline-none text-gray-800 border-0 appearance-none"
                     style={{ border:'none', boxShadow:'none' }}
@@ -704,7 +723,7 @@ export default function CheckoutPage() {
                   <ChevronDown className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
                 </div>
 
-                <div className="px-4 py-1">
+                <div className="interactive-box bg-white border border-gray-200 rounded-xl px-4 py-1">
                   <input
                     type="text" name="firstName"
                     placeholder="الاسم الأول"
@@ -714,7 +733,7 @@ export default function CheckoutPage() {
                   />
                 </div>
 
-                <div className="px-4 py-1">
+                <div className="interactive-box bg-white border border-gray-200 rounded-xl px-4 py-1">
                   <input
                     type="text" name="lastName"
                     placeholder="اسم العائلة (اختياري)"
@@ -724,7 +743,7 @@ export default function CheckoutPage() {
                   />
                 </div>
 
-                <div className="px-4 py-1">
+                <div className="interactive-box bg-white border border-gray-200 rounded-xl px-4 py-1">
                   <input
                     type="text" name="address"
                     placeholder="العنوان بالتفصيل (الشارع، رقم المبنى)"
@@ -734,7 +753,7 @@ export default function CheckoutPage() {
                   />
                 </div>
 
-                <div className="px-4 py-1">
+                <div className="interactive-box bg-white border border-gray-200 rounded-xl px-4 py-1">
                   <input
                     type="text" name="landmark"
                     placeholder="علامة مميزة للموقع (اختياري)"
@@ -744,7 +763,7 @@ export default function CheckoutPage() {
                   />
                 </div>
 
-                <div className="px-4 py-1">
+                <div className="interactive-box bg-white border border-gray-200 rounded-xl px-4 py-1">
                   <input
                     type="text" name="city"
                     placeholder="المدينة"
@@ -754,7 +773,7 @@ export default function CheckoutPage() {
                   />
                 </div>
 
-                <div className="px-4 py-1 relative">
+                <div className="interactive-box bg-white border border-gray-200 rounded-xl px-4 py-1 relative">
                   <select
                     name="governorate" value={formData.governorate} onChange={handleInputChange}
                     className="w-full py-3 text-sm bg-transparent outline-none text-gray-800 border-0 appearance-none"
@@ -765,7 +784,7 @@ export default function CheckoutPage() {
                   <ChevronDown className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
                 </div>
 
-                <div className="px-4 py-1">
+                <div className="interactive-box bg-white border border-gray-200 rounded-xl px-4 py-1">
                   <input
                     type="text" name="postalCode"
                     placeholder="الرمز البريدي (اختياري)"
@@ -775,7 +794,7 @@ export default function CheckoutPage() {
                   />
                 </div>
 
-                <div className="px-4 py-1 relative">
+                <div className="interactive-box bg-white border border-gray-200 rounded-xl px-4 py-1 relative">
                   <input
                     type="tel" name="phone"
                     placeholder="رقم الهاتف"
@@ -786,7 +805,7 @@ export default function CheckoutPage() {
                   <Info size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
                 </div>
 
-                <div className="px-4 py-1">
+                <div className="interactive-box bg-white border border-gray-200 rounded-xl px-4 py-1">
                   <input
                     type="tel" name="altPhone"
                     placeholder="رقم هاتف بديل (اختياري)"
@@ -808,7 +827,7 @@ export default function CheckoutPage() {
             {/* SECTION: Shipping Method */}
             <div className="mb-8">
               <p className="section-label">طريقة الشحن</p>
-              <div className="bg-white border border-gray-300 rounded-xl px-4 py-3.5 flex justify-between items-center">
+              <div className="interactive-box bg-white border border-gray-300 rounded-xl px-4 py-3.5 flex justify-between items-center">
                 <div className="flex items-center gap-3">
                   <div className="w-4 h-4 rounded-full border-2 border-gray-900 flex items-center justify-center shrink-0">
                     <div className="w-2 h-2 rounded-full bg-gray-900"></div>
@@ -986,9 +1005,10 @@ export default function CheckoutPage() {
             </button>
 
             <div className="flex flex-wrap justify-center gap-5 pt-4 border-t border-gray-200">
-              {['سياسة الاسترجاع', 'سياسة الشحن', 'سياسة الخصوصية', 'الشروط والأحكام'].map(link => (
-                <Link key={link} href="#" className="text-[11px] text-gray-400 hover:text-gray-700 transition underline underline-offset-2">{link}</Link>
-              ))}
+              <Link href="/policies/refund-policy" className="policy-link text-[11px] transition underline underline-offset-2">سياسة الاسترجاع</Link>
+              <Link href="/policies/shipping-policy" className="policy-link text-[11px] transition underline underline-offset-2">سياسة الشحن</Link>
+              <Link href="/policies/privacy-policy" className="policy-link text-[11px] transition underline underline-offset-2">سياسة الخصوصية</Link>
+              <Link href="/policies/terms-of-service" className="policy-link text-[11px] transition underline underline-offset-2">الشروط والأحكام</Link>
             </div>
 
           </form>
@@ -996,7 +1016,7 @@ export default function CheckoutPage() {
 
         {/* RIGHT COLUMN — Order Summary */}
         <div className="hidden lg:block w-full lg:w-[42%] bg-gray-100 border-r border-gray-200 order-1 lg:order-2">
-          <div className="sticky top-[65px] px-8 py-10">
+          <div className="sticky top-[65px] px-8 py-12">
 
             <div className="space-y-5 mb-6 max-h-[320px] overflow-y-auto">
               {cartItems.map((item, idx) => (
@@ -1021,13 +1041,13 @@ export default function CheckoutPage() {
                   <input
                     type="text" placeholder="كود الخصم"
                     value={discountCode} onChange={e => setDiscountCode(e.target.value)}
-                    className="w-full pr-8 pl-3 py-3 border border-gray-400 rounded-lg text-sm outline-none focus:ring-2 focus:ring-gray-400 focus:border-gray-500 placeholder-gray-400 bg-gray-50 uppercase transition"
+                    className="w-full pr-8 pl-3 py-3.5 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-gray-400 focus:border-gray-500 placeholder-gray-400 bg-gray-50 uppercase transition"
                   />
                 </div>
                 <button
                   type="button"
                   onClick={() => applyPromoCode(discountCode)}
-                  className="bg-gray-200 text-gray-800 border border-gray-400 px-4 py-3 rounded-lg font-bold text-xs hover:bg-gray-300 transition-colors"
+                  className="bg-gray-100 text-gray-800 border border-gray-200 px-4 py-3.5 rounded-lg font-bold text-xs hover:bg-gray-200 transition-colors"
                 >
                   تطبيق
                 </button>
@@ -1037,11 +1057,11 @@ export default function CheckoutPage() {
             </div>
 
             <div className="space-y-3">
-              <div className="flex justify-between items-center text-sm">
+              <div className="flex justify-between items-center text-base">
                 <span className="text-gray-500">سعر المنتج</span>
                 <span className="font-semibold text-gray-800">ج.م {subtotal}.00</span>
               </div>
-              <div className="flex justify-between items-center text-sm">
+              <div className="flex justify-between items-center text-base">
                 <span className="text-gray-500">سعر الشحن</span>
                 <span className={`font-semibold ${SHIPPING_COST === 0 ? 'text-green-600' : 'text-gray-800'}`}>
                   {SHIPPING_COST === 0 ? 'مجاناً' : `ج.م ${SHIPPING_COST}.00`}
@@ -1049,10 +1069,10 @@ export default function CheckoutPage() {
               </div>
               <div className="flex justify-between items-center pt-4 border-t border-gray-300">
                 <div>
-                  <span className="text-lg font-black text-gray-900">الإجمالي</span>
+                  <span className="text-xl font-black text-gray-900">الإجمالي</span>
                   <span className="text-xs text-gray-400 mr-1.5">• جنيه مصري</span>
                 </div>
-                <span className="text-2xl font-black text-gray-900">ج.م {finalTotal}.00</span>
+                <span className="text-3xl font-black text-gray-900">ج.م {finalTotal}.00</span>
               </div>
             </div>
 
