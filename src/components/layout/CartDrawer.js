@@ -170,8 +170,8 @@ export default function CartDrawer() {
       />
 
       <div className="cart-drawer fixed inset-0 z-[1000] overflow-hidden" dir="rtl">
-        <div className="cart-overlay absolute inset-0" style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(3px)' }} onClick={toggleCart} />
-        <div className="absolute inset-y-0 left-0 flex max-w-full">
+        <div className="cart-overlay absolute inset-0" style={{ background: 'rgba(0,0,0,0.4)' }} onClick={toggleCart} />
+        <div className="absolute inset-y-0 left-0 flex max-w-full pt-[86px]">
           <div className="cart-panel w-screen max-w-[400px] bg-white flex flex-col shadow-2xl">
             
             <div className="bg-white px-5 py-4 flex items-center justify-between border-b border-gray-100 z-10">
@@ -269,12 +269,22 @@ export default function CartDrawer() {
             {cartItems.length > 0 && (
               <div className="bg-white border-t border-gray-100 px-5 pt-4 pb-6 z-10 shadow-lg">
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-base font-bold text-gray-600">المجموع الفرعي</span>
-                  <span className="font-black text-[#1A1A1A] text-xl">{subtotal} <span className="text-sm font-bold text-gray-400">ج.م</span></span>
+                  <span className="text-base font-light text-[#1A1A1A]">المجموع الفرعي</span>
+                  <span className="font-normal text-[#1A1A1A] text-xl">{subtotal}</span> <span className="text-sm font-light text-[#1A1A1A]">ج.م</span>
                 </div>
                 <p className="text-[12px] text-gray-400 mb-5 font-medium">مصاريف الشحن تُحسب عند الدفع</p>
-                <Link href="/checkout" onClick={toggleCart} className="checkout-btn block w-full text-center font-black py-4 rounded-xl text-base shadow-md">إتمام الطلب — {subtotal} ج.م</Link>
+                <Link href="/checkout" onClick={toggleCart} className="checkout-btn block w-full text-center font-normal py-4 rounded-xl text-base shadow-md tracking-wide">إتمام الطلب — {subtotal} ج.م</Link>
                 <button onClick={toggleCart} className="block w-full text-center text-[13px] font-bold text-gray-400 hover:text-[#1A1A1A] mt-4">متابعة التسوق</button>
+                <div className="flex items-center justify-center gap-3 mt-4 pt-4 border-t border-gray-100">
+                  {[
+                    { name: "Mastercard", url: "https://ik.imagekit.io/windeg/WIND_Shopping/mastercard.svg" },
+                    { name: "Visa",       url: "https://ik.imagekit.io/windeg/WIND_Shopping/visa.svg" },
+                    { name: "Meeza",      url: "https://ik.imagekit.io/windeg/WIND_Shopping/Meeza.svg" },
+                    { name: "Amex",       url: "https://ik.imagekit.io/windeg/WIND_Shopping/amex-svgrepo-com.svg" },
+                  ].map((p) => (
+                    <img key={p.name} src={p.url} alt={p.name} className="h-6 w-auto object-contain opacity-80" />
+                  ))}
+                </div>
               </div>
             )}
           </div>
