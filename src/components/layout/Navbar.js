@@ -144,7 +144,7 @@ export default function Navbar() {
               {announcements.map((text, index) => (
                 <span 
                   key={index}
-                  className={`text-[10px] md:text-[11px] font-semibold tracking-[0.2em] uppercase absolute inset-0 flex items-center justify-center whitespace-nowrap font-tajawal
+                  className={`text-[10px] md:text-[11px] font-light tracking-[0.15em] absolute inset-0 flex items-center justify-center whitespace-nowrap font-tajawal
                   ${index === adIndex ? 'animate-slide-right-text' : 'opacity-0'}`}
                 >
                   {text}
@@ -159,12 +159,13 @@ export default function Navbar() {
         </div>
 
         {/* 2. النافبار الأساسي */}
-        <nav className="bg-white border-b border-[#EBEBEB] h-14 w-full">
+        <nav className="bg-white h-14 w-full">
         <div className="max-w-[1600px] mx-auto px-6 h-full flex items-center justify-between">
           <button onClick={() => setIsMenuOpen(true)} className="group flex items-center gap-3 text-black/70 hover:text-[#1A1A1A] transition-all">
             <div className="flex flex-col gap-[5px] overflow-hidden">
-              <span className="w-[22px] h-[1.5px] bg-current transition-all group-hover:w-[14px]"></span>
-              <span className="w-[14px] h-[1.5px] bg-current transition-all group-hover:w-[22px]"></span>
+              <span className="w-[24px] h-[1.5px] bg-current transition-all group-hover:w-[16px]"></span>
+              <span className="w-[16px] h-[1.5px] bg-current transition-all group-hover:w-[24px]"></span>
+              <span className="w-[24px] h-[1.5px] bg-current"></span>
             </div>
             <span className="hidden md:block text-[10px] font-black tracking-widest uppercase">Menu</span>
           </button>
@@ -205,14 +206,14 @@ export default function Navbar() {
                   <span>رجوع</span>
                 </button>
               ) : (
-                <span className="text-[9px] font-bold text-[#bbb] tracking-[0.4em] uppercase">WIND</span>
+                <span className="text-[9px] font-black text-[#999] tracking-[0.4em] uppercase italic">WIND</span>
               )}
               <button onClick={closeMenu} className="text-[#999] hover:text-[#111] transition-colors p-2 border border-[#E8E8E8] rounded-full">
                 <X size={18} />
               </button>
             </div>
             <div className="px-6 pt-5 pb-2">
-              <h2 className="text-xl font-black text-[#111] animate-fade-in tracking-tight">{activeLayer.title}</h2>
+              <h2 className="text-xl font-black text-[#111] animate-fade-in tracking-tight">{history.length === 0 ? "القائمة" : activeLayer.title}</h2>
               <div className="h-[1px] w-8 bg-[#111] mt-2 mb-1"></div>
             </div>
             <div className="flex-1 overflow-y-auto px-4 pb-10 custom-scrollbar">
