@@ -997,11 +997,11 @@ export default function CheckoutPage() {
                 className="px-2 py-3 flex items-center gap-3 cursor-pointer"
                 onClick={() => setPayAreaSummaryOpen(!payAreaSummaryOpen)}
               >
-                <div className="relative w-12 h-12 bg-gray-100 rounded-lg overflow-hidden shrink-0">
+                <div className="relative w-12 h-12 bg-gray-100 rounded-lg overflow-visible shrink-0">
                   <img
                     src={cartItems[0]?.image || cartItems[0]?.images?.[0] || 'https://placehold.co/100'}
                     alt={cartItems[0]?.title || ''}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover rounded-lg"
                   />
                   <span className="absolute -top-2 -right-2 bg-gray-900 text-white text-[10px] min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-sm font-black shadow">
                     {cartItems.reduce((s, it) => s + it.qty, 0)}
