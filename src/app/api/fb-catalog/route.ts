@@ -1,8 +1,6 @@
 // app/api/fb-catalog/route.ts
 import { NextResponse } from "next/server";
-import { getDb } from "@/lib/firebase";
-import { collection, getDocs, query, where } from "firebase/firestore/lite";
-import { kvGet, kvSet } from "@/lib/kv-cache";
+import { kvGet } from "@/lib/kv-cache";
 
 const SITE_URL = "https://windeg.com";
 const BRAND = "WIND";
@@ -62,13 +60,11 @@ function buildXml(items: string[]): string {
 
 // -------- main --------
 
-export const runtime = "edge";
-
 export async function GET() {
   try {
     // 1. حاول تجيب من KV الأول — kvGet بيرجع JSON.parse عادةً
     //    بس إحنا بنخزن XML string مش JSON، فهنستخدم getKV مباشرة
-    const { getKV } = await import("@/lib/kv-cache");
+   const { getKV } = await import("@/lib/kv-cache");
     const kv = await getKV();
 
     if (kv) {
@@ -85,15 +81,68 @@ export async function GET() {
     }
 
     // 2. اجيب المنتجات من Firestore
-    const db = getDb();
-    const q = query(collection(db, "products"), where("status", "==", "Active"));
-    const snapshot = await getDocs(q);
+    const PROJECT_ID = "wind-reviews";
+const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents:runQuery`;
 
-    const items: string[] = [];
+const firestoreRes = await fetch(firestoreUrl, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    structuredQuery: {
+      from: [{ collectionId: "products" }],
+      where: {
+        fieldFilter: {
+          field: { fieldPath: "status" },
+          op: "EQUAL",
+          value: { stringValue: "Active" },
+        },
+      },
+    },
+  }),
+});
 
-    snapshot.forEach((doc) => {
-      const p = doc.data();
-      const handle: string = doc.id;
+const firestoreData = await firestoreRes.json() as Array<{ document?: { name: string; fields: Record<string, unknown> } }>;
+
+const items: string[] = [];
+
+for (const row of firestoreData) {
+  if (!row.document) continue;
+  const rawFields = row.document.fields as Record<string, Record<string, unknown>>;
+  const handle = row.document.name.split("/").pop() ?? "";
+
+  // helper لاستخراج القيمة من Firestore format
+  const f = (field: string): string =>
+    (rawFields[field]?.stringValue as string) ?? "";
+  const fArr = (field: string): string[] => {
+    const arr = rawFields[field]?.arrayValue as { values?: Array<{ stringValue?: string }> } | undefined;
+    return arr?.values?.map((v) => v.stringValue ?? "").filter(Boolean) ?? [];
+  };
+  const fMap = (field: string): Record<string, string> => {
+    const map = rawFields[field]?.mapValue as { fields?: Record<string, { stringValue?: string }> } | undefined;
+    if (!map?.fields) return {};
+    return Object.fromEntries(
+      Object.entries(map.fields).map(([k, v]) => [k, v.stringValue ?? ""])
+    );
+  };
+  const fArrMaps = (field: string): Record<string, unknown>[] => {
+    const arr = rawFields[field]?.arrayValue as { values?: Array<{ mapValue?: { fields?: Record<string, unknown> } }> } | undefined;
+    return arr?.values?.map((v) => v.mapValue?.fields ?? {}) ?? [];
+  };
+
+  const p = {
+    title: f("title"),
+    description: f("description"),
+    price: f("price"),
+    compareAtPrice: f("compareAtPrice"),
+    sellOutOfStock: f("sellOutOfStock"),
+    quantity: f("quantity"),
+    status: f("status"),
+    images: fArr("images"),
+    colorSwatches: fMap("colorSwatches"),
+    selectedCollections: fArr("selectedCollections"),
+    variants: fArrMaps("variants"),
+    seo: { description: (rawFields["seo"]?.mapValue as { fields?: { description?: { stringValue?: string } } } | undefined)?.fields?.description?.stringValue ?? "" },
+  };
       const productUrl = `${SITE_URL}/products/${handle}`;
       const baseTitle: string = (p.title as string) ?? "";
       const rawDescription: string =
@@ -153,7 +202,13 @@ export async function GET() {
 
       variants.forEach((v) => {
         const colorValue: string =
-          (v.option1Value as string) || (v.option2Value as string) || "";
+  ((v["option1Value"] as { stringValue?: string })?.stringValue) ||
+  ((v["option2Value"] as { stringValue?: string })?.stringValue) || "";
+const variantPrice: string =
+  ((v["price"] as { stringValue?: string })?.stringValue) ?? p.price;
+const variantCompare: string =
+  ((v["compareAtPrice"] as { stringValue?: string })?.stringValue) ?? p.compareAtPrice;
+const qty = Number(((v["quantity"] as { integerValue?: string })?.integerValue) ?? 0);
         const colorKey = colorValue.toLowerCase().replace(/\s+/g, "-");
 
         if (seenColors.has(colorKey)) return;
@@ -163,9 +218,7 @@ export async function GET() {
           colorSwatches[colorKey] ?? colorSwatches[colorValue] ?? images[0] ?? "";
         if (!variantImage) return;
 
-        const variantPrice: string = (v.price as string) ?? basePrice;
-        const variantCompare: string = (v.compareAtPrice as string) ?? compareAtPrice;
-        const qty = Number(v.quantity ?? 0);
+        
         const availability =
           qty > 0 || p.sellOutOfStock === "Yes" ? "in stock" : "out of stock";
 
@@ -196,7 +249,7 @@ export async function GET() {
       <g:google_product_category>${escapeXml(googleCategory)}</g:google_product_category>
     </item>`);
       });
-    });
+    }
 
     const xml = buildXml(items);
 
