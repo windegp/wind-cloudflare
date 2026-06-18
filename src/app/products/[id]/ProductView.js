@@ -568,25 +568,11 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           <div ref={addToCartBtnRef} className="flex gap-3 mb-2">
             <button
               onClick={async () => {
-  setIsAddingToCart(true);
-  
-  // 1. إضافة المنتج للسلة محلياً في موقعك كما هو
-  await addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity});
-  
-  // 2. إرسال الحدث فوراً لفيسبوك وتيك توك عبر Zaraz
-  if (typeof window !== 'undefined' && window.zaraz) {
-    window.zaraz.ecommerce('Product Added', {
-      product_id: product.id?.toString(),
-      name: product.title,
-      price: parseFloat(String(product.price).replace(/[^0-9.]/g, '')),
-      currency: 'EGP',
-      quantity: quantity
-    });
-  }
-
-  setQuantity(1);
-  setTimeout(() => setIsAddingToCart(false), 700);
-}}
+                setIsAddingToCart(true);
+                await addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity});
+                setQuantity(1);
+                setTimeout(() => setIsAddingToCart(false), 700);
+              }}
               disabled={isAddingToCart}
               className="flex-1 text-[14px] font-medium py-3 flex items-center justify-center btn-shake border border-black/70 rounded-lg text-[#111] bg-white hover:bg-[#f5f5f5] transition-colors disabled:opacity-80"
               style={{letterSpacing:'0.04em'}}
@@ -643,25 +629,11 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 {/* Add to Cart */}
                 <button
                   onClick={async () => {
-  setIsAddingToCart(true);
-  
-  // 1. إضافة المنتج للسلة محلياً في موقعك كما هو
-  await addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity});
-  
-  // 2. إرسال الحدث فوراً لفيسبوك وتيك توك عبر Zaraz
-  if (typeof window !== 'undefined' && window.zaraz) {
-    window.zaraz.ecommerce('Product Added', {
-      product_id: product.id?.toString(),
-      name: product.title,
-      price: parseFloat(String(product.price).replace(/[^0-9.]/g, '')),
-      currency: 'EGP',
-      quantity: quantity
-    });
-  }
-
-  setQuantity(1);
-  setTimeout(() => setIsAddingToCart(false), 700);
-}}
+                    setIsAddingToCart(true);
+                    await addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity});
+                    setQuantity(1);
+                    setTimeout(() => setIsAddingToCart(false), 700);
+                  }}
                   disabled={isAddingToCart}
                   className="flex-1 text-[13px] font-medium h-[42px] flex items-center justify-center rounded-lg text-white bg-black hover:bg-[#222] transition-colors disabled:opacity-80"
                   style={{letterSpacing:'0.04em'}}
