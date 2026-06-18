@@ -152,9 +152,10 @@ export async function GET() {
         const googleCategory =
           p.selectedCollections.find((c) => c.includes(">")) ??
           "Apparel & Accessories > Clothing";
-        
-        // 🌟 الإضافة الجديدة: استخراج القسم المخصص للموقع تلقائياً
-        const productType = p.selectedCollections.find((c) => c && c.length > 2) || "WIND Collection";
+        // التعديل عشان تحتفظ بنفس تنسيق الحروف الأصلي:
+const productType = p.selectedCollections.length > 0 
+  ? p.selectedCollections[0].replace(/-/g, ' ') 
+  : "WIND Collection";
         
         const variants = Array.isArray(p.variants) ? p.variants : [];
 
