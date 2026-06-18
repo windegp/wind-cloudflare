@@ -152,6 +152,10 @@ export async function GET() {
         const googleCategory =
           p.selectedCollections.find((c) => c.includes(">")) ??
           "Apparel & Accessories > Clothing";
+        
+        // 🌟 الإضافة الجديدة: استخراج القسم المخصص للموقع تلقائياً
+        const productType = p.selectedCollections.find((c) => c && c.length > 2) || "WIND Collection";
+        
         const variants = Array.isArray(p.variants) ? p.variants : [];
 
         // ---- منتج بدون variants ----
@@ -179,6 +183,7 @@ export async function GET() {
         <g:brand>${BRAND}</g:brand>
         <g:condition>new</g:condition>
         <g:google_product_category>${escapeXml(googleCategory)}</g:google_product_category>
+        <g:product_type>${escapeXml(productType)}</g:product_type>
       </item>`);
           continue;
         }
@@ -229,6 +234,7 @@ export async function GET() {
         <g:condition>new</g:condition>
         <g:color>${escapeXml(colorLabel)}</g:color>
         <g:google_product_category>${escapeXml(googleCategory)}</g:google_product_category>
+        <g:product_type>${escapeXml(productType)}</g:product_type>
       </item>`);
         }
       }
