@@ -1,11 +1,11 @@
 // app/api/fb-catalog/route.js
 import { NextResponse } from "next/server";
-import { getKV } from "@/lib/kv"; // 👈 استيراد الدالة بناءً على ملف الـ KV الجديد الخاص بك
+import { getKV } from "@/lib/kv-cache"; // 👈 استيراد الدالة بناءً على ملف الـ KV الجديد الخاص بك
 
 export const runtime = "edge"; // 👈 إجبار الـ Route على العمل في بيئة Cloudflare Edge
 
 const SITE_URL = "https://windeg.com";
-const BRAND = "WIND";
+const BRAND = "WIND Shopping";
 const CURRENCY = "EGP";
 const KV_KEY = "fb_catalog_xml";
 
