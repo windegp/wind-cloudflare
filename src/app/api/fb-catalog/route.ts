@@ -1,6 +1,5 @@
 // app/api/fb-catalog/route.ts
 import { NextResponse } from "next/server";
-import { kvGet } from "@/lib/kv-cache";
 
 const SITE_URL = "https://windeg.com";
 const BRAND = "WIND";
@@ -64,6 +63,8 @@ export async function GET() {
   try {
     // 1. حاول تجيب من KV الأول — kvGet بيرجع JSON.parse عادةً
     //    بس إحنا بنخزن XML string مش JSON، فهنستخدم getKV مباشرة
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   // @ts-ignore
    const { getKV } = await import("@/lib/kv-cache");
     const kv = await getKV();
 
