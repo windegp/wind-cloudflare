@@ -1,12 +1,15 @@
 // app/api/fb-catalog/route.js
 import { NextResponse } from "next/server";
-import { getKV } from "@/lib/kv-cache"; // 👈 استيراد الدالة بناءً على ملف الـ KV الجديد الخاص بك
-
+import { getKV } from "@/lib/kv-cache"; 
 
 const SITE_URL = "https://windeg.com";
 const BRAND = "WIND Shopping";
 const CURRENCY = "EGP";
-const KV_KEY = "fb_catalog_v3";
+// 🌟 تم تغيير المفتاح هنا لكسر الكاش القديم تماماً وإجبار السيرفر على التحديث
+const KV_KEY = "fb_catalog_xml_v5";
+
+// اجبار Next.js على عدم كاش الـ Route نفسه في Vercel
+export const dynamic = 'force-dynamic';
 
 // -------- helpers --------
 
@@ -67,7 +70,6 @@ export async function GET() {
     const kv = await getKV();
 
     if (kv) {
-      // قراءة النص مباشرة بدون JSON.parse لأن الـ catalog هو XML خام
       const cached = await kv.get(KV_KEY); 
       if (cached) {
         return new NextResponse(cached, {
@@ -152,10 +154,11 @@ export async function GET() {
         const googleCategory =
           p.selectedCollections.find((c) => c.includes(">")) ??
           "Apparel & Accessories > Clothing";
-        // التعديل عشان تحتفظ بنفس تنسيق الحروف الأصلي:
-const productType = p.selectedCollections.length > 0 
-  ? p.selectedCollections[0].replace(/-/g, ' ') 
-  : "WIND Collection";
+        
+        // 🌟 استخراج القسم بالتنسيق الأصلي بدون شرطات
+        const productType = p.selectedCollections.length > 0 
+          ? p.selectedCollections[0].replace(/-/g, ' ') 
+          : "WIND Collection";
         
         const variants = Array.isArray(p.variants) ? p.variants : [];
 
@@ -179,8 +182,8 @@ const productType = p.selectedCollections.length > 0
         ${images.slice(1, 10).map((img) => `<g:additional_image_link>${escapeXml(img)}</g:additional_image_link>`).join("\n       ")}
         <g:availability>${availability}</g:availability>
         ${hasSale
-          ? `<g:price>${Number(compareAtPrice).toFixed(2)} ${CURRENCY}</g:price>\n       <g:sale_price>${Number(basePrice).toFixed(2)} ${CURRENCY}</g:sale_price>`
-          : `<g:price>${Number(basePrice).toFixed(2)} ${CURRENCY}</g:price>`}
+          ? `<g:price>${parseFloat(compareAtPrice).toFixed(2)} ${CURRENCY}</g:price>\n       <g:sale_price>${parseFloat(basePrice).toFixed(2)} ${CURRENCY}</g:sale_price>`
+          : `<g:price>${parseFloat(basePrice).toFixed(2)} ${CURRENCY}</g:price>`}
         <g:brand>${BRAND}</g:brand>
         <g:condition>new</g:condition>
         <g:google_product_category>${escapeXml(googleCategory)}</g:google_product_category>
@@ -229,8 +232,8 @@ const productType = p.selectedCollections.length > 0
         ${extraImages.map((img) => `<g:additional_image_link>${escapeXml(img)}</g:additional_image_link>`).join("\n       ")}
         <g:availability>${availability}</g:availability>
         ${hasSale
-          ? `<g:price>${Number(variantCompare).toFixed(2)} ${CURRENCY}</g:price>\n       <g:sale_price>${Number(variantPrice).toFixed(2)} ${CURRENCY}</g:sale_price>`
-          : `<g:price>${Number(variantPrice).toFixed(2)} ${CURRENCY}</g:price>`}
+          ? `<g:price>${parseFloat(variantCompare).toFixed(2)} ${CURRENCY}</g:price>\n       <g:sale_price>${parseFloat(variantPrice).toFixed(2)} ${CURRENCY}</g:sale_price>`
+          : `<g:price>${parseFloat(variantPrice).toFixed(2)} ${CURRENCY}</g:price>`}
         <g:brand>${BRAND}</g:brand>
         <g:condition>new</g:condition>
         <g:color>${escapeXml(colorLabel)}</g:color>
@@ -243,9 +246,7 @@ const productType = p.selectedCollections.length > 0
 
     const xml = buildXml(items);
 
-    // 3. التخزين في Cloudflare KV مباشرة كـ string (تستخدم دالة put الأصلية)
     if (kv) {
-      // لم نستخدم kvSet لأن الكتالوج يُصنف كـ content ولا نريد تطبيق منطق السيريالايز الخاص بـ JSON.
       await kv.put(KV_KEY, xml); 
     }
 
