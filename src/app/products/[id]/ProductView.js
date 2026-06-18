@@ -158,22 +158,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   }, [activeProduct, id]);
 
   useEffect(() => { if (swrRelated) setRelatedProducts(swrRelated); }, [swrRelated]);
-  useEffect(() => {
-  if (!loading && product) {
-    signalPageReady();
-
-    // إرسال حدث مشاهدة المنتج إلى Zaraz
-    if (typeof window !== 'undefined' && window.zaraz) {
-      window.zaraz.ecommerce('Product Viewed', {
-        product_id: product.id?.toString(),
-        name: product.title,
-        price: parseFloat(String(product.price).replace(/[^0-9.]/g, '')), // تحويل السعر لرقم صافي
-        currency: 'EGP',
-        category: sourceCategory || ''
-      });
-    }
-  }
-}, [loading, product, pathname, signalPageReady, sourceCategory]);
+  useEffect(() => { if (!loading && product) { signalPageReady(); } }, [loading, product, pathname, signalPageReady]);
   useEffect(() => { setQuantity(1); }, [id, selectedSize, selectedColor]);
 
   useEffect(() => {
