@@ -6,7 +6,7 @@ import { getKV } from "@/lib/kv-cache"; // 👈 استيراد الدالة بن
 const SITE_URL = "https://windeg.com";
 const BRAND = "WIND Shopping";
 const CURRENCY = "EGP";
-const KV_KEY = "fb_catalog_xml";
+const KV_KEY = "fb_catalog_v3";
 
 // -------- helpers --------
 
@@ -179,8 +179,8 @@ const productType = p.selectedCollections.length > 0
         ${images.slice(1, 10).map((img) => `<g:additional_image_link>${escapeXml(img)}</g:additional_image_link>`).join("\n       ")}
         <g:availability>${availability}</g:availability>
         ${hasSale
-          ? `<g:price>${compareAtPrice}.00 ${CURRENCY}</g:price>\n       <g:sale_price>${basePrice}.00 ${CURRENCY}</g:sale_price>`
-          : `<g:price>${basePrice}.00 ${CURRENCY}</g:price>`}
+          ? `<g:price>${Number(compareAtPrice).toFixed(2)} ${CURRENCY}</g:price>\n       <g:sale_price>${Number(basePrice).toFixed(2)} ${CURRENCY}</g:sale_price>`
+          : `<g:price>${Number(basePrice).toFixed(2)} ${CURRENCY}</g:price>`}
         <g:brand>${BRAND}</g:brand>
         <g:condition>new</g:condition>
         <g:google_product_category>${escapeXml(googleCategory)}</g:google_product_category>
@@ -229,8 +229,8 @@ const productType = p.selectedCollections.length > 0
         ${extraImages.map((img) => `<g:additional_image_link>${escapeXml(img)}</g:additional_image_link>`).join("\n       ")}
         <g:availability>${availability}</g:availability>
         ${hasSale
-          ? `<g:price>${variantCompare}.00 ${CURRENCY}</g:price>\n       <g:sale_price>${variantPrice}.00 ${CURRENCY}</g:sale_price>`
-          : `<g:price>${variantPrice}.00 ${CURRENCY}</g:price>`}
+          ? `<g:price>${Number(variantCompare).toFixed(2)} ${CURRENCY}</g:price>\n       <g:sale_price>${Number(variantPrice).toFixed(2)} ${CURRENCY}</g:sale_price>`
+          : `<g:price>${Number(variantPrice).toFixed(2)} ${CURRENCY}</g:price>`}
         <g:brand>${BRAND}</g:brand>
         <g:condition>new</g:condition>
         <g:color>${escapeXml(colorLabel)}</g:color>
