@@ -38,13 +38,13 @@ function SuccessContent() {
         clearCart();
         localStorage.removeItem('pendingOrder');
         if (typeof window !== "undefined" && window.zaraz) {
-          window.zaraz.track("Purchase", {
-            value: parsed.total || 0,
-            currency: "EGP",
-            content_ids: (parsed.cartItems || []).map(it => String(it.id || it.title)),
-            num_items: (parsed.cartItems || []).reduce((s, it) => s + it.qty, 0),
-            order_id: parsed.orderId || "",
-          });
+         window.zaraz.track("Purchase", {
+  value: parsed.total || 0,
+  currency: "EGP",
+  content_ids: (parsed.cartItems || []).map(it => String(it.handle || it.id || it.title)),
+  num_items: (parsed.cartItems || []).reduce((s, it) => s + it.qty, 0),
+  order_id: parsed.orderId || "",
+});
         }
       })
       .catch(err => console.error("Error:", err));

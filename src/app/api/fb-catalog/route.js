@@ -217,7 +217,7 @@ export async function GET() {
           const availability =
             qty > 0 || p.sellOutOfStock === "Yes" ? "in stock" : "out of stock";
           const colorLabel = colorLabels[colorKey] ?? colorLabels[colorValue] ?? colorValue;
-          const itemId = `${handle}-${colorKey}`;
+          const itemId = seenColors.size === 0 ? handle : `${handle}-${colorKey}`;
           const itemTitle = colorValue ? `${baseTitle} - ${colorLabel}` : baseTitle;
           const extraImages = images.filter((img) => img !== variantImage).slice(0, 9);
           const hasSale = variantCompare && parseFloat(variantCompare) > parseFloat(variantPrice);

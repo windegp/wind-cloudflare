@@ -165,7 +165,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
       window.zaraz.track("ViewContent", {
         value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
         currency: "EGP",
-        content_ids: [String(product.id)],
+        content_ids: [String(product.handle || id || product.id)],
         content_name: product.title || "",
         content_type: "product",
       });
@@ -572,7 +572,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
     window.zaraz.track("AddToCart", {
       value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
       currency: "EGP",
-      content_ids: [String(product.id)],
+      content_ids: [String(product.handle || id || product.id)],
       content_name: product.title || "",
       content_type: "product",
       num_items: quantity,
@@ -643,7 +643,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
     window.zaraz.track("AddToCart", {
       value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
       currency: "EGP",
-      content_ids: [String(product.id)],
+      content_ids: [String(product.handle || id || product.id)],
       content_name: product.title || "",
       content_type: "product",
       num_items: quantity,
@@ -882,10 +882,10 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                 onClick={() => {
   addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity});
   if (typeof window !== "undefined" && window.zaraz) {
-    window.zaraz.track("AddToCart", {
+   window.zaraz.track("AddToCart", {
       value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
       currency: "EGP",
-      content_ids: [String(product.id)],
+      content_ids: [String(product.handle || id || product.id)],
       content_name: product.title || "",
       content_type: "product",
       num_items: quantity,

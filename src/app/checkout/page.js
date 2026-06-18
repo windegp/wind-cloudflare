@@ -188,7 +188,7 @@ export default function CheckoutPage() {
       value: finalTotal,
       currency: "EGP",
       num_items: cartItems.reduce((s, it) => s + it.qty, 0),
-      content_ids: cartItems.map(it => String(it.id || it.title)),
+      content_ids: cartItems.map(it => String(it.handle || it.id || it.title)),
     });
   }
 }, [pathname, signalPageReady]);
@@ -508,7 +508,7 @@ export default function CheckoutPage() {
   window.zaraz.track("Purchase", {
     value: finalTotal,
     currency: "EGP",
-    content_ids: cartItems.map(it => String(it.id || it.title)),
+    content_ids: cartItems.map(it => String(it.handle || it.id || it.title)),
     num_items: cartItems.reduce((s, it) => s + it.qty, 0),
     order_id: orderId,
   });
