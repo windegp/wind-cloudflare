@@ -182,8 +182,16 @@ export default function CheckoutPage() {
 
   // Signal readiness for GlobalLoader
   useEffect(() => {
-    signalPageReady();
-  }, [pathname, signalPageReady]);
+  signalPageReady();
+  if (typeof window !== "undefined" && window.zaraz) {
+    window.zaraz.track("InitiateCheckout", {
+      value: finalTotal,
+      currency: "EGP",
+      num_items: cartItems.reduce((s, it) => s + it.qty, 0),
+      content_ids: cartItems.map(it => String(it.id || it.title)),
+    });
+  }
+}, [pathname, signalPageReady]);
 
   // 🔥 توحيد رقم الطلب من البداية (استراتيجية المستند الواحد)
   const activeOrderIdRef = useRef(null);
@@ -496,7 +504,16 @@ export default function CheckoutPage() {
         localStorage.removeItem('pendingOrder');
         clearCart();
         setLoading(false);
-        router.push(`/thank-you?orderId=${orderId}`);
+        if (typeof window !== "undefined" && window.zaraz) {
+  window.zaraz.track("Purchase", {
+    value: finalTotal,
+    currency: "EGP",
+    content_ids: cartItems.map(it => String(it.id || it.title)),
+    num_items: cartItems.reduce((s, it) => s + it.qty, 0),
+    order_id: orderId,
+  });
+}
+router.push(`/thank-you?orderId=${orderId}`);
       }
 
     } catch (err) {
