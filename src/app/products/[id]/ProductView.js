@@ -158,7 +158,20 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   }, [activeProduct, id]);
 
   useEffect(() => { if (swrRelated) setRelatedProducts(swrRelated); }, [swrRelated]);
-  useEffect(() => { if (!loading && product) { signalPageReady(); } }, [loading, product, pathname, signalPageReady]);
+  useEffect(() => {
+  if (!loading && product) {
+    signalPageReady();
+    if (typeof window !== "undefined" && window.zaraz) {
+      window.zaraz.track("ViewContent", {
+        value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
+        currency: "EGP",
+        content_ids: [String(product.id)],
+        content_name: product.title || "",
+        content_type: "product",
+      });
+    }
+  }
+}, [loading, product, pathname, signalPageReady]);
   useEffect(() => { setQuantity(1); }, [id, selectedSize, selectedColor]);
 
   useEffect(() => {
@@ -553,11 +566,21 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           <div ref={addToCartBtnRef} className="flex gap-3 mb-2">
             <button
               onClick={async () => {
-                setIsAddingToCart(true);
-                await addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity});
-                setQuantity(1);
-                setTimeout(() => setIsAddingToCart(false), 700);
-              }}
+  setIsAddingToCart(true);
+  await addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity});
+  if (typeof window !== "undefined" && window.zaraz) {
+    window.zaraz.track("AddToCart", {
+      value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
+      currency: "EGP",
+      content_ids: [String(product.id)],
+      content_name: product.title || "",
+      content_type: "product",
+      num_items: quantity,
+    });
+  }
+  setQuantity(1);
+  setTimeout(() => setIsAddingToCart(false), 700);
+}}
               disabled={isAddingToCart}
               className="flex-1 text-[14px] font-medium py-3 flex items-center justify-center btn-shake border border-black/70 rounded-lg text-[#111] bg-white hover:bg-[#f5f5f5] transition-colors disabled:opacity-80"
               style={{letterSpacing:'0.04em'}}
@@ -614,11 +637,21 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 {/* Add to Cart */}
                 <button
                   onClick={async () => {
-                    setIsAddingToCart(true);
-                    await addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity});
-                    setQuantity(1);
-                    setTimeout(() => setIsAddingToCart(false), 700);
-                  }}
+  setIsAddingToCart(true);
+  await addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity});
+  if (typeof window !== "undefined" && window.zaraz) {
+    window.zaraz.track("AddToCart", {
+      value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
+      currency: "EGP",
+      content_ids: [String(product.id)],
+      content_name: product.title || "",
+      content_type: "product",
+      num_items: quantity,
+    });
+  }
+  setQuantity(1);
+  setTimeout(() => setIsAddingToCart(false), 700);
+}}
                   disabled={isAddingToCart}
                   className="flex-1 text-[13px] font-medium h-[42px] flex items-center justify-center rounded-lg text-white bg-black hover:bg-[#222] transition-colors disabled:opacity-80"
                   style={{letterSpacing:'0.04em'}}
@@ -846,7 +879,20 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             {/* Add to Cart Desktop */}
             <div className="flex gap-3 mb-6">
               <button
-                onClick={() => { addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity}); setQuantity(1); }}
+                onClick={() => {
+  addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity});
+  if (typeof window !== "undefined" && window.zaraz) {
+    window.zaraz.track("AddToCart", {
+      value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
+      currency: "EGP",
+      content_ids: [String(product.id)],
+      content_name: product.title || "",
+      content_type: "product",
+      num_items: quantity,
+    });
+  }
+  setQuantity(1);
+}}
                 className="flex-1 text-[14px] font-medium py-5 flex items-center justify-center transition-opacity btn-breathe tracking-[0.05em]"
                 style={{background:'#111', color:'#fff'}}
                 onMouseEnter={e => e.currentTarget.style.opacity='0.88'}
