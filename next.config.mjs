@@ -38,7 +38,7 @@ const nextConfig = {
   },
 
   // ============================================
-  // 🔄 REWRITES FOR DYNAMIC ROUTING
+  // 🔄 REDIRECTS FOR SEO
   // ============================================
   async redirects() {
     return [
@@ -46,15 +46,6 @@ const nextConfig = {
         source: '/product/:path*',
         destination: '/products/:path*',
         permanent: true, // مهم جداً للـ SEO
-      },
-    ];
-  },
-
-  async rewrites() {
-    return [
-      {
-        source: '/:slug',
-        destination: '/collections/:slug',
       },
     ];
   },
