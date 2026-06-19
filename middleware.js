@@ -13,13 +13,19 @@ export function middleware(request) {
       pathname.startsWith('/api') ||
       pathname.startsWith('/admin') ||
       pathname.startsWith('/collections') ||
+      pathname.startsWith('/products') ||
+      pathname.startsWith('/policies') ||
+      pathname.startsWith('/checkout') ||
+      pathname.startsWith('/thank-you') ||
+      pathname.startsWith('/failure') ||
+      pathname.startsWith('/font-test') ||
       isStaticFile
     ) {
       return NextResponse.next();
     }
 
     // 2. المسارات الثابتة
-    const staticRoutes = ['/', '/cart', '/checkout', '/login', '/products'];
+    const staticRoutes = ['/', '/cart', '/login'];
     if (staticRoutes.includes(pathname)) {
       return NextResponse.next();
     }
