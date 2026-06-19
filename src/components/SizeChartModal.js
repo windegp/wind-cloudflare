@@ -59,7 +59,7 @@ export default function SizeChartModal({ isOpen, onClose, product }) {
               <thead className="bg-[#111111] text-white">
                 <tr>
                   <th className="py-3 font-medium tracking-wide">المقاس</th>
-                  <th className="py-3 font-medium tracking-wide">الصدر</th>
+                  <th className="py-3 font-medium tracking-wide">العرض</th>
                   <th className="py-3 font-medium tracking-wide">الطول</th>
                 </tr>
               </thead>
