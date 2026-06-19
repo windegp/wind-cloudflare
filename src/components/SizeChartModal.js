@@ -64,14 +64,14 @@ export default function SizeChartModal({ isOpen, onClose, product }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#EBEBEB] bg-white">
-  {chartRows.map((row, i) => (
-    <tr key={i} className="text-[#111]">
-      <td className="py-3 font-medium">{row.size}</td>
-      <td className="py-3" style={{ direction: 'rtl' }}>سم {row.chest}</td>
-      <td className="py-3" style={{ direction: 'rtl' }}>سم {row.length}</td>
-    </tr>
-  ))}
-</tbody>
+                {chartRows.map((row, i) => (
+                  <tr key={i} className="text-[#111]">
+                    <td className="py-3 font-medium">{row.size}</td>
+                    <td className="py-3" style={{ direction: 'ltr' }}>{row.chest} سم</td>
+                    <td className="py-3" style={{ direction: 'ltr' }}>{row.length} سم</td>
+                  </tr>
+                ))}
+              </tbody>
             </table>
           ) : (
             <div className="text-center text-[#999] text-sm py-10 border border-[#EBEBEB]">
