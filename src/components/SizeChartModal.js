@@ -1,90 +1,88 @@
 "use client";
-import { useEffect } from 'react';
 
 export default function SizeChartModal({ isOpen, onClose, product }) {
   if (!isOpen) return null;
 
-  const chartData = product?.options?.sizeChart || [];
-  // جلب العناوين من الداتابيز أو استخدام العناوين الافتراضية لو مش موجودة
-  const headers = product?.options?.chartHeaders || {
-    col1: 'المقاس',
-    col2: 'الطول (CM)',
-    col3: 'الصدر (CM)',
-    col4: 'الوسط (CM)',
-    col5: 'الوزن (كجم)'
-  };
+  // 🔥 تحويل نص المقاسات بصيغة "S:58:72, M:60:74" إلى صفوف منظمة { size, chest, length }
+  const rawChart = product?.metafields?.sizeChart || "";
+  const chartRows = rawChart
+    .split(',')
+    .map(entry => entry.trim())
+    .filter(Boolean)
+    .map(entry => {
+      const [size, chest, length] = entry.split(':').map(v => v?.trim());
+      return { size, chest, length };
+    })
+    .filter(row => row.size);
+
+  const productImage = product?.images?.[0] || product?.mainImage || "";
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm bg-black/70 animate-fadeIn" dir="rtl">
-      {/* Modal Content */}
-      <div className="bg-[#1a1a1a] w-full max-w-2xl rounded-2xl border border-[#333] shadow-2xl overflow-hidden relative animate-slideUp">
-        
-        {/* Header */}
-        <div className="bg-[#121212] p-4 flex justify-between items-center border-b border-[#333]">
-          <div className="flex items-center gap-3">
-            <h2 className="text-[#F5C518] font-bold text-lg tracking-wide">WIND Shopping <span className="text-white text-xs font-normal">SIZE GUIDE</span></h2>
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
-        </div>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm bg-black/60 animate-fadeIn" dir="rtl">
 
-        {/* Body */}
-        <div className="p-6 md:p-8">
-          
-          {/* Product Header inside Modal */}
-          <div className="flex items-center gap-4 mb-8 bg-[#222] p-4 rounded-xl border border-[#333]">
-            {product.images && product.images[0] && (
-               <img src={product.images[0]} alt={product.title} className="w-16 h-16 object-cover rounded-lg border border-[#444]" />
-            )}
-            <div>
-              <h3 className="text-white font-bold text-lg">{product.title}</h3>
-              <p className="text-gray-400 text-sm">دليل المقاسات الرسمي</p>
-            </div>
+      <div className="bg-white w-full max-w-md border border-[#EBEBEB] shadow-2xl relative animate-slideUp">
+
+        {/* زر الإغلاق */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 left-4 z-10 w-8 h-8 rounded-full bg-white border border-[#E0E0E0] flex items-center justify-center text-[#666] hover:bg-[#F5F5F5] transition-colors"
+        >
+          <span className="text-xl leading-none">&times;</span>
+        </button>
+
+        <div className="p-6 sm:p-8">
+
+          {/* الصفوف العلوية: اسم المنتج (يمين) / دليل المقاسات (شمال) */}
+          <div className="flex items-center justify-between mb-8 pl-8">
+            <span className="text-[12px] font-bold text-[#111] tracking-wide truncate max-w-[60%]">
+              {product?.title}
+            </span>
+            <span className="text-[11px] tracking-[0.12em] text-[#999] font-medium uppercase shrink-0">
+              دليل المقاسات
+            </span>
           </div>
 
-          {/* Table */}
-          {chartData.length > 0 ? (
-            <div className="overflow-hidden rounded-xl border border-[#333]">
-              <table className="w-full text-center text-sm md:text-base">
-                <thead className="bg-[#F5C518] text-black">
-                  <tr>
-                    {/* تحديث: الرؤوس الآن تقرأ من متغير headers الديناميكي */}
-                    <th className="py-3 font-bold">{headers.col1}</th>
-                    <th className="py-3 font-bold">{headers.col2}</th>
-                    <th className="py-3 font-bold">{headers.col3}</th>
-                    <th className="py-3 font-bold">{headers.col4}</th>
-                    {/* إظهار العمود الخامس فقط إذا كان له عنوان وقيمة */}
-                    {headers.col5 && <th className="py-3 font-bold">{headers.col5}</th>}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#333] bg-[#121212]">
-                  {chartData.map((row, i) => (
-                    <tr key={i} className="hover:bg-[#1f1f1f] transition-colors text-gray-200">
-                      <td className="py-3 font-bold text-[#F5C518] border-l border-[#333]">{row.size}</td>
-                      <td className="py-3" style={{direction: 'ltr'}}>{row.length}</td>
-                      <td className="py-3" style={{direction: 'ltr'}}>{row.chest}</td>
-                      <td className="py-3" style={{direction: 'ltr'}}>{row.waist}</td>
-                      {headers.col5 && <td className="py-3" style={{direction: 'ltr'}}>{row.weight}</td>}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {/* صورة المنتج الرئيسية */}
+          {productImage && (
+            <div className="flex justify-center mb-8">
+              <img
+                src={productImage}
+                alt={product?.title}
+                className="h-[180px] w-auto object-contain"
+              />
             </div>
-          ) : (
-            <div className="text-center text-gray-500 py-10">عفواً، دليل القياسات غير متوفر لهذا المنتج حالياً.</div>
           )}
 
-          {/* Footer Tips */}
-          <div className="mt-6 space-y-2">
-              <div className="flex items-start gap-2 text-xs text-gray-400 bg-[#222] p-3 rounded">
-                <span className="text-[#F5C518] text-lg">•</span>
-                <p>يتم أخذ القياسات والقطعة مفرودة على سطح مستوٍ. قد تختلف القياسات الفعلية بمقدار بسيط (1-2 سم).</p>
-              </div>
-              {chartData.some(r => r.weight) && (
-                <div className="flex items-start gap-2 text-xs text-gray-400 bg-[#222] p-3 rounded">
-                    <span className="text-[#F5C518] text-lg">•</span>
-                    <p>الأوزان المقترحة هي قيم تقديرية وقد تختلف حسب بنية الجسم والطول.</p>
-                </div>
-              )}
+          {/* الجدول */}
+          {chartRows.length > 0 ? (
+            <table className="w-full text-center text-sm">
+              <thead className="bg-[#111111] text-white">
+                <tr>
+                  <th className="py-3 font-medium tracking-wide">المقاس</th>
+                  <th className="py-3 font-medium tracking-wide">الصدر</th>
+                  <th className="py-3 font-medium tracking-wide">الطول</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#EBEBEB] bg-white">
+                {chartRows.map((row, i) => (
+                  <tr key={i} className="text-[#111]">
+                    <td className="py-3 font-medium">{row.size}</td>
+                    <td className="py-3" style={{ direction: 'ltr' }}>{row.chest} سم</td>
+                    <td className="py-3" style={{ direction: 'ltr' }}>{row.length} سم</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="text-center text-[#999] text-sm py-10 border border-[#EBEBEB]">
+              دليل القياسات غير متوفر لهذا المنتج حالياً.
+            </div>
+          )}
+
+          {/* البراند في الأسفل */}
+          <div className="flex items-center justify-between mt-8 pt-5 border-t border-[#F0F0F0]">
+            <span className="text-[13px] font-bold text-[#111] tracking-wide">WIND Shopping</span>
+            <span className="text-[11px] text-[#999]" dir="ltr">windeg.com</span>
           </div>
 
         </div>
