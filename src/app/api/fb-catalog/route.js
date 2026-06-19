@@ -6,7 +6,7 @@ const SITE_URL = "https://windeg.com";
 const BRAND = "WIND Shopping";
 const CURRENCY = "EGP";
 // 🌟 تم تغيير المفتاح هنا لكسر الكاش القديم تماماً وإجبار السيرفر على التحديث
-const KV_KEY = "fb_catalog_xml_v5";
+const KV_KEY = "fb_catalog_xml_v6";
 
 // اجبار Next.js على عدم كاش الـ Route نفسه في Vercel
 export const dynamic = 'force-dynamic';
@@ -208,6 +208,7 @@ export async function GET() {
           const colorKey = colorValue.toLowerCase().replace(/\s+/g, "-");
 
           if (seenColors.has(colorKey)) continue;
+          const isFirstColor = seenColors.size === 0;
           seenColors.add(colorKey);
 
           const variantImage =
@@ -217,7 +218,7 @@ export async function GET() {
           const availability =
             qty > 0 || p.sellOutOfStock === "Yes" ? "in stock" : "out of stock";
           const colorLabel = colorLabels[colorKey] ?? colorLabels[colorValue] ?? colorValue;
-          const itemId = seenColors.size === 0 ? handle : `${handle}-${colorKey}`;
+          const itemId = isFirstColor ? handle : `${handle}-${colorKey}`;
           const itemTitle = colorValue ? `${baseTitle} - ${colorLabel}` : baseTitle;
           const extraImages = images.filter((img) => img !== variantImage).slice(0, 9);
           const hasSale = variantCompare && parseFloat(variantCompare) > parseFloat(variantPrice);
