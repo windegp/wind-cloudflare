@@ -23,6 +23,16 @@ function getCairoTimestamp() {
 }
 
 // Helper function to handle Firebase errors
+async function hashSHA256(text) {
+  if (!text) return undefined;
+  const cleaned = text.trim().toLowerCase();
+  const encoder = new TextEncoder();
+  const data = encoder.encode(cleaned);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 function handleFirebaseError(error, operation) {
   console.error(`Firebase ${operation} error:`, error);
   
@@ -505,12 +515,19 @@ export default function CheckoutPage() {
         clearCart();
         setLoading(false);
         if (typeof window !== "undefined" && window.zaraz) {
+  const hashedEmail = await hashSHA256(formData.email);
+  const hashedPhone = await hashSHA256((formData.phone || '').replace(/[^0-9]/g, ''));
   window.zaraz.track("Purchase", {
     value: finalTotal,
     currency: "EGP",
     content_ids: cartItems.map(it => String(it.handle || it.id || it.title)),
     num_items: cartItems.reduce((s, it) => s + it.qty, 0),
     order_id: orderId,
+    em: hashedEmail,
+    ph: hashedPhone,
+    fn: formData.firstName ? formData.firstName.trim().toLowerCase() : undefined,
+    ln: formData.lastName ? formData.lastName.trim().toLowerCase() : undefined,
+    ct: formData.city ? formData.city.trim().toLowerCase() : undefined,
   });
 }
 router.push(`/thank-you?orderId=${orderId}`);

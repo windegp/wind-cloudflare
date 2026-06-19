@@ -24,6 +24,16 @@ function SuccessContent() {
   const orderId = searchParams.get('orderId');
   const [orderData, setOrderData] = useState(null);
 
+ async function hashSHA256(text) {
+    if (!text) return undefined;
+    const cleaned = text.trim().toLowerCase();
+    const encoder = new TextEncoder();
+    const data = encoder.encode(cleaned);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
  useEffect(() => {
     const pendingOrder = localStorage.getItem('pendingOrder');
     if (pendingOrder) {
@@ -34,16 +44,23 @@ function SuccessContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...parsed, paymentMethod: 'card_success' }),
       })
-      .then(() => {
+      .then(async () => {
         clearCart();
         localStorage.removeItem('pendingOrder');
         if (typeof window !== "undefined" && window.zaraz) {
+         const hashedEmail = await hashSHA256(parsed.customerEmail);
+         const hashedPhone = await hashSHA256((parsed.phone || '').replace(/[^0-9]/g, ''));
          window.zaraz.track("Purchase", {
   value: parsed.total || 0,
   currency: "EGP",
   content_ids: (parsed.cartItems || []).map(it => String(it.handle || it.id || it.title)),
   num_items: (parsed.cartItems || []).reduce((s, it) => s + it.qty, 0),
   order_id: parsed.orderId || "",
+  em: hashedEmail,
+  ph: hashedPhone,
+  fn: parsed.formData?.firstName ? parsed.formData.firstName.trim().toLowerCase() : undefined,
+  ln: parsed.formData?.lastName ? parsed.formData.lastName.trim().toLowerCase() : undefined,
+  ct: parsed.formData?.city ? parsed.formData.city.trim().toLowerCase() : undefined,
 });
         }
       })
