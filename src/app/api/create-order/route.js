@@ -102,7 +102,13 @@ export async function POST(req) {
     const orderNumber = orderId; // 🔥 توحيد رقم الطلب مع اللي اتسجل في الداتا بيز بدل ما نولد واحد جديد للإيميل
 
     // --- تجهيز بيانات الإيميل ---
-    const shippingText = getShippingDisplayText(appliedPromo, true);
+    // نستخدم قيمة shipping الفعلية المرسلة من صفحة الدفع مباشرة
+    // بدل إعادة حسابها من كود الخصم، عشان تطابق القيمة الحقيقية دايماً
+    const actualShipping = Number(shipping) || 0;
+    const isFreeShipping = actualShipping === 0;
+    const shippingText = isFreeShipping
+      ? `0 ${CURRENCY} (شحن مجاني)`
+      : `${actualShipping} ${CURRENCY}`;
     
     // Map payment method to display name
     const displayPaymentMethod = PAYMENT_METHOD_DISPLAY[paymentMethod?.toUpperCase()?.replace('-', '_')] || paymentMethod;
