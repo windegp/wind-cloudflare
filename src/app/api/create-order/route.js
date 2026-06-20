@@ -31,6 +31,8 @@ export async function POST(req) {
       phone, 
       formData, 
       cartItems, 
+      subtotal,
+      shipping,
       total,
       appliedPromo 
     } = body;

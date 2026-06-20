@@ -12,6 +12,7 @@ import Link from "next/link";
 import { getDb } from "@/lib/firebase-checkout";
 import { doc, setDoc, getDoc, deleteDoc, updateDoc, increment } from "firebase/firestore/lite";
 import { ChevronDown, Info, CheckCircle2, Phone, ShoppingBag, Shield, Tag, ChevronLeft, Truck, CreditCard, Banknote, Smartphone, X, Lock } from '@/components/icons-extra';
+import { SHIPPING_COST } from '@/lib/constants';
 
 // Helper function to get Cairo-local ISO timestamp for Firestore queries
 // Format: "YYYY-MM-DD HH:MM:SS" — matches dashboard query format
@@ -504,6 +505,8 @@ export default function CheckoutPage() {
             orderId,
             formData,
             cartItems,
+            subtotal,
+            shipping: SHIPPING_COST,
             total: finalTotal,
             appliedPromo,
           }),
