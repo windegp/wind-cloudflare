@@ -159,8 +159,63 @@ export async function POST(req) {
       </div>
     `;
 
+    // --- بناء محتوى إيميل العميل (تأكيد الطلب) ---
+    const customerHtmlContent = `
+      <div dir="rtl" style="font-family: 'Arial', sans-serif; background-color: #ffffff; color: #111111; padding: 20px; max-width: 600px; margin: auto; border: 1px solid #eee;">
+        <div style="text-align: center; border-bottom: 2px solid ${BRAND_COLOR}; padding-bottom: 20px; margin-bottom: 20px;">
+          <h1 style="color: #111111; margin: 0; font-size: 28px; letter-spacing: 2px;">${SITE_NAME}</h1>
+          <p style="color: #777; font-size: 14px; margin-top: 5px;">شكراً لطلبك! رقم الطلب #${orderNumber}</p>
+        </div>
+
+        <div style="background-color: #fafafa; padding: 15px; border-radius: 4px; margin-bottom: 25px; border-right: 4px solid ${BRAND_COLOR};">
+          <h3 style="color: #111; margin-top: 0; font-size: 16px;">تفاصيل الشحن:</h3>
+          <p style="margin: 5px 0; font-size: 14px;"><strong>الاسم:</strong> ${formData.firstName} ${formData.lastName}</p>
+          <p style="margin: 5px 0; font-size: 14px;"><strong>العنوان:</strong> ${formData.address}, ${formData.governorate}</p>
+          <p style="margin: 5px 0; font-size: 14px;"><strong>طريقة الدفع:</strong> <span style="color: #10b981; font-weight: bold;">${displayPaymentMethod}</span></p>
+        </div>
+
+        <h3 style="color: #111; font-size: 16px; margin-bottom: 10px;">ملخص طلبك:</h3>
+        <table style="width: 100%; border-collapse: collapse; color: #111;">
+          <thead>
+            <tr style="background-color: #f5f5f5;">
+              <th style="padding: 12px; text-align: right; border-bottom: 1px solid #eee; font-size: 13px;">المنتج</th>
+              <th style="padding: 12px; text-align: center; border-bottom: 1px solid #eee; font-size: 13px;">الكمية</th>
+              <th style="padding: 12px; text-align: left; border-bottom: 1px solid #eee; font-size: 13px;">السعر</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${cartItems.map(item => `
+              <tr>
+                <td style="padding: 12px; border-bottom: 1px solid #f0f0f0; font-size: 13px;">
+                  <span style="font-weight: bold;">${item.title}</span><br/>
+                  <small style="color: #777;">المقاس: ${item.selectedSize}</small>
+                </td>
+                <td style="padding: 12px; text-align: center; border-bottom: 1px solid #f0f0f0;">${item.qty}</td>
+                <td style="padding: 12px; text-align: left; border-bottom: 1px solid #f0f0f0; font-weight: bold;">${item.price} ${CURRENCY}</td>
+              </tr>
+            `).join('')}
+            <tr>
+              <td colspan="2" style="padding: 12px; text-align: right; font-weight: bold; color: #777;">مصاريف الشحن:</td>
+              <td style="padding: 12px; text-align: left; font-weight: bold; color: ${appliedPromo === 'free' ? '#10b981' : '#111'};">${shippingText}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div style="margin-top: 30px; padding: 15px; background-color: ${BRAND_COLOR}; color: #000; border-radius: 4px; text-align: center;">
+          <span style="font-size: 14px; font-weight: bold;">الإجمالي الكلي</span>
+          <h2 style="margin: 5px 0 0 0; font-size: 24px; font-weight: 900;">${total} ${CURRENCY}</h2>
+        </div>
+
+        <div style="text-align: center; margin-top: 30px; color: #999; font-size: 11px;">
+          <p>محتاج مساعدة؟ تواصل معنا عبر واتساب.</p>
+          <p>© 2026 ${SITE_NAME}. All rights reserved.</p>
+        </div>
+      </div>
+    `;
+
     // ============================================
-    // 3. إرسال الإيميل عبر Resend REST API — Edge-compatible
+    // 3. إرسال الإيميلات عبر Resend REST API — Edge-compatible
+    //    (إيميل للأدمن + إيميل تأكيد للعميل)
     // ============================================
     try {
       await fetch('https://api.resend.com/emails', {
@@ -176,10 +231,30 @@ export async function POST(req) {
           html: htmlContent,
         })
       });
-      console.log('✅ Email sent successfully via Resend REST API');
+      console.log('✅ Admin email sent successfully via Resend REST API');
     } catch (emailError) {
-      console.error('❌ Resend Email Error:', emailError.message);
-      // Don't break the entire operation if email fails, just log the error
+      console.error('❌ Resend Admin Email Error:', emailError.message);
+    }
+
+    if (customerEmail || formData.email) {
+      try {
+        await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            from: EMAIL_FROM,
+            to: customerEmail || formData.email,
+            subject: `تأكيد طلبك من ${SITE_NAME} — #${orderNumber}`,
+            html: customerHtmlContent,
+          })
+        });
+        console.log('✅ Customer email sent successfully via Resend REST API');
+      } catch (emailError) {
+        console.error('❌ Resend Customer Email Error:', emailError.message);
+      }
     }
 
     // Final response with success

@@ -38,7 +38,7 @@ export const LIGHT_TEXT = "#ffffff";
 // ============================================
 // 📧 EMAIL CONFIGURATION
 // ============================================
-export const ADMIN_EMAIL = "info@windeg.com";
+export const ADMIN_EMAIL = "windegp@gmail.com";
 export const EMAIL_FROM = "WIND Shopping <info@windeg.com>";
 export const EMAIL_DOMAIN = "windeg.com";
 
