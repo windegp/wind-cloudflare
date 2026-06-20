@@ -105,113 +105,101 @@ export async function POST(req) {
     // Map payment method to display name
     const displayPaymentMethod = PAYMENT_METHOD_DISPLAY[paymentMethod?.toUpperCase()?.replace('-', '_')] || paymentMethod;
 
-    // --- بناء محتوى الإيميل (htmlContent) ---
-    const htmlContent = `
-      <div dir="rtl" style="font-family: 'Arial', sans-serif; background-color: #121212; color: #ffffff; padding: 20px; max-width: 600px; margin: auto; border: 1px solid #333;">
-        <div style="text-align: center; border-bottom: 2px solid ${BRAND_COLOR}; padding-bottom: 20px; margin-bottom: 20px;">
-          <h1 style="color: ${BRAND_COLOR}; margin: 0; font-size: 28px; letter-spacing: 2px;">${SITE_NAME}</h1>
-          <p style="color: #a1a1a1; font-size: 14px; margin-top: 5px;">طلب جديد رقم #${orderNumber}</p>
+    // --- دالة مشتركة لبناء كارت كل منتج ---
+    const buildItemCard = (item) => `
+      <div style="display: flex; gap: 12px; padding: 14px; background: #fafafa; border-radius: 6px; border: 0.5px solid #f0f0f0; margin-bottom: 10px;">
+        <div style="width: 56px; height: 56px; background: #efefef; border-radius: 4px; flex-shrink: 0; overflow: hidden;">
+          <img src="${item.image || item.images?.[0] || ''}" alt="${item.title}" width="56" height="56" style="width: 56px; height: 56px; object-fit: cover; display: block;" />
         </div>
-        
-        <div style="background-color: #1a1a1a; padding: 15px; border-radius: 4px; margin-bottom: 25px; border-right: 4px solid ${BRAND_COLOR};">
-          <h3 style="color: ${BRAND_COLOR}; margin-top: 0; font-size: 16px;">بيانات العميل:</h3>
-          <p style="margin: 5px 0; font-size: 14px;"><strong>الاسم:</strong> ${formData.firstName} ${formData.lastName}</p>
-          <p style="margin: 5px 0; font-size: 14px;"><strong>الهاتف:</strong> ${formData.phone}</p>
-          <p style="margin: 5px 0; font-size: 14px;"><strong>العنوان:</strong> ${formData.address}, ${formData.governorate}</p>
-          <p style="margin: 5px 0; font-size: 14px;"><strong>طريقة الدفع:</strong> <span style="color: #10b981; font-weight: bold;">${displayPaymentMethod}</span></p>
+        <div style="flex: 1; min-width: 0;">
+          <p style="color: #111111; font-size: 13px; font-weight: bold; margin: 0 0 4px;">${item.title}</p>
+          <p style="color: #888888; font-size: 12px; margin: 0;">المقاس: ${item.selectedSize || '-'} &nbsp;|&nbsp; الكمية: ${item.qty}</p>
         </div>
-
-        <h3 style="color: ${BRAND_COLOR}; font-size: 16px; margin-bottom: 10px;">ملخص المشتريات:</h3>
-        <table style="width: 100%; border-collapse: collapse; color: #ffffff;">
-          <thead>
-            <tr style="background-color: #222;">
-              <th style="padding: 12px; text-align: right; border-bottom: 1px solid #333; font-size: 13px;">المنتج</th>
-              <th style="padding: 12px; text-align: center; border-bottom: 1px solid #333; font-size: 13px;">الكمية</th>
-              <th style="padding: 12px; text-align: left; border-bottom: 1px solid #333; font-size: 13px;">السعر</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${cartItems.map(item => `
-              <tr>
-                <td style="padding: 12px; border-bottom: 1px solid #222; font-size: 13px;">
-                  <span style="font-weight: bold; color: #eee;">${item.title}</span><br/>
-                  <small style="color: ${BRAND_COLOR};">المقاس: ${item.selectedSize}</small>
-                </td>
-                <td style="padding: 12px; text-align: center; border-bottom: 1px solid #222;">${item.qty}</td>
-                <td style="padding: 12px; text-align: left; border-bottom: 1px solid #222; font-weight: bold;">${item.price} ${CURRENCY}</td>
-              </tr>
-            `).join('')}
-            <tr>
-              <td colspan="2" style="padding: 12px; text-align: right; font-weight: bold; color: #a1a1a1;">مصاريف الشحن:</td>
-              <td style="padding: 12px; text-align: left; font-weight: bold; color: ${appliedPromo === 'free' ? '#10b981' : '#eee'};">${shippingText}</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <div style="margin-top: 30px; padding: 15px; background-color: ${BRAND_COLOR}; color: #000; border-radius: 4px; text-align: center;">
-          <span style="font-size: 14px; font-weight: bold;">الإجمالي الكلي المستحق</span>
-          <h2 style="margin: 5px 0 0 0; font-size: 24px; font-weight: 900;">${total} ${CURRENCY}</h2>
-        </div>
-        
-        <div style="text-align: center; margin-top: 30px; color: #555; font-size: 11px;">
-          <p>© 2026 ${SITE_NAME}. All rights reserved.</p>
+        <div style="text-align: left; white-space: nowrap;">
+          <p style="color: #111111; font-size: 13px; font-weight: bold; margin: 0;">${item.price} ${CURRENCY}</p>
         </div>
       </div>
     `;
 
-    // --- بناء محتوى إيميل العميل (تأكيد الطلب) ---
-    const customerHtmlContent = `
-      <div dir="rtl" style="font-family: 'Arial', sans-serif; background-color: #ffffff; color: #111111; padding: 20px; max-width: 600px; margin: auto; border: 1px solid #eee;">
-        <div style="text-align: center; border-bottom: 2px solid ${BRAND_COLOR}; padding-bottom: 20px; margin-bottom: 20px;">
-          <h1 style="color: #111111; margin: 0; font-size: 28px; letter-spacing: 2px;">${SITE_NAME}</h1>
-          <p style="color: #777; font-size: 14px; margin-top: 5px;">شكراً لطلبك! رقم الطلب #${orderNumber}</p>
-        </div>
+    // --- دالة مشتركة لبناء جسم الإيميل بالكامل (نفس التصميم للعميل والأدمن) ---
+    const buildEmailHtml = ({ headline, subline }) => `
+      <div dir="rtl" style="background-color: #f0f0f0; padding: 32px 16px; font-family: 'Arial', sans-serif;">
+        <div style="max-width: 480px; margin: 0 auto; background: #ffffff; border: 0.5px solid #e5e5e5; border-radius: 8px; overflow: hidden;">
 
-        <div style="background-color: #fafafa; padding: 15px; border-radius: 4px; margin-bottom: 25px; border-right: 4px solid ${BRAND_COLOR};">
-          <h3 style="color: #111; margin-top: 0; font-size: 16px;">تفاصيل الشحن:</h3>
-          <p style="margin: 5px 0; font-size: 14px;"><strong>الاسم:</strong> ${formData.firstName} ${formData.lastName}</p>
-          <p style="margin: 5px 0; font-size: 14px;"><strong>العنوان:</strong> ${formData.address}, ${formData.governorate}</p>
-          <p style="margin: 5px 0; font-size: 14px;"><strong>طريقة الدفع:</strong> <span style="color: #10b981; font-weight: bold;">${displayPaymentMethod}</span></p>
-        </div>
+          <div style="padding: 32px 32px 24px; text-align: center; border-bottom: 0.5px solid #ededed;">
+            <p style="color: #111111; font-size: 20px; font-weight: bold; letter-spacing: 2px; margin: 0;">${SITE_NAME}</p>
+          </div>
 
-        <h3 style="color: #111; font-size: 16px; margin-bottom: 10px;">ملخص طلبك:</h3>
-        <table style="width: 100%; border-collapse: collapse; color: #111;">
-          <thead>
-            <tr style="background-color: #f5f5f5;">
-              <th style="padding: 12px; text-align: right; border-bottom: 1px solid #eee; font-size: 13px;">المنتج</th>
-              <th style="padding: 12px; text-align: center; border-bottom: 1px solid #eee; font-size: 13px;">الكمية</th>
-              <th style="padding: 12px; text-align: left; border-bottom: 1px solid #eee; font-size: 13px;">السعر</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${cartItems.map(item => `
-              <tr>
-                <td style="padding: 12px; border-bottom: 1px solid #f0f0f0; font-size: 13px;">
-                  <span style="font-weight: bold;">${item.title}</span><br/>
-                  <small style="color: #777;">المقاس: ${item.selectedSize}</small>
-                </td>
-                <td style="padding: 12px; text-align: center; border-bottom: 1px solid #f0f0f0;">${item.qty}</td>
-                <td style="padding: 12px; text-align: left; border-bottom: 1px solid #f0f0f0; font-weight: bold;">${item.price} ${CURRENCY}</td>
-              </tr>
-            `).join('')}
-            <tr>
-              <td colspan="2" style="padding: 12px; text-align: right; font-weight: bold; color: #777;">مصاريف الشحن:</td>
-              <td style="padding: 12px; text-align: left; font-weight: bold; color: ${appliedPromo === 'free' ? '#10b981' : '#111'};">${shippingText}</td>
-            </tr>
-          </tbody>
-        </table>
+          <div style="padding: 32px 32px 24px; text-align: center;">
+            <p style="color: #999999; font-size: 12px; margin: 0 0 6px; letter-spacing: 1px;">${headline}</p>
+            <p style="color: #111111; font-size: 22px; font-weight: bold; margin: 0;">${subline}</p>
+            <p style="color: #888888; font-size: 13px; margin: 8px 0 0;">رقم الطلب #${orderNumber}</p>
+          </div>
 
-        <div style="margin-top: 30px; padding: 15px; background-color: ${BRAND_COLOR}; color: #000; border-radius: 4px; text-align: center;">
-          <span style="font-size: 14px; font-weight: bold;">الإجمالي الكلي</span>
-          <h2 style="margin: 5px 0 0 0; font-size: 24px; font-weight: 900;">${total} ${CURRENCY}</h2>
-        </div>
+          <div style="padding: 0 32px 24px;">
+            <div style="background-color: #fafafa; padding: 15px; border-radius: 6px; margin-bottom: 20px; border: 0.5px solid #f0f0f0;">
+              <p style="color: #999999; font-size: 10px; letter-spacing: 1px; margin: 0 0 8px;">بيانات العميل</p>
+              <p style="margin: 4px 0; font-size: 13px; color: #444444;"><strong style="color:#111111;">الاسم:</strong> ${formData.firstName} ${formData.lastName}</p>
+              <p style="margin: 4px 0; font-size: 13px; color: #444444;"><strong style="color:#111111;">الهاتف:</strong> ${formData.phone}</p>
+              <p style="margin: 4px 0; font-size: 13px; color: #444444;"><strong style="color:#111111;">طريقة الدفع:</strong> <span style="color: #10b981; font-weight: bold;">${displayPaymentMethod}</span></p>
+            </div>
 
-        <div style="text-align: center; margin-top: 30px; color: #999; font-size: 11px;">
-          <p>محتاج مساعدة؟ تواصل معنا عبر واتساب.</p>
-          <p>© 2026 ${SITE_NAME}. All rights reserved.</p>
+            ${cartItems.map(buildItemCard).join('')}
+          </div>
+
+          <div style="padding: 0 32px 24px;">
+            <div style="border-top: 0.5px solid #ededed; padding-top: 16px; display: flex; flex-direction: column; gap: 8px;">
+              <div style="display: flex; justify-content: space-between; font-size: 13px;">
+                <span style="color: #999999;">سعر المنتج</span>
+                <span style="color: #444444;">${cartItems.reduce((sum, item) => sum + (Number(item.price) * Number(item.qty)), 0)} ${CURRENCY}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-size: 13px;">
+                <span style="color: #999999;">الشحن</span>
+                <span style="color: ${appliedPromo === 'free' ? '#10b981' : '#444444'};">${shippingText}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; padding-top: 8px; border-top: 0.5px solid #ededed;">
+                <span style="color: #111111; font-size: 15px; font-weight: bold;">الإجمالي</span>
+                <span style="color: #111111; font-size: 17px; font-weight: bold;">${total} ${CURRENCY}</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="padding: 0 32px 28px;">
+            <div style="background-color: #fafafa; border-radius: 6px; padding: 16px; border: 0.5px solid #f0f0f0;">
+              <p style="color: #999999; font-size: 10px; letter-spacing: 1px; margin: 0 0 8px;">عنوان الشحن</p>
+              <p style="color: #444444; font-size: 13px; margin: 0; line-height: 1.7;">${formData.firstName} ${formData.lastName}<br>${formData.address}${formData.landmark ? ' - ' + formData.landmark : ''}<br>${formData.city}, ${formData.governorate}</p>
+            </div>
+          </div>
+
+          <div style="padding: 0 32px 32px;">
+            <a href="https://windeg.com" style="display: block; background-color: #111111; border-radius: 6px; padding: 13px; text-align: center; text-decoration: none;">
+              <span style="color: #ffffff; font-size: 13px; font-weight: bold;">تتبع طلبك</span>
+            </a>
+          </div>
+
+          <div style="padding: 20px 32px; border-top: 0.5px solid #ededed; text-align: center;">
+            <p style="color: #aaaaaa; font-size: 11px; margin: 0;">
+              محتاج مساعدة؟
+              <a href="https://wa.me/201055351494" style="color: #111111; text-decoration: none; font-weight: bold;">تواصل معنا عبر واتساب</a>
+            </p>
+            <p style="color: #bbbbbb; font-size: 10px; margin: 8px 0 0;">© 2026 ${SITE_NAME}</p>
+          </div>
+
         </div>
       </div>
     `;
+
+    // --- محتوى إيميل الأدمن ---
+    const htmlContent = buildEmailHtml({
+      headline: 'طلب جديد',
+      subline: `طلب جديد من ${formData.firstName}`,
+    });
+
+    // --- محتوى إيميل العميل ---
+    const customerHtmlContent = buildEmailHtml({
+      headline: 'ORDER CONFIRMED',
+      subline: 'شكراً لطلبك من وينـد',
+    });
 
     // ============================================
     // 3. إرسال الإيميلات عبر Resend REST API — Edge-compatible
