@@ -141,11 +141,13 @@ export default function AdminLayout({ children }) {
         </nav>
 
         <div className="p-3 border-t border-gray-300 space-y-2">
-          {isOpen && (
-            <div className="px-1">
-              <OrderNotifications />
-            </div>
-          )}
+          {/* 🔥 OrderNotifications لازم يفضل mounted دايمًا، حتى لو الـ sidebar
+              مقفول — لأنه هو المسؤول عن الاستماع للإشعارات اللحظية
+              (listenForegroundMessages) وتجديد التوكن. لو اتقفل من هنا،
+              الإشعارات بتتوقف لحد ما تفتح الـ sidebar تاني. */}
+          <div className="px-1">
+            <OrderNotifications isOpen={isOpen} />
+          </div>
           <button 
             onClick={() => auth.signOut()}
             className="w-full flex items-center gap-3 p-3 rounded-xl text-red-600 hover:bg-red-50 transition-all"

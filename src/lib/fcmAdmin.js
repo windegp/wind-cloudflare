@@ -116,7 +116,12 @@ async function getGoogleAccessToken() {
 // ============================================
 async function getAdminDeviceTokens() {
   const snapshot = await getDocs(collection(getDb(), "adminTokens"));
-  return snapshot.docs.map((d) => d.id); // doc id = token نفسه
+  // doc id = token نفسه. بنرجّع الـ platform كمان عشان نقدر نبعت
+  // android.notification.sound مخصص بس لتوكنات التطبيق النيتيف.
+  return snapshot.docs.map((d) => ({
+    token: d.id,
+    platform: d.data()?.platform || "unknown",
+  }));
 }
 
 // ============================================
@@ -136,8 +141,8 @@ async function removeInvalidToken(token) {
 // ============================================
 export async function sendNewOrderNotification({ title, body, orderId }) {
   try {
-    const tokens = await getAdminDeviceTokens();
-    if (tokens.length === 0) {
+    const devices = await getAdminDeviceTokens();
+    if (devices.length === 0) {
       console.log("ℹ️ No admin FCM tokens registered — skipping push notification");
       return;
     }
@@ -152,23 +157,38 @@ export async function sendNewOrderNotification({ title, body, orderId }) {
     const endpoint = `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`;
 
     await Promise.allSettled(
-      tokens.map(async (token) => {
+      devices.map(async ({ token, platform }) => {
+        const isNativeAndroid = platform === "android-native";
+
+        const message = {
+          token,
+          notification: { title, body },
+          data: { orderId: String(orderId || "") },
+          webpush: {
+            fcm_options: { link: "/admin/orders" },
+          },
+        };
+
+        // 🔥 للتطبيق النيتيف بس: نوجّه الإشعار لقناة order_alerts اللي
+        // اتعملت في التطبيق بصوت cha_ching.mp3 (res/raw/cha_ching).
+        // من غير الجزء ده، النظام بيستخدم القناة الافتراضية بصوت
+        // النظام العادي حتى لو التطبيق فاتح القناة المخصصة بنفسه.
+        if (isNativeAndroid) {
+          message.android = {
+            notification: {
+              channel_id: "order_alerts",
+              sound: "cha_ching",
+            },
+          };
+        }
+
         const res = await fetch(endpoint, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${accessToken}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            message: {
-              token,
-              notification: { title, body },
-              data: { orderId: String(orderId || "") },
-              webpush: {
-                fcm_options: { link: "/admin/orders" },
-              },
-            },
-          }),
+          body: JSON.stringify({ message }),
         });
 
         if (!res.ok) {
@@ -183,7 +203,7 @@ export async function sendNewOrderNotification({ title, body, orderId }) {
       })
     );
 
-    console.log(`✅ Push notification dispatched to ${tokens.length} admin device(s)`);
+    console.log(`✅ Push notification dispatched to ${devices.length} admin device(s)`);
   } catch (error) {
     // ⚠️ مقصود: أي فشل هنا ما يأثرش على إنشاء الأوردر أو إرسال الإيميل
     console.error("❌ FCM push notification error:", error?.message);

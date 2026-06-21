@@ -21,7 +21,7 @@ import { Bell, BellRing, BellOff } from "@/components/icons-extra";
 //   الافتراضي (مش الصوت المخصص) — ده بيتظبط من public/firebase-messaging-sw.js
 // - التاب/المتصفح مقفول بالكامل → مفيش إشعار خالص.
 
-export default function OrderNotifications() {
+export default function OrderNotifications({ isOpen = true } = {}) {
   const [status, setStatus] = useState("checking"); // checking | unsupported | default | granted | denied
   const [toast, setToast] = useState(null);
   const audioRef = useRef(null);
@@ -98,7 +98,7 @@ export default function OrderNotifications() {
 
   return (
     <>
-      {status === "default" && (
+      {isOpen && status === "default" && (
         <button
           onClick={enableNotifications}
           className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-[#1a1a1a] bg-white border border-gray-300 hover:bg-gray-100 transition-all"
@@ -108,7 +108,7 @@ export default function OrderNotifications() {
         </button>
       )}
 
-      {status === "granted" && (
+      {isOpen && status === "granted" && (
         <div
           className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-[#1a1a1a]"
           title="تنبيهات الأوردرات شغالة على الجهاز ده"
@@ -118,7 +118,7 @@ export default function OrderNotifications() {
         </div>
       )}
 
-      {status === "denied" && (
+      {isOpen && status === "denied" && (
         <div
           className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-gray-400"
           title="افتح إعدادات المتصفح وفعّل صلاحية الإشعارات لهذا الموقع"
