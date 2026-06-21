@@ -28,8 +28,7 @@ export default function OrderNotifications() {
 
   // تجهيز عنصر الصوت مرة واحدة بس
   useEffect(() => {
-    audioRef.current = new Audio("/sounds/cha-ching.mp3");
-    audioRef.current.preload = "auto";
+    audioRef.current = new Audio("/cha-ching.mp3");    audioRef.current.preload = "auto";
   }, []);
 
   const saveToken = async (token) => {
