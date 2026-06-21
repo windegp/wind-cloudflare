@@ -160,10 +160,12 @@ export async function sendNewOrderNotification({ title, body, orderId }) {
       devices.map(async ({ token, platform }) => {
         const isNativeAndroid = platform === "android-native";
 
+        const orderUrl = `https://windeg.com/admin/orders/${String(orderId || "")}`;
+
         const message = {
           token,
           notification: { title, body },
-          data: { orderId: String(orderId || "") },
+          data: { orderId: String(orderId || ""), url: orderUrl },
           webpush: {
             fcm_options: { link: "/admin/orders" },
           },
