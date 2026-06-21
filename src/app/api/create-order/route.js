@@ -10,6 +10,7 @@ import {
   KASHIER_CONFIG 
 } from '@/lib/constants';
 import { getShippingDisplayText, calculateAllTotals } from '@/lib/cartCalculations';
+import { sendNewOrderNotification } from '@/lib/fcmAdmin';
 
 // Generate unique order number with format: WND-YYYYMMDD-TTTT
 function generateOrderNumber() {
@@ -250,6 +251,16 @@ export async function POST(req) {
     } catch (emailError) {
       console.error('❌ Resend Admin Email Error:', emailError.message);
     }
+
+    // 🔥 إشعار صوتي للأدمن — مستقل تماماً عن الإيميل، فشله ما يأثرش على أي حاجة
+    // ⚠️ لازم await هنا: على Cloudflare، أي Promise من غير await ممكن
+    // يتقفل قبل ما يخلص لو الـ Response رجع قبله — ده اللي يخلي الإشعار
+    // يجي بالصدفة مرة ويختفي مرة، نفس مشكلة عدم الاستقرار القديمة.
+    await sendNewOrderNotification({
+      title: `طلب جديد من ${formData.firstName}`,
+      body: `${displayPaymentMethod} • ${total} ${CURRENCY} • #${orderNumber}`,
+      orderId: orderNumber,
+    });
 
     if (customerEmail || formData.email) {
       try {

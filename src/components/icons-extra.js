@@ -106,3 +106,6 @@ export const FileText = (props) => <IconWrapper {...props}><path d="M14 2H6a2 2 
 export const LogOut = (props) => <IconWrapper {...props}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></IconWrapper>;
 export const Ruler = (props) => <IconWrapper {...props}><path d="M21.5 2H2.5A1.5 1.5 0 001 3.5v17A1.5 1.5 0 002.5 22h19A1.5 1.5 0 0023 20.5v-17A1.5 1.5 0 0021.5 2zM5 6h2v2H5zm4 0h2v2H9zm4 0h2v2h-2zm4 0h2v2h-2zm-14 8h2v2H3zm4 0h2v2H7zm4 0h2v2h-2zm4 0h2v2h-2z"/></IconWrapper>;
 export const ArrowLeftRight = (props) => <IconWrapper {...props}><path d="M21 7H3m18 0-4-4m4 4-4 4M3 17h18M3 17l4-4m-4 4 4 4"/></IconWrapper>;
+export const Bell = (props) => <IconWrapper {...props}><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></IconWrapper>;
+export const BellRing = (props) => <IconWrapper {...props}><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/><path d="M4 2C2.8 3.7 2 5.7 2 8"/><path d="M22 8c0-2.3-.8-4.3-2-6"/></IconWrapper>;
+export const BellOff = (props) => <IconWrapper {...props}><path d="M8.7 3A6 6 0 0 1 18 8c0 2.4.5 4.4 1.1 5.8"/><path d="M17 17H3s3-2 3-9c0-.7.1-1.4.3-2"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/><line x1="1" y1="1" x2="23" y2="23"/></IconWrapper>;

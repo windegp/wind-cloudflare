@@ -57,3 +57,8 @@ export const getRtdb = () => {
   }
   return rtdb;
 };
+
+// 🔥 5. دالة استدعاء الـ App Instance — مستخدمة في firebaseMessaging.js
+//    (إشعارات الأدمن الصوتية) عشان نتأكد إن firebase/messaging
+//    بيستخدم نفس الـ app instance بالظبط بدون تكرار التهيئة
+export const getAppInstanceForMessaging = () => getAppInstance();

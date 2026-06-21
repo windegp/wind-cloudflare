@@ -3,6 +3,7 @@ import { verifyWebhookSignature } from '@/lib/kashier';
 import { successResponse, errorResponse, unauthorizedError } from '@/lib/apiResponse';
 import { getDb } from "@/lib/firebase";
 import { doc, getDoc, setDoc, updateDoc, increment } from "firebase/firestore/lite";
+import { sendNewOrderNotification } from '@/lib/fcmAdmin';
 
 // Helper: Cairo-local ISO timestamp matching dashboard query format "YYYY-MM-DD HH:MM:SS"
 function getCairoTimestamp() {
@@ -78,6 +79,16 @@ export async function POST(request) {
                         "Payment Method": "card",
                         "Payment Reference": data.transactionId || ""
                     }, { merge: true });
+
+                    // 🔥 1.5 إشعار صوتي للأدمن — نفس نقطة الإشعار المستخدمة في
+                    // create-order/route.js لـ COD/InstaPay. هنا كانت الفيزا
+                    // قبل كده من غير أي إشعار خالص (إيميل ولا صوت).
+                    const billingName = (orderData['Billing Name'] || '').split(' ');
+                    await sendNewOrderNotification({
+                        title: `طلب جديد من ${billingName[0] || 'عميل'} (فيزا)`,
+                        body: `${orderData.Total || 0} ${orderData.Currency || 'EGP'} • #${orderId}`,
+                        orderId,
+                    });
 
                     // 2. تحديث ملف العميل (يدعم العملاء الجدد وقدامى)
                     const cleanPhone = orderData.Phone?.replace(/[^0-9]/g, '') || "";
