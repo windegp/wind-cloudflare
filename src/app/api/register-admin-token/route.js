@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { doc, setDoc } from 'firebase/firestore/lite';
-import { getDb } from '@/lib/firebase';
+import { firestoreAdminSet } from '@/lib/firestoreAdmin';
 import { getCairoTimestamp } from '@/lib/analytics-helpers';
 import { ADMIN_UID } from '@/lib/constants';
 
@@ -18,6 +17,14 @@ import { ADMIN_UID } from '@/lib/constants';
 // OPTIONS preflight الأول. من غير الـ headers دي تحت، المتصفح كان
 // بيرفض الطلب من نفسه قبل ما يوصل هنا خالص — وده سبب رسالة "فشل إرسال
 // التوكن للسيرفر" اللي كانت بتظهر في التطبيق.
+//
+// ⚠️ مهم جداً: الكتابة هنا بتستخدم firestoreAdminSet (REST API + Service
+// Account) مش setDoc العادي من firebase/firestore/lite. السبب: قواعد
+// الأمان (Firestore Security Rules) بتمنع الكتابة في adminTokens غير
+// من مستخدم مسجل دخول بـ UID الأدمن — والـ endpoint ده بيتنادى من
+// السيرفر من غير أي تسجيل دخول، فـ setDoc كان بيترفض بصمت
+// (permission-denied) رغم إن الـ response كان بيرجع 200 وهمي، وده
+// السبب الحقيقي إن توكن التطبيق مكنش بيوصل لقاعدة البيانات خالص.
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -41,17 +48,13 @@ export async function POST(req) {
       );
     }
 
-    await setDoc(
-      doc(getDb(), 'adminTokens', token),
-      {
-        token,
-        uid: ADMIN_UID,
-        platform: platform || 'unknown', // مثال: "android-native"
-        createdAt: getCairoTimestamp(),
-        lastSeenAt: getCairoTimestamp(),
-      },
-      { merge: true }
-    );
+    await firestoreAdminSet('adminTokens', token, {
+      token,
+      uid: ADMIN_UID,
+      platform: platform || 'unknown', // مثال: "android-native"
+      createdAt: getCairoTimestamp(),
+      lastSeenAt: getCairoTimestamp(),
+    });
 
     console.log(`✅ Native admin token registered (${platform || 'unknown'}): ${token.slice(0, 12)}...`);
 
