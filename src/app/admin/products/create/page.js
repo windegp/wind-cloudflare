@@ -368,7 +368,10 @@ function CreateProductForm() {
       const documentId = isEditing ? productId : handleToUse;
 
       // 🔥 تنظيف WIND: نعتمد على collections فقط ونحذف categories المكررة لتوفير الكوتا
-        const cleanCollections = (productData.selectedCollections || []).map(slug => slug.replace(/^\//, '').trim());
+        // ✅ استخدام Set هنا يمنع أي تكرار (مثل وجود "shop-all" و "/shop-all" معاً) عند الحفظ
+        const cleanCollections = Array.from(
+          new Set((productData.selectedCollections || []).map(slug => slug.replace(/^\//, '').trim()).filter(Boolean))
+        );
         
         // 🔥 تنظيف WIND: استخراج البيانات واستبعاد الحقول المكررة والقديمة تماماً
         const { selectedCollections, categories, Price, type, category, productCategory, barcode, ...pureData } = productData;

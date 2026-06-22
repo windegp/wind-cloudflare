@@ -76,7 +76,9 @@ export default function CategoryView({ initialSlug, initialCategoryData }) {
       } else {
         baseQ = query(
           collection(db, "products"),
-          where("categories", "array-contains-any", [currentSlug, `/${currentSlug}`])
+          where("categories", "array-contains-any", [currentSlug, `/${currentSlug}`]),
+          orderBy("createdAt", "desc") // 🔥 لازم يطابق usePaginatedProducts بالضبط
+                                         // وإلا startAfter(lastDoc) بيرجّع منتجات سبق ظهورها (تكرار)
         );
       }
 

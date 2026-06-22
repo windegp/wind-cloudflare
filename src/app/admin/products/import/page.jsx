@@ -63,6 +63,10 @@ export default function ImportShopifyCSV() {
               type: row['Type'] || "",
               tags: row['Tags'] || "",
               // 🔥 هذه المصفوفة هي التي ستتحكم في ظهور المنتج في الأقسام والمنيو
+              // ⚠️ لازم نكتب categories و collections معاً بنفس القيمة:
+              // صفحات عرض الكولكشن (CategoryView.js + usePaginatedProducts) تفلتر على "categories"
+              // بينما صفحة الإدارة العادية تحفظ في "collections" — نفس القيمة في الحقلين يمنع اختفاء المنتج
+              categories: Array.from(collectionSet),
               collections: Array.from(collectionSet), 
               status: row['Published'] === 'TRUE' || row['Published'] === 'true' ? 'Active' : 'Draft',
               price: row['Variant Price'] || "0",
