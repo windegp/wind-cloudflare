@@ -6,7 +6,7 @@ const SITE_URL = "https://windeg.com";
 const BRAND = "WIND Shopping";
 const CURRENCY = "EGP";
 // 🌟 تم تغيير المفتاح هنا لكسر الكاش القديم تماماً وإجبار السيرفر على التحديث
-const KV_KEY = "fb_catalog_xml_v7";
+const KV_KEY = "fb_catalog_xml_v8";
 
 // اجبار Next.js على عدم كاش الـ Route نفسه في Vercel
 export const dynamic = 'force-dynamic';
@@ -139,6 +139,7 @@ export async function GET() {
           images: fArr("images"),
           colorSwatches: fMap("colorSwatches"),
           selectedCollections: fArr("selectedCollections"),
+          categories: fArr("categories"), // 🔥 المصدر الموثوق — مزامَن مع collections وصفحات العرض، بعكس selectedCollections الذي قد يكون فاضياً لمنتجات قديمة
           variants: fArrMaps("variants"),
           seoDescription: rawFields["seo"]?.mapValue?.fields?.description?.stringValue ?? "",
         };
@@ -151,8 +152,13 @@ export async function GET() {
         const compareAtPrice = p.compareAtPrice ?? "";
         const images = Array.isArray(p.images) ? p.images : [];
         const colorSwatches = p.colorSwatches ?? {};
+        // 🔥 المصدر الأساسي categories (موثوق ومتزامن)، مع fallback لـ selectedCollections القديم
+        // لأي منتج نادر لم يُحدَّث بعد — يضمن عدم رجوع قيم فاضية تماماً
+        const sourceCollections =
+          (p.categories && p.categories.length > 0) ? p.categories : p.selectedCollections;
+
         const googleCategory =
-          p.selectedCollections.find((c) => c.includes(">")) ??
+          sourceCollections.find((c) => c.includes(">")) ??
           "Apparel & Accessories > Clothing";
         
         // 🌟 الأقسام العامة دي مش مفيدة كفلتر Set في فيسبوك (موجودة في كل المنتجات تقريباً)
@@ -162,7 +168,7 @@ export async function GET() {
         ]);
         const meaningfulCollections = Array.from(
           new Set(
-            p.selectedCollections
+            sourceCollections
               .map((c) => c.replace(/^\//, "").trim()) // إزالة السلاش البادئ لتوحيد القيم المكررة
               .filter((c) => c && !c.includes(">") && !GENERIC_COLLECTIONS.has(c))
           )
