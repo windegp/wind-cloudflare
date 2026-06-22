@@ -73,7 +73,7 @@ export async function sendNewOrderNotification({ title, body, orderId }) {
           },
         };
 
-        // 🔥 للتطبيق النيتيف بس: نوجّه الإشعار لقناة order_alerts_v2 اللي
+        // 🔥 للتطبيق النيتيف بس: نوجّه الإشعار لقناة order_alerts_v3 اللي
         // اتعملت في التطبيق بصوت cha_ching.mp3 (res/raw/cha_ching).
         // ⚠️ خلاص: لو احتجنا نغيّر الصوت تاني يوماً، لازم نغيّر اسم القناة
         // تاني (v3...) — قنوات أندرويد مالهاش رجعة، أول صوت بيتسجل بيها
@@ -81,7 +81,7 @@ export async function sendNewOrderNotification({ title, body, orderId }) {
         if (isNativeAndroid) {
           message.android = {
             notification: {
-              channel_id: "order_alerts_v2",
+              channel_id: "order_alerts_v3",
               sound: "cha_ching",
               icon: "ic_stat_wind",
               color: "#000000",
