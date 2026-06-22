@@ -155,10 +155,30 @@ export async function GET() {
           p.selectedCollections.find((c) => c.includes(">")) ??
           "Apparel & Accessories > Clothing";
         
-        // 🌟 استخراج القسم بالتنسيق الأصلي بدون شرطات
-        const productType = p.selectedCollections.length > 0 
-          ? p.selectedCollections[0].replace(/-/g, ' ') 
-          : "WIND Collection";
+        // 🌟 الأقسام العامة دي مش مفيدة كفلتر Set في فيسبوك (موجودة في كل المنتجات تقريباً)
+        // فبنستبعدها من الـ product_type/custom_labels، مع استبعاد نسخ السلاش المكررة "/slug"
+        const GENERIC_COLLECTIONS = new Set([
+          "shop-all", "new-arrivals", "best-sellers", "sale", "women-sale", "men-sale",
+        ]);
+        const meaningfulCollections = Array.from(
+          new Set(
+            p.selectedCollections
+              .map((c) => c.replace(/^\//, "").trim()) // إزالة السلاش البادئ لتوحيد القيم المكررة
+              .filter((c) => c && !c.includes(">") && !GENERIC_COLLECTIONS.has(c))
+          )
+        );
+
+        // 🌟 كل الأقسام الحقيقية: أول قسم في product_type، والباقي في custom_label_0..4
+        // ده بيخلي Meta تقدر تعمل Set بناءً على أي قسم منهم وقت اختيار "Filter by product_type/custom_label"
+        const productType =
+          meaningfulCollections.length > 0
+            ? meaningfulCollections[0].replace(/-/g, " ")
+            : "WIND Collection";
+        const customLabels = meaningfulCollections.slice(1, 6).map((c) => c.replace(/-/g, " "));
+        while (customLabels.length < 5) customLabels.push(""); // تفريغ الباقي لو الأقسام أقل من 5
+        const customLabelsXml = customLabels
+          .map((label, i) => `<g:custom_label_${i}>${escapeXml(label)}</g:custom_label_${i}>`)
+          .join("\n        ");
         
         const variants = Array.isArray(p.variants) ? p.variants : [];
 
@@ -188,6 +208,7 @@ export async function GET() {
         <g:condition>new</g:condition>
         <g:google_product_category>${escapeXml(googleCategory)}</g:google_product_category>
         <g:product_type>${escapeXml(productType)}</g:product_type>
+        ${customLabelsXml}
       </item>`);
           continue;
         }
@@ -240,6 +261,7 @@ export async function GET() {
         <g:color>${escapeXml(colorLabel)}</g:color>
         <g:google_product_category>${escapeXml(googleCategory)}</g:google_product_category>
         <g:product_type>${escapeXml(productType)}</g:product_type>
+        ${customLabelsXml}
       </item>`);
         }
       }
