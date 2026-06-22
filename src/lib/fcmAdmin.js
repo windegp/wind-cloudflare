@@ -83,6 +83,11 @@ export async function sendNewOrderNotification({ title, body, orderId }) {
             notification: {
               channel_id: "order_alerts_v2",
               sound: "cha_ching",
+              icon: "ic_stat_wind",
+              color: "#000000",
+              // ic_notification_large موجود في drawable كـ resource محلي
+              // Android بيختاره تلقائياً من الـ density المناسبة
+              notification_count: 1,
             },
           };
         }

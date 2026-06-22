@@ -257,8 +257,8 @@ export async function POST(req) {
     // يتقفل قبل ما يخلص لو الـ Response رجع قبله — ده اللي يخلي الإشعار
     // يجي بالصدفة مرة ويختفي مرة، نفس مشكلة عدم الاستقرار القديمة.
     await sendNewOrderNotification({
-      title: `طلب جديد من ${formData.firstName}`,
-      body: `${displayPaymentMethod} • ${total} ${CURRENCY} • #${orderNumber}`,
+      title: `طلب جديد من WIND`,
+      body: `${formData.firstName} • ${displayPaymentMethod} • ${total} ${CURRENCY} • #${orderNumber}`,
       orderId: orderNumber,
     });
 
