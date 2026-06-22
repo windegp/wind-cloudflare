@@ -85,8 +85,8 @@ export async function POST(request) {
                     // قبل كده من غير أي إشعار خالص (إيميل ولا صوت).
                     const billingName = (orderData['Billing Name'] || '').split(' ');
                     await sendNewOrderNotification({
-                        title: `طلب جديد من ${billingName[0] || 'عميل'} (فيزا)`,
-                        body: `${orderData.Total || 0} ${orderData.Currency || 'EGP'} • #${orderId}`,
+                        title: `طلب جديد من WIND`,
+                        body: `${billingName[0] || 'عميل'} • فيزا • ${orderData.Total || 0} ${orderData.Currency || 'EGP'} • #${orderId}`,
                         orderId,
                     });
 

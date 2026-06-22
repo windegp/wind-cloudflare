@@ -84,7 +84,10 @@ export async function sendNewOrderNotification({ title, body, orderId }) {
               channel_id: "order_alerts_v2",
               sound: "cha_ching",
               icon: "ic_stat_wind",
-              image: "https://windeg.com/ic_notification_large_dark.png",
+              color: "#000000",
+              // ic_notification_large موجود في drawable كـ resource محلي
+              // Android بيختاره تلقائياً من الـ density المناسبة
+              notification_count: 1,
             },
           };
         }
