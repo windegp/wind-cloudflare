@@ -42,6 +42,9 @@ export async function POST(request) {
       num_items,
       order_id,
       event_source_url,
+      external_id,        // معرّف ثابت للزائر (من localStorage)، يحسّن EMQ
+      fbp: fbpFromClient,
+      fbc: fbcFromClient,
       // بيانات العميل (اختيارية، تُستخدم فقط في Purchase حالياً)
       email,
       phone,
@@ -55,8 +58,10 @@ export async function POST(request) {
     }
 
     const cookieHeader = request.headers.get("cookie") || "";
-    const fbp = readCookie(cookieHeader, "_fbp");
-    const fbc = readCookie(cookieHeader, "_fbc");
+    // 🔥 نعطي الأولوية لقيم fbp/fbc القادمة من العميل مباشرة (أحدث وأدق)
+    // لأن قراءتها من الكوكي على السيرفر قد تكون متأخرة عن لحظة الحدث الفعلية
+    const fbp = fbpFromClient || readCookie(cookieHeader, "_fbp");
+    const fbc = fbcFromClient || readCookie(cookieHeader, "_fbc");
 
     const clientIp =
       request.headers.get("cf-connecting-ip") ||
@@ -64,13 +69,14 @@ export async function POST(request) {
       undefined;
     const userAgent = request.headers.get("user-agent") || undefined;
 
-    const [hashedEmail, hashedPhone, hashedFirstName, hashedLastName, hashedCity] =
+    const [hashedEmail, hashedPhone, hashedFirstName, hashedLastName, hashedCity, hashedExternalId] =
       await Promise.all([
         sha256(email),
         sha256(phone ? String(phone).replace(/[^0-9]/g, "") : undefined),
         sha256(first_name),
         sha256(last_name),
         sha256(city),
+        sha256(external_id),
       ]);
 
     const userData = {};
@@ -83,6 +89,7 @@ export async function POST(request) {
     if (hashedFirstName) userData.fn = hashedFirstName;
     if (hashedLastName) userData.ln = hashedLastName;
     if (hashedCity) userData.ct = hashedCity;
+    if (hashedExternalId) userData.external_id = hashedExternalId;
 
     // 🔥 content_ids كـ array حقيقي 100% — هذا هو كل الهدف من هذا الـ route
     const customData = {
