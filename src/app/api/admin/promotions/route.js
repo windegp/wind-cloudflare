@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '@/lib/firebase-checkout';
+import { getDb } from '@/lib/firebase';
 import {
   doc, getDoc, setDoc, updateDoc, deleteDoc,
-  collection, getDocs, writeBatch, increment
+  collection, getDocs,
 } from 'firebase/firestore/lite';
 
-export const runtime = 'edge';
+export const dynamic = 'force-dynamic';
 
 // ── GET: جلب الإعدادات + كل الأكواد ────────────────────────────
 export async function GET() {
@@ -25,7 +25,6 @@ export async function GET() {
     const codes = codesSnap.docs.map(d => ({
       id: d.id,
       ...d.data(),
-      // تحويل timestamp لـ string عشان JSON
       expiresAt: d.data().expiresAt
         ? (d.data().expiresAt.toDate
             ? d.data().expiresAt.toDate().toISOString().split('T')[0]
@@ -75,10 +74,10 @@ export async function POST(req) {
       }
 
       const promoData = {
-        type,                                           // free_shipping | percent | fixed
+        type,
         value: Number(value) || 0,
         scope: scope === 'all' ? 'all' : (Array.isArray(scope) ? scope : [scope]),
-        usageType: usageType || 'unlimited',           // unlimited | once_per_customer | single_use | limited
+        usageType: usageType || 'unlimited',
         maxUses: Number(maxUses) || 1,
         firstOrderOnly: Boolean(firstOrderOnly),
         active: Boolean(active),
@@ -86,7 +85,6 @@ export async function POST(req) {
         updatedAt: new Date().toISOString(),
       };
 
-      // حقول تُضاف عند الإنشاء فقط
       if (body.isNew) {
         promoData.usedCount = 0;
         promoData.usedBy = [];
@@ -94,7 +92,6 @@ export async function POST(req) {
       }
 
       await setDoc(doc(db, 'promoCodes', normalizedCode), promoData, { merge: !body.isNew });
-
       return NextResponse.json({ success: true, code: normalizedCode });
     }
 
@@ -110,7 +107,6 @@ export async function DELETE(req) {
   try {
     const { code } = await req.json();
     if (!code) return NextResponse.json({ success: false, error: 'الكود مطلوب' }, { status: 400 });
-
     const db = getDb();
     await deleteDoc(doc(db, 'promoCodes', code.trim().toUpperCase()));
     return NextResponse.json({ success: true });

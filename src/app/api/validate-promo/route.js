@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '@/lib/firebase-checkout';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore/lite';
+import { getDb } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore/lite';
 import { SHIPPING_COST } from '@/lib/constants';
 
-export const runtime = 'edge';
+export const dynamic = 'force-dynamic';
 
 /**
  * POST /api/validate-promo
@@ -22,8 +22,7 @@ export async function POST(req) {
     const db = getDb();
 
     // ── 1. جلب الكود من Firestore ──────────────────────────────
-    const promoRef = doc(db, 'promoCodes', normalizedCode);
-    const promoSnap = await getDoc(promoRef);
+    const promoSnap = await getDoc(doc(db, 'promoCodes', normalizedCode));
 
     if (!promoSnap.exists()) {
       return NextResponse.json({ valid: false, message: 'عذراً، هذا الكود غير صالح' });
@@ -44,9 +43,9 @@ export async function POST(req) {
       }
     }
 
-    // ── 4. حد الاستخدام الكلي (single_use / limited) ────────────
+    // ── 4. حد الاستخدام الكلي ────────────────────────────────────
     if (promo.usageType === 'single_use' || promo.usageType === 'limited') {
-      const maxUses = Number(promo.maxUses) || 1;
+      const maxUses   = Number(promo.maxUses) || 1;
       const usedCount = Number(promo.usedCount) || 0;
       if (usedCount >= maxUses) {
         return NextResponse.json({ valid: false, message: 'تم استخدام هذا الكود بالفعل' });
@@ -57,8 +56,7 @@ export async function POST(req) {
     if (promo.firstOrderOnly) {
       const identifier = customerEmail?.toLowerCase().trim() || customerPhone?.replace(/\D/g, '');
       if (identifier) {
-        const customerRef = doc(db, 'Customers', identifier);
-        const customerSnap = await getDoc(customerRef);
+        const customerSnap = await getDoc(doc(db, 'Customers', identifier));
         if (customerSnap.exists()) {
           const totalOrders = Number(customerSnap.data()['Total Orders'] || 0);
           if (totalOrders > 0) {
@@ -68,7 +66,7 @@ export async function POST(req) {
       }
     }
 
-    // ── 6. للمستخدم مرة واحدة ────────────────────────────────────
+    // ── 6. مرة واحدة لكل عميل ────────────────────────────────────
     if (promo.usageType === 'once_per_customer') {
       const identifier = customerEmail?.toLowerCase().trim() || customerPhone?.replace(/\D/g, '');
       if (identifier) {
@@ -89,18 +87,18 @@ export async function POST(req) {
       if (applicableItems.length === 0) {
         return NextResponse.json({
           valid: false,
-          message: 'هذا الكود لا ينطبق على المنتجات في سلتك'
+          message: 'هذا الكود لا ينطبق على المنتجات في سلتك',
         });
       }
     }
 
     // ── 8. حساب قيمة الخصم ───────────────────────────────────────
     let discountAmount = 0;
-    let freeShipping = false;
-    const shippingCost = Number(promo.shippingCostOverride ?? SHIPPING_COST);
+    let freeShipping   = false;
+    const shippingCost = Number(SHIPPING_COST);
 
     if (promo.type === 'free_shipping') {
-      freeShipping = true;
+      freeShipping  = true;
       discountAmount = shippingCost;
     } else if (promo.type === 'percent') {
       const applicableSubtotal = applicableItems.reduce(
