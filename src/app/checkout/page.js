@@ -13,6 +13,7 @@ import { getDb } from "@/lib/firebase-checkout";
 import { doc, setDoc, getDoc, deleteDoc, updateDoc, increment } from "firebase/firestore/lite";
 import { ChevronDown, Info, CheckCircle2, Phone, ShoppingBag, Shield, Tag, ChevronLeft, Truck, CreditCard, Banknote, Smartphone, X, Lock } from '@/components/icons-extra';
 import { SHIPPING_COST } from '@/lib/constants';
+import { fbTrack } from "@/lib/fbTrack";
 
 // Helper function to get Cairo-local ISO timestamp for Firestore queries
 // Format: "YYYY-MM-DD HH:MM:SS" — matches dashboard query format
@@ -192,17 +193,20 @@ export default function CheckoutPage() {
   const [submitError, setSubmitError] = useState('');
 
   // Signal readiness for GlobalLoader
+  const checkoutEventSentRef = useRef(false);
   useEffect(() => {
   signalPageReady();
-  if (typeof window !== "undefined" && window.zaraz) {
-    window.zaraz.track("InitiateCheckout", {
+  // 🔥 نرسل الحدث مرة واحدة فقط، وبعد توفر عناصر السلة فعلياً (لتجنب content_ids فاضية بسبب stale closure)
+  if (cartItems.length > 0 && !checkoutEventSentRef.current) {
+    checkoutEventSentRef.current = true;
+    fbTrack("InitiateCheckout", {
       value: finalTotal,
       currency: "EGP",
       num_items: cartItems.reduce((s, it) => s + it.qty, 0),
       content_ids: cartItems.map(it => String(it.handle || it.id || it.title)),
     });
   }
-}, [pathname, signalPageReady]);
+}, [pathname, signalPageReady, cartItems]);
 
   // 🔥 توحيد رقم الطلب من البداية (استراتيجية المستند الواحد)
   const activeOrderIdRef = useRef(null);
@@ -514,25 +518,26 @@ export default function CheckoutPage() {
 
         if (!res.ok) throw new Error('حدث خطأ في إنشاء الطلب');
 
+        // 🔥 لازم نحفظ بيانات السلة هنا (snapshot) قبل clearCart()
+        // وإلا cartItems تصبح فاضية أو جزئية وقت إرسال Purchase بسبب إعادة الرندر بعد await
+        const purchaseContentIds = cartItems.map(it => String(it.handle || it.id || it.title));
+        const purchaseNumItems = cartItems.reduce((s, it) => s + it.qty, 0);
+
         localStorage.removeItem('pendingOrder');
         clearCart();
         setLoading(false);
-        if (typeof window !== "undefined" && window.zaraz) {
-  const hashedEmail = await hashSHA256(formData.email);
-  const hashedPhone = await hashSHA256((formData.phone || '').replace(/[^0-9]/g, ''));
-  window.zaraz.track("Purchase", {
-    value: finalTotal,
-    currency: "EGP",
-    content_ids: cartItems.map(it => String(it.handle || it.id || it.title)),
-    num_items: cartItems.reduce((s, it) => s + it.qty, 0),
-    order_id: orderId,
-    em: hashedEmail,
-    ph: hashedPhone,
-    fn: formData.firstName ? formData.firstName.trim().toLowerCase() : undefined,
-    ln: formData.lastName ? formData.lastName.trim().toLowerCase() : undefined,
-    ct: formData.city ? formData.city.trim().toLowerCase() : undefined,
-  });
-}
+        fbTrack("Purchase", {
+          value: finalTotal,
+          currency: "EGP",
+          content_ids: purchaseContentIds,
+          num_items: purchaseNumItems,
+          order_id: orderId,
+          email: formData.email,
+          phone: formData.phone,
+          first_name: formData.firstName,
+          last_name: formData.lastName,
+          city: formData.city,
+        });
 router.push(`/thank-you?orderId=${orderId}`);
       }
 

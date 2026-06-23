@@ -14,6 +14,7 @@ import ProductReviews from "@/components/products/ProductReviews";
 import ProductCard from "@/components/products/ProductCard";
 import { useProduct, useRelatedProducts } from "@/hooks/useFirestore";
 import { Plus, Minus, Star, Info, Share2, Heart, ImageIcon, X, Truck, Eye, ShieldCheck, ChevronLeft, Search, ChevronRight, ChevronDown, ChevronUp, CreditCard, Banknote, ArrowLeftRight } from '@/components/icons-extra';
+import { fbTrack } from "@/lib/fbTrack";
 
 export default function ProductView({ initialProduct, sourceCategory }) {
   const { id } = useParams();
@@ -161,15 +162,13 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   useEffect(() => {
   if (!loading && product) {
     signalPageReady();
-    if (typeof window !== "undefined" && window.zaraz) {
-      window.zaraz.track("ViewContent", {
-        value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
-        currency: "EGP",
-        content_ids: [String(product.handle || id || product.id)],
-        content_name: product.title || "",
-        content_type: "product",
-      });
-    }
+    fbTrack("ViewContent", {
+      value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
+      currency: "EGP",
+      content_ids: [String(product.handle || id || product.id)],
+      content_name: product.title || "",
+      content_type: "product",
+    });
   }
 }, [loading, product, pathname, signalPageReady]);
   useEffect(() => { setQuantity(1); }, [id, selectedSize, selectedColor]);
@@ -568,16 +567,14 @@ export default function ProductView({ initialProduct, sourceCategory }) {
               onClick={async () => {
   setIsAddingToCart(true);
   await addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity});
-  if (typeof window !== "undefined" && window.zaraz) {
-    window.zaraz.track("AddToCart", {
-      value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
-      currency: "EGP",
-      content_ids: [String(product.handle || id || product.id)],
-      content_name: product.title || "",
-      content_type: "product",
-      num_items: quantity,
-    });
-  }
+  fbTrack("AddToCart", {
+    value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
+    currency: "EGP",
+    content_ids: [String(product.handle || id || product.id)],
+    content_name: product.title || "",
+    content_type: "product",
+    num_items: quantity,
+  });
   setQuantity(1);
   setTimeout(() => setIsAddingToCart(false), 700);
 }}
@@ -639,16 +636,14 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                   onClick={async () => {
   setIsAddingToCart(true);
   await addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity});
-  if (typeof window !== "undefined" && window.zaraz) {
-    window.zaraz.track("AddToCart", {
-      value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
-      currency: "EGP",
-      content_ids: [String(product.handle || id || product.id)],
-      content_name: product.title || "",
-      content_type: "product",
-      num_items: quantity,
-    });
-  }
+  fbTrack("AddToCart", {
+    value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
+    currency: "EGP",
+    content_ids: [String(product.handle || id || product.id)],
+    content_name: product.title || "",
+    content_type: "product",
+    num_items: quantity,
+  });
   setQuantity(1);
   setTimeout(() => setIsAddingToCart(false), 700);
 }}
@@ -881,16 +876,14 @@ export default function ProductView({ initialProduct, sourceCategory }) {
               <button
                 onClick={() => {
   addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity});
-  if (typeof window !== "undefined" && window.zaraz) {
-   window.zaraz.track("AddToCart", {
-      value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
-      currency: "EGP",
-      content_ids: [String(product.handle || id || product.id)],
-      content_name: product.title || "",
-      content_type: "product",
-      num_items: quantity,
-    });
-  }
+  fbTrack("AddToCart", {
+    value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
+    currency: "EGP",
+    content_ids: [String(product.handle || id || product.id)],
+    content_name: product.title || "",
+    content_type: "product",
+    num_items: quantity,
+  });
   setQuantity(1);
 }}
                 className="flex-1 text-[14px] font-medium py-5 flex items-center justify-center transition-opacity btn-breathe tracking-[0.05em]"
