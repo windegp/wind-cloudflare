@@ -12,7 +12,10 @@ export const ADMIN_UID = "jGb9wBMHZfRIQgR9yfbb3rkvzRw2";
 // 💳 SHIPPING CONFIGURATION
 // ============================================
 export const SHIPPING_COST = 70; // EGP
-export const FREE_SHIPPING_THRESHOLD = Infinity; // No threshold; only "free" promo code enables free shipping
+// 0 = يُخفى تماماً من الواجهة (لا يوجد شحن مجاني بالحد الأدنى)
+// أي رقم > 0 = شحن مجاني بعد هذا المبلغ
+// Infinity = لا threshold (الشحن المجاني عن طريق الكود فقط)
+export const FREE_SHIPPING_THRESHOLD = 0;
 
 // ============================================
 // 💰 CURRENCY

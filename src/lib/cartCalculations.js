@@ -4,7 +4,7 @@
 // Used by CartContext and API routes
 // ============================================
 
-import { SHIPPING_COST, CURRENCY, VALID_PROMO_CODES } from '@/lib/constants';
+import { SHIPPING_COST, FREE_SHIPPING_THRESHOLD, CURRENCY, VALID_PROMO_CODES } from '@/lib/constants';
 
 /**
  * Calculate subtotal from cart items
@@ -23,13 +23,18 @@ export function calculateSubtotal(cartItems) {
 }
 
 /**
- * Calculate shipping cost based on promo code
+ * Calculate shipping cost based on promo code and subtotal
  * @param {string} promoCode - Applied promo code (optional)
+ * @param {number} subtotal - Cart subtotal to check free shipping threshold
  * @returns {number} Shipping cost in currency units
  */
-export function calculateShipping(promoCode) {
-  // Free shipping promo code overrides the standard shipping cost
+export function calculateShipping(promoCode, subtotal = 0) {
+  // Free shipping promo code overrides everything
   if (promoCode && promoCode.toLowerCase() === VALID_PROMO_CODES.FREE.toLowerCase()) {
+    return 0;
+  }
+  // Free shipping threshold: if > 0 and subtotal reaches it → free
+  if (FREE_SHIPPING_THRESHOLD > 0 && subtotal >= FREE_SHIPPING_THRESHOLD) {
     return 0;
   }
   return SHIPPING_COST;
@@ -54,7 +59,7 @@ export function calculateTotal(subtotal, shipping) {
  */
 export function calculateAllTotals(cartItems, promoCode = "") {
   const subtotal = calculateSubtotal(cartItems);
-  const shipping = calculateShipping(promoCode);
+  const shipping = calculateShipping(promoCode, subtotal);
   const total = calculateTotal(subtotal, shipping);
   
   return {
@@ -84,8 +89,8 @@ export function validatePromoCode(code) {
   if (normalizedCode === VALID_PROMO_CODES.FREE.toLowerCase()) {
     return {
       isValid: true,
-      discount: SHIPPING_COST, // Free shipping promo gives shipping cost as discount
-      message: "تم تفعيل الشحن المجاني بنجاح!",
+      discount: SHIPPING_COST,
+      message: "تم تفعيل الشحن المجاني بنجاح! 🎉",
       code: normalizedCode,
     };
   }
