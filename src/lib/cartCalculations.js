@@ -23,18 +23,23 @@ export function calculateSubtotal(cartItems) {
 }
 
 /**
- * Calculate shipping cost based on promo code and subtotal
+ * Calculate shipping cost based on promo code, subtotal, and cart items
  * @param {string} promoCode - Applied promo code (optional)
  * @param {number} subtotal - Cart subtotal to check free shipping threshold
+ * @param {Array} cartItems - Cart items to check for bundleFreeShipping flag
  * @returns {number} Shipping cost in currency units
  */
-export function calculateShipping(promoCode, subtotal = 0) {
+export function calculateShipping(promoCode, subtotal = 0, cartItems = []) {
   // Free shipping promo code overrides everything
   if (promoCode && promoCode.toLowerCase() === VALID_PROMO_CODES.FREE.toLowerCase()) {
     return 0;
   }
   // Free shipping threshold: if > 0 and subtotal reaches it → free
   if (FREE_SHIPPING_THRESHOLD > 0 && subtotal >= FREE_SHIPPING_THRESHOLD) {
+    return 0;
+  }
+  // Bundle free shipping: if any item in the cart has bundleFreeShipping flag → free
+  if (Array.isArray(cartItems) && cartItems.some(item => item.bundleFreeShipping === true)) {
     return 0;
   }
   return SHIPPING_COST;
@@ -59,7 +64,7 @@ export function calculateTotal(subtotal, shipping) {
  */
 export function calculateAllTotals(cartItems, promoCode = "") {
   const subtotal = calculateSubtotal(cartItems);
-  const shipping = calculateShipping(promoCode, subtotal);
+  const shipping = calculateShipping(promoCode, subtotal, cartItems);
   const total = calculateTotal(subtotal, shipping);
   
   return {

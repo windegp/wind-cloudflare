@@ -168,16 +168,20 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
     if (hasUnavailable || adding) return;
     setAdding(true);
 
+    // هل الشحن مجاني في هذه الباقة؟ (limit > 0 والإجمالي وصل للحد)
+    const bundleFreeShipping = hasFreeShippingFeature && shippingDone;
+
     // المنتج الأساسي بسعر مخفض + الـ variant المختار
     const selectedMainVariant = mainVariants?.[mainVariantIdx];
     addToCart({
       ...product,
-      selectedSize:   selectedMainVariant?.size  || product.selectedSize  || "",
-      selectedColor:  selectedMainVariant?.color || product.selectedColor || "",
-      image:          selectedMainVariant?.img   || product.images?.[0]   || product.mainImage || "",
-      price:          Math.round(applyDiscount(mainPrice, effectiveDiscount)),
-      compareAtPrice: effectiveDiscount > 0 ? Math.round(mainPrice) : undefined,
-      qty:            mainQty,
+      selectedSize:        selectedMainVariant?.size  || product.selectedSize  || "",
+      selectedColor:       selectedMainVariant?.color || product.selectedColor || "",
+      image:               selectedMainVariant?.img   || product.images?.[0]   || product.mainImage || "",
+      price:               Math.round(applyDiscount(mainPrice, effectiveDiscount)),
+      compareAtPrice:      effectiveDiscount > 0 ? Math.round(mainPrice) : undefined,
+      qty:                 mainQty,
+      bundleFreeShipping:  bundleFreeShipping || undefined,
     });
 
     // المنتجات المقترحة
@@ -188,21 +192,22 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
       if (!variant?.available) return;
 
       addToCart({
-        id:             up.id,
-        title:          up.title,
-        price:          Math.round(applyDiscount(variant.price, effectiveDiscount)),
-        compareAtPrice: effectiveDiscount > 0 ? Math.round(variant.price) : undefined,
-        images:         up.images,
-        mainImage:      variant.img || up.images?.[0] || "",
-        image:          variant.img || up.images?.[0] || "",
-        selectedSize:   variant.size  || "",
-        selectedColor:  variant.color || "",
-        qty:            st.qty || 1,
+        id:                 up.id,
+        title:              up.title,
+        price:              Math.round(applyDiscount(variant.price, effectiveDiscount)),
+        compareAtPrice:     effectiveDiscount > 0 ? Math.round(variant.price) : undefined,
+        images:             up.images,
+        mainImage:          variant.img || up.images?.[0] || "",
+        image:              variant.img || up.images?.[0] || "",
+        selectedSize:       variant.size  || "",
+        selectedColor:      variant.color || "",
+        qty:                st.qty || 1,
+        bundleFreeShipping: bundleFreeShipping || undefined,
       });
     });
 
     setTimeout(() => setAdding(false), 700);
-  }, [hasUnavailable, adding, product, mainPrice, mainQty, upsells, upsellStates, effectiveDiscount, addToCart]);
+  }, [hasUnavailable, adding, product, mainPrice, mainQty, upsells, upsellStates, effectiveDiscount, hasFreeShippingFeature, shippingDone, addToCart]);
 
   // ─── Render ───────────────────────────────────────────────
   if (loading) {
@@ -215,8 +220,10 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
 
   if (!upsells.length) return null;
 
-  const shippingPct  = limit > 0 ? Math.min((total / limit) * 100, 100) : 100;
-  const shippingDone = limit === 0 || total >= limit;
+  // limit === 0 → لا يوجد شحن مجاني في هذه الباقة إطلاقاً
+  const hasFreeShippingFeature = limit > 0;
+  const shippingPct  = hasFreeShippingFeature ? Math.min((total / limit) * 100, 100) : 0;
+  const shippingDone = hasFreeShippingFeature && total >= limit;
 
   return (
     <div style={styles.root} dir="rtl">
@@ -267,18 +274,23 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
           <span style={styles.summaryLabel}>{shippingDone ? "الإجمالي:" : "الإجمالي الفرعي:"}</span>
           <span style={styles.summaryPrice}>{fmt(total)}</span>
         </div>
-        <div style={styles.shippingBar}>
-          <div style={{
-            ...styles.shippingProgress,
-            width: shippingPct + "%",
-            background: shippingDone ? "#28a745" : "#1a1a1a",
-          }} />
-        </div>
-        <span style={styles.shippingText}>
-          {shippingDone
-            ? <>مبروك! حصلت على <strong>شحن مجاني</strong> 🎉</>
-            : `باقي ${fmt(limit - total)} للشحن المجاني`}
-        </span>
+        {/* شريط الشحن المجاني — يظهر فقط لو limit > 0 */}
+        {hasFreeShippingFeature && (
+          <>
+            <div style={styles.shippingBar}>
+              <div style={{
+                ...styles.shippingProgress,
+                width: shippingPct + "%",
+                background: shippingDone ? "#28a745" : "#1a1a1a",
+              }} />
+            </div>
+            <span style={styles.shippingText}>
+              {shippingDone
+                ? <>مبروك! حصلت على <strong>شحن مجاني</strong> 🎉</>
+                : `باقي ${fmt(limit - total)} للشحن المجاني`}
+            </span>
+          </>
+        )}
       </div>
 
       {/* ── زر الإضافة — sticky cart style ── */}
