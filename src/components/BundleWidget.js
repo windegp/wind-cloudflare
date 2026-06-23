@@ -163,6 +163,11 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
     setUpsellStates(prev => prev.map((s, idx) => idx === i ? { ...s, ...patch } : s));
   }, []);
 
+  // ─── حساب الشحن المجاني — يجب أن يكون قبل useCallback ─────
+  const hasFreeShippingFeature = limit > 0;
+  const shippingDone = hasFreeShippingFeature && total >= limit;
+  const shippingPct = hasFreeShippingFeature ? Math.min((total / limit) * 100, 100) : 0;
+
   // ─── إضافة للسلة — الخصم يتطبق على السعر المبعوت ─────────
   const handleAddToCart = useCallback(() => {
     if (hasUnavailable || adding) return;
@@ -219,11 +224,6 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
   }
 
   if (!upsells.length) return null;
-
-  // limit === 0 → لا يوجد شحن مجاني في هذه الباقة إطلاقاً
-  const hasFreeShippingFeature = limit > 0;
-  const shippingPct  = hasFreeShippingFeature ? Math.min((total / limit) * 100, 100) : 0;
-  const shippingDone = hasFreeShippingFeature && total >= limit;
 
   return (
     <div style={styles.root} dir="rtl">
