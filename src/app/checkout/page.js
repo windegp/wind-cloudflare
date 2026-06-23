@@ -151,19 +151,22 @@ export default function CheckoutPage() {
   const { 
     cartItems, 
     clearCart, 
-    subtotal, 
+    subtotal,
+    discount,
     shipping, 
     total, 
-    applyPromoCode, 
+    applyPromoCode,
+    removePromoCode,
     discountError, 
-    appliedPromo 
+    appliedPromo,
+    promoLoading,
   } = useCart();
   
   const { signalPageReady } = usePageReady();
   const { isVisible: loaderActive } = useGlobalLoader();
 
   const SHIPPING_COST = shipping;
-  const finalTotal = total;
+  const finalTotal    = total;
 
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -268,7 +271,7 @@ export default function CheckoutPage() {
             }))
           };
 
-          if (appliedPromo) draftData['Discount Code'] = appliedPromo;
+          if (appliedPromo?.code) draftData['Discount Code'] = appliedPromo.code;
 
           await setDoc(orderRef, draftData, { merge: true });
 
@@ -366,7 +369,7 @@ export default function CheckoutPage() {
         }))
       };
 
-      if (appliedPromo) orderData['Discount Code'] = appliedPromo;
+      if (appliedPromo?.code) orderData['Discount Code'] = appliedPromo.code;
 
       try {
         await setDoc(doc(getDb(), "Orders", orderId), orderData, { merge: true });
@@ -694,18 +697,21 @@ router.push(`/thank-you?orderId=${orderId}`);
                 </div>
                 <button
                   type="button"
-                  onClick={() => applyPromoCode(discountCode)}
+                  onClick={() => applyPromoCode(discountCode, formData.email, formData.phone)} disabled={promoLoading}
                   className="rounded-focus bg-gray-50 text-gray-800 border border-gray-200 px-4 py-3.5 rounded-lg font-bold text-xs hover:bg-gray-100 transition-colors"
                 >
                   تطبيق
                 </button>
               </div>
               {discountError && <p className="text-red-500 text-[10px] mt-1.5 pr-1">{discountError}</p>}
-              {appliedPromo && <p className="promo-success pr-1">✓ تم تطبيق كود: {appliedPromo}</p>}
+              {appliedPromo && <p className="promo-success pr-1">✓ {appliedPromo.message || ("تم تطبيق كود: " + appliedPromo.code)} <button onClick={removePromoCode} className="mr-2 text-red-400 hover:text-red-600 font-bold">✕</button></p>}
             </div>
 
             <div className="border-t border-gray-100 pt-3 space-y-1.5 text-base">
               <div className="flex justify-between text-gray-500"><span>سعر المنتج</span><span className="text-gray-800 font-medium">ج.م {subtotal}.00</span></div>
+              {discount > 0 && (
+                <div className="flex justify-between text-emerald-600"><span>خصم الكود</span><span className="font-bold">- ج.م {discount}.00</span></div>
+              )}
               <div className="flex justify-between text-gray-500"><span>سعر الشحن</span><span className={`font-medium ${SHIPPING_COST === 0 ? 'text-green-600' : 'text-gray-800'}`}>{SHIPPING_COST === 0 ? 'مجاناً' : `ج.م ${SHIPPING_COST}.00`}</span></div>
               <div className="flex justify-between font-black text-lg pt-2 border-t border-gray-100">
                 <span>الإجمالي</span>
@@ -1094,14 +1100,14 @@ router.push(`/thank-you?orderId=${orderId}`);
                       </div>
                       <button
                         type="button"
-                        onClick={() => applyPromoCode(discountCode)}
+                        onClick={() => applyPromoCode(discountCode, formData.email, formData.phone)} disabled={promoLoading}
                         className="rounded-focus bg-gray-50 text-gray-800 border border-gray-200 px-4 py-3.5 rounded-lg font-bold text-xs hover:bg-gray-100 transition-colors"
                       >
                         تطبيق
                       </button>
                     </div>
                     {discountError && <p className="text-red-500 text-[10px] mt-1.5 pr-1">{discountError}</p>}
-                    {appliedPromo && <p className="promo-success pr-1">✓ تم تطبيق كود: {appliedPromo}</p>}
+                    {appliedPromo && <p className="promo-success pr-1">✓ {appliedPromo.message || ("تم تطبيق كود: " + appliedPromo.code)} <button onClick={removePromoCode} className="mr-2 text-red-400 hover:text-red-600 font-bold">✕</button></p>}
                   </div>
 
                   <div className="border-t border-gray-100 pt-3 space-y-1.5 text-sm">
@@ -1190,14 +1196,14 @@ router.push(`/thank-you?orderId=${orderId}`);
                 </div>
                 <button
                   type="button"
-                  onClick={() => applyPromoCode(discountCode)}
+                  onClick={() => applyPromoCode(discountCode, formData.email, formData.phone)} disabled={promoLoading}
                   className="rounded-focus bg-gray-100 text-gray-800 border border-gray-200 px-4 py-3.5 rounded-lg font-bold text-xs hover:bg-gray-200 transition-colors"
                 >
                   تطبيق
                 </button>
               </div>
               {discountError && <p className="text-red-500 text-[10px] mt-1.5 pr-1">{discountError}</p>}
-              {appliedPromo && <p className="promo-success pr-1">✓ تم تطبيق كود: {appliedPromo}</p>}
+              {appliedPromo && <p className="promo-success pr-1">✓ {appliedPromo.message || ("تم تطبيق كود: " + appliedPromo.code)} <button onClick={removePromoCode} className="mr-2 text-red-400 hover:text-red-600 font-bold">✕</button></p>}
             </div>
 
             <div className="space-y-3">

@@ -4,132 +4,62 @@
 // Used by CartContext and API routes
 // ============================================
 
-import { SHIPPING_COST, FREE_SHIPPING_THRESHOLD, CURRENCY, VALID_PROMO_CODES } from '@/lib/constants';
+import { SHIPPING_COST, FREE_SHIPPING_THRESHOLD, CURRENCY } from '@/lib/constants';
 
 /**
  * Calculate subtotal from cart items
- * @param {Array} cartItems - Array of items with price and qty
- * @returns {number} Subtotal in currency units
  */
 export function calculateSubtotal(cartItems) {
-  if (!Array.isArray(cartItems) || cartItems.length === 0) {
-    return 0;
-  }
+  if (!Array.isArray(cartItems) || cartItems.length === 0) return 0;
   return cartItems.reduce((acc, item) => {
-    const itemPrice = parseFloat(item.price) || 0;
-    const itemQty = parseInt(item.qty) || 0;
-    return acc + (itemPrice * itemQty);
+    return acc + (parseFloat(item.price) || 0) * (parseInt(item.qty) || 0);
   }, 0);
 }
 
 /**
- * Calculate shipping cost based on promo code, subtotal, and cart items
- * @param {string} promoCode - Applied promo code (optional)
- * @param {number} subtotal - Cart subtotal to check free shipping threshold
- * @param {Array} cartItems - Cart items to check for bundleFreeShipping flag
- * @returns {number} Shipping cost in currency units
+ * Calculate shipping cost.
+ * promoResult: نتيجة validate-promo من الـ server { freeShipping, discountAmount, type }
+ * shippingSettings: { shippingCost, freeShippingThreshold } من Firestore — يسقط على constants كـ fallback
  */
-export function calculateShipping(promoCode, subtotal = 0, cartItems = []) {
-  // Free shipping promo code overrides everything
-  if (promoCode && promoCode.toLowerCase() === VALID_PROMO_CODES.FREE.toLowerCase()) {
-    return 0;
-  }
-  // Free shipping threshold: if > 0 and subtotal reaches it → free
-  if (FREE_SHIPPING_THRESHOLD > 0 && subtotal >= FREE_SHIPPING_THRESHOLD) {
-    return 0;
-  }
-  // Bundle free shipping: if any item in the cart has bundleFreeShipping flag → free
-  if (Array.isArray(cartItems) && cartItems.some(item => item.bundleFreeShipping === true)) {
-    return 0;
-  }
-  return SHIPPING_COST;
+export function calculateShipping(promoResult = null, subtotal = 0, cartItems = [], shippingSettings = null) {
+  const baseCost    = shippingSettings?.shippingCost         ?? SHIPPING_COST;
+  const threshold   = shippingSettings?.freeShippingThreshold ?? FREE_SHIPPING_THRESHOLD;
+
+  // 1. كود شحن مجاني
+  if (promoResult?.freeShipping) return 0;
+
+  // 2. حد الشحن المجاني العام (threshold > 0)
+  if (threshold > 0 && subtotal >= threshold) return 0;
+
+  // 3. شحن مجاني من الباقة
+  if (Array.isArray(cartItems) && cartItems.some(item => item.bundleFreeShipping === true)) return 0;
+
+  return baseCost;
 }
 
 /**
- * Calculate total amount including shipping
- * @param {number} subtotal - Subtotal amount
- * @param {number} shipping - Shipping cost
- * @returns {number} Total amount
+ * Calculate discount amount from promoResult
+ * خصم% أو مبلغ ثابت — مش شحن مجاني (ده بيتعامل معاه في calculateShipping)
  */
-export function calculateTotal(subtotal, shipping) {
-  return subtotal + shipping;
+export function calculateDiscount(promoResult = null) {
+  if (!promoResult?.valid) return 0;
+  if (promoResult.type === 'free_shipping') return 0; // مش خصم على المنتجات
+  return promoResult.discountAmount || 0;
 }
 
-/**
- * Calculate all totals at once (optimized)
- * Useful when you need all calculations and want to avoid multiple calculations
- * @param {Array} cartItems - Array of items with price and qty
- * @param {string} promoCode - Applied promo code (optional)
- * @returns {object} Object with subtotal, shipping, and total
- */
-export function calculateAllTotals(cartItems, promoCode = "") {
+export function calculateTotal(subtotal, shipping, discount = 0) {
+  return Math.max(0, subtotal - discount + shipping);
+}
+
+export function calculateAllTotals(cartItems, promoResult = null, shippingSettings = null) {
   const subtotal = calculateSubtotal(cartItems);
-  const shipping = calculateShipping(promoCode, subtotal, cartItems);
-  const total = calculateTotal(subtotal, shipping);
-  
-  return {
-    subtotal,
-    shipping,
-    total,
-  };
+  const discount = calculateDiscount(promoResult);
+  const shipping  = calculateShipping(promoResult, subtotal - discount, cartItems, shippingSettings);
+  const total     = calculateTotal(subtotal, shipping, discount);
+  return { subtotal, discount, shipping, total };
 }
 
-/**
- * Validate promo code and return applicable discount
- * @param {string} code - Promo code to validate
- * @returns {object} { isValid: boolean, discount: number, message: string }
- */
-export function validatePromoCode(code) {
-  if (!code) {
-    return {
-      isValid: false,
-      discount: 0,
-      message: "Please enter a promo code",
-    };
-  }
-
-  const normalizedCode = code.toLowerCase().trim();
-
-  // Check if code is valid
-  if (normalizedCode === VALID_PROMO_CODES.FREE.toLowerCase()) {
-    return {
-      isValid: true,
-      discount: SHIPPING_COST,
-      message: "تم تفعيل الشحن المجاني بنجاح! 🎉",
-      code: normalizedCode,
-    };
-  }
-
-  return {
-    isValid: false,
-    discount: 0,
-    message: "عذراً، هذا الكود غير صالح",
-  };
-}
-
-/**
- * Format currency for display
- * @param {number} amount - Amount to format
- * @param {string} currency - Currency code (default: EGP)
- * @returns {string} Formatted currency string (e.g., "100 EGP")
- */
+/** Format currency for display */
 export function formatCurrency(amount, currency = CURRENCY) {
-  const formatted = parseFloat(amount).toFixed(2);
-  return `${formatted} ${currency}`;
-}
-
-/**
- * Get shipping text for display (used in emails and UI)
- * @param {string} promoCode - Applied promo code
- * @param {boolean} includeEmoji - Whether to include emoji (default: true)
- * @returns {string} Formatted shipping text
- */
-export function getShippingDisplayText(promoCode, includeEmoji = true) {
-  const shipping = calculateShipping(promoCode);
-  
-  if (shipping === 0) {
-    return includeEmoji ? `0 ${CURRENCY} (شحن مجاني 🎉)` : `0 ${CURRENCY}`;
-  }
-  
-  return `${shipping} ${CURRENCY}`;
+  return `${parseFloat(amount).toFixed(2)} ${currency}`;
 }

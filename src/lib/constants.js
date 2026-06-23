@@ -26,9 +26,10 @@ export const CURRENCY_SYMBOL = "EGP";
 // ============================================
 // 🎟️ PROMO CODES
 // ============================================
-export const VALID_PROMO_CODES = {
-  FREE: "free", // Enables free shipping
-};
+// @deprecated — الأكواد دلوقتي في Firestore collection "promoCodes"
+// export const VALID_PROMO_CODES = {
+//   FREE: "free", // Enables free shipping
+// };
 
 // ============================================
 // 🎨 BRAND COLORS

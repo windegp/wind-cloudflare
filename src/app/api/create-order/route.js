@@ -9,7 +9,7 @@ import {
   PAYMENT_METHOD_DISPLAY,
   KASHIER_CONFIG 
 } from '@/lib/constants';
-import { getShippingDisplayText, calculateAllTotals } from '@/lib/cartCalculations';
+import { calculateAllTotals } from '@/lib/cartCalculations';
 import { sendNewOrderNotification } from '@/lib/fcmAdmin';
 
 // Generate unique order number with format: WND-YYYYMMDD-TTTT
@@ -35,7 +35,8 @@ export async function POST(req) {
       subtotal,
       shipping,
       total,
-      appliedPromo 
+      promoCode,
+      discount,
     } = body;
 
     // ============================================
