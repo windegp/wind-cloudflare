@@ -1,35 +1,34 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { getDb } from "@/lib/firebase";
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs } from "firebase/firestore/lite";
 import {
   Tag, Plus, Trash2, Edit2, Save, AlertTriangle, CheckCircle2,
-  Truck, RefreshCw, AlertCircle, Check, Eye, Calendar, X, Search
+  Truck, RefreshCw, AlertCircle, Calendar, X, Search
 } from "@/components/icons-extra";
 
 export const dynamic = "force-dynamic";
 
-// ── أنواع الأكواد ────────────────────────────────────────────────
 const CODE_TYPES = [
-  { value: "free_shipping", label: "شحن مجاني", icon: "🚚" },
-  { value: "percent",       label: "خصم نسبة %", icon: "%" },
-  { value: "fixed",         label: "خصم مبلغ ثابت", icon: "ج.م" },
+  { value: "free_shipping", label: "شحن مجاني",       icon: "🚚" },
+  { value: "percent",       label: "خصم نسبة %",      icon: "%" },
+  { value: "fixed",         label: "خصم مبلغ ثابت",   icon: "ج.م" },
 ];
 
 const USAGE_TYPES = [
-  { value: "unlimited",         label: "غير محدود" },
-  { value: "once_per_customer", label: "مرة واحدة لكل عميل" },
-  { value: "single_use",        label: "مرة واحدة فقط (كلي)" },
-  { value: "limited",           label: "عدد محدد من الاستخدامات" },
+  { value: "unlimited",          label: "غير محدود" },
+  { value: "once_per_customer",  label: "مرة واحدة لكل عميل" },
+  { value: "single_use",         label: "مرة واحدة فقط (كلي)" },
+  { value: "limited",            label: "عدد محدد من الاستخدامات" },
 ];
 
-// ── نموذج كود فارغ ────────────────────────────────────────────────
 const EMPTY_CODE = {
   code: "", type: "free_shipping", value: "", scope: "all",
   usageType: "unlimited", maxUses: 1, firstOrderOnly: false,
   active: true, expiresAt: "",
 };
 
-// ── Badge الحالة ─────────────────────────────────────────────────
 function StatusBadge({ active, expiresAt }) {
   const isExpired = expiresAt && new Date(expiresAt) < new Date();
   if (isExpired) return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-500">منتهي</span>;
@@ -37,62 +36,65 @@ function StatusBadge({ active, expiresAt }) {
   return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-600">نشط</span>;
 }
 
-// ── تنسيق قيمة الكود ─────────────────────────────────────────────
-function formatCodeValue(code) {
-  if (code.type === "free_shipping") return "شحن مجاني";
-  if (code.type === "percent")       return `${code.value}% خصم`;
-  if (code.type === "fixed")         return `${code.value} ج.م خصم`;
+function formatCodeValue(c) {
+  if (c.type === "free_shipping") return "شحن مجاني";
+  if (c.type === "percent")       return `${c.value}% خصم`;
+  if (c.type === "fixed")         return `${c.value} ج.م خصم`;
   return "-";
 }
 
-// ── تنسيق الاستخدام ──────────────────────────────────────────────
-function formatUsage(code) {
-  if (code.usageType === "unlimited") return "غير محدود";
-  if (code.usageType === "once_per_customer") return "مرة/عميل";
-  if (code.usageType === "single_use") return `${code.usedCount || 0} / 1`;
-  if (code.usageType === "limited") return `${code.usedCount || 0} / ${code.maxUses}`;
+function formatUsage(c) {
+  if (c.usageType === "unlimited")         return "غير محدود";
+  if (c.usageType === "once_per_customer") return "مرة/عميل";
+  if (c.usageType === "single_use")        return `${c.usedCount || 0} / 1`;
+  if (c.usageType === "limited")           return `${c.usedCount || 0} / ${c.maxUses}`;
   return "-";
 }
 
-// ═══════════════════════════════════════════════════════════════
-// الصفحة الرئيسية
-// ═══════════════════════════════════════════════════════════════
 export default function PromotionsPage() {
-  // ── State ────────────────────────────────────────────────────
-  const [loading, setLoading]           = useState(true);
-  const [saving, setSaving]             = useState(false);
-  const [toast, setToast]               = useState(null);          // { msg, ok }
-  const [search, setSearch]             = useState("");
+  const [loading,        setLoading]        = useState(true);
+  const [saving,         setSaving]         = useState(false);
+  const [toast,          setToast]          = useState(null);
+  const [search,         setSearch]         = useState("");
 
-  // إعدادات الشحن
-  const [shippingCost, setShippingCost]                     = useState(70);
-  const [freeShippingThreshold, setFreeShippingThreshold]   = useState(0);
-  const [origSettings, setOrigSettings]                     = useState(null);
+  const [shippingCost,            setShippingCost]            = useState(70);
+  const [freeShippingThreshold,   setFreeShippingThreshold]   = useState(0);
+  const [origSettings,            setOrigSettings]            = useState(null);
 
-  // الأكواد
-  const [codes, setCodes]               = useState([]);
-  const [showForm, setShowForm]         = useState(false);
-  const [editingCode, setEditingCode]   = useState(null);   // null = جديد
-  const [form, setForm]                 = useState(EMPTY_CODE);
-  const [formError, setFormError]       = useState("");
-  const [deleteConfirm, setDeleteConfirm] = useState(null); // code id
+  const [codes,          setCodes]          = useState([]);
+  const [showForm,       setShowForm]       = useState(false);
+  const [editingCode,    setEditingCode]    = useState(null);
+  const [form,           setForm]           = useState(EMPTY_CODE);
+  const [formError,      setFormError]      = useState("");
+  const [deleteConfirm,  setDeleteConfirm]  = useState(null);
+  const [conflicts,      setConflicts]      = useState([]);
 
-  // تحذيرات التعارض
-  const [conflicts, setConflicts]       = useState([]);
-
-  // ── جلب البيانات ─────────────────────────────────────────────
+  // ── جلب البيانات مباشرة من Firestore ────────────────────────
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const res  = await fetch("/api/admin/promotions");
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error);
+      const db = getDb();
 
-      const { promotionSettings, codes: fetchedCodes } = data;
-      setShippingCost(promotionSettings.shippingCost ?? 70);
-      setFreeShippingThreshold(promotionSettings.freeShippingThreshold ?? 0);
-      setOrigSettings(promotionSettings);
-      setCodes(fetchedCodes || []);
+      // إعدادات الشحن
+      const settingsSnap = await getDoc(doc(db, "settings", "siteSettings"));
+      const settingsData = settingsSnap.exists() ? settingsSnap.data() : {};
+      const promo = settingsData.promotions || { shippingCost: 70, freeShippingThreshold: 0 };
+      setShippingCost(promo.shippingCost ?? 70);
+      setFreeShippingThreshold(promo.freeShippingThreshold ?? 0);
+      setOrigSettings(promo);
+
+      // الأكواد
+      const codesSnap = await getDocs(collection(db, "promoCodes"));
+      const list = codesSnap.docs.map(d => ({
+        id: d.id,
+        ...d.data(),
+        expiresAt: d.data().expiresAt
+          ? (d.data().expiresAt.toDate
+              ? d.data().expiresAt.toDate().toISOString().split("T")[0]
+              : d.data().expiresAt)
+          : null,
+      }));
+      setCodes(list);
     } catch (err) {
       showToast("فشل تحميل البيانات: " + err.message, false);
     } finally {
@@ -102,49 +104,37 @@ export default function PromotionsPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // ── حساب التعارضات ───────────────────────────────────────────
+  // ── تحذيرات التعارض ──────────────────────────────────────────
   useEffect(() => {
     const warns = [];
-
-    // لو في كودين نسبة% في نفس الوقت — المستخدم قد يتوقع تجميعهم
-    const activePctCodes = codes.filter(c => c.active && c.type === "percent");
-    if (activePctCodes.length > 1) {
-      warns.push(`يوجد ${activePctCodes.length} أكواد خصم نسبة% نشطة — سيُطبَّق الأعلى فقط عند الدفع`);
-    }
-
-    // threshold > 0 مع كود شحن مجاني غير محدود — ليس تعارضاً حقيقياً لكن نُنبّه
-    if (freeShippingThreshold > 0) {
-      const unlimitedFreeShip = codes.filter(c => c.active && c.type === "free_shipping" && c.usageType === "unlimited");
-      if (unlimitedFreeShip.length > 0) {
+    const activePct = codes.filter(c => c.active && c.type === "percent");
+    if (activePct.length > 1)
+      warns.push(`يوجد ${activePct.length} أكواد خصم نسبة% نشطة — سيُطبَّق الأعلى فقط عند الدفع`);
+    if (Number(freeShippingThreshold) > 0) {
+      const unlimitedFree = codes.filter(c => c.active && c.type === "free_shipping" && c.usageType === "unlimited");
+      if (unlimitedFree.length > 0)
         warns.push("حد الشحن المجاني مفعّل مع كود شحن مجاني غير محدود — العميل سيحصل على الشحن مجاناً دائماً تقريباً");
-      }
     }
-
     setConflicts(warns);
   }, [codes, freeShippingThreshold]);
 
-  // ── Toast ────────────────────────────────────────────────────
   const showToast = (msg, ok = true) => {
     setToast({ msg, ok });
     setTimeout(() => setToast(null), 3500);
   };
 
-  // ── حفظ إعدادات الشحن ────────────────────────────────────────
+  // ── حفظ إعدادات الشحن مباشرة في Firestore ───────────────────
   const saveSettings = async () => {
-    // تحقق منطقي
-    if (shippingCost < 0) return showToast("تكلفة الشحن لا يمكن أن تكون سالبة", false);
-    if (freeShippingThreshold < 0) return showToast("الحد الأدنى للشحن المجاني لا يمكن أن يكون سالباً", false);
-
+    if (Number(shippingCost) < 0)            return showToast("تكلفة الشحن لا يمكن أن تكون سالبة", false);
+    if (Number(freeShippingThreshold) < 0)   return showToast("الحد الأدنى للشحن المجاني لا يمكن أن يكون سالباً", false);
     setSaving(true);
     try {
-      const res = await fetch("/api/admin/promotions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "save_settings", shippingCost, freeShippingThreshold }),
+      const db = getDb();
+      await updateDoc(doc(db, "settings", "siteSettings"), {
+        "promotions.shippingCost":          Number(shippingCost),
+        "promotions.freeShippingThreshold": Number(freeShippingThreshold),
       });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error);
-      setOrigSettings({ shippingCost, freeShippingThreshold });
+      setOrigSettings({ shippingCost: Number(shippingCost), freeShippingThreshold: Number(freeShippingThreshold) });
       showToast("تم حفظ إعدادات الشحن ✓");
     } catch (err) {
       showToast("فشل الحفظ: " + err.message, false);
@@ -153,7 +143,7 @@ export default function PromotionsPage() {
     }
   };
 
-  // ── فتح نموذج إنشاء جديد ─────────────────────────────────────
+  // ── نموذج الكود ──────────────────────────────────────────────
   const openNewForm = () => {
     setEditingCode(null);
     setForm(EMPTY_CODE);
@@ -161,7 +151,6 @@ export default function PromotionsPage() {
     setShowForm(true);
   };
 
-  // ── فتح نموذج تعديل ──────────────────────────────────────────
   const openEditForm = (c) => {
     setEditingCode(c.id);
     setForm({
@@ -179,52 +168,63 @@ export default function PromotionsPage() {
     setShowForm(true);
   };
 
-  // ── التحقق من النموذج ─────────────────────────────────────────
   const validateForm = () => {
-    if (!form.code.trim()) return "الكود مطلوب";
-    if (!/^[A-Z0-9_-]+$/i.test(form.code.trim())) return "الكود يحتوي على حروف غير مسموح بها (أحرف إنجليزية وأرقام فقط)";
+    if (!form.code.trim())                                      return "الكود مطلوب";
+    if (!/^[A-Z0-9_-]+$/i.test(form.code.trim()))             return "الكود يحتوي على حروف غير مسموح بها (أحرف إنجليزية وأرقام فقط)";
     if (form.type !== "free_shipping" && (!form.value || Number(form.value) <= 0))
-      return "قيمة الخصم يجب أن تكون أكبر من صفر";
-    if (form.type === "percent" && Number(form.value) > 100)
-      return "نسبة الخصم لا يمكن أن تتجاوز 100%";
+                                                                return "قيمة الخصم يجب أن تكون أكبر من صفر";
+    if (form.type === "percent" && Number(form.value) > 100)    return "نسبة الخصم لا يمكن أن تتجاوز 100%";
     if ((form.usageType === "single_use" || form.usageType === "limited") && Number(form.maxUses) < 1)
-      return "عدد الاستخدامات يجب أن يكون 1 على الأقل";
+                                                                return "عدد الاستخدامات يجب أن يكون 1 على الأقل";
     return null;
   };
 
-  // ── حفظ الكود ────────────────────────────────────────────────
+  // ── حفظ الكود مباشرة في Firestore ───────────────────────────
   const saveCode = async () => {
     const err = validateForm();
     if (err) return setFormError(err);
     setFormError("");
     setSaving(true);
 
-    // تحليل نطاق المنتجات
+    const normalizedCode = form.code.trim().toUpperCase();
     const rawScope = form.scope.trim();
     const scope = rawScope === "all" || !rawScope
       ? "all"
       : rawScope.split(",").map(s => s.trim()).filter(Boolean);
 
     try {
-      const res = await fetch("/api/admin/promotions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action:        "save_code",
-          isNew:         !editingCode,
-          code:          form.code,
-          type:          form.type,
-          value:         form.value,
-          scope,
-          usageType:     form.usageType,
-          maxUses:       form.maxUses,
-          firstOrderOnly: form.firstOrderOnly,
-          active:        form.active,
-          expiresAt:     form.expiresAt || null,
-        }),
-      });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error);
+      const db = getDb();
+
+      // تحقق من الكود موجود مسبقاً عند الإنشاء
+      if (!editingCode) {
+        const existing = await getDoc(doc(db, "promoCodes", normalizedCode));
+        if (existing.exists()) {
+          setFormError("هذا الكود موجود بالفعل");
+          setSaving(false);
+          return;
+        }
+      }
+
+      const promoData = {
+        type:           form.type,
+        value:          Number(form.value) || 0,
+        scope,
+        usageType:      form.usageType || "unlimited",
+        maxUses:        Number(form.maxUses) || 1,
+        firstOrderOnly: Boolean(form.firstOrderOnly),
+        active:         Boolean(form.active),
+        expiresAt:      form.expiresAt || null,
+        updatedAt:      new Date().toISOString(),
+      };
+
+      if (!editingCode) {
+        promoData.usedCount = 0;
+        promoData.usedBy    = [];
+        promoData.createdAt = new Date().toISOString();
+        await setDoc(doc(db, "promoCodes", normalizedCode), promoData);
+      } else {
+        await updateDoc(doc(db, "promoCodes", normalizedCode), promoData);
+      }
 
       showToast(editingCode ? "تم تعديل الكود ✓" : "تم إنشاء الكود ✓");
       setShowForm(false);
@@ -236,17 +236,12 @@ export default function PromotionsPage() {
     }
   };
 
-  // ── حذف كود ──────────────────────────────────────────────────
+  // ── حذف كود مباشرة من Firestore ─────────────────────────────
   const deleteCode = async (id) => {
     setSaving(true);
     try {
-      const res = await fetch("/api/admin/promotions", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: id }),
-      });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error);
+      const db = getDb();
+      await deleteDoc(doc(db, "promoCodes", id));
       showToast("تم حذف الكود ✓");
       setDeleteConfirm(null);
       fetchData();
@@ -257,27 +252,22 @@ export default function PromotionsPage() {
     }
   };
 
-  // ── فلترة الأكواد ────────────────────────────────────────────
   const filteredCodes = codes.filter(c =>
     !search || c.id.toLowerCase().includes(search.toLowerCase())
   );
 
-  // ── تغير في الحقول ───────────────────────────────────────────
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const settingsChanged = origSettings &&
     (Number(shippingCost) !== Number(origSettings.shippingCost) ||
      Number(freeShippingThreshold) !== Number(origSettings.freeShippingThreshold));
 
-  // ═══════════════════════════════════════════════════════════
-  // RENDER
-  // ═══════════════════════════════════════════════════════════
   return (
     <div className="min-h-screen bg-[#f4f6f8] font-sans" dir="rtl">
 
-      {/* ── Toast ── */}
+      {/* Toast */}
       {toast && (
-        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl shadow-lg text-sm font-bold flex items-center gap-2 transition-all ${
+        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl shadow-lg text-sm font-bold flex items-center gap-2 ${
           toast.ok ? "bg-emerald-600 text-white" : "bg-red-600 text-white"
         }`}>
           {toast.ok ? <CheckCircle2 size={16}/> : <AlertCircle size={16}/>}
@@ -285,7 +275,7 @@ export default function PromotionsPage() {
         </div>
       )}
 
-      {/* ── نافذة حذف ── */}
+      {/* نافذة تأكيد الحذف */}
       {deleteConfirm && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl" dir="rtl">
@@ -300,7 +290,7 @@ export default function PromotionsPage() {
             </p>
             <div className="flex gap-3">
               <button onClick={() => deleteCode(deleteConfirm)} disabled={saving}
-                className="flex-1 py-2.5 bg-red-600 text-white rounded-xl font-bold text-sm hover:bg-red-700 transition">
+                className="flex-1 py-2.5 bg-red-600 text-white rounded-xl font-bold text-sm hover:bg-red-700 transition disabled:opacity-60">
                 {saving ? "جاري الحذف..." : "حذف"}
               </button>
               <button onClick={() => setDeleteConfirm(null)}
@@ -312,11 +302,10 @@ export default function PromotionsPage() {
         </div>
       )}
 
-      {/* ── نافذة إنشاء/تعديل كود ── */}
+      {/* نافذة إنشاء/تعديل كود */}
       {showForm && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg my-4" dir="rtl">
-            {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <h2 className="font-black text-gray-900">
                 {editingCode ? `تعديل: ${editingCode}` : "إنشاء كود جديد"}
@@ -356,7 +345,7 @@ export default function PromotionsPage() {
                 </div>
               </div>
 
-              {/* القيمة — مخفية للشحن المجاني */}
+              {/* القيمة */}
               {form.type !== "free_shipping" && (
                 <div>
                   <label className="block text-xs font-bold text-gray-600 mb-1.5">
@@ -382,7 +371,7 @@ export default function PromotionsPage() {
                   className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-gray-400"
                 />
                 <p className="text-[10px] text-gray-400 mt-1">
-                  اكتب <code className="bg-gray-100 px-1 rounded">all</code> لكل المنتجات، أو handles المنتجات مفصولة بفاصلة للمنتجات المحددة
+                  اكتب <code className="bg-gray-100 px-1 rounded">all</code> لكل المنتجات، أو handles مفصولة بفاصلة للمنتجات المحددة
                 </p>
               </div>
 
@@ -401,9 +390,7 @@ export default function PromotionsPage() {
               {/* عدد الاستخدامات */}
               {(form.usageType === "single_use" || form.usageType === "limited") && (
                 <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-1.5">
-                    {form.usageType === "single_use" ? "الحد الأقصى للاستخدام" : "عدد الاستخدامات المسموحة"}
-                  </label>
+                  <label className="block text-xs font-bold text-gray-600 mb-1.5">عدد الاستخدامات المسموحة</label>
                   <input
                     type="number" min="1"
                     value={form.maxUses}
@@ -415,19 +402,14 @@ export default function PromotionsPage() {
 
               {/* أول طلب فقط */}
               <label className="flex items-center gap-3 cursor-pointer select-none">
-                <div
-                  onClick={() => setField("firstOrderOnly", !form.firstOrderOnly)}
-                  className={`w-10 h-6 rounded-full transition-colors flex items-center ${
-                    form.firstOrderOnly ? "bg-emerald-500" : "bg-gray-200"
-                  }`}>
-                  <div className={`w-4 h-4 bg-white rounded-full shadow mx-1 transition-transform ${
-                    form.firstOrderOnly ? "translate-x-[-4px] mr-auto ml-1" : ""
-                  }`}/>
+                <div onClick={() => setField("firstOrderOnly", !form.firstOrderOnly)}
+                  className={`w-10 h-6 rounded-full transition-colors flex items-center ${form.firstOrderOnly ? "bg-emerald-500" : "bg-gray-200"}`}>
+                  <div className={`w-4 h-4 bg-white rounded-full shadow mx-1 transition-transform ${form.firstOrderOnly ? "translate-x-[-4px] mr-auto ml-1" : ""}`}/>
                 </div>
                 <span className="text-sm font-bold text-gray-700">للطلب الأول فقط (عميل جديد)</span>
               </label>
 
-              {/* تاريخ انتهاء الصلاحية */}
+              {/* تاريخ الانتهاء */}
               <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1.5">تاريخ انتهاء الصلاحية (اختياري)</label>
                 <input
@@ -437,24 +419,18 @@ export default function PromotionsPage() {
                   min={new Date().toISOString().split("T")[0]}
                   className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-gray-400"
                 />
-                <p className="text-[10px] text-gray-400 mt-1">اتركه فارغاً للكود الدائم بدون تاريخ انتهاء</p>
+                <p className="text-[10px] text-gray-400 mt-1">اتركه فارغاً للكود الدائم</p>
               </div>
 
-              {/* نشط/معطّل */}
+              {/* نشط/معطل */}
               <label className="flex items-center gap-3 cursor-pointer select-none">
-                <div
-                  onClick={() => setField("active", !form.active)}
-                  className={`w-10 h-6 rounded-full transition-colors flex items-center ${
-                    form.active ? "bg-emerald-500" : "bg-gray-300"
-                  }`}>
-                  <div className={`w-4 h-4 bg-white rounded-full shadow mx-1 transition-transform ${
-                    form.active ? "translate-x-[-4px] mr-auto ml-1" : ""
-                  }`}/>
+                <div onClick={() => setField("active", !form.active)}
+                  className={`w-10 h-6 rounded-full transition-colors flex items-center ${form.active ? "bg-emerald-500" : "bg-gray-300"}`}>
+                  <div className={`w-4 h-4 bg-white rounded-full shadow mx-1 transition-transform ${form.active ? "translate-x-[-4px] mr-auto ml-1" : ""}`}/>
                 </div>
                 <span className="text-sm font-bold text-gray-700">الكود نشط</span>
               </label>
 
-              {/* خطأ */}
               {formError && (
                 <div className="flex items-center gap-2 text-red-600 text-xs font-bold bg-red-50 p-3 rounded-xl">
                   <AlertCircle size={14}/> {formError}
@@ -462,7 +438,6 @@ export default function PromotionsPage() {
               )}
             </div>
 
-            {/* Footer */}
             <div className="px-6 pb-6 flex gap-3">
               <button onClick={saveCode} disabled={saving}
                 className="flex-1 py-3 bg-gray-900 text-white rounded-xl font-bold text-sm hover:bg-black transition flex items-center justify-center gap-2 disabled:opacity-60">
@@ -478,9 +453,7 @@ export default function PromotionsPage() {
         </div>
       )}
 
-      {/* ══════════════════════════════════════════════════════
-          المحتوى الرئيسي
-      ══════════════════════════════════════════════════════ */}
+      {/* ══ المحتوى الرئيسي ══ */}
       <div className="max-w-4xl mx-auto py-8 px-4 space-y-8">
 
         {/* Header */}
@@ -505,7 +478,7 @@ export default function PromotionsPage() {
           </div>
         ) : (
           <>
-            {/* ── تحذيرات التعارض ── */}
+            {/* تحذيرات التعارض */}
             {conflicts.length > 0 && (
               <div className="space-y-2">
                 {conflicts.map((w, i) => (
@@ -524,12 +497,8 @@ export default function PromotionsPage() {
                 <h2 className="font-black text-gray-800">إعدادات الشحن العامة</h2>
               </div>
               <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
-
-                {/* تكلفة الشحن */}
                 <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-2">
-                    تكلفة الشحن الثابتة (ج.م)
-                  </label>
+                  <label className="block text-xs font-bold text-gray-600 mb-2">تكلفة الشحن الثابتة (ج.م)</label>
                   <input
                     type="number" min="0"
                     value={shippingCost}
@@ -538,12 +507,8 @@ export default function PromotionsPage() {
                   />
                   <p className="text-[10px] text-gray-400 mt-1">المبلغ الثابت المضاف على كل طلب</p>
                 </div>
-
-                {/* حد الشحن المجاني */}
                 <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-2">
-                    شحن مجاني عند الطلبات فوق (ج.م)
-                  </label>
+                  <label className="block text-xs font-bold text-gray-600 mb-2">شحن مجاني عند الطلبات فوق (ج.م)</label>
                   <input
                     type="number" min="0"
                     value={freeShippingThreshold}
@@ -552,25 +517,21 @@ export default function PromotionsPage() {
                   />
                   <p className="text-[10px] text-gray-400 mt-1">
                     {Number(freeShippingThreshold) === 0
-                      ? "🚫 معطّل — لا يوجد شحن مجاني تلقائي بالحد الأدنى"
+                      ? "🚫 معطّل — لا يوجد شحن مجاني تلقائي"
                       : `✅ الطلبات فوق ${freeShippingThreshold} ج.م تحصل على شحن مجاني`}
                   </p>
                 </div>
               </div>
 
-              {/* تحذير منطقي: threshold أقل من تكلفة الشحن */}
               {Number(freeShippingThreshold) > 0 && Number(freeShippingThreshold) <= Number(shippingCost) && (
                 <div className="mx-6 mb-4 flex items-center gap-2 text-amber-700 text-xs font-bold bg-amber-50 border border-amber-200 p-3 rounded-xl">
-                  <AlertTriangle size={13}/> حد الشحن المجاني أقل من أو يساوي تكلفة الشحن — هذا يعني الشحن مجاني دائماً تقريباً
+                  <AlertTriangle size={13}/> حد الشحن المجاني أقل من أو يساوي تكلفة الشحن — الشحن سيكون مجانياً دائماً تقريباً
                 </div>
               )}
 
               <div className="px-6 pb-6">
-                <button
-                  onClick={saveSettings}
-                  disabled={saving || !settingsChanged}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-gray-900 text-white rounded-xl font-bold text-sm hover:bg-black transition disabled:opacity-40 disabled:cursor-not-allowed"
-                >
+                <button onClick={saveSettings} disabled={saving || !settingsChanged}
+                  className="flex items-center gap-2 px-6 py-2.5 bg-gray-900 text-white rounded-xl font-bold text-sm hover:bg-black transition disabled:opacity-40 disabled:cursor-not-allowed">
                   <Save size={14}/>
                   {saving ? "جاري الحفظ..." : "حفظ إعدادات الشحن"}
                 </button>
@@ -586,9 +547,7 @@ export default function PromotionsPage() {
                 <div className="flex items-center gap-2">
                   <Tag size={18} className="text-gray-500"/>
                   <h2 className="font-black text-gray-800">أكواد الخصم</h2>
-                  <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full font-bold">
-                    {codes.length} كود
-                  </span>
+                  <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full font-bold">{codes.length} كود</span>
                 </div>
                 <button onClick={openNewForm}
                   className="flex items-center gap-1.5 px-4 py-2 bg-gray-900 text-white rounded-xl text-xs font-bold hover:bg-black transition">
@@ -596,42 +555,31 @@ export default function PromotionsPage() {
                 </button>
               </div>
 
-              {/* بحث */}
               {codes.length > 4 && (
                 <div className="px-6 py-3 border-b border-gray-100">
                   <div className="relative">
                     <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"/>
-                    <input
-                      value={search} onChange={e => setSearch(e.target.value)}
-                      placeholder="بحث بالكود..."
-                      className="w-full pr-9 pl-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-gray-400"
-                    />
+                    <input value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث بالكود..."
+                      className="w-full pr-9 pl-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-gray-400"/>
                   </div>
                 </div>
               )}
 
-              {/* جدول الأكواد */}
               {filteredCodes.length === 0 ? (
                 <div className="py-16 text-center text-gray-400">
                   <Tag size={32} className="mx-auto mb-3 opacity-30"/>
-                  <p className="text-sm font-bold">
-                    {search ? "لا توجد نتائج للبحث" : "لا توجد أكواد — أضف كوداً جديداً"}
-                  </p>
+                  <p className="text-sm font-bold">{search ? "لا توجد نتائج" : "لا توجد أكواد — أضف كوداً جديداً"}</p>
                 </div>
               ) : (
                 <div className="divide-y divide-gray-100">
                   {filteredCodes.map(c => (
                     <div key={c.id} className="px-6 py-4 flex items-center gap-4 hover:bg-gray-50 transition">
-
-                      {/* الكود */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <code className="text-sm font-black text-gray-900 tracking-wider">{c.id}</code>
                           <StatusBadge active={c.active} expiresAt={c.expiresAt}/>
                           {c.firstOrderOnly && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-600">
-                              أول طلب
-                            </span>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-600">أول طلب</span>
                           )}
                         </div>
                         <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
@@ -639,32 +587,21 @@ export default function PromotionsPage() {
                           <span className="text-gray-300">·</span>
                           <span>{formatUsage(c)}</span>
                           {c.scope !== "all" && Array.isArray(c.scope) && (
-                            <>
-                              <span className="text-gray-300">·</span>
-                              <span className="text-blue-500">{c.scope.length} منتج محدد</span>
-                            </>
+                            <><span className="text-gray-300">·</span><span className="text-blue-500">{c.scope.length} منتج محدد</span></>
                           )}
                           {c.expiresAt && (
-                            <>
-                              <span className="text-gray-300">·</span>
-                              <span className="flex items-center gap-1">
-                                <Calendar size={10}/> {c.expiresAt}
-                              </span>
-                            </>
+                            <><span className="text-gray-300">·</span>
+                            <span className="flex items-center gap-1"><Calendar size={10}/> {c.expiresAt}</span></>
                           )}
                         </div>
                       </div>
-
-                      {/* أزرار */}
                       <div className="flex items-center gap-2 shrink-0">
                         <button onClick={() => openEditForm(c)}
-                          className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition"
-                          title="تعديل">
+                          className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition" title="تعديل">
                           <Edit2 size={15}/>
                         </button>
                         <button onClick={() => setDeleteConfirm(c.id)}
-                          className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
-                          title="حذف">
+                          className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition" title="حذف">
                           <Trash2 size={15}/>
                         </button>
                       </div>
@@ -674,35 +611,26 @@ export default function PromotionsPage() {
               )}
             </div>
 
-            {/* ── ملاحظة الأولوية ── */}
+            {/* ملاحظة الأولوية */}
             <div className="bg-blue-50 border border-blue-100 rounded-2xl p-5">
               <h3 className="text-sm font-black text-blue-800 mb-3 flex items-center gap-2">
                 <AlertCircle size={15}/> ترتيب الأولوية عند تطبيق الخصومات
               </h3>
               <div className="space-y-2 text-xs text-blue-700 font-medium">
-                <div className="flex items-center gap-2">
-                  <span className="w-5 h-5 bg-blue-200 text-blue-800 rounded-full flex items-center justify-center font-black text-[10px] shrink-0">1</span>
-                  <span>كود شحن مجاني — يلغي تكلفة الشحن دائماً</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-5 h-5 bg-blue-200 text-blue-800 rounded-full flex items-center justify-center font-black text-[10px] shrink-0">2</span>
-                  <span>شحن مجاني الباقة (bundleFreeShipping في المنتج) — مستقل تماماً</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-5 h-5 bg-blue-200 text-blue-800 rounded-full flex items-center justify-center font-black text-[10px] shrink-0">3</span>
-                  <span>حد الشحن المجاني العام (الطلبات فوق X ج.م) — يُطبَّق تلقائياً</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-5 h-5 bg-blue-200 text-blue-800 rounded-full flex items-center justify-center font-black text-[10px] shrink-0">4</span>
-                  <span>كود خصم نسبة% أو مبلغ ثابت — يُطبَّق على المنتجات المحددة في نطاقه</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-5 h-5 bg-blue-200 text-blue-800 rounded-full flex items-center justify-center font-black text-[10px] shrink-0">5</span>
-                  <span>خصم الباقة (bundleDiscount في المنتج) — مستقل ولا يتجمع مع كود الخصم%</span>
-                </div>
+                {[
+                  "كود شحن مجاني — يلغي تكلفة الشحن دائماً",
+                  "شحن مجاني الباقة (bundleFreeShipping في المنتج) — مستقل تماماً",
+                  "حد الشحن المجاني العام (الطلبات فوق X ج.م) — يُطبَّق تلقائياً",
+                  "كود خصم نسبة% أو مبلغ ثابت — يُطبَّق على المنتجات المحددة في نطاقه",
+                  "خصم الباقة (bundleDiscount في المنتج) — مستقل ولا يتجمع مع كود الخصم%",
+                ].map((t, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className="w-5 h-5 bg-blue-200 text-blue-800 rounded-full flex items-center justify-center font-black text-[10px] shrink-0">{i + 1}</span>
+                    <span>{t}</span>
+                  </div>
+                ))}
               </div>
             </div>
-
           </>
         )}
       </div>
