@@ -11,13 +11,35 @@ const CartContext = createContext();
 export function CartProvider({ children }) {
   const { settings } = useSettings();
 
-  // إعدادات الشحن من Firestore (مع fallback على constants)
+  // إعدادات الشحن — تييجي من SettingsContext أو مباشرة من Firestore لو promotions مش موجودة
+  const [promoSettings, setPromoSettings] = useState(null);
+
+  useEffect(() => {
+    // لو الـ settings جاءت وفيها promotions → استخدمها مباشرة
+    if (settings?.promotions) {
+      setPromoSettings(settings.promotions);
+      return;
+    }
+    // لو مفيش promotions في الـ cache → اجيبها fresh من Firestore
+    if (settings === null) return; // لسه بيحمّل
+    const fetchFresh = async () => {
+      try {
+        const res = await fetch('/api/site-settings?fresh=true');
+        const data = await res.json();
+        if (data?.success && data?.data?.promotions) {
+          setPromoSettings(data.data.promotions);
+        }
+      } catch {}
+    };
+    fetchFresh();
+  }, [settings]);
+
   const shippingSettings = useMemo(() => ({
-    shippingCost:           settings?.promotions?.shippingCost           ?? 70,
-    freeShippingThreshold:  settings?.promotions?.freeShippingThreshold  ?? 0,
-    firstOrderEnabled:      settings?.promotions?.firstOrderEnabled      ?? false,
-    firstOrderDiscount:     settings?.promotions?.firstOrderDiscount     ?? 0,
-  }), [settings]);
+    shippingCost:          promoSettings?.shippingCost          ?? settings?.promotions?.shippingCost          ?? 70,
+    freeShippingThreshold: promoSettings?.freeShippingThreshold ?? settings?.promotions?.freeShippingThreshold ?? 0,
+    firstOrderEnabled:     promoSettings?.firstOrderEnabled     ?? settings?.promotions?.firstOrderEnabled     ?? false,
+    firstOrderDiscount:    promoSettings?.firstOrderDiscount    ?? settings?.promotions?.firstOrderDiscount    ?? 0,
+  }), [promoSettings, settings]);
 
   // هل العميل الحالي مؤهل لخصم الطلب الأول؟
   const [isFirstOrder, setIsFirstOrder] = useState(false);
