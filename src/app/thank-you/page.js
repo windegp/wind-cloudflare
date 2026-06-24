@@ -8,6 +8,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { CheckCircle2, ShoppingBag, Phone, Truck, Shield, Package, CreditCard, Banknote, Smartphone } from '@/components/icons-extra';
 import { fbTrack } from "@/lib/fbTrack";
+import { gaPurchase } from "@/lib/gaTrack";
 
 const PAYMENT_LABELS = {
   card:         { label: 'كارت / محفظة إلكترونية', icon: <CreditCard size={14} className="text-[#F5C518]" /> },
@@ -50,6 +51,16 @@ function SuccessContent() {
           last_name: parsed.formData?.lastName,
           city: parsed.formData?.city,
         });
+        gaPurchase(
+          parsed.orderId || "",
+          (parsed.cartItems || []).map(it => ({
+            id: it.handle || it.id || it.title,
+            title: it.title,
+            price: it.price,
+            qty: it.qty,
+          })),
+          parsed.total || 0
+        );
       })
       .catch(err => console.error("Error:", err));
     }

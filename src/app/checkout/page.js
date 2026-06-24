@@ -14,6 +14,7 @@ import { doc, setDoc, getDoc, deleteDoc, updateDoc, increment } from "firebase/f
 import { ChevronDown, Info, CheckCircle2, Phone, ShoppingBag, Shield, Tag, ChevronLeft, Truck, CreditCard, Banknote, Smartphone, X, Lock } from '@/components/icons-extra';
 import { SHIPPING_COST } from '@/lib/constants';
 import { fbTrack } from "@/lib/fbTrack";
+import { gaBeginCheckout, gaPurchase } from "@/lib/gaTrack";
 
 // Helper function to get Cairo-local ISO timestamp for Firestore queries
 // Format: "YYYY-MM-DD HH:MM:SS" — matches dashboard query format
@@ -211,6 +212,7 @@ export default function CheckoutPage() {
       num_items: cartItems.reduce((s, it) => s + it.qty, 0),
       content_ids: cartItems.map(it => String(it.handle || it.id || it.title)),
     });
+    gaBeginCheckout(cartItems, finalTotal);
   }
 }, [pathname, signalPageReady, cartItems]);
 
@@ -588,6 +590,12 @@ export default function CheckoutPage() {
         // وإلا cartItems تصبح فاضية أو جزئية وقت إرسال Purchase بسبب إعادة الرندر بعد await
         const purchaseContentIds = cartItems.map(it => String(it.handle || it.id || it.title));
         const purchaseNumItems = cartItems.reduce((s, it) => s + it.qty, 0);
+        const purchaseCartSnapshot = cartItems.map(it => ({
+          id: it.handle || it.id || it.title,
+          title: it.title,
+          price: it.price,
+          qty: it.qty,
+        }));
 
         localStorage.removeItem('pendingOrder');
 
@@ -619,6 +627,7 @@ export default function CheckoutPage() {
           last_name: formData.lastName,
           city: formData.city,
         });
+        gaPurchase(orderId, purchaseCartSnapshot, finalTotal);
 router.push(`/thank-you?orderId=${orderId}`);
       }
 

@@ -15,6 +15,7 @@ import ProductCard from "@/components/products/ProductCard";
 import { useProduct, useRelatedProducts } from "@/hooks/useFirestore";
 import { Plus, Minus, Star, Info, Share2, Heart, ImageIcon, X, Truck, Eye, ShieldCheck, ChevronLeft, Search, ChevronRight, ChevronDown, ChevronUp, CreditCard, Banknote, ArrowLeftRight } from '@/components/icons-extra';
 import { fbTrack } from "@/lib/fbTrack";
+import { gaViewItem, gaAddToCart } from "@/lib/gaTrack";
 
 export default function ProductView({ initialProduct, sourceCategory }) {
   const { id } = useParams();
@@ -168,6 +169,11 @@ export default function ProductView({ initialProduct, sourceCategory }) {
       content_ids: [String(product.handle || id || product.id)],
       content_name: product.title || "",
       content_type: "product",
+    });
+    gaViewItem({
+      id: product.handle || id || product.id,
+      title: product.title || "",
+      price: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
     });
   }
 }, [loading, product, pathname, signalPageReady]);
@@ -575,6 +581,11 @@ export default function ProductView({ initialProduct, sourceCategory }) {
     content_type: "product",
     num_items: quantity,
   });
+  gaAddToCart({
+    id: product.handle || id || product.id,
+    title: product.title || "",
+    price: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
+  }, quantity);
   setQuantity(1);
   setTimeout(() => setIsAddingToCart(false), 700);
 }}
@@ -644,6 +655,11 @@ export default function ProductView({ initialProduct, sourceCategory }) {
     content_type: "product",
     num_items: quantity,
   });
+  gaAddToCart({
+    id: product.handle || id || product.id,
+    title: product.title || "",
+    price: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
+  }, quantity);
   setQuantity(1);
   setTimeout(() => setIsAddingToCart(false), 700);
 }}
@@ -884,6 +900,11 @@ export default function ProductView({ initialProduct, sourceCategory }) {
     content_type: "product",
     num_items: quantity,
   });
+  gaAddToCart({
+    id: product.handle || id || product.id,
+    title: product.title || "",
+    price: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
+  }, quantity);
   setQuantity(1);
 }}
                 className="flex-1 text-[14px] font-medium py-5 flex items-center justify-center transition-opacity btn-breathe tracking-[0.05em]"

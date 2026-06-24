@@ -59,6 +59,28 @@ export default function RootLayout({ children }) {
             fbq('track', 'PageView');
           `}
         </Script>
+
+        {/*
+          🔥 Google Analytics 4 (GA4) — مشروع مستقل تماماً عن Facebook Pixel،
+          لا تداخل بينهما. يُستخدم لقياس سلوك الزوار العام (مصدر الزيارة،
+          مدة الجلسة، معدل الارتداد) + أحداث Enhanced Ecommerce
+          (view_item, add_to_cart, begin_checkout, purchase) المُرسلة
+          من نفس نقاط الكود التي ترسل لـ fbTrack (عبر دالة gaTrack في
+          lib/gaTrack.js)، بدون أي تأثير على نظام فيسبوك.
+        */}
+        <Script
+          id="ga4-base"
+          strategy="afterInteractive"
+          src="https://www.googletagmanager.com/gtag/js?id=G-17RCL06LKM"
+        />
+        <Script id="ga4-init" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-17RCL06LKM');
+          `}
+        </Script>
       </head>
       <body className={`${cairo.className} bg-white text-[#1A1A1A] antialiased overflow-x-hidden`}>
         {/* ✅ تغليف الموقع بالكامل بـ SWRProvider لضمان حماية الكوتا عالمياً */}
