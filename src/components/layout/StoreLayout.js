@@ -1,15 +1,26 @@
 "use client";
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import Navbar from "./Navbar";
 import Footer from "./Footer";
 import CartDrawer from "./CartDrawer";
 import ScrollToTop from "./ScrollToTop";
+import { fbTrack } from "@/lib/fbTrack";
 
 export default function StoreLayout({ children }) {
   const pathname = usePathname();
   const isAdmin = pathname?.startsWith('/admin');
+
+  // 🔥 نرسل PageView للسيرفر (Conversions API) عند كل تغيير مسار حقيقي
+  // (بخلاف fbq الذي يرسل من المتصفح فقط مرة واحدة عند أول تحميل).
+  // هذا يحسّن "Conversions API coverage" لحدث PageView كما أوصى فيسبوك،
+  // ولا يحمل أي array فيتأثر بمشكلة flattening.
+  useEffect(() => {
+    if (!isAdmin) {
+      fbTrack("PageView", {});
+    }
+  }, [pathname, isAdmin]);
 
   return (
     <>
