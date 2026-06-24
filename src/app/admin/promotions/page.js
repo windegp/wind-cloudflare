@@ -544,39 +544,40 @@ export default function PromotionsPage() {
                       : `✅ الطلبات فوق ${freeShippingThreshold} ج.م تحصل على شحن مجاني`}
                   </p>
                 </div>
-              </div>
 
-              {/* ── خصم الطلب الأول ── */}
-              <div className="sm:col-span-2 border-t border-gray-100 pt-5">
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <p className="text-xs font-bold text-gray-700">خصم الطلب الأول (عملاء جدد)</p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">يُطبَّق تلقائياً على أي عميل طلبه الأول بناءً على الإيميل أو التليفون</p>
+                {/* ── خصم الطلب الأول ── */}
+                <div className="sm:col-span-2 border-t border-gray-100 pt-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <p className="text-xs font-bold text-gray-700">خصم الطلب الأول (عملاء جدد)</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">يُطبَّق تلقائياً على أي عميل طلبه الأول بناءً على الإيميل أو التليفون</p>
+                    </div>
+                    <div onClick={() => setFirstOrderEnabled(p => !p)}
+                      className={`w-11 h-6 rounded-full transition-colors cursor-pointer flex items-center ${firstOrderEnabled ? "bg-emerald-500" : "bg-gray-200"}`}>
+                      <div className={`w-4 h-4 bg-white rounded-full shadow mx-1 transition-transform ${firstOrderEnabled ? "translate-x-[-4px] mr-auto ml-1" : ""}`}/>
+                    </div>
                   </div>
-                  <div onClick={() => setFirstOrderEnabled(p => !p)}
-                    className={`w-11 h-6 rounded-full transition-colors cursor-pointer flex items-center ${firstOrderEnabled ? "bg-emerald-500" : "bg-gray-200"}`}>
-                    <div className={`w-4 h-4 bg-white rounded-full shadow mx-1 transition-transform ${firstOrderEnabled ? "translate-x-[-4px] mr-auto ml-1" : ""}`}/>
-                  </div>
+                  {firstOrderEnabled && (
+                    <div className="flex items-center gap-3 mt-2">
+                      <div className="flex-1">
+                        <label className="block text-[10px] font-bold text-gray-500 mb-1">نسبة الخصم %</label>
+                        <input
+                          type="number" min="1" max="100"
+                          value={firstOrderDiscount}
+                          onChange={e => setFirstOrderDiscount(e.target.value)}
+                          className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:border-gray-400"
+                          placeholder="مثال: 10"
+                        />
+                      </div>
+                      <div className="flex-1 bg-emerald-50 border border-emerald-100 rounded-xl p-3">
+                        <p className="text-[10px] text-emerald-700 font-bold">✅ نشط</p>
+                        <p className="text-xs text-emerald-800 font-black mt-0.5">{firstOrderDiscount}% خصم للعملاء الجدد</p>
+                        <p className="text-[10px] text-emerald-600 mt-1">يُتحقق عبر الإيميل والتليفون</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                {firstOrderEnabled && (
-                  <div className="flex items-center gap-3 mt-2">
-                    <div className="flex-1">
-                      <label className="block text-[10px] font-bold text-gray-500 mb-1">نسبة الخصم %</label>
-                      <input
-                        type="number" min="1" max="100"
-                        value={firstOrderDiscount}
-                        onChange={e => setFirstOrderDiscount(e.target.value)}
-                        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:border-gray-400"
-                        placeholder="مثال: 10"
-                      />
-                    </div>
-                    <div className="flex-1 bg-emerald-50 border border-emerald-100 rounded-xl p-3">
-                      <p className="text-[10px] text-emerald-700 font-bold">✅ نشط</p>
-                      <p className="text-xs text-emerald-800 font-black mt-0.5">{firstOrderDiscount}% خصم للعملاء الجدد</p>
-                      <p className="text-[10px] text-emerald-600 mt-1">يُتحقق عبر الإيميل والتليفون</p>
-                    </div>
-                  </div>
-                )}
+
               </div>
 
               {Number(freeShippingThreshold) > 0 && Number(freeShippingThreshold) <= Number(shippingCost) && (
