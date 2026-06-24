@@ -35,16 +35,44 @@ function readCookie(name) {
   return match ? decodeURIComponent(match[1]) : undefined;
 }
 
+// 🔥 حل Race Condition: fbq يحتاج وقتاً (تحميل سكريبت + تنفيذ) لتثبيت
+// كوكي _fbp، وقد يُستدعى أول fbTrack() قبل اكتمال هذا التثبيت (خصوصاً
+// لأول حدث في الجلسة، مثل ViewContent لصفحة منتج مفتوحة مباشرة).
+// هذه الدالة تنتظر ظهور الكوكي بمحاولات سريعة، بحد أقصى MAX_WAIT_MS
+// (نصف ثانية) — فترة غير ملحوظة للمستخدم، لكنها تكفي عملياً لتحميل
+// fbevents.js وتثبيت الكوكي في الغالبية العظمى من الحالات.
+const FBP_POLL_INTERVAL_MS = 50;
+const FBP_MAX_WAIT_MS = 500;
+
+function waitForFbp() {
+  return new Promise((resolve) => {
+    const existing = readCookie("_fbp");
+    if (existing) {
+      resolve(existing);
+      return;
+    }
+    let elapsed = 0;
+    const interval = setInterval(() => {
+      const fbp = readCookie("_fbp");
+      elapsed += FBP_POLL_INTERVAL_MS;
+      if (fbp || elapsed >= FBP_MAX_WAIT_MS) {
+        clearInterval(interval);
+        resolve(fbp); // قد تكون undefined لو انتهى الوقت بدون نجاح، وهذا مقبول
+      }
+    }, FBP_POLL_INTERVAL_MS);
+  });
+}
+
 function generateEventId(eventName) {
   return `${eventName}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export function fbTrack(eventName, data = {}) {
+export async function fbTrack(eventName, data = {}) {
   if (typeof window === "undefined") return;
 
   const eventId = generateEventId(eventName);
   const externalId = getOrCreateExternalId();
-  const fbp = readCookie("_fbp");
+  const fbp = await waitForFbp();
   const fbc = readCookie("_fbc");
 
   // نرسل الحدث للسيرفر فقط عبر /api/fb-track — المصدر الموثوق الوحيد
