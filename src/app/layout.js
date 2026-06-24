@@ -67,20 +67,28 @@ export default function RootLayout({ children }) {
           (view_item, add_to_cart, begin_checkout, purchase) المُرسلة
           من نفس نقاط الكود التي ترسل لـ fbTrack (عبر دالة gaTrack في
           lib/gaTrack.js)، بدون أي تأثير على نظام فيسبوك.
+
+          ⚠️ مهم: نستخدم <script> خام هنا (لا مكوّن next/script) عمداً —
+          في App Router، حتى مع strategy="beforeInteractive"، مكوّن
+          next/script لا يُضمَّن كنص حرفي في الـ HTML الذي يولّده السيرفر
+          (بل يُحقَن لاحقاً عبر JS)، فلا تستطيع أدوات الفحص الخارجية
+          (مثل أداة "Test" في Google Analytics) رؤيته رغم أنه يعمل فعلياً
+          في المتصفح. الـ script الخام هو الحل الموصى به رسمياً لهذه الحالة.
         */}
-        <Script
-          id="ga4-base"
-          strategy="afterInteractive"
+        <script
+          async
           src="https://www.googletagmanager.com/gtag/js?id=G-17RCL06LKM"
         />
-        <Script id="ga4-init" strategy="afterInteractive">
-          {`
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            gtag('config', 'G-17RCL06LKM');
-          `}
-        </Script>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.dataLayer = window.dataLayer || [];
+              function gtag(){dataLayer.push(arguments);}
+              gtag('js', new Date());
+              gtag('config', 'G-17RCL06LKM');
+            `,
+          }}
+        />
       </head>
       <body className={`${cairo.className} bg-white text-[#1A1A1A] antialiased overflow-x-hidden`}>
         {/* ✅ تغليف الموقع بالكامل بـ SWRProvider لضمان حماية الكوتا عالمياً */}
