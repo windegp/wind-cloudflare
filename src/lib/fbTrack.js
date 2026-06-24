@@ -1,14 +1,15 @@
 // lib/fbTrack.js
 //
 // دالة موحّدة لإرسال أحداث Facebook Pixel عبر /api/fb-track
-// (مباشرة لـ Conversions API، بدون المرور بـ Zaraz).
+// (مباشرة لـ Conversions API من السيرفر فقط، بدون fbq() ولا Zaraz).
 //
-// تُستخدم بدل window.zaraz.track() لأحداث: ViewContent, AddToCart,
-// InitiateCheckout, Purchase — التي تحتاج content_ids كـ array صحيح.
-//
-// 🔥 بالتوازي مع هذا، نطلق نفس الحدث على fbq() (Facebook Pixel الأساسي
-// المُحمَّل في layout.js) بنفس event_id لتفعيل Deduplication الصحيح،
-// ولرفع Event Match Quality عبر إشارات المتصفح (fbp/fbc الطازجة).
+// 🔥 لماذا لا نرسل من fbq() (Browser) لهذه الأحداث:
+// كان يحدث Deduplication بين حدث Browser (فقير: بلا content_ids)
+// وحدث Server (غني: يحتوي content_ids الصحيحة)، وفيسبوك كان يحتفظ
+// بنسخة Browser في بعض عمليات الحساب (مثل Catalogue Match Rate)،
+// فتُفقد content_ids من المعادلة فعلياً رغم وصولها للسيرفر بنجاح.
+// الحل: الاعتماد على السيرفر فقط لهذه الأحداث (الأغنى والأدق بيانات).
+// PageView يبقى عبر fbq() في layout.js (لا يحتوي على arrays، لا مشكلة).
 
 function getOrCreateExternalId() {
   if (typeof window === "undefined") return undefined;
@@ -46,30 +47,8 @@ export function fbTrack(eventName, data = {}) {
   const fbp = readCookie("_fbp");
   const fbc = readCookie("_fbc");
 
-  // 1) نرسل للـ Pixel الأساسي (fbq) — بدون content_ids array لتجنب أي مشكلة flattening
-  //    محتمَلة من جهة fbq نفسه، فقط القيم الأساسية + نفس event_id للـ dedup
-  try {
-    if (typeof window.fbq === "function") {
-      window.fbq(
-        "trackSingle",
-        "880930164288645",
-        eventName,
-        {
-          value: data.value,
-          currency: data.currency,
-          content_name: data.content_name,
-          content_type: data.content_type,
-          num_items: data.num_items,
-        },
-        { eventID: eventId }
-      );
-    }
-  } catch (err) {
-    console.error(`fbq(${eventName}) failed:`, err);
-  }
-
-  // 2) نرسل نفس الحدث للسيرفر عبر /api/fb-track — هذا المصدر الموثوق لـ content_ids
-  //    ولإضافة Advanced Matching الكامل (email/phone عند توفرها)
+  // نرسل الحدث للسيرفر فقط عبر /api/fb-track — المصدر الموثوق الوحيد
+  // لـ content_ids الصحيحة وكل بيانات Advanced Matching
   try {
     fetch("/api/fb-track", {
       method: "POST",
