@@ -59,6 +59,8 @@ export default function PromotionsPage() {
 
   const [shippingCost,            setShippingCost]            = useState(70);
   const [freeShippingThreshold,   setFreeShippingThreshold]   = useState(0);
+  const [firstOrderEnabled,       setFirstOrderEnabled]       = useState(false);
+  const [firstOrderDiscount,      setFirstOrderDiscount]      = useState(10);
   const [origSettings,            setOrigSettings]            = useState(null);
 
   const [codes,          setCodes]          = useState([]);
@@ -81,6 +83,8 @@ export default function PromotionsPage() {
       const promo = settingsData.promotions || { shippingCost: 70, freeShippingThreshold: 0 };
       setShippingCost(promo.shippingCost ?? 70);
       setFreeShippingThreshold(promo.freeShippingThreshold ?? 0);
+      setFirstOrderEnabled(promo.firstOrderEnabled ?? false);
+      setFirstOrderDiscount(promo.firstOrderDiscount ?? 10);
       setOrigSettings(promo);
 
       // الأكواد
@@ -130,11 +134,22 @@ export default function PromotionsPage() {
     setSaving(true);
     try {
       const db = getDb();
+      // تحقق منطقي على خصم الطلب الأول
+      if (firstOrderEnabled && (Number(firstOrderDiscount) <= 0 || Number(firstOrderDiscount) > 100)) {
+        return showToast("نسبة خصم الطلب الأول يجب أن تكون بين 1% و100%", false);
+      }
       await updateDoc(doc(db, "settings", "siteSettings"), {
         "promotions.shippingCost":          Number(shippingCost),
         "promotions.freeShippingThreshold": Number(freeShippingThreshold),
+        "promotions.firstOrderEnabled":     Boolean(firstOrderEnabled),
+        "promotions.firstOrderDiscount":    Number(firstOrderDiscount),
       });
-      setOrigSettings({ shippingCost: Number(shippingCost), freeShippingThreshold: Number(freeShippingThreshold) });
+      setOrigSettings({
+        shippingCost: Number(shippingCost),
+        freeShippingThreshold: Number(freeShippingThreshold),
+        firstOrderEnabled: Boolean(firstOrderEnabled),
+        firstOrderDiscount: Number(firstOrderDiscount),
+      });
       showToast("تم حفظ إعدادات الشحن ✓");
     } catch (err) {
       showToast("فشل الحفظ: " + err.message, false);
@@ -259,8 +274,10 @@ export default function PromotionsPage() {
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const settingsChanged = origSettings &&
-    (Number(shippingCost) !== Number(origSettings.shippingCost) ||
-     Number(freeShippingThreshold) !== Number(origSettings.freeShippingThreshold));
+    (Number(shippingCost)           !== Number(origSettings.shippingCost)           ||
+     Number(freeShippingThreshold)  !== Number(origSettings.freeShippingThreshold)  ||
+     Boolean(firstOrderEnabled)     !== Boolean(origSettings.firstOrderEnabled)     ||
+     Number(firstOrderDiscount)     !== Number(origSettings.firstOrderDiscount));
 
   return (
     <div className="min-h-screen bg-[#f4f6f8] font-sans" dir="rtl">
@@ -521,6 +538,39 @@ export default function PromotionsPage() {
                       : `✅ الطلبات فوق ${freeShippingThreshold} ج.م تحصل على شحن مجاني`}
                   </p>
                 </div>
+              </div>
+
+              {/* ── خصم الطلب الأول ── */}
+              <div className="sm:col-span-2 border-t border-gray-100 pt-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <p className="text-xs font-bold text-gray-700">خصم الطلب الأول (عملاء جدد)</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">يُطبَّق تلقائياً على أي عميل طلبه الأول بناءً على الإيميل أو التليفون</p>
+                  </div>
+                  <div onClick={() => setFirstOrderEnabled(p => !p)}
+                    className={`w-11 h-6 rounded-full transition-colors cursor-pointer flex items-center ${firstOrderEnabled ? "bg-emerald-500" : "bg-gray-200"}`}>
+                    <div className={`w-4 h-4 bg-white rounded-full shadow mx-1 transition-transform ${firstOrderEnabled ? "translate-x-[-4px] mr-auto ml-1" : ""}`}/>
+                  </div>
+                </div>
+                {firstOrderEnabled && (
+                  <div className="flex items-center gap-3 mt-2">
+                    <div className="flex-1">
+                      <label className="block text-[10px] font-bold text-gray-500 mb-1">نسبة الخصم %</label>
+                      <input
+                        type="number" min="1" max="100"
+                        value={firstOrderDiscount}
+                        onChange={e => setFirstOrderDiscount(e.target.value)}
+                        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:border-gray-400"
+                        placeholder="مثال: 10"
+                      />
+                    </div>
+                    <div className="flex-1 bg-emerald-50 border border-emerald-100 rounded-xl p-3">
+                      <p className="text-[10px] text-emerald-700 font-bold">✅ نشط</p>
+                      <p className="text-xs text-emerald-800 font-black mt-0.5">{firstOrderDiscount}% خصم للعملاء الجدد</p>
+                      <p className="text-[10px] text-emerald-600 mt-1">يُتحقق عبر الإيميل والتليفون</p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {Number(freeShippingThreshold) > 0 && Number(freeShippingThreshold) <= Number(shippingCost) && (

@@ -38,22 +38,28 @@ export function calculateShipping(promoResult = null, subtotal = 0, cartItems = 
 }
 
 /**
- * Calculate discount amount from promoResult
- * خصم% أو مبلغ ثابت — مش شحن مجاني (ده بيتعامل معاه في calculateShipping)
+ * Calculate discount amount from promoResult OR first-order discount
+ * الأولوية: كود الخصم > خصم الطلب الأول (لا يتجمعون)
  */
-export function calculateDiscount(promoResult = null) {
-  if (!promoResult?.valid) return 0;
-  if (promoResult.type === 'free_shipping') return 0; // مش خصم على المنتجات
-  return promoResult.discountAmount || 0;
+export function calculateDiscount(promoResult = null, subtotal = 0, isFirstOrder = false, shippingSettings = null) {
+  // كود خصم نسبة أو مبلغ ثابت
+  if (promoResult?.valid && promoResult.type !== 'free_shipping') {
+    return promoResult.discountAmount || 0;
+  }
+  // خصم الطلب الأول (تلقائي — بدون كود)
+  if (isFirstOrder && shippingSettings?.firstOrderEnabled && shippingSettings?.firstOrderDiscount > 0) {
+    return Math.round((subtotal * shippingSettings.firstOrderDiscount) / 100);
+  }
+  return 0;
 }
 
 export function calculateTotal(subtotal, shipping, discount = 0) {
   return Math.max(0, subtotal - discount + shipping);
 }
 
-export function calculateAllTotals(cartItems, promoResult = null, shippingSettings = null) {
+export function calculateAllTotals(cartItems, promoResult = null, shippingSettings = null, isFirstOrder = false) {
   const subtotal = calculateSubtotal(cartItems);
-  const discount = calculateDiscount(promoResult);
+  const discount = calculateDiscount(promoResult, subtotal, isFirstOrder, shippingSettings);
   const shipping  = calculateShipping(promoResult, subtotal - discount, cartItems, shippingSettings);
   const total     = calculateTotal(subtotal, shipping, discount);
   return { subtotal, discount, shipping, total };

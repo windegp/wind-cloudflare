@@ -160,6 +160,8 @@ export default function CheckoutPage() {
     discountError, 
     appliedPromo,
     promoLoading,
+    setIsFirstOrder,
+    shippingSettings,
   } = useCart();
   
   const { signalPageReady } = usePageReady();
@@ -225,6 +227,36 @@ export default function CheckoutPage() {
   // 🚀 رادار السلة المتروكة المطور (استراتيجية المستند الواحد)
   // ============================================================
   const lastSavedDraftRef = useRef(""); 
+
+  // ── تحقق تلقائي من أول طلب عند إدخال الإيميل أو التليفون ──
+  useEffect(() => {
+    if (!shippingSettings?.firstOrderEnabled) {
+      setIsFirstOrder(false);
+      return;
+    }
+    const isValidEmail = formData.email && formData.email.includes('@') && formData.email.includes('.');
+    const isValidPhone = formData.phone && formData.phone.replace(/\D/g,'').length >= 11;
+    if (!isValidEmail && !isValidPhone) { setIsFirstOrder(false); return; }
+
+    const identifier = isValidEmail
+      ? formData.email.toLowerCase().trim()
+      : formData.phone.replace(/\D/g,'');
+
+    const checkFirstOrder = async () => {
+      try {
+        const customerSnap = await getDoc(doc(getDb(), "Customers", identifier));
+        if (!customerSnap.exists()) {
+          setIsFirstOrder(true);   // عميل جديد
+        } else {
+          const totalOrders = Number(customerSnap.data()['Total Orders'] || 0);
+          setIsFirstOrder(totalOrders === 0);
+        }
+      } catch { setIsFirstOrder(false); }
+    };
+
+    const timer = setTimeout(checkFirstOrder, 600); // debounce
+    return () => clearTimeout(timer);
+  }, [formData.email, formData.phone, shippingSettings?.firstOrderEnabled, setIsFirstOrder]);
 
   useEffect(() => {
     const isValidEmail = formData.email && formData.email.includes('@') && formData.email.includes('.');
@@ -705,12 +737,18 @@ router.push(`/thank-you?orderId=${orderId}`);
               </div>
               {discountError && <p className="text-red-500 text-[10px] mt-1.5 pr-1">{discountError}</p>}
               {appliedPromo && <p className="promo-success pr-1">✓ {appliedPromo.message || ("تم تطبيق كود: " + appliedPromo.code)} <button onClick={removePromoCode} className="mr-2 text-red-400 hover:text-red-600 font-bold">✕</button></p>}
+              {!appliedPromo && discount > 0 && shippingSettings?.firstOrderEnabled && (
+                <p className="promo-success pr-1">🎉 تم تطبيق خصم الطلب الأول {shippingSettings.firstOrderDiscount}% تلقائياً</p>
+              )}
             </div>
 
             <div className="border-t border-gray-100 pt-3 space-y-1.5 text-base">
               <div className="flex justify-between text-gray-500"><span>سعر المنتج</span><span className="text-gray-800 font-medium">ج.م {subtotal}.00</span></div>
               {discount > 0 && (
-                <div className="flex justify-between text-emerald-600"><span>خصم الكود</span><span className="font-bold">- ج.م {discount}.00</span></div>
+                <div className="flex justify-between text-emerald-600">
+                  <span>{appliedPromo && appliedPromo.type !== 'free_shipping' ? 'خصم الكود' : 'خصم الطلب الأول 🎉'}</span>
+                  <span className="font-bold">- ج.م {discount}.00</span>
+                </div>
               )}
               <div className="flex justify-between text-gray-500"><span>سعر الشحن</span><span className={`font-medium ${SHIPPING_COST === 0 ? 'text-green-600' : 'text-gray-800'}`}>{SHIPPING_COST === 0 ? 'مجاناً' : `ج.م ${SHIPPING_COST}.00`}</span></div>
               <div className="flex justify-between font-black text-lg pt-2 border-t border-gray-100">

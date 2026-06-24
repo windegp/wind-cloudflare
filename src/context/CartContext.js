@@ -15,7 +15,12 @@ export function CartProvider({ children }) {
   const shippingSettings = useMemo(() => ({
     shippingCost:           settings?.promotions?.shippingCost           ?? 70,
     freeShippingThreshold:  settings?.promotions?.freeShippingThreshold  ?? 0,
+    firstOrderEnabled:      settings?.promotions?.firstOrderEnabled      ?? false,
+    firstOrderDiscount:     settings?.promotions?.firstOrderDiscount     ?? 0,
   }), [settings]);
+
+  // هل العميل الحالي مؤهل لخصم الطلب الأول؟
+  const [isFirstOrder, setIsFirstOrder] = useState(false);
 
   // ── State ──────────────────────────────────────────────────────
   const [cartItems,     setCartItems]     = useState([]);
@@ -77,8 +82,8 @@ export function CartProvider({ children }) {
 
   // ── Calculations ───────────────────────────────────────────────
   const { subtotal, discount, shipping, total } = useMemo(
-    () => calculateAllTotals(cartItems, appliedPromo, shippingSettings),
-    [cartItems, appliedPromo, shippingSettings]
+    () => calculateAllTotals(cartItems, appliedPromo, shippingSettings, isFirstOrder),
+    [cartItems, appliedPromo, shippingSettings, isFirstOrder]
   );
 
   // ── Promo code — server-side validation ───────────────────────
@@ -147,12 +152,14 @@ export function CartProvider({ children }) {
     applyPromoCode, removePromoCode,
     discountError, promoLoading,
     shippingSettings,
+    isFirstOrder, setIsFirstOrder,
   }), [
     cartItems, addToCart, removeFromCart, updateQty, clearCart,
     isCartOpen, toggleCart, openCart, closeCart,
     subtotal, discount, shipping, total,
     appliedPromo, applyPromoCode, removePromoCode,
     discountError, promoLoading, shippingSettings,
+    isFirstOrder, setIsFirstOrder,
   ]);
 
   return <CartContext.Provider value={contextValue}>{children}</CartContext.Provider>;
