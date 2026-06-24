@@ -792,7 +792,7 @@ router.push(`/thank-you?orderId=${orderId}`);
               <div className="flex justify-between text-gray-500"><span>سعر المنتج</span><span className="text-gray-800 font-medium">ج.م {subtotal}.00</span></div>
               {discount > 0 && (
                 <div className="flex justify-between text-emerald-600">
-                  <span>{appliedPromo && appliedPromo.type !== 'free_shipping' ? 'خصم الكود' : 'خصم الطلب الأول 🎉'}</span>
+                  <span>{appliedPromo?.type && appliedPromo.type !== 'free_shipping' ? 'خصم الكود' : 'خصم الطلب الأول 🎉'}</span>
                   <span className="font-bold">- ج.م {discount}.00</span>
                 </div>
               )}
@@ -1196,6 +1196,12 @@ router.push(`/thank-you?orderId=${orderId}`);
 
                   <div className="border-t border-gray-100 pt-3 space-y-1.5 text-sm">
                     <div className="flex justify-between text-gray-500"><span>سعر المنتج</span><span className="text-gray-800 font-medium">ج.م {subtotal}.00</span></div>
+                    {discount > 0 && (
+                      <div className="flex justify-between text-emerald-600">
+                        <span>{appliedPromo?.type && appliedPromo.type !== 'free_shipping' ? 'خصم الكود' : 'خصم الطلب الأول 🎉'}</span>
+                        <span className="font-bold">- ج.م {discount}.00</span>
+                      </div>
+                    )}
                     <div className="flex justify-between text-gray-500">
                       <span>سعر الشحن</span>
                       <span className={`font-medium ${SHIPPING_COST === 0 ? 'text-green-600' : 'text-gray-800'}`}>{SHIPPING_COST === 0 ? 'مجاناً' : `ج.م ${SHIPPING_COST}.00`}</span>
@@ -1295,6 +1301,12 @@ router.push(`/thank-you?orderId=${orderId}`);
                 <span className="text-gray-500">سعر المنتج</span>
                 <span className="font-semibold text-gray-800">ج.م {subtotal}.00</span>
               </div>
+              {discount > 0 && (
+                <div className="flex justify-between items-center text-base text-emerald-600">
+                  <span>{appliedPromo?.type && appliedPromo.type !== 'free_shipping' ? 'خصم الكود' : 'خصم الطلب الأول 🎉'}</span>
+                  <span className="font-semibold">- ج.م {discount}.00</span>
+                </div>
+              )}
               <div className="flex justify-between items-center text-base">
                 <span className="text-gray-500">سعر الشحن</span>
                 <span className={`font-semibold ${SHIPPING_COST === 0 ? 'text-green-600' : 'text-gray-800'}`}>
