@@ -150,6 +150,12 @@ export default function PromotionsPage() {
         firstOrderEnabled: Boolean(firstOrderEnabled),
         firstOrderDiscount: Number(firstOrderDiscount),
       });
+      // مسح KV cache عشان التغييرات تنعكس فوراً على الموقع
+      await fetch("/api/revalidate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "site_settings" }),
+      });
       showToast("تم حفظ إعدادات الشحن ✓");
     } catch (err) {
       showToast("فشل الحفظ: " + err.message, false);

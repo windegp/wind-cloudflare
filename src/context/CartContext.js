@@ -150,7 +150,7 @@ export function CartProvider({ children }) {
     subtotal, discount, shipping, total,
     appliedPromo,
     applyPromoCode, removePromoCode,
-    discountError, promoLoading,
+    discountError, setDiscountError, promoLoading,
     shippingSettings,
     isFirstOrder, setIsFirstOrder,
   }), [
@@ -158,7 +158,7 @@ export function CartProvider({ children }) {
     isCartOpen, toggleCart, openCart, closeCart,
     subtotal, discount, shipping, total,
     appliedPromo, applyPromoCode, removePromoCode,
-    discountError, promoLoading, shippingSettings,
+    discountError, setDiscountError, promoLoading, shippingSettings,
     isFirstOrder, setIsFirstOrder,
   ]);
 

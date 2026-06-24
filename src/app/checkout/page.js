@@ -157,7 +157,8 @@ export default function CheckoutPage() {
     total, 
     applyPromoCode,
     removePromoCode,
-    discountError, 
+    discountError,
+    setDiscountError,
     appliedPromo,
     promoLoading,
     setIsFirstOrder,
@@ -358,6 +359,36 @@ export default function CheckoutPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return window.scrollTo(0, 0);
+
+    // ── التحقق النهائي من الكود لما يكون مقيد بعميل معين ──
+    // يحصل هنا لأن الإيميل والتليفون متأكدين منهم دلوقتي
+    if (appliedPromo?.valid && (appliedPromo.usageType === 'once_per_customer' || appliedPromo.firstOrderOnly)) {
+      const identifier = formData.email?.toLowerCase().trim() || formData.phone?.replace(/\D/g, '');
+      if (identifier) {
+        try {
+          const recheck = await fetch("/api/validate-promo", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              code: appliedPromo.code,
+              customerEmail: formData.email,
+              customerPhone: formData.phone,
+              cartItems,
+              subtotal,
+            }),
+          });
+          const recheckResult = await recheck.json();
+          if (!recheckResult.valid) {
+            // الكود مش صالح لهذا العميل — نشيله ونوقف الطلب
+            removePromoCode();
+            setDiscountError(recheckResult.message || 'هذا الكود لا ينطبق على بيانات هذا الحساب');
+            window.scrollTo(0, 0);
+            return;
+          }
+        } catch { /* نكمل في حالة فشل الـ network */ }
+      }
+    }
+
     setLoading(true);
     
     isOrderSubmittedRef.current = true;
@@ -559,6 +590,21 @@ export default function CheckoutPage() {
         const purchaseNumItems = cartItems.reduce((s, it) => s + it.qty, 0);
 
         localStorage.removeItem('pendingOrder');
+
+        // ── تسجيل استخدام الكود في Firestore ──
+        if (appliedPromo?.valid && appliedPromo.code) {
+          const identifier = formData.email?.toLowerCase().trim() || formData.phone?.replace(/\D/g, '');
+          try {
+            const { doc: fsDoc, updateDoc: fsUpdateDoc, arrayUnion, increment: fsIncrement } = await import('firebase/firestore/lite');
+            const promoRef = fsDoc(getDb(), 'promoCodes', appliedPromo.code);
+            const updates = { usedCount: fsIncrement(1) };
+            if (identifier && (appliedPromo.usageType === 'once_per_customer')) {
+              updates.usedBy = arrayUnion(identifier);
+            }
+            await fsUpdateDoc(promoRef, updates);
+          } catch { /* تسجيل الاستخدام مش حرج — نكمل */ }
+        }
+
         clearCart();
         setLoading(false);
         fbTrack("Purchase", {
