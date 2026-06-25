@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Settings, ShieldCheck, Store, Truck } from '@/components/icons-extra';
+import { Settings, ShieldCheck, Store, Truck, Tag } from '@/components/icons-extra';
 import { 
   CreditCard, 
   Share2, 
@@ -35,6 +35,14 @@ const settingsOptions = [
     icon: <Truck size={28} />,
     path: '/admin/settings/shipping',
     color: 'bg-orange-50 text-orange-600'
+  },
+  {
+    id: 'discounts',
+    title: 'كودات الخصم',
+    desc: 'أضف وعدّل كودات الخصم — نسبة مئوية، مبلغ ثابت، أو شحن مجاني.',
+    icon: <Tag size={28} />,
+    path: '/admin/discounts',
+    color: 'bg-rose-50 text-rose-600'
   },
   {
     id: 'social',
