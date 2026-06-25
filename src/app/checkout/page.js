@@ -10,7 +10,7 @@ import Link from "next/link";
 // يستورد firebase/firestore/lite فقط بدون storage/auth/database
 // لتجنب مشاكل Edge Runtime في Cloudflare
 import { getDb } from "@/lib/firebase-checkout";
-import { doc, setDoc, getDoc, deleteDoc, updateDoc, increment } from "firebase/firestore/lite";
+import { doc, setDoc, getDoc, deleteDoc, updateDoc, increment, collection, query, where, getDocs, limit } from "firebase/firestore/lite";
 import { ChevronDown, Info, CheckCircle2, Phone, ShoppingBag, Shield, Tag, ChevronLeft, Truck, CreditCard, Banknote, Smartphone, X, Lock } from '@/components/icons-extra';
 import { SHIPPING_COST } from '@/lib/constants';
 import { fbTrack } from "@/lib/fbTrack";
@@ -248,15 +248,32 @@ export default function CheckoutPage() {
 
     const checkFirstOrder = async () => {
       try {
-        // نتحقق من الإيميل والتليفون معاً — لو أي منهم موجود بطلبات سابقة مش عميل جديد
-        const [emailSnap, phoneSnap] = await Promise.all([
-          getDoc(doc(getDb(), "Customers", emailId)),
-          getDoc(doc(getDb(), "Customers", phoneId)),
-        ]);
+        const db = getDb();
+
+        // 1. تحقق من الإيميل كـ document ID (الطريقة الأساسية للتخزين)
+        const emailSnap = await getDoc(doc(db, "Customers", emailId));
         const emailOrders = emailSnap.exists() ? Number(emailSnap.data()['Total Orders'] || 0) : 0;
-        const phoneOrders = phoneSnap.exists() ? Number(phoneSnap.data()['Total Orders'] || 0) : 0;
-        // عميل جديد فقط لو الإيميل والتليفون كلاهم بدون طلبات سابقة
-        setIsFirstOrder(emailOrders === 0 && phoneOrders === 0);
+        if (emailOrders > 0) { setIsFirstOrder(false); return; }
+
+        // 2. تحقق من التليفون كـ document ID (لو العميل اشترى بتليفون بدون إيميل)
+        const phoneDocSnap = await getDoc(doc(db, "Customers", phoneId));
+        const phoneDocOrders = phoneDocSnap.exists() ? Number(phoneDocSnap.data()['Total Orders'] || 0) : 0;
+        if (phoneDocOrders > 0) { setIsFirstOrder(false); return; }
+
+        // 3. تحقق من التليفون كـ field في أي document (عميل اشترى بإيميل مختلف)
+        const phoneQuery = query(
+          collection(db, "Customers"),
+          where("Phone", "==", formData.phone.trim()),
+          limit(1)
+        );
+        const phoneQuerySnap = await getDocs(phoneQuery);
+        if (!phoneQuerySnap.empty) {
+          const existingOrders = Number(phoneQuerySnap.docs[0].data()['Total Orders'] || 0);
+          if (existingOrders > 0) { setIsFirstOrder(false); return; }
+        }
+
+        // الإيميل والتليفون كلاهم جديدان تماماً
+        setIsFirstOrder(true);
       } catch { setIsFirstOrder(false); }
     };
 
