@@ -60,7 +60,9 @@ export function calculateTotal(subtotal, shipping, discount = 0) {
 export function calculateAllTotals(cartItems, promoResult = null, shippingSettings = null, isFirstOrder = false) {
   const subtotal = calculateSubtotal(cartItems);
   const discount = calculateDiscount(promoResult, subtotal, isFirstOrder, shippingSettings);
-  const shipping  = calculateShipping(promoResult, subtotal - discount, cartItems, shippingSettings);
+  // الشحن يُحسب على الـ subtotal الكامل (قبل الخصم)
+  // خصم المنتجات لا يلغي شحن مجاني حققه العميل بإجمالي طلبه
+  const shipping  = calculateShipping(promoResult, subtotal, cartItems, shippingSettings);
   const total     = calculateTotal(subtotal, shipping, discount);
   return { subtotal, discount, shipping, total };
 }

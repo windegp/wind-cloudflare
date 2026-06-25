@@ -162,6 +162,7 @@ export default function CheckoutPage() {
     setDiscountError,
     appliedPromo,
     promoLoading,
+    isFirstOrder,
     setIsFirstOrder,
     shippingSettings,
   } = useCart();
@@ -239,21 +240,23 @@ export default function CheckoutPage() {
     }
     const isValidEmail = formData.email && formData.email.includes('@') && formData.email.includes('.');
     const isValidPhone = formData.phone && formData.phone.replace(/\D/g,'').length >= 11;
-    if (!isValidEmail && !isValidPhone) { setIsFirstOrder(false); return; }
+    // لازم الإيميل والتليفون معاً — منع الخصم بإيميل وهمي بدون تليفون حقيقي
+    if (!isValidEmail || !isValidPhone) { setIsFirstOrder(false); return; }
 
-    const identifier = isValidEmail
-      ? formData.email.toLowerCase().trim()
-      : formData.phone.replace(/\D/g,'');
+    const emailId = formData.email.toLowerCase().trim();
+    const phoneId = formData.phone.replace(/\D/g,'');
 
     const checkFirstOrder = async () => {
       try {
-        const customerSnap = await getDoc(doc(getDb(), "Customers", identifier));
-        if (!customerSnap.exists()) {
-          setIsFirstOrder(true);   // عميل جديد
-        } else {
-          const totalOrders = Number(customerSnap.data()['Total Orders'] || 0);
-          setIsFirstOrder(totalOrders === 0);
-        }
+        // نتحقق من الإيميل والتليفون معاً — لو أي منهم موجود بطلبات سابقة مش عميل جديد
+        const [emailSnap, phoneSnap] = await Promise.all([
+          getDoc(doc(getDb(), "Customers", emailId)),
+          getDoc(doc(getDb(), "Customers", phoneId)),
+        ]);
+        const emailOrders = emailSnap.exists() ? Number(emailSnap.data()['Total Orders'] || 0) : 0;
+        const phoneOrders = phoneSnap.exists() ? Number(phoneSnap.data()['Total Orders'] || 0) : 0;
+        // عميل جديد فقط لو الإيميل والتليفون كلاهم بدون طلبات سابقة
+        setIsFirstOrder(emailOrders === 0 && phoneOrders === 0);
       } catch { setIsFirstOrder(false); }
     };
 
@@ -792,9 +795,7 @@ router.push(`/thank-you?orderId=${orderId}`);
               </div>
               {discountError && <p className="text-red-500 text-[10px] mt-1.5 pr-1">{discountError}</p>}
               {appliedPromo && <p className="promo-success pr-1">✓ {appliedPromo.message || ("تم تطبيق كود: " + appliedPromo.code)} <button onClick={removePromoCode} className="mr-2 text-red-400 hover:text-red-600 font-bold">✕</button></p>}
-              {!appliedPromo && discount > 0 && shippingSettings?.firstOrderEnabled && (
-                <p className="promo-success pr-1">🎉 تم تطبيق خصم الطلب الأول {shippingSettings.firstOrderDiscount}% تلقائياً</p>
-              )}
+
             </div>
 
             <div className="border-t border-gray-100 pt-3 space-y-1.5 text-base">
@@ -955,6 +956,17 @@ router.push(`/thank-you?orderId=${orderId}`);
                   />
                   <Info size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
                 </div>
+
+                {/* بادج خصم الطلب الأول — يظهر بمجرد التحقق */}
+                {isFirstOrder && shippingSettings?.firstOrderEnabled && !appliedPromo && (
+                  <div className="mt-2 flex items-center gap-2.5 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 animate-in fade-in slide-in-from-top-1 duration-300">
+                    <span className="text-lg">🎉</span>
+                    <div>
+                      <p className="text-xs font-black text-emerald-800">مبروك! خصم {shippingSettings.firstOrderDiscount}% على طلبك الأول</p>
+                      <p className="text-[10px] text-emerald-600 mt-0.5">تم التطبيق تلقائياً — سيظهر في ملخص طلبك</p>
+                    </div>
+                  </div>
+                )}
 
                 <div className="interactive-box bg-white border border-gray-200 rounded-xl px-4 py-1">
                   <input
