@@ -5,6 +5,7 @@ import { doc, getDoc } from "firebase/firestore/lite";
 import { products as staticProducts } from "@/lib/products";
 import ProductView from "./ProductView"; 
 import { cache } from 'react';
+import { redirect } from 'next/navigation';
 import { kvGet, kvSet } from "@/lib/kv-cache"; // 🔥 KV Cache
 
 // Use edge-compatible Firebase when running on edge runtime
@@ -12,9 +13,11 @@ const isEdgeRuntime = typeof window === 'undefined' && process.env.NEXT_RUNTIME 
 const firestoreDb = isEdgeRuntime ? getEdgeDb() : getDb(); 
 
 // تم تغليف الدالة بـ cache لضمان جلب المنتج مرة واحدة فقط لكل طلب سيرفر (توفير كوتا)
+// 🔥 الآن ترجع أيضاً علامة "ترحيل" (redirectTo) لو المستند تم نقله لرابط جديد،
+// بدل بيانات المنتج العادية — يستخدمها كل من generateMetadata و Page لعمل تحويل 301 فوري.
 const getProductData = cache(async (id) => {
   if (!id) return null;
-  
+
   // 1. ابحث في Static Products أولاً
   const staticProduct = staticProducts.find((p) => p.id.toString() === id.toString());
   if (staticProduct) return staticProduct;
@@ -22,7 +25,13 @@ const getProductData = cache(async (id) => {
   // 2. حاول تجيب من KV Cache
   const cacheKey = `product_${id}`;
   const cached = await kvGet(cacheKey);
-  if (cached) return cached;
+  if (cached) {
+    // 🔥 لو النسخة المخزّنة في الكاش (من قبل الترحيل) تحمل علامة ترحيل قديمة، نحترمها فوراً
+    if (cached.status === "Redirected" && cached.redirectedTo) {
+      return { __redirectTo: cached.redirectedTo };
+    }
+    return cached;
+  }
 
   // 3. اجيب من Firebase (مرة واحدة بس لحد ما يحصل تحديث)
   try {
@@ -30,14 +39,20 @@ const getProductData = cache(async (id) => {
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
       const data = docSnap.data();
-      
+
+      // 🔥 المستند تم ترحيله لرابط جديد — لا نخزّنه في KV كمنتج عادي،
+      // بل نرجع فقط الرابط الجديد للتحويل الفوري (هذا حالة نادرة ومؤقتة، فلا داعي لتخزينها بنفس آلية المنتجات)
+      if (data.status === "Redirected" && data.redirectedTo) {
+        return { __redirectTo: data.redirectedTo };
+      }
+
       if (data.createdAt && typeof data.createdAt.toDate === 'function') {
         data.createdAt = data.createdAt.toDate().toISOString();
       }
       if (data.updatedAt && typeof data.updatedAt.toDate === 'function') {
         data.updatedAt = data.updatedAt.toDate().toISOString();
       }
-      
+
       const product = { id: docSnap.id, ...data };
 
       // 4. خزّن في KV للأبد
@@ -55,6 +70,14 @@ const getProductData = cache(async (id) => {
 export async function generateMetadata({ params }) {
   const { id } = await params; // 🔥 Next.js 15 Fix
   const product = await getProductData(id);
+
+  // 🔥 المنتج تم نقله لرابط جديد — نوجّه محركات البحث/فيسبوك للرابط الصحيح فوراً
+  if (product?.__redirectTo) {
+    return {
+      title: "إعادة توجيه... | WIND",
+      alternates: { canonical: `https://windeg.com/products/${product.__redirectTo}` },
+    };
+  }
 
   if (!product) return { title: "المنتج غير موجود | WIND" };
 
@@ -89,6 +112,12 @@ export default async function Page({ params, searchParams }) {
   const sParams = await searchParams; // 🔥 Next.js 15 Fix
   const sourceCat = sParams?.cat;
   const product = await getProductData(id);
+
+  // 🔥 المنتج تم نقله لرابط جديد (handle تغيّر من الإدارة) — تحويل 301 فوري
+  // يحافظ على فهرسة محركات البحث وفعالية الإعلانات القديمة بدل عرض صفحة فاضية
+  if (product?.__redirectTo) {
+    redirect(`/products/${product.__redirectTo}`);
+  }
 
   if (!product) return null; // Silent fallback
 
