@@ -365,7 +365,31 @@ function CreateProductForm() {
     setIsSaving(true);
     try {
       const handleToUse = urlHandle || productData.title.toLowerCase().trim().replace(/\s+/g, '-');
-      const documentId = isEditing ? productId : handleToUse;
+
+      // 🔥 ترحيل آمن للرابط: لو كنا بنعدّل منتج موجود، وغيّر المستخدم الرابط (handle)،
+      // فلازم نستخدم الرابط الجديد كـ Document ID الفعلي (مش نفضل عالقين في الـ ID القديم للأبد).
+      // الـ Document ID في Firestore غير قابل للتعديل المباشر، فالطريقة الآمنة الوحيدة هي:
+      // 1) نتأكد إن الرابط الجديد متاح (لا يخص منتج آخر).
+      // 2) نحفظ المنتج بكل بياناته على الـ ID الجديد.
+      // 3) نحوّل المستند القديم (بدون حذفه نهائياً) إلى مستند Redirect بسيط،
+      //    يحمل status مختلف عن "Active" (فيُستثنى تلقائياً من الكتالوج وصفحات العرض)
+      //    وحقل redirectedTo يشير للرابط الجديد، لتستطيع صفحة المنتج (page.js)
+      //    عمل تحويل 301 تلقائي من الرابط القديم بدل عرض صفحة فاضية أو 404.
+      const isHandleChanged = isEditing && handleToUse !== productId;
+      let documentId = isEditing ? productId : handleToUse;
+
+      if (isHandleChanged) {
+        const db = getDb();
+        // تأكيد أمان: الرابط الجديد غير مستخدم فعلاً من منتج آخر (غير هذا المنتج نفسه)
+        const newDocSnap = await getDoc(doc(db, "products", handleToUse));
+        if (newDocSnap.exists()) {
+          setIsSaving(false);
+          return alert(
+            `لا يمكن استخدام هذا الرابط "${handleToUse}" — يوجد منتج آخر بنفس الرابط بالفعل. اختر رابطاً مختلفاً.`
+          );
+        }
+        documentId = handleToUse;
+      }
 
       // 🔥 تنظيف WIND: نعتمد على collections فقط ونحذف categories المكررة لتوفير الكوتا
         // ✅ استخدام Set هنا يمنع أي تكرار (مثل وجود "shop-all" و "/shop-all" معاً) عند الحفظ
@@ -417,9 +441,36 @@ function CreateProductForm() {
       if (!isEditing) {
         finalProduct.createdAt = serverTimestamp();
       }
+      if (isHandleChanged) {
+        // نحافظ على تاريخ الإنشاء الأصلي عند الترحيل (لا نعتبره منتجاً جديداً)
+        finalProduct.createdAt = productData.createdAt || serverTimestamp();
+      }
 
       const db = getDb();
      await setDoc(doc(db, "products", documentId), finalProduct, { merge: true });
+
+      // 🔥 الخطوة الأخيرة من الترحيل الآمن: تحويل المستند القديم لمستند Redirect
+      // (بدون حذفه نهائياً — يحافظ على أي بيانات/مراجع قديمة، فقط يصبح غير نشط ويوجّه الزوار)
+      if (isHandleChanged) {
+        try {
+          await setDoc(doc(db, "products", productId), {
+            status: "Redirected", // 🔥 مختلف عن "Active" فيُستثنى تلقائياً من الكتالوج
+            redirectedTo: documentId, // الرابط الجديد، تستخدمه صفحة المنتج لعمل تحويل 301
+            categories: [], // إخراجه من كل صفحات الكولكشن فوراً
+            collections: [],
+            updatedAt: serverTimestamp(),
+          }, { merge: true });
+
+          // مسح كاش الرابط القديم فوراً، عشان الزوار يبدأوا ياخدوا التحويل الجديد على طول
+          await fetch("/api/revalidate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ type: 'product', id: productId })
+          });
+        } catch (e) {
+          console.error("WIND Error: Old product redirect setup failed", e);
+        }
+      }
 
       // 🔥 مسح KV Cache للمنتج والصفحة الرئيسية عند الحفظ
       try {
