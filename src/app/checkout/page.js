@@ -15,6 +15,7 @@ import { ChevronDown, Info, CheckCircle2, Phone, ShoppingBag, Shield, Tag, Chevr
 import { SHIPPING_COST } from '@/lib/constants';
 import { fbTrack } from "@/lib/fbTrack";
 import { gaBeginCheckout, gaPurchase } from "@/lib/gaTrack";
+import { buildCheckoutMetaUserData } from "@/lib/metaEventData";
 
 // Helper function to get Cairo-local ISO timestamp for Firestore queries
 // Format: "YYYY-MM-DD HH:MM:SS" — matches dashboard query format
@@ -641,11 +642,7 @@ export default function CheckoutPage() {
           content_ids: purchaseContentIds,
           num_items: purchaseNumItems,
           order_id: orderId,
-          email: formData.email,
-          phone: formData.phone,
-          first_name: formData.firstName,
-          last_name: formData.lastName,
-          city: formData.city,
+          ...buildCheckoutMetaUserData(formData),
         });
         gaPurchase(orderId, purchaseCartSnapshot, finalTotal);
 router.push(`/thank-you?orderId=${orderId}`);

@@ -8,6 +8,8 @@
 // الكود في الصفحات يستدعي هذا الـ route بدل zaraz.track() لهذه الأحداث.
 // PageView يبقى يعمل عبر Zaraz كما هو (لا مشكلة فيه أصلاً).
 
+import { normalizePhoneForMetaHash } from "@/lib/metaEventData";
+
 const PIXEL_ID = "880930164288645";
 
 async function sha256(text) {
@@ -51,6 +53,9 @@ export async function POST(request) {
       first_name,
       last_name,
       city,
+      state,
+      country,
+      zip,
     } = body;
 
     if (!event_name) {
@@ -69,13 +74,26 @@ export async function POST(request) {
       undefined;
     const userAgent = request.headers.get("user-agent") || undefined;
 
-    const [hashedEmail, hashedPhone, hashedFirstName, hashedLastName, hashedCity, hashedExternalId] =
+    const [
+      hashedEmail,
+      hashedPhone,
+      hashedFirstName,
+      hashedLastName,
+      hashedCity,
+      hashedState,
+      hashedCountry,
+      hashedZip,
+      hashedExternalId,
+    ] =
       await Promise.all([
         sha256(email),
-        sha256(phone ? String(phone).replace(/[^0-9]/g, "") : undefined),
+        sha256(normalizePhoneForMetaHash(phone)),
         sha256(first_name),
         sha256(last_name),
         sha256(city),
+        sha256(state),
+        sha256(country),
+        sha256(zip),
         sha256(external_id),
       ]);
 
@@ -89,6 +107,9 @@ export async function POST(request) {
     if (hashedFirstName) userData.fn = hashedFirstName;
     if (hashedLastName) userData.ln = hashedLastName;
     if (hashedCity) userData.ct = hashedCity;
+    if (hashedState) userData.st = hashedState;
+    if (hashedCountry) userData.country = hashedCountry;
+    if (hashedZip) userData.zp = hashedZip;
     if (hashedExternalId) userData.external_id = hashedExternalId;
 
     // 🔥 content_ids كـ array حقيقي 100% — هذا هو كل الهدف من هذا الـ route

@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { CheckCircle2, ShoppingBag, Phone, Truck, Shield, Package, CreditCard, Banknote, Smartphone } from '@/components/icons-extra';
 import { fbTrack } from "@/lib/fbTrack";
 import { gaPurchase } from "@/lib/gaTrack";
+import { buildCheckoutMetaUserData } from "@/lib/metaEventData";
 
 const PAYMENT_LABELS = {
   card:         { label: 'كارت / محفظة إلكترونية', icon: <CreditCard size={14} className="text-[#F5C518]" /> },
@@ -45,11 +46,10 @@ function SuccessContent() {
           content_ids: (parsed.cartItems || []).map(it => String(it.handle || it.id || it.title)),
           num_items: (parsed.cartItems || []).reduce((s, it) => s + it.qty, 0),
           order_id: parsed.orderId || "",
-          email: parsed.customerEmail,
-          phone: parsed.phone,
-          first_name: parsed.formData?.firstName,
-          last_name: parsed.formData?.lastName,
-          city: parsed.formData?.city,
+          ...buildCheckoutMetaUserData(parsed.formData, {
+            email: parsed.customerEmail,
+            phone: parsed.phone,
+          }),
         });
         gaPurchase(
           parsed.orderId || "",
