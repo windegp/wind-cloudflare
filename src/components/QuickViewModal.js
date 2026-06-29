@@ -6,6 +6,8 @@ import { ZoomIn, Minus, Info } from '@/components/icons-extra';
 import { useCart } from "@/context/CartContext"; 
 import SizeChartModal from "@/components/SizeChartModal"; 
 import ProductReviews from "@/components/products/ProductReviews";
+import { fbTrack } from "@/lib/fbTrack";
+import { gaAddToCart } from "@/lib/gaTrack";
 
 export default function QuickViewModal({ product, isOpen, onClose }) {
   const { addToCart } = useCart();
@@ -129,6 +131,26 @@ export default function QuickViewModal({ product, isOpen, onClose }) {
       image: getImageUrl(product, qvActiveImage),
       qty: qvQuantity
     });
+
+    // ── Pixel + GA tracking (مطابق لنفس المعاملات في ProductView) ──
+    const handle = String(product.handle || product.id || product.title || "");
+    const price  = parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0;
+
+    fbTrack("AddToCart", {
+      value:        price * qvQuantity,
+      currency:     "EGP",
+      content_ids:  [handle],
+      content_name: product.title || "",
+      content_type: "product",
+      num_items:    qvQuantity,
+    });
+
+    gaAddToCart({
+      id:    handle,
+      title: product.title || "",
+      price,
+    }, qvQuantity);
+
     setTimeout(() => {
       setIsAdding(false);
       onClose();

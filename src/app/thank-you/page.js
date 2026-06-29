@@ -29,41 +29,59 @@ function SuccessContent() {
 
  useEffect(() => {
     const pendingOrder = localStorage.getItem('pendingOrder');
-    if (pendingOrder) {
-      const parsed = JSON.parse(pendingOrder);
+    if (!pendingOrder) return;
+
+    const parsed = JSON.parse(pendingOrder);
+
+    // ── حماية مزدوجة من تكرار Purchase ──────────────────────────────
+    // الطبقة ١: sessionStorage — تمنع إعادة الإرسال طوال جلسة التاب الحالية
+    //           (يبقى عند Refresh، يُمسح عند إغلاق التاب)
+    // الطبقة ٢: orderId كـ event_id — Meta تُلغي التكرار تلقائياً
+    //           إذا وصل نفس pixel_id + event_name + event_id في أقل من 48 ساعة
+    const purchaseGuardKey = `purchase_sent_${parsed.orderId}`;
+    if (sessionStorage.getItem(purchaseGuardKey)) {
+      // تم الإرسال من قبل في هذه الجلسة → أظهر البيانات فقط
       setOrderData(parsed);
-      fetch('/api/create-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...parsed, paymentMethod: 'card_success' }),
-      })
-      .then(() => {
-        clearCart();
-        localStorage.removeItem('pendingOrder');
-        fbTrack("Purchase", {
-          value: parsed.total || 0,
-          currency: "EGP",
-          content_ids: (parsed.cartItems || []).map(it => String(it.handle || it.id || it.title)),
-          num_items: (parsed.cartItems || []).reduce((s, it) => s + it.qty, 0),
-          order_id: parsed.orderId || "",
-          ...buildCheckoutMetaUserData(parsed.formData, {
-            email: parsed.customerEmail,
-            phone: parsed.phone,
-          }),
-        });
-        gaPurchase(
-          parsed.orderId || "",
-          (parsed.cartItems || []).map(it => ({
-            id: it.handle || it.id || it.title,
-            title: it.title,
-            price: it.price,
-            qty: it.qty,
-          })),
-          parsed.total || 0
-        );
-      })
-      .catch(err => console.error("Error:", err));
+      return;
     }
+
+    setOrderData(parsed);
+    fetch('/api/create-order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...parsed, paymentMethod: 'card_success' }),
+    })
+    .then(() => {
+      clearCart();
+      localStorage.removeItem('pendingOrder');
+
+      // ضع العلامة قبل fbTrack — حتى لو fbTrack فشل لا نُعيد الإرسال
+      sessionStorage.setItem(purchaseGuardKey, '1');
+
+      fbTrack("Purchase", {
+        event_id: `Purchase-${parsed.orderId}`,   // ثابت → Meta تُلغي التكرار
+        value: parsed.total || 0,
+        currency: "EGP",
+        content_ids: (parsed.cartItems || []).map(it => String(it.handle || it.id || it.title)),
+        num_items: (parsed.cartItems || []).reduce((s, it) => s + it.qty, 0),
+        order_id: parsed.orderId || "",
+        ...buildCheckoutMetaUserData(parsed.formData, {
+          email: parsed.customerEmail,
+          phone: parsed.phone,
+        }),
+      });
+      gaPurchase(
+        parsed.orderId || "",
+        (parsed.cartItems || []).map(it => ({
+          id: it.handle || it.id || it.title,
+          title: it.title,
+          price: it.price,
+          qty: it.qty,
+        })),
+        parsed.total || 0
+      );
+    })
+    .catch(err => console.error("Error:", err));
   }, []);
 
   // Signal readiness for GlobalLoader (thank you page is ready immediately)
