@@ -276,7 +276,12 @@ export async function GET() {
     const xml = buildXml(items);
 
     if (kv) {
-      await kv.put(KV_KEY, xml); 
+      // TTL 86400 (24h) كشبكة أمان — لا يوجد Cron Job أو Scheduled Worker
+      // لتحديث الكتالوج. في الظروف الطبيعية، يتم مسح الكاش عبر
+      // /api/revalidate عند تعديل/إضافة/حذف أي منتج.
+      // الـ TTL هنا يضمن عدم بقاء الكاش عالقاً لأكثر من 24 ساعة
+      // في حال فشلت آلية الـ invalidation لأي سبب.
+      await kv.put(KV_KEY, xml, { expirationTtl: 86400 });
     }
 
     return new NextResponse(xml, {

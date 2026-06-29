@@ -510,6 +510,17 @@ function CreateProductForm() {
         console.error("WIND Error: Product revalidate failed", e); 
       }
       
+      // 🔥 مسح كاش الكتالوج (Facebook Catalog) عند الحفظ — يضمن تحديث الكاش فوراً
+      try {
+        await fetch("/api/revalidate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: 'fb_catalog' })
+        });
+      } catch (e) {
+        console.error("WIND Error: FB Catalog revalidate failed", e);
+      }
+      
       // 🔥 مسح كاش الأقسام المرتبطة بالمنتج لضمان ظهوره فوراً
       if (finalProduct.collections && finalProduct.collections.length > 0) {
         try {

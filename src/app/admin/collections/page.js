@@ -176,6 +176,17 @@ try {
   console.error("WIND Error: Collection and Homepage revalidate failed", error);
 }
 
+// 🔥 مسح كاش الكتالوج لأن تغيير الأقسام يؤثر على product_type/custom_labels في Facebook Catalog
+try {
+  await fetch("/api/revalidate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type: 'fb_catalog' })
+  });
+} catch (error) {
+  console.error("WIND Error: FB Catalog revalidate failed after collection update", error);
+}
+
             setView('list');
             alert("تم التحديث بنجاح!");
         } catch (error) { alert("حدث خطأ أثناء الحفظ"); } 
@@ -197,6 +208,17 @@ try {
                 
                 // 🔥 5. تحديث الكاش بعد الحذف
                 mutate('collections-data');
+
+                // 🔥 مسح كاش الكتالوج لأن حذف القسم يزيل ارتباطه من المنتجات
+                try {
+                  await fetch("/api/revalidate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ type: 'fb_catalog' })
+                  });
+                } catch (error) {
+                  console.error("WIND Error: FB Catalog revalidate failed after collection delete", error);
+                }
 
             } catch (err) { alert("خطأ في الحذف"); }
         }

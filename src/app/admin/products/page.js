@@ -123,11 +123,22 @@ export default function ProductsList() {
       // 🔥 مسح KV Cache للمنتج المحذوف
       try {
         await fetch('/api/revalidate', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ type: 'product', id: id }) // استخدم المتغير id الصح
-});
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'product', id: id })
+        });
       } catch {}
+      
+      // 🔥 مسح كاش الكتالوج أيضاً عند حذف منتج
+      try {
+        await fetch('/api/revalidate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'fb_catalog' })
+        });
+      } catch (e) {
+        console.error("[fb-catalog] Invalidation failed on product delete:", e.message);
+      }
 
       const updatedProducts = products.filter(p => p.id !== id);
       setProducts(updatedProducts);

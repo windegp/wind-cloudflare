@@ -40,6 +40,8 @@ export async function POST(request) {
   } else if (type === 'site_settings') {
     keysToDelete = ['site_settings_v1'];
     revalidatePath('/');
+  } else if (type === 'fb_catalog') {
+    keysToDelete = ['fb_catalog_xml_v8'];
   } else if (type === 'all') {
     try {
       const kv = await getKV();
