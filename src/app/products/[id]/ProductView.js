@@ -26,6 +26,14 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   
   const [product, setProduct]               = useState(initialProduct || null);
   const [loading, setLoading]               = useState(!initialProduct);
+  // 🔥 المرحلة الرابعة — إصلاح ViewContent Double-Fire
+  // مُثبَت من الكود مباشرة: useState(initialProduct) يجعل product متاحاً
+  // فوراً من SSR، فيُطلَق ViewContent مرة أولى. بعدها SWR (useProduct)
+  // يُرجع كائناً جديداً (مرجع مختلف حتى لو نفس المحتوى)، فيُعاد تشغيل
+  // الـ useEffect ويُطلَق ViewContent مرة ثانية لنفس المنتج بالضبط.
+  // الحل: تتبّع "هوية" المنتج (handle/id) لا مرجع الكائن — يمنع التكرار
+  // لنفس المنتج، ويسمح بالإرسال الصحيح عند تغيّر المنتج فعلياً (SPA nav).
+  const lastViewContentHandleRef = useRef(null);
   const { addToCart }                       = useCart();
   const [activeImage, setActiveImage]       = useState(initialProduct?.images?.[0] || initialProduct?.mainImage || "");
   const [activeIdx, setActiveIdx]           = useState(0);
@@ -163,18 +171,27 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   useEffect(() => {
   if (!loading && product) {
     signalPageReady();
-    fbTrack("ViewContent", {
-      value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
-      currency: "EGP",
-      content_ids: [String(product.handle || id || product.id)],
-      content_name: product.title || "",
-      content_type: "product",
-    });
-    gaViewItem({
-      id: product.handle || id || product.id,
-      title: product.title || "",
-      price: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
-    });
+    const productHandle = String(product.handle || id || product.id || "");
+    // 🔥 لا نرسل ViewContent إلا لو تغيّرت هوية المنتج فعلياً، لا مجرد
+    // مرجع الكائن (يمنع التكرار من SWR refetch، يسمح بالإرسال الصحيح
+    // عند فتح منتج جديد فعلاً — حتى لو نفس handle نظرياً بعد رجوع/تنقل،
+    // لأن الـ ref يُصفَّر تلقائياً عند unmount الكومبوننت "العادي" في
+    // Next.js App Router عند تغيّر [id] في الرابط).
+    if (lastViewContentHandleRef.current !== productHandle) {
+      lastViewContentHandleRef.current = productHandle;
+      fbTrack("ViewContent", {
+        value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
+        currency: "EGP",
+        content_ids: [productHandle],
+        content_name: product.title || "",
+        content_type: "product",
+      });
+      gaViewItem({
+        id: productHandle,
+        title: product.title || "",
+        price: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
+      });
+    }
   }
 }, [loading, product, pathname, signalPageReady]);
   useEffect(() => { setQuantity(1); }, [id, selectedSize, selectedColor]);
