@@ -133,7 +133,13 @@ export default function QuickViewModal({ product, isOpen, onClose }) {
     });
 
     // ── Pixel + GA tracking (مطابق لنفس المعاملات في ProductView) ──
-    const handle = String(product.handle || product.id || product.title || "");
+    // productId = Firestore doc ID = handle (نفس القيمة)
+    // مصادر مختلفة حسب نوع الـ section:
+    //   ProductView / TopRatedWeekly: product.handle و product.id
+    //   HomePage CMS sections:        product.productId (بدون handle أو id)
+    const handle = String(
+      product.handle || product.id || product.productId || product.title || ""
+    );
     const price  = parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0;
 
     fbTrack("AddToCart", {
