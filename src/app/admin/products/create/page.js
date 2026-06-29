@@ -4,7 +4,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { getDb } from "@/lib/firebase";
-import { doc, getDoc, setDoc, serverTimestamp, collection, getDocs, updateDoc, increment, query, limit } from "firebase/firestore/lite";
+import { doc, getDoc, setDoc, serverTimestamp, collection, getDocs, updateDoc, increment, query, where, limit } from "firebase/firestore/lite";
 import ImageUploader from "@/components/ImageUploader";
 import { Loader2, Save, Plus, Minus, Star, Info, Share2, Heart, ImageIcon, X, Truck, Eye, ShieldCheck, ChevronLeft, Search, ChevronRight, ShoppingBag, CreditCard, Banknote, Smartphone, Lock, Edit2, ExternalLink, CheckSquare, Square, FolderTree, CheckCircle2, Globe, Box, Settings, Tag, AlertCircle, Database, Layout, Trash2, Monitor, Archive, Layers, ChevronDown, ChevronUp, Menu, Target, Mail, Crown, UserMinus, MonitorSmartphone, LinkIcon, Paintbrush, ListFilter, PackageSearch, ArrowRight } from '@/components/icons-extra';
 
@@ -380,13 +380,35 @@ function CreateProductForm() {
 
       if (isHandleChanged) {
         const db = getDb();
-        // تأكيد أمان: الرابط الجديد غير مستخدم فعلاً من منتج آخر (غير هذا المنتج نفسه)
+        // تأكيد أمان: الرابط الجديد غير مستخدم فعلاً من منتج نشط آخر (غير هذا المنتج نفسه)
         const newDocSnap = await getDoc(doc(db, "products", handleToUse));
         if (newDocSnap.exists()) {
-          setIsSaving(false);
-          return alert(
-            `لا يمكن استخدام هذا الرابط "${handleToUse}" — يوجد منتج آخر بنفس الرابط بالفعل. اختر رابطاً مختلفاً.`
-          );
+          const existingData = newDocSnap.data();
+          // 🔥 لو المستند الموجود هو فقط علامة Redirect خفيفة (لا منتج نشط فعلياً)،
+          // يُسمح بالكتابة فوقه — هذا يحدث مثلاً لو رجع المستخدم رابطاً قديماً
+          // كان قد حوّله بنفسه من قبل لمنتج آخر، ثم تراجع عن ذلك.
+          if (existingData.status === "Redirected") {
+            // تأكيد أمان إضافي: نتحقق ألا يكون منتج آخر (غير هذا) يعتمد على هذا
+            // الرابط القديم كـ "وجهة تحويل" نشطة حالياً، فهذا سيكسر سلسلة الترحيل له
+            const dependentQuery = query(
+              collection(db, "products"),
+              where("redirectedTo", "==", handleToUse)
+            );
+            const dependentSnap = await getDocs(dependentQuery);
+            const hasOtherDependents = dependentSnap.docs.some((d) => d.id !== productId);
+            if (hasOtherDependents) {
+              setIsSaving(false);
+              return alert(
+                `لا يمكن استخدام هذا الرابط "${handleToUse}" — هناك منتج آخر يعتمد عليه حالياً كرابط قديم محوَّل. اختر رابطاً مختلفاً.`
+              );
+            }
+            // آمن للاستخدام — سيُكتب فوقه بالكامل لاحقاً (بدون merge)
+          } else {
+            setIsSaving(false);
+            return alert(
+              `لا يمكن استخدام هذا الرابط "${handleToUse}" — يوجد منتج آخر بنفس الرابط بالفعل. اختر رابطاً مختلفاً.`
+            );
+          }
         }
         documentId = handleToUse;
       }
