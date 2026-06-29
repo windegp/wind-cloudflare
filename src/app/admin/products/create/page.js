@@ -453,13 +453,18 @@ function CreateProductForm() {
       // (بدون حذفه نهائياً — يحافظ على أي بيانات/مراجع قديمة، فقط يصبح غير نشط ويوجّه الزوار)
       if (isHandleChanged) {
         try {
+          // ⚠️ بدون merge: true عمداً — الهدف استبدال المستند القديم بالكامل
+          // بمستند Redirect خفيف، لا دمج الحقول الجديدة فوق بيانات المنتج
+          // الكاملة القديمة (التي كانت تبقى محتفظة بها بالكامل مع merge: true،
+          // فيظهر "منتج مكرر" بنفس كل البيانات في قائمة الإدارة).
           await setDoc(doc(db, "products", productId), {
             status: "Redirected", // 🔥 مختلف عن "Active" فيُستثنى تلقائياً من الكتالوج
             redirectedTo: documentId, // الرابط الجديد، تستخدمه صفحة المنتج لعمل تحويل 301
+            title: productData.title, // نحتفظ بالعنوان فقط للعرض التوضيحي في قائمة الإدارة
             categories: [], // إخراجه من كل صفحات الكولكشن فوراً
             collections: [],
             updatedAt: serverTimestamp(),
-          }, { merge: true });
+          });
 
           // مسح كاش الرابط القديم فوراً، عشان الزوار يبدأوا ياخدوا التحويل الجديد على طول
           await fetch("/api/revalidate", {
