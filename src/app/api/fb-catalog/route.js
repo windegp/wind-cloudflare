@@ -281,8 +281,22 @@ export async function GET() {
 
         // ── السيناريو: variants موجودة لكن لا لون ولا مقاس مُعرَّف ─────────
         // Data Issue: بيانات غير مكتملة في Firestore (options مفقودة أو بدون أسماء معروفة)
-        // → نتعامل مع المنتج كمنتج بدون variants (item واحد، نذكر الأمر في الـ comment)
+        // → نتعامل مع المنتج كمنتج بدون variants (item واحد)
         if (!productHasColors && !productHasSizes) {
+          // تحذير خفيف فقط (مرة واحدة لكل منتج، بدون أي تأثير على الأداء أو الـ XML):
+          // يساعد على اكتشاف منتجات بأسماء options غير معروفة (مثل "نوع القماش")
+          // بدل اكتشاف المشكلة لاحقاً من خلال انخفاض جودة الكتالوج في Meta
+          const unrecognizedOptionNames = productOptions
+            .map(o => o["name"]?.stringValue)
+            .filter(Boolean);
+          console.warn(
+            `[fb-catalog] DATA ISSUE — منتج "${handle}" عنده ${variants.length} variant(s) ` +
+            `لكن لا يوجد خيار لون أو مقاس معروف. ` +
+            `أسماء الـ options الموجودة: ${unrecognizedOptionNames.length > 0 ? unrecognizedOptionNames.join(", ") : "(غير محددة)"}. ` +
+            `تم التعامل معه كمنتج بدون variants (item واحد). ` +
+            `الحل: أضف اسم واضح للـ option في صفحة تعديل المنتج (مثل "لون" أو "مقاس").`
+          );
+
           const mainImage = images[0] ?? "";
           if (!mainImage) continue;
           const qty = Number(p.quantity ?? 0);
