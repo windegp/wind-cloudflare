@@ -188,6 +188,66 @@ export async function GET() {
         
         const variants = Array.isArray(p.variants) ? p.variants : [];
 
+        // ── قراءة أسماء الخيارات على مستوى المنتج (للـ fallback) ──────────
+        // الأولوية: option1Name/option2Name داخل كل variant
+        // الـ Fallback: options[] على مستوى المنتج
+        const productOptions = fArrMaps("options");
+        // productOptions = [{name:{stringValue:"لون"}, values:{stringValue:"red,blue"}}, ...]
+
+        // ── دوال الكشف (متطابقة مع admin/products/create) ──────────────
+        const isColorOptName = (name = "") => {
+          const n = name.toLowerCase().trim();
+          return n.includes("color") || n.includes("colour") ||
+                 n.includes("لون")   || n.includes("الوان");
+        };
+        const isSizeOptName  = (name = "") => {
+          const n = name.toLowerCase().trim();
+          return n.includes("size") || n.includes("مقاس") || n.includes("حجم");
+        };
+
+        // ── تحديد طبيعة الـ options من مستوى المنتج ──────────────────────
+        // نستخدم هذا للـ fallback عندما لا يحمل الـ variant اسم الخيار
+        let productColorOptIndex = -1; // 1 أو 2
+        let productSizeOptIndex  = -1;
+        for (const opt of productOptions) {
+          const optName = opt["name"]?.stringValue ?? "";
+          if (isColorOptName(optName)) {
+            // نحدد هل هو في option1 أم option2 بناءً على ترتيبه في المصفوفة
+            productColorOptIndex = productOptions.indexOf(opt) === 0 ? 1 : 2;
+          } else if (isSizeOptName(optName)) {
+            productSizeOptIndex  = productOptions.indexOf(opt) === 0 ? 1 : 2;
+          }
+        }
+
+        // ── دالة قراءة قيمة الخيار من variant باستخدام اسمه ──────────────
+        // تقرأ option1Name/option2Name من الـ variant ذاته أولاً،
+        // ثم تتراجع لـ productColorOptIndex / productSizeOptIndex
+        const getVariantColorValue = (v) => {
+          const n1 = v["option1Name"]?.stringValue ?? "";
+          const n2 = v["option2Name"]?.stringValue ?? "";
+          if (isColorOptName(n1)) return v["option1Value"]?.stringValue ?? "";
+          if (isColorOptName(n2)) return v["option2Value"]?.stringValue ?? "";
+          // fallback: استخدم الترتيب المحدد من options المنتج
+          if (productColorOptIndex === 1) return v["option1Value"]?.stringValue ?? "";
+          if (productColorOptIndex === 2) return v["option2Value"]?.stringValue ?? "";
+          return "";
+        };
+
+        const getVariantSizeValue  = (v) => {
+          const n1 = v["option1Name"]?.stringValue ?? "";
+          const n2 = v["option2Name"]?.stringValue ?? "";
+          if (isSizeOptName(n1)) return v["option1Value"]?.stringValue ?? "";
+          if (isSizeOptName(n2)) return v["option2Value"]?.stringValue ?? "";
+          // fallback
+          if (productSizeOptIndex === 1) return v["option1Value"]?.stringValue ?? "";
+          if (productSizeOptIndex === 2) return v["option2Value"]?.stringValue ?? "";
+          return "";
+        };
+
+        // ── هل المنتج عنده ألوان أو مقاسات فعلاً؟ ───────────────────────
+        const productHasColors = variants.some(v => getVariantColorValue(v) !== "");
+        const productHasSizes  = variants.some(v => getVariantSizeValue(v)  !== "");
+
         // ---- منتج بدون variants ----
         if (variants.length === 0) {
           const mainImage = images[0] ?? "";
@@ -219,36 +279,133 @@ export async function GET() {
           continue;
         }
 
-        // ---- منتج بـ variants (colors) ----
+        // ── السيناريو: variants موجودة لكن لا لون ولا مقاس مُعرَّف ─────────
+        // Data Issue: بيانات غير مكتملة في Firestore (options مفقودة أو بدون أسماء معروفة)
+        // → نتعامل مع المنتج كمنتج بدون variants (item واحد، نذكر الأمر في الـ comment)
+        if (!productHasColors && !productHasSizes) {
+          const mainImage = images[0] ?? "";
+          if (!mainImage) continue;
+          const qty = Number(p.quantity ?? 0);
+          const availability =
+            qty > 0 || p.sellOutOfStock === "Yes" ? "in stock" : "out of stock";
+          const hasSale = compareAtPrice && parseFloat(compareAtPrice) > parseFloat(basePrice);
+          items.push(`<item>
+        <g:id>${escapeXml(handle)}</g:id>
+        <g:title>${escapeXml(baseTitle)}</g:title>
+        <g:description>${cleanDescription}</g:description>
+        <g:link>${productUrl}</g:link>
+        <g:image_link>${escapeXml(mainImage)}</g:image_link>
+        ${images.slice(1, 10).map(img => `<g:additional_image_link>${escapeXml(img)}</g:additional_image_link>`).join("\n       ")}
+        <g:availability>${availability}</g:availability>
+        ${hasSale
+          ? `<g:price>${parseFloat(compareAtPrice).toFixed(2)} ${CURRENCY}</g:price>\n       <g:sale_price>${parseFloat(basePrice).toFixed(2)} ${CURRENCY}</g:sale_price>`
+          : `<g:price>${parseFloat(basePrice).toFixed(2)} ${CURRENCY}</g:price>`}
+        <g:brand>${BRAND}</g:brand>
+        <g:condition>new</g:condition>
+        <g:google_product_category>${escapeXml(googleCategory)}</g:google_product_category>
+        <g:product_type>${escapeXml(productType)}</g:product_type>
+        ${customLabelsXml}
+      </item>`);
+          continue;
+        }
+
+        // ── السيناريو B: مقاس فقط (بدون ألوان) ───────────────────────────
+        // item واحد للمنتج + g:size بالمقاسات المتاحة (in stock)
+        if (!productHasColors && productHasSizes) {
+          const mainImage = images[0] ?? "";
+          if (!mainImage) continue;
+
+          const availableSizes = [...new Set(
+            variants
+              .filter(v => {
+                const qty = Number(v["quantity"]?.integerValue ?? v["quantity"]?.stringValue ?? 0);
+                return qty > 0 || p.sellOutOfStock === "Yes";
+              })
+              .map(v => getVariantSizeValue(v))
+              .filter(Boolean)
+          )];
+
+          const anyInStock = variants.some(v => {
+            const qty = Number(v["quantity"]?.integerValue ?? v["quantity"]?.stringValue ?? 0);
+            return qty > 0 || p.sellOutOfStock === "Yes";
+          });
+          const availability = anyInStock ? "in stock" : "out of stock";
+
+          const firstV   = variants[0] ?? {};
+          const vPrice   = firstV["price"]?.stringValue ?? basePrice;
+          const vCompare = firstV["compareAtPrice"]?.stringValue ?? compareAtPrice;
+          const hasSale  = vCompare && parseFloat(vCompare) > parseFloat(vPrice);
+
+          items.push(`<item>
+        <g:id>${escapeXml(handle)}</g:id>
+        <g:title>${escapeXml(baseTitle)}</g:title>
+        <g:description>${cleanDescription}</g:description>
+        <g:link>${productUrl}</g:link>
+        <g:image_link>${escapeXml(mainImage)}</g:image_link>
+        ${images.slice(1, 10).map(img => `<g:additional_image_link>${escapeXml(img)}</g:additional_image_link>`).join("\n       ")}
+        <g:availability>${availability}</g:availability>
+        ${hasSale
+          ? `<g:price>${parseFloat(vCompare).toFixed(2)} ${CURRENCY}</g:price>\n       <g:sale_price>${parseFloat(vPrice).toFixed(2)} ${CURRENCY}</g:sale_price>`
+          : `<g:price>${parseFloat(vPrice).toFixed(2)} ${CURRENCY}</g:price>`}
+        <g:brand>${BRAND}</g:brand>
+        <g:condition>new</g:condition>
+        ${availableSizes.length > 0 ? `<g:size>${escapeXml(availableSizes.join(", "))}</g:size>` : ""}
+        <g:google_product_category>${escapeXml(googleCategory)}</g:google_product_category>
+        <g:product_type>${escapeXml(productType)}</g:product_type>
+        ${customLabelsXml}
+      </item>`);
+          continue;
+        }
+
+        // ── السيناريو A و C: لون (مع أو بدون مقاس) ─────────────────────
+        // item واحد لكل لون فريد
+        // + g:size يجمع المقاسات المتاحة لهذا اللون (فقط لو productHasSizes)
         const seenColors = new Set();
 
         for (const v of variants) {
           if (!v) continue;
 
-          const colorValue =
-            v["option1Value"]?.stringValue ||
-            v["option2Value"]?.stringValue || "";
-          const variantPrice = v["price"]?.stringValue ?? basePrice;
-          const variantCompare = v["compareAtPrice"]?.stringValue ?? compareAtPrice;
-          
-          const qty = Number(v["quantity"]?.integerValue ?? v["quantity"]?.stringValue ?? 0);
-          const colorKey = colorValue.toLowerCase().replace(/\s+/g, "-");
+          const colorValue = getVariantColorValue(v);
+          const colorKey   = colorValue.toLowerCase().replace(/\s+/g, "-");
 
           if (seenColors.has(colorKey)) continue;
           const isFirstColor = seenColors.size === 0;
           seenColors.add(colorKey);
 
-          const variantImage =
-            colorSwatches[colorKey] ?? colorSwatches[colorValue] ?? images[0] ?? "";
+          // اجمع المقاسات المتاحة لهذا اللون بالذبط
+          let sizesForThisColor = [];
+          if (productHasSizes) {
+            sizesForThisColor = [...new Set(
+              variants
+                .filter(sv => {
+                  const svColor = getVariantColorValue(sv).toLowerCase().replace(/\s+/g, "-");
+                  const svQty   = Number(sv["quantity"]?.integerValue ?? sv["quantity"]?.stringValue ?? 0);
+                  return svColor === colorKey && (svQty > 0 || p.sellOutOfStock === "Yes");
+                })
+                .map(sv => getVariantSizeValue(sv))
+                .filter(Boolean)
+            )];
+          }
+
+          const variantPrice   = v["price"]?.stringValue ?? basePrice;
+          const variantCompare = v["compareAtPrice"]?.stringValue ?? compareAtPrice;
+
+          // availability: in stock لو أي variant لهذا اللون متاح
+          const anyColorInStock = variants.some(sv => {
+            const svColor = getVariantColorValue(sv).toLowerCase().replace(/\s+/g, "-");
+            const svQty   = Number(sv["quantity"]?.integerValue ?? sv["quantity"]?.stringValue ?? 0);
+            return svColor === colorKey && (svQty > 0 || p.sellOutOfStock === "Yes");
+          });
+          const availability = anyColorInStock ? "in stock" : "out of stock";
+
+          const variantImage = colorSwatches[colorKey] ?? colorSwatches[colorValue] ?? images[0] ?? "";
           if (!variantImage) continue;
 
-          const availability =
-            qty > 0 || p.sellOutOfStock === "Yes" ? "in stock" : "out of stock";
-          const colorLabel = colorLabels[colorKey] ?? colorLabels[colorValue] ?? colorValue;
-          const itemId = isFirstColor ? handle : `${handle}-${colorKey}`;
-          const itemTitle = colorValue ? `${baseTitle} - ${colorLabel}` : baseTitle;
-          const extraImages = images.filter((img) => img !== variantImage).slice(0, 9);
-          const hasSale = variantCompare && parseFloat(variantCompare) > parseFloat(variantPrice);
+          const colorLabel  = colorLabels[colorKey] ?? colorLabels[colorValue] ?? colorValue;
+          const itemId      = isFirstColor ? handle : `${handle}-${colorKey}`;
+          const itemTitle   = colorValue ? `${baseTitle} - ${colorLabel}` : baseTitle;
+          const extraImages = images.filter(img => img !== variantImage).slice(0, 9);
+          const hasSale     = variantCompare && parseFloat(variantCompare) > parseFloat(variantPrice);
 
           items.push(`<item>
         <g:id>${escapeXml(itemId)}</g:id>
@@ -257,7 +414,7 @@ export async function GET() {
         <g:description>${cleanDescription}</g:description>
         <g:link>${productUrl}?color=${encodeURIComponent(colorValue)}</g:link>
         <g:image_link>${escapeXml(variantImage)}</g:image_link>
-        ${extraImages.map((img) => `<g:additional_image_link>${escapeXml(img)}</g:additional_image_link>`).join("\n       ")}
+        ${extraImages.map(img => `<g:additional_image_link>${escapeXml(img)}</g:additional_image_link>`).join("\n       ")}
         <g:availability>${availability}</g:availability>
         ${hasSale
           ? `<g:price>${parseFloat(variantCompare).toFixed(2)} ${CURRENCY}</g:price>\n       <g:sale_price>${parseFloat(variantPrice).toFixed(2)} ${CURRENCY}</g:sale_price>`
@@ -265,6 +422,7 @@ export async function GET() {
         <g:brand>${BRAND}</g:brand>
         <g:condition>new</g:condition>
         <g:color>${escapeXml(colorLabel)}</g:color>
+        ${sizesForThisColor.length > 0 ? `<g:size>${escapeXml(sizesForThisColor.join(", "))}</g:size>` : ""}
         <g:google_product_category>${escapeXml(googleCategory)}</g:google_product_category>
         <g:product_type>${escapeXml(productType)}</g:product_type>
         ${customLabelsXml}
