@@ -12,12 +12,34 @@
  */
 
 // ─── Inventory Status Enum ────────────────────────────────────────────────────
+//
+// ┌─────────────────────────────────────────────────────────────────────────┐
+// │  MIGRATION MARKER — ليست جزءاً من الـ Final Business Enum              │
+// │  ─────────────────────────────────────────────────────────────────────  │
+// │  NEEDS_REVIEW                                                           │
+// │                                                                         │
+// │  • تُكتَب فقط بواسطة Migration Script (مرة واحدة)                     │
+// │  • لا تظهر في Admin Dropdown — الأدمن لا يستطيع اختيارها              │
+// │  • لا تُرسَل لـ Meta Catalog كـ available (تُعامَل كـ out of stock)    │
+// │  • لا تُعرَض للعميل بأي شكل                                           │
+// │  • بعد اكتمال المراجعة البشرية تختفي من البيانات نهائياً               │
+// │  • وجودها على variant = "هذا الـ variant لم يُراجَع بعد"               │
+// ├─────────────────────────────────────────────────────────────────────────┤
+// │  FINAL BUSINESS ENUM — الحالات التسع المعتمدة نهائياً                  │
+// │  ─────────────────────────────────────────────────────────────────────  │
+// │  IN_STOCK | LOW_STOCK | OUT_OF_STOCK | PRE_ORDER | BACKORDER           │
+// │  COMING_SOON | TEMP_DISABLED | DISCONTINUED | ARCHIVED                 │
+// │                                                                         │
+// │  • هذه فقط تظهر في Admin Dropdown                                      │
+// │  • هذه فقط تُخزَّن كقرار تجاري نهائي                                   │
+// │  • هذه فقط يُبنى عليها سلوك الموقع وMeta Catalog                      │
+// └─────────────────────────────────────────────────────────────────────────┘
 
 export const INVENTORY_STATUS = {
-  // حالة مؤقتة — Migration فقط، تُعامَل كـ OUT_OF_STOCK في كل الـ readers
+  // ── Migration Marker (مؤقت — ليس جزءاً من الـ Business Enum) ────────────
   NEEDS_REVIEW:  "NEEDS_REVIEW",
 
-  // حالات حقيقية
+  // ── Final Business Enum (9 حالات نهائية معتمدة) ─────────────────────────
   IN_STOCK:      "IN_STOCK",
   LOW_STOCK:     "LOW_STOCK",
   OUT_OF_STOCK:  "OUT_OF_STOCK",
@@ -250,6 +272,27 @@ export const ADMIN_SELECTABLE_STATUSES = [
   INVENTORY_STATUS.DISCONTINUED,
   INVENTORY_STATUS.ARCHIVED,
 ];
+
+/**
+ * الـ Final Business Enum الرسمي — الحالات التسع المعتمدة نهائياً.
+ *
+ * هذه هي المرجع الوحيد لأي تحقق من "هل هذا status نهائي؟"
+ * NEEDS_REVIEW غير موجودة هنا عمداً — هي migration marker وليست business status.
+ *
+ * الاستخدام:
+ *   FINAL_BUSINESS_STATUSES.has(status)  // true = status نهائي معتمد
+ */
+export const FINAL_BUSINESS_STATUSES = new Set([
+  INVENTORY_STATUS.IN_STOCK,
+  INVENTORY_STATUS.LOW_STOCK,
+  INVENTORY_STATUS.OUT_OF_STOCK,
+  INVENTORY_STATUS.PRE_ORDER,
+  INVENTORY_STATUS.BACKORDER,
+  INVENTORY_STATUS.COMING_SOON,
+  INVENTORY_STATUS.TEMP_DISABLED,
+  INVENTORY_STATUS.DISCONTINUED,
+  INVENTORY_STATUS.ARCHIVED,
+]);
 
 /** الـ statuses التي تحتاج عرض expectedAvailabilityDate */
 export const STATUSES_WITH_DATE = new Set([
