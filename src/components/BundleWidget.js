@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useCart } from "@/context/CartContext";
 import { getDb } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore/lite";
+import { getVariantBehavior } from "@/lib/inventoryHelpers";
 
 // ─── لوحة التحكم ──────────────────────────────────────────────
 const DEFAULT_DISCOUNT_PERCENT    = 0;
@@ -100,15 +101,29 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
                 );
                 const colors = colorOpt?.values?.split(",").map(s => s.trim()).filter(Boolean) || [""];
                 const sizes  = sizeOpt?.values?.split(",").map(s => s.trim()).filter(Boolean)  || [""];
+                // Phase 6: availability من inventoryStatus لو المنتج migrated
+                // الـ variants array من Firestore تحتوي inventoryStatus بعد Migration
                 colors.forEach(color => {
                   sizes.forEach(size => {
                     const label = [color, size].filter(Boolean).join(" / ") || "Default";
                     const img   = (color && d.colorSwatches?.[color]) || d.images?.[0] || "";
-                    variants.push({ label, img, color, size, price: parseFloat(d.price || 0), available: true });
+                    // ابحث عن الـ variant المطابق في d.variants لقراءة inventoryStatus
+                    const matchedVariant = (d.variants || []).find(v => {
+                      const v1 = (v.option1Value || "").toLowerCase();
+                      const v2 = (v.option2Value || "").toLowerCase();
+                      const colorMatch = !color || v1 === color.toLowerCase() || v2 === color.toLowerCase();
+                      const sizeMatch  = !size  || v1 === size.toLowerCase()  || v2 === size.toLowerCase();
+                      return colorMatch && sizeMatch;
+                    });
+                    const available = matchedVariant
+                      ? getVariantBehavior(matchedVariant.inventoryStatus).canPurchase
+                      : true; // fallback: اعتبره متاحاً لو لم نجد variant (بيانات غير مكتملة)
+                    variants.push({ label, img, color, size, price: parseFloat(d.price || 0), available });
                   });
                 });
               }
               if (!variants.length) {
+                // legacy fallback: منتجات بدون variants array (AD-2 — سيُزال لاحقاً)
                 variants.push({
                   label: "Default",
                   img: d.images?.[0] || "",

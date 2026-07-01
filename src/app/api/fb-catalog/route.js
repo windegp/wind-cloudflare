@@ -1,6 +1,7 @@
 // app/api/fb-catalog/route.js
 import { NextResponse } from "next/server";
 import { getKV } from "@/lib/kv-cache"; 
+import { getMetaAvailability } from "@/lib/inventoryHelpers";
 
 const SITE_URL = "https://windeg.com";
 const BRAND = "WIND Shopping";
@@ -329,19 +330,20 @@ export async function GET() {
           const mainImage = images[0] ?? "";
           if (!mainImage) continue;
 
+          // Phase 6: availability من inventoryStatus — Golden Rule, لا fallback لـ quantity
           const availableSizes = [...new Set(
             variants
               .filter(v => {
-                const qty = Number(v["quantity"]?.integerValue ?? v["quantity"]?.stringValue ?? 0);
-                return qty > 0 || p.sellOutOfStock === "Yes";
+                const metaAvail = getMetaAvailability(v["inventoryStatus"]?.stringValue);
+                return metaAvail === "in stock" || metaAvail === "preorder";
               })
               .map(v => getVariantSizeValue(v))
               .filter(Boolean)
           )];
 
           const anyInStock = variants.some(v => {
-            const qty = Number(v["quantity"]?.integerValue ?? v["quantity"]?.stringValue ?? 0);
-            return qty > 0 || p.sellOutOfStock === "Yes";
+            const metaAvail = getMetaAvailability(v["inventoryStatus"]?.stringValue);
+            return metaAvail === "in stock" || metaAvail === "preorder";
           });
           const availability = anyInStock ? "in stock" : "out of stock";
 
@@ -389,12 +391,13 @@ export async function GET() {
           // اجمع المقاسات المتاحة لهذا اللون بالذبط
           let sizesForThisColor = [];
           if (productHasSizes) {
+            // Phase 6: مقاسات متاحة لهذا اللون — من inventoryStatus فقط
             sizesForThisColor = [...new Set(
               variants
                 .filter(sv => {
                   const svColor = getVariantColorValue(sv).toLowerCase().replace(/\s+/g, "-");
-                  const svQty   = Number(sv["quantity"]?.integerValue ?? sv["quantity"]?.stringValue ?? 0);
-                  return svColor === colorKey && (svQty > 0 || p.sellOutOfStock === "Yes");
+                  const metaAvail = getMetaAvailability(sv["inventoryStatus"]?.stringValue);
+                  return svColor === colorKey && (metaAvail === "in stock" || metaAvail === "preorder");
                 })
                 .map(sv => getVariantSizeValue(sv))
                 .filter(Boolean)
@@ -404,11 +407,11 @@ export async function GET() {
           const variantPrice   = v["price"]?.stringValue ?? basePrice;
           const variantCompare = v["compareAtPrice"]?.stringValue ?? compareAtPrice;
 
-          // availability: in stock لو أي variant لهذا اللون متاح
+          // Phase 6: availability لهذا اللون — من inventoryStatus فقط (Golden Rule)
           const anyColorInStock = variants.some(sv => {
             const svColor = getVariantColorValue(sv).toLowerCase().replace(/\s+/g, "-");
-            const svQty   = Number(sv["quantity"]?.integerValue ?? sv["quantity"]?.stringValue ?? 0);
-            return svColor === colorKey && (svQty > 0 || p.sellOutOfStock === "Yes");
+            const metaAvail = getMetaAvailability(sv["inventoryStatus"]?.stringValue);
+            return svColor === colorKey && (metaAvail === "in stock" || metaAvail === "preorder");
           });
           const availability = anyColorInStock ? "in stock" : "out of stock";
 

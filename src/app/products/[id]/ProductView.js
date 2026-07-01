@@ -16,6 +16,7 @@ import { useProduct, useRelatedProducts } from "@/hooks/useFirestore";
 import { Plus, Minus, Star, Info, Share2, Heart, ImageIcon, X, Truck, Eye, ShieldCheck, ChevronLeft, Search, ChevronRight, ChevronDown, ChevronUp, CreditCard, Banknote, ArrowLeftRight } from '@/components/icons-extra';
 import { fbTrack } from "@/lib/fbTrack";
 import { gaViewItem, gaAddToCart } from "@/lib/gaTrack";
+import { getVariantBehavior } from "@/lib/inventoryHelpers";
 
 export default function ProductView({ initialProduct, sourceCategory }) {
   const { id } = useParams();
@@ -336,6 +337,32 @@ export default function ProductView({ initialProduct, sourceCategory }) {
     return result;
   }, [safeColors, safeSizes]);
 
+  // ── selectedVariant: الـ variant المطابق للـ color+size الحالي ────────────
+  // مصدر inventoryStatus — يُستخدَم بدلاً من product.quantity/sellOutOfStock
+  // لو المنتج بلا variants (legacy) → null → fallback للسلوك القديم في getLegacyAvailability
+  const selectedVariant = useMemo(() => {
+    const variants = product?.variants;
+    if (!variants || !Array.isArray(variants) || variants.length === 0) return null;
+    return variants.find(v => {
+      const c = (v.option1Value || v.option2Value || "").toLowerCase();
+      const s = (v.option2Value || v.option1Value || "").toLowerCase();
+      const colorMatch = !selectedColor || c === selectedColor.toLowerCase() || s === selectedColor.toLowerCase();
+      const sizeMatch  = !selectedSize  || c === selectedSize.toLowerCase()  || s === selectedSize.toLowerCase();
+      return colorMatch && sizeMatch;
+    }) || variants[0] || null;
+  }, [product?.variants, selectedColor, selectedSize]);
+
+  // canPurchase: المصدر الوحيد لقرار "هل زر السلة فعّال؟"
+  // Fail Closed: إذا لا يوجد variant أو inventoryStatus → false
+  const { canPurchase, status: currentInventoryStatus } = useMemo(() => {
+    if (!selectedVariant) {
+      // legacy fallback للمنتجات بدون variants (AD-2 — سيُزال لاحقاً)
+      const legacy = (product?.quantity > 0) || product?.sellOutOfStock === "Yes";
+      return { canPurchase: legacy, status: legacy ? "IN_STOCK" : "OUT_OF_STOCK" };
+    }
+    return getVariantBehavior(selectedVariant.inventoryStatus);
+  }, [selectedVariant, product?.quantity, product?.sellOutOfStock]);
+
   const currentColorImage = () => {
     if (!selectedColor) return gallery[1] || activeImage;
     const hi = product.colorSwatches?.[selectedColor];
@@ -569,9 +596,9 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             </div>
           )}
 
-          {/* Stock Status */}
+          {/* Stock Status — مصدر الحقيقة: inventoryStatus (Phase 6) */}
           <div className="flex items-center gap-2 mb-7">
-            {product?.quantity > 0 || product?.sellOutOfStock === "Yes" ? (
+            {canPurchase ? (
               <>
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_6px_2px_rgba(16,185,129,0.4)]"></span>
                 <span className="text-[13px] font-medium text-emerald-600">متوفر في المخزون</span>
@@ -843,7 +870,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             </div>
             <div className="flex items-center gap-1.5 mb-6">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-              <span className="text-xs text-[#888]">{product?.quantity > 0 || product?.sellOutOfStock === "Yes" ? "متوفر" : "غير متوفر"}</span>
+              <span className="text-xs text-[#888]">{canPurchase ? "متوفر" : "غير متوفر"}</span>
             </div>
 
             {/* Short Desc */}

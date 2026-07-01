@@ -77,24 +77,41 @@ const PURCHASABLE = new Set([
  * @returns {{ canPurchase: boolean, hideFromUI: boolean, status: string }}
  */
 export function getVariantBehavior(inventoryStatus) {
-  // أي قيمة غير معروفة (null, undefined, قيمة غريبة, NEEDS_REVIEW)
-  // تُعامَل كـ OUT_OF_STOCK — آمن للعميل، لا crash
-  if (!inventoryStatus || !VALID_STATUSES.has(inventoryStatus) ||
-      inventoryStatus === INVENTORY_STATUS.NEEDS_REVIEW) {
+  // Fail Closed: any unknown value → OUT_OF_STOCK, never purchasable
+  // NEEDS_REVIEW: expected migration marker, no warning
+  // Unknown string: real error → console.warn for admin visibility
+  const isNeedsReview = inventoryStatus === INVENTORY_STATUS.NEEDS_REVIEW;
+  const isUnknown = (
+    !isNeedsReview &&
+    inventoryStatus !== undefined &&
+    inventoryStatus !== null &&
+    !VALID_STATUSES.has(inventoryStatus)
+  );
+
+  if (!inventoryStatus || !VALID_STATUSES.has(inventoryStatus)) {
+    if (isUnknown && typeof console !== "undefined") {
+      console.warn(
+        `[WIND Inventory] Unknown inventoryStatus: "${inventoryStatus}". ` +
+        `Treating as OUT_OF_STOCK (Fail Closed). ` +
+        `Valid values: ${[...VALID_STATUSES].join(", ")}`
+      );
+    }
     return {
-      canPurchase:  false,
-      hideFromUI:   false,
-      status:       INVENTORY_STATUS.OUT_OF_STOCK,
-      isNeedsReview: inventoryStatus === INVENTORY_STATUS.NEEDS_REVIEW,
+      canPurchase:   false,
+      hideFromUI:    false,
+      status:        INVENTORY_STATUS.OUT_OF_STOCK,
+      isNeedsReview,
+      isUnknown,
     };
   }
 
   return {
-    canPurchase:  PURCHASABLE.has(inventoryStatus),
-    hideFromUI:   inventoryStatus === INVENTORY_STATUS.DISCONTINUED ||
-                  inventoryStatus === INVENTORY_STATUS.ARCHIVED,
-    status:       inventoryStatus,
+    canPurchase:   PURCHASABLE.has(inventoryStatus),
+    hideFromUI:    inventoryStatus === INVENTORY_STATUS.DISCONTINUED ||
+                   inventoryStatus === INVENTORY_STATUS.ARCHIVED,
+    status:        inventoryStatus,
     isNeedsReview: false,
+    isUnknown:     false,
   };
 }
 
@@ -233,6 +250,10 @@ export function getVariantDisplayInfo(
  * التسمية العربية لكل status — للعرض في لوحة الإدارة فقط.
  * Firestore يخزن القيمة الإنجليزية دائماً.
  */
+// Unknown status sentinel — shown in Admin UI when Firestore has an unrecognized value
+export const UNKNOWN_STATUS_LABEL = "🔴 حالة غير معروفة";
+export const UNKNOWN_STATUS_COLORS = { bg: "bg-red-100", text: "text-red-800", border: "border-red-400" };
+
 export const ADMIN_STATUS_LABELS = {
   [INVENTORY_STATUS.NEEDS_REVIEW]:  "⚠️ تحتاج مراجعة",
   [INVENTORY_STATUS.IN_STOCK]:      "✅ متوفر",

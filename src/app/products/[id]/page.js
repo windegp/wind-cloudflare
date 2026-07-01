@@ -7,6 +7,7 @@ import ProductView from "./ProductView";
 import { cache } from 'react';
 import { redirect } from 'next/navigation';
 import { kvGet, kvSet } from "@/lib/kv-cache"; // 🔥 KV Cache
+import { getVariantBehavior } from "@/lib/inventoryHelpers";
 
 // Use edge-compatible Firebase when running on edge runtime
 const isEdgeRuntime = typeof window === 'undefined' && process.env.NEXT_RUNTIME === 'edge';
@@ -142,7 +143,18 @@ export default async function Page({ params, searchParams }) {
       "url": `https://windeg.com/products/${id}`, // ✅ تم تحديث الرابط بـ S
       "priceCurrency": "EGP",
       "price": product.price || "0",
-      "availability": (Number(product.quantity) > 0 || product.sellOutOfStock === "Yes") ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+      "availability": (() => {
+        // Phase 6: availability من inventoryStatus — Golden Rule
+        // fallback للمنتجات legacy بدون variants (AD-2)
+        const variants = product.variants;
+        if (variants && Array.isArray(variants) && variants.length > 0) {
+          const anyPurchasable = variants.some(v => getVariantBehavior(v.inventoryStatus).canPurchase);
+          return anyPurchasable ? "https://schema.org/InStock" : "https://schema.org/OutOfStock";
+        }
+        // legacy fallback: منتجات بدون variants
+        const legacyAvailable = (Number(product.quantity) > 0 || product.sellOutOfStock === "Yes");
+        return legacyAvailable ? "https://schema.org/InStock" : "https://schema.org/OutOfStock";
+      })(),
       "itemCondition": "https://schema.org/NewCondition"
     }
   };
