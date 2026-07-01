@@ -291,9 +291,11 @@ export default function InventoryMigrationPage() {
               await updateDoc(doc(db, "products", productId), {
                 variants: updatedVariants_,
               });
+              updatedProducts++;
+              addLog(`  ✓ ${productId}: ${variants.length} variants مُعدَّلة`, "success");
+            } else {
+              addLog(`  [DRY RUN] ${productId}: ${variants.length} variants ستُعدَّل`, "warn");
             }
-            updatedProducts++;
-            addLog(`  ✓ ${productId}: ${variants.length} variants معالَجة`, "success");
           } else {
             addLog(`  ⊘ ${productId}: لا تعديلات مطلوبة`, "dim");
           }
@@ -333,15 +335,20 @@ export default function InventoryMigrationPage() {
             await updateDoc(settingsRef, {
               "inventory.defaultLowStockThreshold": DEFAULT_LOW_STOCK_THRESHOLD,
             });
+            addLog(
+              `  ✓ تم إضافة inventory.defaultLowStockThreshold = ${DEFAULT_LOW_STOCK_THRESHOLD}`,
+              "success"
+            );
+          } else {
+            addLog(
+              `  [DRY RUN] سيُضاف inventory.defaultLowStockThreshold = ${DEFAULT_LOW_STOCK_THRESHOLD} (لم يُكتَب بعد)`,
+              "warn"
+            );
           }
-          addLog(
-            `  ✓ تم إضافة inventory.defaultLowStockThreshold = ${DEFAULT_LOW_STOCK_THRESHOLD}`,
-            "success"
-          );
         }
       } else {
         addLog(
-          `  ⚠️ مستند siteSettings غير موجود — يُنشأ بإعدادات inventory فقط`,
+          `  ⚠️ مستند siteSettings غير موجود`,
           "warn"
         );
         if (!isDryRun) {
@@ -350,6 +357,9 @@ export default function InventoryMigrationPage() {
             { inventory: { defaultLowStockThreshold: DEFAULT_LOW_STOCK_THRESHOLD } },
             { merge: true }
           );
+          addLog(`  ✓ تم إنشاء siteSettings مع inventory config`, "success");
+        } else {
+          addLog(`  [DRY RUN] سيُنشأ siteSettings مع inventory config (لم يُكتَب بعد)`, "warn");
         }
       }
 
