@@ -33,6 +33,7 @@ function readCookie(cookieHeader, name) {
 export async function POST(request) {
   try {
     const body = await request.json();
+    console.log("[fb-track] ✓ Route hit — event_name:", body?.event_name, "| url:", body?.event_source_url);
     const {
       event_name,
       event_id,           // لازم يكون فريد لكل حدث (لمنع التكرار/dedup)
@@ -145,9 +146,27 @@ export async function POST(request) {
 
     const accessToken = process.env.FB_CONVERSIONS_TOKEN;
     if (!accessToken) {
-      console.error("FB_CONVERSIONS_TOKEN غير موجود في Environment Variables");
+      console.error("[fb-track] FATAL: FB_CONVERSIONS_TOKEN is missing from environment variables");
       return Response.json({ error: "Server misconfiguration" }, { status: 500 });
     }
+
+    // ── DIAGNOSTIC LOGGING (temporary — remove after root cause found) ──
+    const graphUrl = `https://graph.facebook.com/v21.0/${PIXEL_ID}/events?access_token=***`;
+    console.log("[fb-track] ▶ Sending event:", {
+      event_name,
+      pixel_id: PIXEL_ID,
+      graph_url: graphUrl,
+      test_event_code: process.env.FB_TEST_EVENT_CODE || "(NOT SET — events go to PRODUCTION)",
+      has_token: !!accessToken,
+      token_prefix: accessToken.slice(0, 8) + "...",
+      payload_summary: {
+        event_time: eventPayload.data[0].event_time,
+        action_source: eventPayload.data[0].action_source,
+        event_source_url: eventPayload.data[0].event_source_url,
+        custom_data_keys: Object.keys(eventPayload.data[0].custom_data),
+        user_data_keys: Object.keys(userData),
+      },
+    });
 
     const fbRes = await fetch(
       `https://graph.facebook.com/v21.0/${PIXEL_ID}/events?access_token=${accessToken}`,
@@ -159,9 +178,14 @@ export async function POST(request) {
     );
 
     const fbData = await fbRes.json();
+    console.log("[fb-track] ◀ Meta response:", {
+      http_status: fbRes.status,
+      ok: fbRes.ok,
+      response: fbData,
+    });
 
     if (!fbRes.ok) {
-      console.error("Facebook CAPI Error:", JSON.stringify(fbData));
+      console.error("[fb-track] ✗ Meta rejected event:", JSON.stringify(fbData));
       return Response.json(
         { error: fbData.error?.message || "خطأ من فيسبوك", details: fbData },
         { status: 500 }
