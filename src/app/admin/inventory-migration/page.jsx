@@ -80,6 +80,7 @@ const INVENTORY_STATUS = {
   TEMP_DISABLED: "TEMP_DISABLED",
   DISCONTINUED: "DISCONTINUED",
   ARCHIVED: "ARCHIVED",
+  SEASONAL: "SEASONAL", // 🔥 Phase 8 — لازم يفضل مطابق لـ inventoryHelpers.js دايماً
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
