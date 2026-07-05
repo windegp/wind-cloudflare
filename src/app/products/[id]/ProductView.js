@@ -355,20 +355,27 @@ export default function ProductView({ initialProduct, sourceCategory }) {
     }) || variants[0] || null;
   }, [product?.variants, selectedColor, selectedSize]);
 
-  // presentation: المصدر المركزي الوحيد لكل عناصر الواجهة (badge/زر/رسالة/progress bar)
-  // Fail Closed: إذا لا يوجد variant أو inventoryStatus → OUT_OF_STOCK
+  // presentation: المصدر المركزي الوحيد لكل عناصر الواجهة
+  // Fail Closed للـ variants المُرحَّلة (inventoryStatus موجود)
+  // Legacy fallback للـ variants قبل Phase 6 migration (inventoryStatus غير موجود)
   const presentation = useMemo(() => {
     if (!selectedVariant) {
-      // legacy fallback للمنتجات بدون variants (AD-2 — سيُزال لاحقاً)
+      // منتج بدون variants array → legacy fallback (AD-2)
       const legacy = (product?.quantity > 0) || product?.sellOutOfStock === "Yes";
       return getInventoryPresentation(legacy ? "IN_STOCK" : "OUT_OF_STOCK", { lowStockThreshold });
     }
-    return getInventoryPresentation(selectedVariant.inventoryStatus, {
-      quantity: selectedVariant.quantity,
-      lowStockThreshold,
-      inventoryManaged: selectedVariant.inventoryManaged !== false,
-      expectedAvailabilityDate: selectedVariant.expectedAvailabilityDate || null,
-    });
+    if (selectedVariant.inventoryStatus) {
+      // variant مُرحَّل → Fail Closed
+      return getInventoryPresentation(selectedVariant.inventoryStatus, {
+        quantity: selectedVariant.quantity,
+        lowStockThreshold,
+        inventoryManaged: selectedVariant.inventoryManaged !== false,
+        expectedAvailabilityDate: selectedVariant.expectedAvailabilityDate || null,
+      });
+    }
+    // variant موجود لكن بدون inventoryStatus بعد → legacy fallback مؤقت
+    const legacy = (product?.quantity > 0) || product?.sellOutOfStock === "Yes";
+    return getInventoryPresentation(legacy ? "IN_STOCK" : "OUT_OF_STOCK", { lowStockThreshold });
   }, [selectedVariant, product?.quantity, product?.sellOutOfStock, lowStockThreshold]);
 
   const canPurchase = presentation.canPurchase;

@@ -70,33 +70,37 @@ function generateEventId(eventName) {
 export async function fbTrack(eventName, data = {}) {
   if (typeof window === "undefined") return;
 
-  const eventId = generateEventId(eventName);
+  const eventId = data.event_id || generateEventId(eventName);
   const externalId = getOrCreateExternalId();
   const fbp = await waitForFbp();
   const fbc = readCookie("_fbc");
 
-  // نرسل الحدث للسيرفر فقط عبر /api/fb-track — المصدر الموثوق الوحيد
-  // لـ content_ids الصحيحة وكل بيانات Advanced Matching
+  const payload = JSON.stringify({
+    event_name:       eventName,
+    event_id:         eventId,
+    event_source_url: window.location.href,
+    external_id:      externalId,
+    fbp,
+    fbc,
+    ...data,
+  });
+
+  // ── sendBeacon أولاً: لا يُعترَض من Zaraz (على خلاف window.fetch)،
+  // ويُكمل الإرسال بعد مغادرة الصفحة (مثل keepalive تماماً).
+  // كان fetch+keepalive يتعطل بصمت بسبب Zaraz's fetch wrapper.
+  const endpoint = "/api/fb-track";
+  const blob = new Blob([payload], { type: "application/json" });
+
   try {
-    fetch("/api/fb-track", {
-      method: "POST",
+    if (navigator.sendBeacon(endpoint, blob)) return;
+  } catch (_) { /* sendBeacon غير متاح */ }
+
+  // Fallback: fetch بدون keepalive
+  try {
+    fetch(endpoint, {
+      method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        event_name: eventName,
-        event_id: eventId,
-        event_source_url: window.location.href,
-        external_id: externalId,
-        fbp,
-        fbc,
-        ...data,
-      }),
-      // keepalive يضمن إتمام الطلب حتى لو المستخدم انتقل لصفحة تانية فوراً
-      // (مهم بشكل خاص لـ Purchase بعد إتمام الطلب)
-      keepalive: true,
-    }).catch((err) => {
-      console.error(`fbTrack(${eventName}) failed:`, err);
-    });
-  } catch (err) {
-    console.error(`fbTrack(${eventName}) error:`, err);
-  }
+      body:    payload,
+    }).catch(() => {});
+  } catch (_) { /* صامت */ }
 }
