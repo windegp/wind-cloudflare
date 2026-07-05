@@ -203,6 +203,13 @@ export default function InventoryMigrationPage() {
 
       addLog(`معالجة ${docs.length} منتج نشط...`, "info");
 
+      // 🔥 Fix (Dry Run reporting bug): نبني حالة "بعد الترحيل" في الذاكرة بشكل
+      // دقيق لكل منتج — سواء Dry Run أو Live — عشان Step 5 يقرا منها مباشرة
+      // بدل ما يعيد قراءة نفس الـ docs الأصلية غير المعدَّلة (وده كان سبب التناقض:
+      // Step 1+2 كانا يزيدان العداد فقط في Dry Run، بينما الكائن نفسه في الذاكرة
+      // كان يفضل بلا تعديل بسبب `if (!isDryRun)` حول كل تعيين حقل).
+      const simulatedState = new Map(); // productId -> { variants }
+
       let updatedProducts = 0;
       let updatedVariants = 0;
       let skippedVariants = 0;
@@ -218,7 +225,8 @@ export default function InventoryMigrationPage() {
           const variants = data.variants || [];
 
           if (variants.length === 0) {
-            // منتج بدون variants — لا تعديل على variants
+            // منتج بدون variants — لا تعديل على variants (سيُعالَج في Step 4 لو عنده options)
+            simulatedState.set(productId, { variants: [] });
             addLog(`  ⊘ ${productId}: بدون variants، يُتجاهل`, "dim");
             continue;
           }
@@ -240,38 +248,38 @@ export default function InventoryMigrationPage() {
                 ? updated.quantity
                 : parseInt(updated.quantity) || 0;
             if (currentQty < 0) {
-              if (!isDryRun) updated.quantity = 0;
+              updated.quantity = 0;
               normalizedQty++;
               changed = true;
             } else {
               // تأكد أن quantity دائماً رقم صحيح وليس string
               if (typeof updated.quantity !== "number") {
-                if (!isDryRun) updated.quantity = Math.max(0, parseInt(updated.quantity) || 0);
+                updated.quantity = Math.max(0, parseInt(updated.quantity) || 0);
                 changed = true;
               }
             }
 
             // 1c. inventoryManaged — يُعيَّن true إذا لم يكن موجوداً
             if (updated.inventoryManaged === undefined) {
-              if (!isDryRun) updated.inventoryManaged = true;
+              updated.inventoryManaged = true;
               changed = true;
             }
 
             // 1d. expectedAvailabilityDate — يُعيَّن null إذا لم يكن موجوداً
             if (updated.expectedAvailabilityDate === undefined) {
-              if (!isDryRun) updated.expectedAvailabilityDate = null;
+              updated.expectedAvailabilityDate = null;
               changed = true;
             }
 
             // 1e. inventoryNote — يُعيَّن "" إذا لم يكن موجوداً
             if (updated.inventoryNote === undefined) {
-              if (!isDryRun) updated.inventoryNote = "";
+              updated.inventoryNote = "";
               changed = true;
             }
 
             // 1f. inventoryUpdatedAt — يُعيَّن بوقت Migration
             if (!updated.inventoryUpdatedAt) {
-              if (!isDryRun) updated.inventoryUpdatedAt = now;
+              updated.inventoryUpdatedAt = now;
               changed = true;
             }
 
@@ -286,7 +294,7 @@ export default function InventoryMigrationPage() {
               Object.values(INVENTORY_STATUS).includes(updated.inventoryStatus);
 
             if (!hasRealStatus) {
-              if (!isDryRun) updated.inventoryStatus = INVENTORY_STATUS.NEEDS_REVIEW;
+              updated.inventoryStatus = INVENTORY_STATUS.NEEDS_REVIEW;
               changed = true;
             } else {
               skippedVariants++;
@@ -299,6 +307,9 @@ export default function InventoryMigrationPage() {
 
             return updated;
           });
+
+          // 🔥 نسجّل الحالة المحاكاة دايماً (Dry Run أو Live) عشان Step 5 يقرا منها
+          simulatedState.set(productId, { variants: updatedVariants_ });
 
           if (productChanged) {
             if (!isDryRun) {
@@ -418,6 +429,9 @@ export default function InventoryMigrationPage() {
           continue;
         }
 
+        // 🔥 نسجّل الحالة المحاكاة دايماً (Dry Run أو Live) — Step 5 هيقرا منها
+        simulatedState.set(productId, { variants: newVariants });
+
         if (!isDryRun) {
           await updateDoc(doc(db, "products", productId), { variants: newVariants });
         }
@@ -441,24 +455,24 @@ export default function InventoryMigrationPage() {
       addLog(``, "spacer");
       addLog("─── Step 5: Inventory Health Report ───", "section");
 
-      // نعيد قراءة كل المنتجات النشطة (بعد كل التعديلات أعلاه) لحساب تقرير دقيق
-      const reportSnapshot = isDryRun ? null : await getDocs(collection(db, "products"));
-      const reportDocs = isDryRun
-        ? docs // في وضع Dry Run، الأرقام تقريبية بناءً على آخر قراءة (مفيش كتابة حصلت فعلاً)
-        : reportSnapshot.docs.filter((d) => d.data().status === "Active");
-
+      // 🔥 Fix: نقرا من simulatedState (الحالة المحاكاة في الذاكرة بعد Step 1+2+4)
+      // بدل إعادة query لـ Firestore. ده صحيح ودقيق في الحالتين:
+      //  - Dry Run: يعكس فعلياً "لو نفّذنا التغييرات دي كلها"، مش البيانات الأصلية القديمة
+      //  - Live: يعكس بالظبط ما تمت كتابته لتوّه في Firestore (بدل قراءة تانية قد تتأخر/تختلف)
       let totalProducts = 0;
       let productsNoVariants = 0;
       let totalVariants = 0;
       let missingVariantIds = 0;
       let duplicateVariantIds = 0;
       let missingOrUnknownStatus = 0;
+      let needsReviewCount = 0;
       let remainingLegacyProducts = 0;
 
-      for (const d of reportDocs) {
-        const data = d.data();
+      for (const docSnap of docs) {
+        const productId = docSnap.id;
         totalProducts++;
-        const variants = Array.isArray(data.variants) ? data.variants : [];
+        const state = simulatedState.get(productId);
+        const variants = state?.variants || [];
 
         if (variants.length === 0) {
           productsNoVariants++;
@@ -476,12 +490,20 @@ export default function InventoryMigrationPage() {
           } else {
             seenIds.add(v.variantId);
           }
-          if (!v.inventoryStatus || !FINAL_BUSINESS_STATUSES.has(v.inventoryStatus)) {
+
+          // 🔥 تصنيف صريح لـ inventoryStatus بناءً على طلب Islam:
+          //  - NEEDS_REVIEW: مقصودة تماماً بعد Migration (ليست خطأ نظام) → Review Queue فقط
+          //  - أي قيمة تانية مفقودة/غير معروفة (garbage/undefined): خطأ نظام حقيقي → يمنع PASS
+          if (v.inventoryStatus === INVENTORY_STATUS.NEEDS_REVIEW) {
+            needsReviewCount++;
+          } else if (!v.inventoryStatus || !FINAL_BUSINESS_STATUSES.has(v.inventoryStatus)) {
             missingOrUnknownStatus++;
           }
         }
       }
 
+      // PASS يعتمد فقط على System Errors — NEEDS_REVIEW لا يمنع PASS إطلاقاً
+      // (هي Review Queue بشرية مقصودة، وليست فساد بيانات)
       const reportPass =
         productsNoVariants === 0 &&
         missingVariantIds === 0 &&
@@ -491,14 +513,25 @@ export default function InventoryMigrationPage() {
       addLog(`  عدد المنتجات: ${totalProducts}`, "data");
       addLog(`  منتجات بدون variants: ${productsNoVariants}`, productsNoVariants > 0 ? "warn" : "data");
       addLog(`  إجمالي الـ variants: ${totalVariants}`, "data");
+      addLog(``, "spacer");
+      addLog(`── System Errors (تمنع PASS) ──`, "dim");
       addLog(`  variantIds مفقودة: ${missingVariantIds}`, missingVariantIds > 0 ? "warn" : "data");
       addLog(`  variantIds مكررة: ${duplicateVariantIds}`, duplicateVariantIds > 0 ? "warn" : "data");
-      addLog(`  inventoryStatus مفقودة/غير معروفة: ${missingOrUnknownStatus}`, missingOrUnknownStatus > 0 ? "warn" : "data");
+      addLog(`  inventoryStatus مفقودة/غير معروفة (فعلياً فاسدة): ${missingOrUnknownStatus}`, missingOrUnknownStatus > 0 ? "warn" : "data");
       addLog(`  منتجات Legacy متبقية: ${remainingLegacyProducts}`, remainingLegacyProducts > 0 ? "warn" : "data");
       addLog(``, "spacer");
+      addLog(`── Review Queue (لا تمنع PASS) ──`, "dim");
+      addLog(`  Variants awaiting review: ${needsReviewCount}`, needsReviewCount > 0 ? "warn" : "success");
+      addLog(``, "spacer");
       addLog(reportPass ? "✅ Health Report: PASS" : "❌ Health Report: FAIL", reportPass ? "success" : "error");
+      if (reportPass && needsReviewCount > 0) {
+        addLog(
+          `  البنية سليمة 100% — باقي بس ${needsReviewCount} variant محتاجين مراجعة يدوية من /admin/inventory (فلتر "Awaiting Review")`,
+          "warn"
+        );
+      }
       if (isDryRun) {
-        addLog(`  (ملاحظة: هذا تقرير تقريبي — لم تُكتَب أي تعديلات فعلياً في وضع Dry Run)`, "dim");
+        addLog(`  (ملاحظة: هذا تقرير محاكاة دقيق لما سيحدث لو نُفِّذ Live — لم تُكتَب أي تعديلات فعلياً بعد)`, "dim");
       }
 
       addLog(``, "spacer");
