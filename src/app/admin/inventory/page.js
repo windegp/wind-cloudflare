@@ -720,6 +720,28 @@ export default function InventoryPage() {
     });
   }, [products, search, filterStatus, showOnlyNeedsReview]);
 
+  // 🔥 Bug 2 Fix: بعد أي تحديث لـ inventoryStatus/quantity في Firestore،
+  // لازم نمسح الـ KV cache الخاص بالمنتج (product_{id} مخزّن بدون TTL = يفضل قديم للأبد
+  // لو محدش مسحه صراحة). بدون الاستدعاء ده، صفحة المنتج بتفضل تعرض النسخة القديمة
+  // من الـ KV حتى لو Firestore اتحدّث فعلاً.
+  const revalidateProduct = useCallback(async (productId) => {
+    try {
+      const res = await fetch("/api/revalidate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "product", id: productId }),
+      });
+      if (!res.ok) {
+        console.error("[Inventory] Revalidate failed:", res.status);
+      }
+    } catch (err) {
+      // لا نمنع نجاح الحفظ في Firestore بسبب فشل الـ revalidate،
+      // لكن نُظهر تحذيراً واضحاً للأدمن لأن صفحة المنتج قد تفضل قديمة.
+      console.error("[Inventory] Revalidate request failed:", err);
+      showToast("تم الحفظ لكن فشل تحديث الكاش — الصفحة قد تفضل قديمة", "error");
+    }
+  }, [showToast]);
+
   // Write history record
   const writeHistory = useCallback(async (productId, variantId, field, prev, next, changeType, reason) => {
     const db = getDb();
@@ -780,13 +802,16 @@ export default function InventoryPage() {
       await writeHistory(product.id, vid, "quantity", variant.quantity, newQty, qtyMode, reason);
     }
 
+    // 🔥 Bug 2 Fix: امسح KV cache بعد الحفظ عشان صفحة المنتج تتحدث فوراً
+    await revalidateProduct(product.id);
+
     // Update local state
     setProducts((prev) => prev.map((p) =>
       p.id === product.id ? { ...p, variants: updatedVariants } : p
     ));
 
     showToast("تم الحفظ بنجاح ✓");
-  }, [editingProduct, writeHistory, showToast]);
+  }, [editingProduct, writeHistory, showToast, revalidateProduct]);
 
   // Save bulk
   const handleSaveBulk = useCallback(async ({ selectedKeys: keys, newStatus, qtyMode, qtyAmount, reason }) => {
@@ -838,12 +863,15 @@ export default function InventoryPage() {
       }
     }
 
+    // 🔥 Bug 2 Fix: امسح KV cache بعد الحفظ الجماعي كمان
+    await revalidateProduct(product.id);
+
     setProducts((prev) => prev.map((p) =>
       p.id === product.id ? { ...p, variants: updatedVariants } : p
     ));
     setSelectedKeys(new Set());
     showToast(`تم تحديث ${keys.size} variant بنجاح ✓`);
-  }, [bulkProduct, writeHistory, showToast]);
+  }, [bulkProduct, writeHistory, showToast, revalidateProduct]);
 
   const handleSelectKey = useCallback((key, checked) => {
     setSelectedKeys((prev) => {

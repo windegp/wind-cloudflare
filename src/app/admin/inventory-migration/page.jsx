@@ -22,6 +22,19 @@
  * Step 3 — Site Settings (إضافة inventory config)
  *   - إضافة inventory.defaultLowStockThreshold = 5 لـ siteSettings
  *
+ * Step 4 — Legacy No-Variant Products Migration (Phase 7 · يوليو 2026)
+ *   - ترحيل المنتجات التي لديها options لكن بلا variants[] إلى نفس البنية النهائية
+ *   - Legacy Migration Note: عند ترحيل منتج قديم لا يملك variants[]، يتم نسخ
+ *     product.quantity إلى جميع الـ Variants الناتجة للحفاظ على البيانات القديمة فقط.
+ *     بعد أول تعديل من لوحة المخزون، تصبح إدارة الكميات على مستوى الـ Variant فقط،
+ *     ولا يُستخدم product.quantity مرة أخرى.
+ *   - كل variant جديد: price/compareAtPrice من المنتج، sku = ""، inventoryStatus = IN_STOCK
+ *   - لا استثناءات: نفس بنية أي منتج جديد يُنشأ من صفحة الإنشاء
+ *
+ * Step 5 — Inventory Health Report
+ *   - عدد المنتجات / بلا variants / إجمالي variants / variantIds مفقودة أو مكررة
+ *   - عدد inventoryStatus مفقودة أو غير معروفة / منتجات Legacy متبقية / PASS أو FAIL
+ *
  * بعد Migration: الأدمن يراجع كل variant ويعيّن inventoryStatus الحقيقي
  * من Admin Inventory Panel (الخطوة 2 من التنفيذ)
  *
@@ -40,6 +53,7 @@ import {
   setDoc,
   serverTimestamp,
 } from "firebase/firestore/lite";
+import { buildVariantsFromOptions, validateVariants, FINAL_BUSINESS_STATUSES } from "@/lib/inventoryHelpers";
 
 // ─── NanoID implementation (no external dependency) ──────────────────────────
 // URL-safe, 21 chars, collision probability negligible for this scale
@@ -361,6 +375,130 @@ export default function InventoryMigrationPage() {
         } else {
           addLog(`  [DRY RUN] سيُنشأ siteSettings مع inventory config (لم يُكتَب بعد)`, "warn");
         }
+      }
+
+      // ── Step 4: Legacy No-Variant Products Migration ───────────────────
+      // Legacy Migration Note: عند ترحيل منتج قديم لا يملك variants[]، يتم نسخ
+      // product.quantity إلى جميع الـ Variants الناتجة للحفاظ على البيانات القديمة فقط.
+      // بعد أول تعديل من لوحة المخزون، تصبح إدارة الكميات على مستوى الـ Variant فقط،
+      // ولا يُستخدم product.quantity مرة أخرى.
+      addLog(``, "spacer");
+      addLog("─── Step 4: ترحيل المنتجات بلا variants (Legacy) ───", "section");
+
+      let legacyMigrated = 0;
+      let legacyVariantsCreated = 0;
+      let legacySkippedNoOptions = 0;
+
+      for (const docSnap of docs) {
+        const data = docSnap.data();
+        const productId = docSnap.id;
+        const hasVariants = Array.isArray(data.variants) && data.variants.length > 0;
+        if (hasVariants) continue; // عنده variants بالفعل — تم التعامل معه في Step 1+2
+
+        if (!Array.isArray(data.options) || data.options.length === 0) {
+          // لا يملك options أصلاً — مفيش معلومات كافية لبناء variants تلقائياً،
+          // يحتاج تدخّل يدوي من الأدمن (تحديد لون/مقاس على الأقل) قبل إعادة تشغيل الخطوة دي
+          legacySkippedNoOptions++;
+          addLog(`  ⚠️ ${productId}: بلا options — يحتاج تدخّل يدوي، تخطّي`, "warn");
+          continue;
+        }
+
+        // نسخ product.quantity كما هو لكل الـ variants الناتجة (Legacy Migration Note أعلاه)
+        const legacyQty = Math.max(0, parseInt(data.quantity, 10) || 0);
+        let newVariants = buildVariantsFromOptions(data.options, [], { defaultQuantity: legacyQty });
+        newVariants = newVariants.map((v) => ({
+          ...v,
+          price: data.price ?? "0",
+          compareAtPrice: data.compareAtPrice ?? "",
+        }));
+
+        const { valid, errors } = validateVariants(newVariants);
+        if (!valid) {
+          addLog(`  ❌ ${productId}: فشل التحقق — ${errors.join("; ")}`, "error");
+          continue;
+        }
+
+        if (!isDryRun) {
+          await updateDoc(doc(db, "products", productId), { variants: newVariants });
+        }
+        legacyMigrated++;
+        legacyVariantsCreated += newVariants.length;
+        addLog(
+          `  ${isDryRun ? "[DRY RUN] " : "✓ "}${productId}: ${newVariants.length} variants ${isDryRun ? "ستُنشأ" : "أُنشئت"} (quantity=${legacyQty} منسوخة من product.quantity)`,
+          isDryRun ? "warn" : "success"
+        );
+      }
+
+      addLog(``, "spacer");
+      addLog(`Step 4 مكتمل:`, "success");
+      addLog(`  منتجات Legacy مُرحَّلة: ${legacyMigrated}`, "data");
+      addLog(`  Variants جديدة أُنشئت: ${legacyVariantsCreated}`, "data");
+      if (legacySkippedNoOptions > 0) {
+        addLog(`  منتجات بلا options (تحتاج تدخّل يدوي): ${legacySkippedNoOptions}`, "warn");
+      }
+
+      // ── Step 5: Inventory Health Report ─────────────────────────────────
+      addLog(``, "spacer");
+      addLog("─── Step 5: Inventory Health Report ───", "section");
+
+      // نعيد قراءة كل المنتجات النشطة (بعد كل التعديلات أعلاه) لحساب تقرير دقيق
+      const reportSnapshot = isDryRun ? null : await getDocs(collection(db, "products"));
+      const reportDocs = isDryRun
+        ? docs // في وضع Dry Run، الأرقام تقريبية بناءً على آخر قراءة (مفيش كتابة حصلت فعلاً)
+        : reportSnapshot.docs.filter((d) => d.data().status === "Active");
+
+      let totalProducts = 0;
+      let productsNoVariants = 0;
+      let totalVariants = 0;
+      let missingVariantIds = 0;
+      let duplicateVariantIds = 0;
+      let missingOrUnknownStatus = 0;
+      let remainingLegacyProducts = 0;
+
+      for (const d of reportDocs) {
+        const data = d.data();
+        totalProducts++;
+        const variants = Array.isArray(data.variants) ? data.variants : [];
+
+        if (variants.length === 0) {
+          productsNoVariants++;
+          remainingLegacyProducts++;
+          continue;
+        }
+
+        const seenIds = new Set();
+        for (const v of variants) {
+          totalVariants++;
+          if (!v.variantId) {
+            missingVariantIds++;
+          } else if (seenIds.has(v.variantId)) {
+            duplicateVariantIds++;
+          } else {
+            seenIds.add(v.variantId);
+          }
+          if (!v.inventoryStatus || !FINAL_BUSINESS_STATUSES.has(v.inventoryStatus)) {
+            missingOrUnknownStatus++;
+          }
+        }
+      }
+
+      const reportPass =
+        productsNoVariants === 0 &&
+        missingVariantIds === 0 &&
+        duplicateVariantIds === 0 &&
+        missingOrUnknownStatus === 0;
+
+      addLog(`  عدد المنتجات: ${totalProducts}`, "data");
+      addLog(`  منتجات بدون variants: ${productsNoVariants}`, productsNoVariants > 0 ? "warn" : "data");
+      addLog(`  إجمالي الـ variants: ${totalVariants}`, "data");
+      addLog(`  variantIds مفقودة: ${missingVariantIds}`, missingVariantIds > 0 ? "warn" : "data");
+      addLog(`  variantIds مكررة: ${duplicateVariantIds}`, duplicateVariantIds > 0 ? "warn" : "data");
+      addLog(`  inventoryStatus مفقودة/غير معروفة: ${missingOrUnknownStatus}`, missingOrUnknownStatus > 0 ? "warn" : "data");
+      addLog(`  منتجات Legacy متبقية: ${remainingLegacyProducts}`, remainingLegacyProducts > 0 ? "warn" : "data");
+      addLog(``, "spacer");
+      addLog(reportPass ? "✅ Health Report: PASS" : "❌ Health Report: FAIL", reportPass ? "success" : "error");
+      if (isDryRun) {
+        addLog(`  (ملاحظة: هذا تقرير تقريبي — لم تُكتَب أي تعديلات فعلياً في وضع Dry Run)`, "dim");
       }
 
       addLog(``, "spacer");

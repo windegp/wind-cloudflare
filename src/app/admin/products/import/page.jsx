@@ -3,6 +3,7 @@ import { useState } from 'react';
 import Papa from 'papaparse';
 import { getDb } from "@/lib/firebase";
 import { collection, doc, setDoc, serverTimestamp } from "firebase/firestore/lite";
+import { generateVariantId, validateVariants, INVENTORY_STATUS } from "@/lib/inventoryHelpers";
 
 export const dynamic = 'force-dynamic';
 
@@ -96,6 +97,9 @@ export default function ImportShopifyCSV() {
           }
 
           // تجميع البدائل (الألوان والمقاسات)
+          // 🔥 Phase 7: نفس السياسة المعمارية النهائية — أي variant جديد لازم يحمل
+          // variantId + inventoryStatus=IN_STOCK + inventoryManaged=true، بلا استثناء،
+          // حتى لو جاي من Shopify CSV القديم. لا يُشتق status من الكمية أبداً.
           if (row['Option1 Value'] || row['Variant SKU']) {
             productsMap[handle].variants.push({
               option1Name: row['Option1 Name'] || "",
@@ -106,18 +110,42 @@ export default function ImportShopifyCSV() {
               compareAtPrice: row['Variant Compare At Price'] || "",
               sku: row['Variant SKU'] || "",
               quantity: parseInt(row['Variant Inventory Qty']) || 0,
+              variantId: generateVariantId(),
+              inventoryStatus: INVENTORY_STATUS.IN_STOCK,
+              inventoryManaged: true,
+              inventoryUpdatedAt: new Date().toISOString(),
+              inventoryNote: "",
+              expectedAvailabilityDate: null,
             });
           }
         });
 
         const productsArray = Object.values(productsMap);
         addLog(`تم دمج البيانات في ${productsArray.length} منتج فريد.`);
+
+        // 🔥 Phase 7: تحقّق إجباري — أي منتج بلا variants صالحة يُستبعد من الرفع
+        // بدل ما يُحفظ بالنظام القديم (نفس القاعدة المطبَّقة في صفحة الإنشاء اليدوية)
+        const rejectedProducts = [];
+        const validProductsArray = productsArray.filter((product) => {
+          const { valid, errors } = validateVariants(product.variants);
+          if (!valid) {
+            rejectedProducts.push({ handle: product.seo.handle, errors });
+            return false;
+          }
+          return true;
+        });
+
+        if (rejectedProducts.length > 0) {
+          addLog(`⚠️ تم استبعاد ${rejectedProducts.length} منتج بلا variants صالحة (لن يُرفع بالنظام القديم):`);
+          rejectedProducts.forEach((r) => addLog(`  ✗ ${r.handle}: ${r.errors.join("; ")}`));
+        }
+
         addLog("بدأ الرفع إلى Firebase... يرجى عدم إغلاق الصفحة.");
 
         let successCount = 0;
         let errorCount = 0;
 
-        for (const product of productsArray) {
+        for (const product of validProductsArray) {
           try {
             // نستخدم الـ handle كـ ID للمنتج لسهولة البحث والروابط
             const db = getDb();

@@ -300,9 +300,15 @@ export async function GET() {
 
           const mainImage = images[0] ?? "";
           if (!mainImage) continue;
-          const qty = Number(p.quantity ?? 0);
-          const availability =
-            qty > 0 || p.sellOutOfStock === "Yes" ? "in stock" : "out of stock";
+          // 🔥 Legacy Audit Fix: هذا المنتج عنده variants فعلياً — القرار لازم يعتمد
+          // على inventoryStatus لكل variant (Golden Rule)، وليس product.quantity/sellOutOfStock
+          // حتى لو أسماء الـ options غير معروفة (لون/مقاس). نعتبره "in stock" لو أي variant
+          // منه قابل للشراء فعلياً.
+          const anyVariantAvailable = variants.some((sv) => {
+            const a = getMetaAvailability(sv["inventoryStatus"]?.stringValue);
+            return a === "in stock" || a === "preorder";
+          });
+          const availability = anyVariantAvailable ? "in stock" : "out of stock";
           const hasSale = compareAtPrice && parseFloat(compareAtPrice) > parseFloat(basePrice);
           items.push(`<item>
         <g:id>${escapeXml(handle)}</g:id>

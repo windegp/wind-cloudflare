@@ -615,6 +615,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           <div ref={addToCartBtnRef} className="flex gap-3 mb-2">
             <button
               onClick={async () => {
+  if (!canPurchase) return;
   setIsAddingToCart(true);
   await addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity});
   fbTrack("AddToCart", {
@@ -633,15 +634,15 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   setQuantity(1);
   setTimeout(() => setIsAddingToCart(false), 700);
 }}
-              disabled={isAddingToCart}
-              className="flex-1 text-[14px] font-medium py-3 flex items-center justify-center btn-shake border border-black/70 rounded-lg text-[#111] bg-white hover:bg-[#f5f5f5] transition-colors disabled:opacity-80"
+              disabled={!canPurchase || isAddingToCart}
+              className="flex-1 text-[14px] font-medium py-3 flex items-center justify-center btn-shake border border-black/70 rounded-lg text-[#111] bg-white hover:bg-[#f5f5f5] transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white"
               style={{letterSpacing:'0.04em'}}
             >
               {isAddingToCart ? (
                 <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#111" strokeWidth="2.5" strokeLinecap="round">
                   <path d="M12 2a10 10 0 0 1 10 10" />
                 </svg>
-              ) : "أضف إلى السلة"}
+              ) : (canPurchase ? "أضف إلى السلة" : "غير متوفر")}
             </button>
             <div className="flex items-center justify-between bg-[#F2F2F2] border border-[#E0E0E0] px-1 w-[72px] shrink-0 rounded-lg">
               <button onClick={() => setQuantity(q => q + 1)} className="text-[#888] hover:text-black p-1"><Plus size={13} /></button>
@@ -689,6 +690,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 {/* Add to Cart */}
                 <button
                   onClick={async () => {
+  if (!canPurchase) return;
   setIsAddingToCart(true);
   await addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity});
   fbTrack("AddToCart", {
@@ -707,15 +709,15 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   setQuantity(1);
   setTimeout(() => setIsAddingToCart(false), 700);
 }}
-                  disabled={isAddingToCart}
-                  className="flex-1 text-[13px] font-medium h-[42px] flex items-center justify-center rounded-lg text-white bg-black hover:bg-[#222] transition-colors disabled:opacity-80"
+                  disabled={!canPurchase || isAddingToCart}
+                  className="flex-1 text-[13px] font-medium h-[42px] flex items-center justify-center rounded-lg text-white bg-black hover:bg-[#222] transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-black"
                   style={{letterSpacing:'0.04em'}}
                 >
                   {isAddingToCart ? (
                     <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
                       <path d="M12 2a10 10 0 0 1 10 10" />
                     </svg>
-                  ) : "أضف إلى السلة"}
+                  ) : (canPurchase ? "أضف إلى السلة" : "غير متوفر")}
                 </button>
 
                 {/* Options Button */}
@@ -935,6 +937,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             <div className="flex gap-3 mb-6">
               <button
                 onClick={() => {
+  if (!canPurchase) return;
   addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity});
   fbTrack("AddToCart", {
     value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
@@ -951,12 +954,13 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   }, quantity);
   setQuantity(1);
 }}
-                className="flex-1 text-[14px] font-medium py-5 flex items-center justify-center transition-opacity btn-breathe tracking-[0.05em]"
+                disabled={!canPurchase}
+                className="flex-1 text-[14px] font-medium py-5 flex items-center justify-center transition-opacity btn-breathe tracking-[0.05em] disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{background:'#111', color:'#fff'}}
-                onMouseEnter={e => e.currentTarget.style.opacity='0.88'}
-                onMouseLeave={e => e.currentTarget.style.opacity='1'}
+                onMouseEnter={e => { if (canPurchase) e.currentTarget.style.opacity='0.88'; }}
+                onMouseLeave={e => { if (canPurchase) e.currentTarget.style.opacity='1'; }}
               >
-                أضف إلى السلة
+                {canPurchase ? "أضف إلى السلة" : "غير متوفر"}
               </button>
               <div className="flex items-center justify-between bg-white border border-[#E0E0E0] px-1 w-[84px] shrink-0">
                 <button onClick={() => setQuantity(q => q+1)} className="text-[#888] hover:text-black p-2"><Plus size={14} /></button>

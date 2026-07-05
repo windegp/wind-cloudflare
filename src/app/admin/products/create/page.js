@@ -6,6 +6,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { getDb } from "@/lib/firebase";
 import { doc, getDoc, setDoc, serverTimestamp, collection, getDocs, updateDoc, increment, query, where, limit } from "firebase/firestore/lite";
 import ImageUploader from "@/components/ImageUploader";
+import { buildVariantsFromOptions, validateVariants } from "@/lib/inventoryHelpers";
 import { Loader2, Save, Plus, Minus, Star, Info, Share2, Heart, ImageIcon, X, Truck, Eye, ShieldCheck, ChevronLeft, Search, ChevronRight, ShoppingBag, CreditCard, Banknote, Smartphone, Lock, Edit2, ExternalLink, CheckSquare, Square, FolderTree, CheckCircle2, Globe, Box, Settings, Tag, AlertCircle, Database, Layout, Trash2, Monitor, Archive, Layers, ChevronDown, ChevronUp, Menu, Target, Mail, Crown, UserMinus, MonitorSmartphone, LinkIcon, Paintbrush, ListFilter, PackageSearch, ArrowRight } from '@/components/icons-extra';
 
 export const dynamic = 'force-dynamic';
@@ -63,6 +64,9 @@ function CreateProductForm() {
   ]);
   
   const [colorSwatches, setColorSwatches] = useState({}); 
+  // 🔥 Phase 7: variants[] الحالية المحمَّلة من Firestore عند التعديل — تُستخدَم للحفاظ
+  // على بيانات كل variant (variantId, inventoryStatus, quantity...) بدل استبدالها بالكامل
+  const [existingVariants, setExistingVariants] = useState([]);
   const [seoTitle, setSeoTitle] = useState("");
   const [seoDesc, setSeoDesc] = useState("");
   const [urlHandle, setUrlHandle] = useState("");
@@ -217,6 +221,7 @@ function CreateProductForm() {
             setSeoDesc(data.seo?.description || "");
             setUrlHandle(data.seo?.handle || productId);
             setColorSwatches(data.colorSwatches || {});
+            setExistingVariants(Array.isArray(data.variants) ? data.variants : []);
 
             setMetafields({
               youMayAlsoLike: data.metafields?.youMayAlsoLike || "",
@@ -422,6 +427,24 @@ function CreateProductForm() {
         // 🔥 تنظيف WIND: استخراج البيانات واستبعاد الحقول المكررة والقديمة تماماً
         const { selectedCollections, categories, Price, type, category, productCategory, barcode, ...pureData } = productData;
 
+        // 🔥 Phase 7 — القرار المعماري النهائي: صفحة الإنشاء هي المصدر الرسمي الوحيد لـ variants[].
+        // كل variant يرث price/compareAtPrice من المنتج (لا فروق أسعار حالياً)،
+        // و variant جديد كلياً يحصل على quantity=0 (أو ما أدخله الأدمن) و inventoryStatus=IN_STOCK.
+        // أي variant موجود مسبقاً (نفس تركيبة Color×Size) يحافظ على كل بياناته كما هي.
+        const defaultQty = Math.max(0, parseInt(productData.quantity, 10) || 0);
+        let variants = buildVariantsFromOptions(options, existingVariants, { defaultQuantity: defaultQty });
+        variants = variants.map((v) => ({
+          ...v,
+          price: v.price !== "" ? v.price : (productData.price || "0"),
+          compareAtPrice: v.compareAtPrice !== "" ? v.compareAtPrice : (productData.compareAtPrice || ""),
+        }));
+
+        const { valid, errors } = validateVariants(variants);
+        if (!valid) {
+          setIsSaving(false);
+          return alert("⚠️ لا يمكن حفظ المنتج:\n\n" + errors.join("\n"));
+        }
+
         const finalProduct = {
           ...pureData,
           categories: cleanCollections, // 🔥 حفظ الأقسام هنا عشان الموقع القديم يقرأها
@@ -429,16 +452,12 @@ function CreateProductForm() {
           images,
           chargeTax,
           options,
+          variants, // 🔥 Phase 7: المصدر الرسمي الوحيد للمخزون من الآن فصاعداً
           colorSwatches,
           inventoryTracked,
           physicalProduct,
-          // 🔥 توحيد السعر: السعر الرئيسي يتبع دائماً سعر أول Variant لضمان دقة الكارت
-          price: productData.variants && productData.variants.length > 0 
-                 ? productData.variants[0].price.toString() 
-                 : productData.price,
-          compareAtPrice: productData.variants && productData.variants.length > 0 
-                          ? productData.variants[0].compareAtPrice.toString() 
-                          : (productData.compareAtPrice || ""),
+          price: productData.price,
+          compareAtPrice: productData.compareAtPrice || "",
           seo: {
             title: seoTitle || productData.title,
             description: seoDesc || productData.description.substring(0, 160),

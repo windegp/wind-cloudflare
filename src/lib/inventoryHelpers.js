@@ -403,3 +403,151 @@ export const STATUSES_WITH_DATE = new Set([
 export function getLegacyAvailability(quantity, sellOutOfStock) {
   return quantity > 0 || sellOutOfStock === "Yes";
 }
+
+// ─── Variant Generation — المصدر الرسمي الوحيد ────────────────────────────────
+// Phase 7 · القرار المعماري النهائي (يوليو 2026)
+//
+// تُستخدَم من مكانين فقط:
+//   1) admin/products/create/page.js  — عند إنشاء/تعديل أي منتج
+//   2) migration script للـ 11 منتج القديم بلا variants
+//
+// أي منتج جديد أو مُرحَّل يمر من هنا يخرج بنفس البنية بالضبط — لا استثناءات.
+
+const NANOID_CHARS =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+/** يولّد variantId بنفس الصيغة المستخدمة في inventory-migration (var_ + 12 حرف) */
+export function generateVariantId() {
+  let id = "var_";
+  for (let i = 0; i < 12; i++) {
+    id += NANOID_CHARS[Math.floor(Math.random() * NANOID_CHARS.length)];
+  }
+  return id;
+}
+
+const isColorOptionName = (name = "") => {
+  const n = name.toLowerCase().trim();
+  return n.includes("color") || n.includes("colour") || n.includes("لون") || n.includes("الوان");
+};
+const isSizeOptionName = (name = "") => {
+  const n = name.toLowerCase().trim();
+  return n.includes("size") || n.includes("مقاس") || n.includes("حجم");
+};
+
+/**
+ * يبني مصفوفة تركيبات (Color × Size) من options الخام لصفحة الإنشاء.
+ * options: [{ name: "Color", values: "Red, Blue" }, { name: "Size", values: "S, M" }]
+ * @returns {Array<{option1Name, option1Value, option2Name, option2Value}>}
+ */
+export function buildVariantCombinations(options = []) {
+  const cleanOptions = (options || [])
+    .filter((o) => o?.name && o?.values?.trim())
+    .slice(0, 2) // النظام يدعم خياريّن فقط (Color/Size) — متوافق مع كل الكود الحالي
+    .map((o) => ({
+      name: o.name.trim(),
+      values: o.values.split(",").map((v) => v.trim()).filter(Boolean),
+    }));
+
+  if (cleanOptions.length === 0) return [];
+
+  if (cleanOptions.length === 1) {
+    return cleanOptions[0].values.map((val) => ({
+      option1Name: cleanOptions[0].name,
+      option1Value: val,
+      option2Name: "",
+      option2Value: "",
+    }));
+  }
+
+  // خياريّن: Cartesian product
+  const combos = [];
+  for (const v1 of cleanOptions[0].values) {
+    for (const v2 of cleanOptions[1].values) {
+      combos.push({
+        option1Name: cleanOptions[0].name,
+        option1Value: v1,
+        option2Name: cleanOptions[1].name,
+        option2Value: v2,
+      });
+    }
+  }
+  return combos;
+}
+
+/**
+ * المصدر الرسمي الوحيد لإنشاء/تحديث variants[] من options.
+ *
+ * القرار المعماري النهائي (يوليو 2026):
+ *  - السعر: كل variant يرث product.price / product.compareAtPrice (لا فروق أسعار حالياً)
+ *  - SKU: لا يُنشأ افتراضياً — يبقى "" (الاعتماد على variantId وليس SKU)
+ *  - الكمية: variant جديد كلياً → quantity كما يحدده defaultQuantity (0 لو مش محدد)
+ *  - الحالة: كل variant جديد → inventoryStatus = IN_STOCK دائماً، بغض النظر عن الكمية
+ *  - variants موجودة مسبقاً (نفس التركيبة) تُحفَظ بكل حقولها كما هي (لا Overwrite لـ
+ *    variantId/inventoryStatus/quantity/inventoryNote/expectedAvailabilityDate الحالية)
+ *
+ * @param {Array} options - خام من صفحة الإنشاء [{name, values}]
+ * @param {Array} existingVariants - variants[] الحالية في Firestore (للحفاظ على بياناتها)
+ * @param {{ defaultQuantity?: number }} opts
+ * @returns {Array} variants[] الجديدة الكاملة
+ */
+export function buildVariantsFromOptions(options, existingVariants = [], opts = {}) {
+  const combos = buildVariantCombinations(options);
+  const defaultQuantity = Number.isFinite(opts.defaultQuantity) ? opts.defaultQuantity : 0;
+  const now = new Date().toISOString();
+
+  const findExisting = (combo) =>
+    (existingVariants || []).find(
+      (v) =>
+        (v.option1Value || "") === (combo.option1Value || "") &&
+        (v.option2Value || "") === (combo.option2Value || "")
+    );
+
+  return combos.map((combo) => {
+    const existing = findExisting(combo);
+    if (existing) {
+      // حافظ على كل بيانات الـ variant الموجود، وحدّث فقط أسماء الخيارات
+      // (لو الأدمن غيّر اسم الخيار نفسه، مثلاً "Color" → "اللون")
+      return {
+        ...existing,
+        option1Name: combo.option1Name,
+        option1Value: combo.option1Value,
+        option2Name: combo.option2Name,
+        option2Value: combo.option2Value,
+        variantId: existing.variantId || generateVariantId(),
+      };
+    }
+    // Variant جديد كلياً
+    return {
+      ...combo,
+      variantId: generateVariantId(),
+      price: "",           // يُملأ لاحقاً من product.price وقت الحفظ (توحيد مركزي)
+      compareAtPrice: "",  // نفس الشيء
+      sku: "",
+      quantity: defaultQuantity,
+      inventoryStatus: INVENTORY_STATUS.IN_STOCK,
+      inventoryManaged: true,
+      inventoryUpdatedAt: now,
+      inventoryNote: "",
+      expectedAvailabilityDate: null,
+    };
+  });
+}
+
+/**
+ * تحقّق نهائي قبل الحفظ: يمنع حفظ أي منتج بدون variants كاملة.
+ * @returns {{ valid: boolean, errors: string[] }}
+ */
+export function validateVariants(variants) {
+  const errors = [];
+  if (!Array.isArray(variants) || variants.length === 0) {
+    errors.push("لا يمكن حفظ منتج بدون variants — أضف لون أو مقاس واحد على الأقل.");
+    return { valid: false, errors };
+  }
+  variants.forEach((v, i) => {
+    if (!v.variantId) errors.push(`Variant #${i + 1}: بدون variantId`);
+    if (!v.inventoryStatus || !VALID_STATUSES.has(v.inventoryStatus)) {
+      errors.push(`Variant #${i + 1}: inventoryStatus غير صالح ("${v.inventoryStatus}")`);
+    }
+  });
+  return { valid: errors.length === 0, errors };
+}
