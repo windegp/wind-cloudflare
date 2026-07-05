@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useCart } from "@/context/CartContext";
 import { getDb } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore/lite";
-import { getVariantBehavior } from "@/lib/inventoryHelpers";
+import { getInventoryPresentation } from "@/lib/inventoryHelpers";
 
 // ─── لوحة التحكم ──────────────────────────────────────────────
 const DEFAULT_DISCOUNT_PERCENT    = 0;
@@ -71,7 +71,24 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
       sizes.forEach(size => {
         const label = [color, size].filter(Boolean).join(" / ") || "Default";
         const img   = (color && d.colorSwatches?.[color]) || d.images?.[0] || "";
-        result.push({ label, img, color, size });
+        // 🔥 نفس منطق الـ upsells بالظبط: نفحص inventoryStatus الحقيقي للـ variant المطابق
+        // من المنتج الحالي نفسه (product.variants) — مش بس شكل، حتى لو المنتج الرئيسي
+        // نفسه هو المفتوح، لازم اختياره جوا الباقة يخضع لنفس قاعدة الشراء
+        const matchedVariant = (d.variants || []).find(v => {
+          const v1 = (v.option1Value || "").toLowerCase();
+          const v2 = (v.option2Value || "").toLowerCase();
+          const colorMatch = !color || v1 === color.toLowerCase() || v2 === color.toLowerCase();
+          const sizeMatch  = !size  || v1 === size.toLowerCase()  || v2 === size.toLowerCase();
+          return colorMatch && sizeMatch;
+        });
+        const hasRealStatus = matchedVariant?.inventoryStatus && matchedVariant.inventoryStatus !== "NEEDS_REVIEW";
+        const legacyAvailable = (d.quantity > 0) || d.sellOutOfStock === "Yes";
+        const presentation = matchedVariant
+          ? (hasRealStatus
+              ? getInventoryPresentation(matchedVariant.inventoryStatus, { quantity: matchedVariant.quantity })
+              : getInventoryPresentation(legacyAvailable ? "IN_STOCK" : "OUT_OF_STOCK", {}))
+          : getInventoryPresentation("IN_STOCK", {}); // بيانات غير مكتملة → افتراضي متاح
+        result.push({ label, img, color, size, available: presentation.canPurchase, presentation });
       });
     });
     return result;
@@ -121,23 +138,29 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
                     const hasRealStatus =
                       matchedVariant?.inventoryStatus &&
                       matchedVariant.inventoryStatus !== "NEEDS_REVIEW";
-                    const available = matchedVariant
+                    // 🔥 نستخدم نفس getInventoryPresentation المركزية — مش boolean بس،
+                    // عشان الباقات توضّح PRE_ORDER/BACKORDER للعميل زي باقي الموقع بالظبط
+                    const legacyAvailable = (d.quantity > 0) || d.sellOutOfStock === "Yes";
+                    const presentation = matchedVariant
                       ? (hasRealStatus
-                          ? getVariantBehavior(matchedVariant.inventoryStatus).canPurchase
-                          : (d.quantity > 0) || d.sellOutOfStock === "Yes")
-                      : true; // fallback: اعتبره متاحاً لو لم نجد variant (بيانات غير مكتملة)
-                    variants.push({ label, img, color, size, price: parseFloat(d.price || 0), available });
+                          ? getInventoryPresentation(matchedVariant.inventoryStatus, { quantity: matchedVariant.quantity })
+                          : getInventoryPresentation(legacyAvailable ? "IN_STOCK" : "OUT_OF_STOCK", {}))
+                      : getInventoryPresentation("IN_STOCK", {}); // fallback: بيانات غير مكتملة
+                    const available = presentation.canPurchase;
+                    variants.push({ label, img, color, size, price: parseFloat(d.price || 0), available, presentation });
                   });
                 });
               }
               if (!variants.length) {
                 // legacy fallback: منتجات بدون variants array (AD-2 — سيُزال لاحقاً)
+                const legacyAvailable = (d.quantity > 0) || d.sellOutOfStock === "Yes";
                 variants.push({
                   label: "Default",
                   img: d.images?.[0] || "",
                   color: "", size: "",
                   price: parseFloat(d.price || 0),
-                  available: (d.quantity > 0) || d.sellOutOfStock === "Yes",
+                  available: legacyAvailable,
+                  presentation: getInventoryPresentation(legacyAvailable ? "IN_STOCK" : "OUT_OF_STOCK", {}),
                 });
               }
 
@@ -176,11 +199,14 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
     return Math.round(sum);
   })();
 
-  const hasUnavailable = upsells.some((up, i) => {
-    const st = upsellStates[i];
-    if (!st?.checked) return false;
-    return !up.variants[st.variantIdx]?.available;
-  });
+  const hasUnavailable = (
+    mainVariants?.[mainVariantIdx]?.available === false ||
+    upsells.some((up, i) => {
+      const st = upsellStates[i];
+      if (!st?.checked) return false;
+      return !up.variants[st.variantIdx]?.available;
+    })
+  );
 
   const updateUpsell = useCallback((i, patch) => {
     setUpsellStates(prev => prev.map((s, idx) => idx === i ? { ...s, ...patch } : s));
@@ -365,6 +391,13 @@ function MainProductCard({ product, discount, mainPrice, mainQty, setMainQty, on
   const discounted = applyDiscount(mainPrice, discount);
   const imgSrc     = mainVariants?.[mainVariantIdx]?.img || product?.images?.[0] || product?.mainImage || "";
   const currentVariant = mainVariants?.[mainVariantIdx];
+  const presentation = currentVariant?.presentation;
+  const statusNote = presentation && presentation.status !== "IN_STOCK" && presentation.status !== "LOW_STOCK"
+    ? presentation.badgeText
+    : null;
+  const statusColor = presentation?.badgeColor === "blue" ? "#2563EB"
+    : presentation?.badgeColor === "purple" ? "#9333EA"
+    : "#C0392B";
 
   return (
     <div style={styles.card}>
@@ -373,6 +406,11 @@ function MainProductCard({ product, discount, mainPrice, mainQty, setMainQty, on
       <div style={styles.info}>
         {/* اسم المنتج — سطر مستقل */}
         <p style={styles.productTitle}>{product?.title}</p>
+        {statusNote && (
+          <span style={{ fontSize: 10, color: statusColor, fontWeight: "bold", display: "block", marginBottom: 2 }}>
+            {statusNote}
+          </span>
+        )}
 
         {/* السعر الجديد ← القديم مشطوب ← بادج */}
         <div style={styles.priceRow}>
@@ -395,7 +433,7 @@ function MainProductCard({ product, discount, mainPrice, mainQty, setMainQty, on
                 style={styles.variantSelect}
               >
                 {mainVariants.map((v, i) => (
-                  <option key={i} value={i}>{v.label}</option>
+                  <option key={i} value={i}>{v.label}{!v.available ? " - (غير متوفر)" : ""}</option>
                 ))}
               </select>
               <div style={styles.variantDisplay}>
@@ -429,7 +467,17 @@ function UpsellCard({ product, state, discount, originalPrice, onCheck, onVarian
   const variant        = product.variants[state.variantIdx];
   const imgSrc         = variant?.img || product.images?.[0] || "";
   const isAvail        = variant?.available !== false;
+  const presentation   = variant?.presentation;
   const discountedPrice = applyDiscount(originalPrice, discount);
+
+  // 🔥 نص واضح للعميل حسب الحالة الفعلية — مش بس متاح/غير متاح، عشان الحجز المسبق
+  // وإعادة التوفير توضّح نفسها بدل ما تظهر عادية من غير أي إشارة
+  const statusNote = state.checked && presentation && presentation.status !== "IN_STOCK" && presentation.status !== "LOW_STOCK"
+    ? presentation.badgeText
+    : null;
+  const statusColor = presentation?.badgeColor === "blue" ? "#2563EB"
+    : presentation?.badgeColor === "purple" ? "#9333EA"
+    : "#C0392B"; // أحمر افتراضي لغير المتوفر/الحالات المعطّلة
 
   return (
     <div style={styles.card}>
@@ -443,9 +491,9 @@ function UpsellCard({ product, state, discount, originalPrice, onCheck, onVarian
       <div style={styles.info}>
         {/* اسم المنتج — سطر مستقل */}
         <p style={styles.productTitle}>{product.title}</p>
-        {state.checked && !isAvail && (
-          <span style={{ fontSize: 10, color: "#C0392B", fontWeight: "bold", display: "block", marginBottom: 2 }}>
-            غير متوفر حالياً
+        {statusNote && (
+          <span style={{ fontSize: 10, color: statusColor, fontWeight: "bold", display: "block", marginBottom: 2 }}>
+            {statusNote}
           </span>
         )}
 

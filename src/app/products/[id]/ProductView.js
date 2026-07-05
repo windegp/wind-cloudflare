@@ -637,7 +637,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
           {/* Stock Status — المصدر المركزي الوحيد: getInventoryPresentation() */}
           <div className="mb-7">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               <span className={`relative flex items-center justify-center w-5 h-5 rounded-full ${badgeColors.ring}`}>
                 <span className={`w-2.5 h-2.5 rounded-full ${badgeColors.dot} ${canPurchase ? `animate-pulse ${badgeColors.shadow}` : ""}`}></span>
               </span>
@@ -915,7 +915,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
               <span className="text-sm text-[#999]">ج.م</span>
               {product.compareAtPrice && <span className="text-sm text-[#BBBBBB] line-through">{product.compareAtPrice} ج.م</span>}
             </div>
-            <div className="flex items-center gap-1.5 mb-6">
+            <div className="flex items-center gap-2 mb-6">
               <span className={`w-1.5 h-1.5 rounded-full ${badgeColors.dot}`}></span>
               <span className="text-xs text-[#888]">{presentation.badgeText}</span>
             </div>
