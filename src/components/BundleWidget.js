@@ -115,8 +115,16 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
                       const sizeMatch  = !size  || v1 === size.toLowerCase()  || v2 === size.toLowerCase();
                       return colorMatch && sizeMatch;
                     });
+                    // 🔥 نفس فيكس ProductView/QuickView: status حقيقي (مش مفقود ومش
+                    // NEEDS_REVIEW) → Fail Closed. غير كده → legacy fallback مؤقت
+                    // (quantity/sellOutOfStock) لحد ما الأدمن يراجع الـ variant.
+                    const hasRealStatus =
+                      matchedVariant?.inventoryStatus &&
+                      matchedVariant.inventoryStatus !== "NEEDS_REVIEW";
                     const available = matchedVariant
-                      ? getVariantBehavior(matchedVariant.inventoryStatus).canPurchase
+                      ? (hasRealStatus
+                          ? getVariantBehavior(matchedVariant.inventoryStatus).canPurchase
+                          : (d.quantity > 0) || d.sellOutOfStock === "Yes")
                       : true; // fallback: اعتبره متاحاً لو لم نجد variant (بيانات غير مكتملة)
                     variants.push({ label, img, color, size, price: parseFloat(d.price || 0), available });
                   });

@@ -5,7 +5,7 @@ import { X, ChevronRight, ChevronLeft, ShoppingBag, Plus, Star } from '@/compone
 import { ZoomIn, Minus, Info } from '@/components/icons-extra';
 import { useCart } from "@/context/CartContext"; 
 import { useSiteSettings } from "@/hooks/useFirestore";
-import { getInventoryPresentation } from "@/lib/inventoryHelpers";
+import { getInventoryPresentation, INVENTORY_STATUS } from "@/lib/inventoryHelpers";
 import SizeChartModal from "@/components/SizeChartModal"; 
 import ProductReviews from "@/components/products/ProductReviews";
 import { fbTrack } from "@/lib/fbTrack";
@@ -127,12 +127,22 @@ export default function QuickViewModal({ product, isOpen, onClose }) {
       const legacy = (product?.quantity > 0) || product?.sellOutOfStock === "Yes";
       return getInventoryPresentation(legacy ? "IN_STOCK" : "OUT_OF_STOCK", { lowStockThreshold });
     }
-    return getInventoryPresentation(selectedVariant.inventoryStatus, {
-      quantity: selectedVariant.quantity,
-      lowStockThreshold,
-      inventoryManaged: selectedVariant.inventoryManaged !== false,
-      expectedAvailabilityDate: selectedVariant.expectedAvailabilityDate || null,
-    });
+    // 🔥 نفس فيكس ProductView.js بالظبط: status حقيقي (مش مفقود ومش NEEDS_REVIEW) → Fail Closed.
+    // غير كده → legacy fallback مؤقت لحد ما الأدمن يراجع الـ variant.
+    const hasRealStatus =
+      selectedVariant.inventoryStatus &&
+      selectedVariant.inventoryStatus !== INVENTORY_STATUS.NEEDS_REVIEW;
+
+    if (hasRealStatus) {
+      return getInventoryPresentation(selectedVariant.inventoryStatus, {
+        quantity: selectedVariant.quantity,
+        lowStockThreshold,
+        inventoryManaged: selectedVariant.inventoryManaged !== false,
+        expectedAvailabilityDate: selectedVariant.expectedAvailabilityDate || null,
+      });
+    }
+    const legacy = (product?.quantity > 0) || product?.sellOutOfStock === "Yes";
+    return getInventoryPresentation(legacy ? "IN_STOCK" : "OUT_OF_STOCK", { lowStockThreshold });
   }, [selectedVariant, product?.quantity, product?.sellOutOfStock, lowStockThreshold]);
 
   const canPurchase = presentation.canPurchase;

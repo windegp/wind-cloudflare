@@ -16,7 +16,7 @@ import { useProduct, useRelatedProducts, useSiteSettings } from "@/hooks/useFire
 import { Plus, Minus, Star, Info, Share2, Heart, ImageIcon, X, Truck, Eye, ShieldCheck, ChevronLeft, Search, ChevronRight, ChevronDown, ChevronUp, CreditCard, Banknote, ArrowLeftRight } from '@/components/icons-extra';
 import { fbTrack } from "@/lib/fbTrack";
 import { gaViewItem, gaAddToCart } from "@/lib/gaTrack";
-import { getInventoryPresentation } from "@/lib/inventoryHelpers";
+import { getInventoryPresentation, INVENTORY_STATUS } from "@/lib/inventoryHelpers";
 
 export default function ProductView({ initialProduct, sourceCategory }) {
   const { id } = useParams();
@@ -364,8 +364,17 @@ export default function ProductView({ initialProduct, sourceCategory }) {
       const legacy = (product?.quantity > 0) || product?.sellOutOfStock === "Yes";
       return getInventoryPresentation(legacy ? "IN_STOCK" : "OUT_OF_STOCK", { lowStockThreshold });
     }
-    if (selectedVariant.inventoryStatus) {
-      // variant مُرحَّل → Fail Closed
+    // 🔥 Fix (منع تكرار انقطاع AddToCart بعد Live Migration): variant عنده inventoryStatus
+    // حقيقي بالفعل (مُراجَع من الأدمن) → Fail Closed كامل. لكن لو القيمة مفقودة تماماً
+    // (قبل Migration) أو NEEDS_REVIEW (بعد Migration مباشرة، قبل مراجعة الأدمن اليدوية)
+    // → legacy fallback مؤقت (quantity/sellOutOfStock) لحد ما الأدمن يراجع الـ variant
+    // ويحدد status حقيقي. بدون الفيكس ده، تشغيل Live Migration كان هيقفل الشراء فوراً
+    // على كل الـ variants اللي لسه NEEDS_REVIEW (زي بالظبط المشكلة اللي حصلت مع undefined).
+    const hasRealStatus =
+      selectedVariant.inventoryStatus &&
+      selectedVariant.inventoryStatus !== INVENTORY_STATUS.NEEDS_REVIEW;
+
+    if (hasRealStatus) {
       return getInventoryPresentation(selectedVariant.inventoryStatus, {
         quantity: selectedVariant.quantity,
         lowStockThreshold,
@@ -373,7 +382,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
         expectedAvailabilityDate: selectedVariant.expectedAvailabilityDate || null,
       });
     }
-    // variant موجود لكن بدون inventoryStatus بعد → legacy fallback مؤقت
+    // variant موجود لكن بدون status حقيقي بعد (مفقود أو NEEDS_REVIEW) → legacy fallback مؤقت
     const legacy = (product?.quantity > 0) || product?.sellOutOfStock === "Yes";
     return getInventoryPresentation(legacy ? "IN_STOCK" : "OUT_OF_STOCK", { lowStockThreshold });
   }, [selectedVariant, product?.quantity, product?.sellOutOfStock, lowStockThreshold]);
