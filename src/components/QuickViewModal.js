@@ -1,9 +1,11 @@
 "use client";
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { X, ChevronRight, ChevronLeft, ShoppingBag, Plus, Star } from '@/components/icons-extra';
 import { ZoomIn, Minus, Info } from '@/components/icons-extra';
 import { useCart } from "@/context/CartContext"; 
+import { useSiteSettings } from "@/hooks/useFirestore";
+import { getInventoryPresentation } from "@/lib/inventoryHelpers";
 import SizeChartModal from "@/components/SizeChartModal"; 
 import ProductReviews from "@/components/products/ProductReviews";
 import { fbTrack } from "@/lib/fbTrack";
@@ -104,6 +106,48 @@ export default function QuickViewModal({ product, isOpen, onClose }) {
     }
   }, [product, isOpen]);
 
+  // 🔥 Phase 9: نفس منطق ProductView بالظبط — مصدر واحد لقرار الشراء وعرضه
+  const { data: siteSettings } = useSiteSettings();
+  const lowStockThreshold = siteSettings?.inventory?.defaultLowStockThreshold ?? 5;
+
+  const selectedVariant = useMemo(() => {
+    const variants = product?.variants;
+    if (!variants || !Array.isArray(variants) || variants.length === 0) return null;
+    return variants.find(v => {
+      const c = (v.option1Value || v.option2Value || "").toLowerCase();
+      const s = (v.option2Value || v.option1Value || "").toLowerCase();
+      const colorMatch = !qvSelectedColor || c === qvSelectedColor.toLowerCase() || s === qvSelectedColor.toLowerCase();
+      const sizeMatch  = !qvSelectedSize  || c === qvSelectedSize.toLowerCase()  || s === qvSelectedSize.toLowerCase();
+      return colorMatch && sizeMatch;
+    }) || variants[0] || null;
+  }, [product?.variants, qvSelectedColor, qvSelectedSize]);
+
+  const presentation = useMemo(() => {
+    if (!selectedVariant) {
+      const legacy = (product?.quantity > 0) || product?.sellOutOfStock === "Yes";
+      return getInventoryPresentation(legacy ? "IN_STOCK" : "OUT_OF_STOCK", { lowStockThreshold });
+    }
+    return getInventoryPresentation(selectedVariant.inventoryStatus, {
+      quantity: selectedVariant.quantity,
+      lowStockThreshold,
+      inventoryManaged: selectedVariant.inventoryManaged !== false,
+      expectedAvailabilityDate: selectedVariant.expectedAvailabilityDate || null,
+    });
+  }, [selectedVariant, product?.quantity, product?.sellOutOfStock, lowStockThreshold]);
+
+  const canPurchase = presentation.canPurchase;
+
+  const QV_BADGE_COLOR_MAP = {
+    green:  { dot: "bg-emerald-500", text: "text-emerald-600" },
+    orange: { dot: "bg-amber-500",   text: "text-amber-700"   },
+    blue:   { dot: "bg-blue-500",    text: "text-blue-600"    },
+    purple: { dot: "bg-purple-500",  text: "text-purple-600"  },
+    yellow: { dot: "bg-yellow-500",  text: "text-yellow-700"  },
+    red:    { dot: "bg-red-500",     text: "text-red-500"     },
+    gray:   { dot: "bg-gray-400",    text: "text-gray-500"    },
+  };
+  const qvBadgeColors = QV_BADGE_COLOR_MAP[presentation.badgeColor] || QV_BADGE_COLOR_MAP.gray;
+
   if (!isOpen || !product || !mounted) return null;
 
   const formatVariable = (val) => {
@@ -123,6 +167,7 @@ export default function QuickViewModal({ product, isOpen, onClose }) {
   };
 
   const handleAddToCartFromQuickView = () => {
+    if (!canPurchase) return;
     setIsAdding(true);
     addToCart({
       ...product,
@@ -287,6 +332,19 @@ export default function QuickViewModal({ product, isOpen, onClose }) {
                 {product.compareAtPrice && <span className="text-xs text-gray-400 line-through mr-2">{product.compareAtPrice} ج.م</span>}
               </div>
 
+              {/* Stock Status — نفس presentation المركزية المستخدمة في صفحة المنتج */}
+              <div className="mb-4">
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${qvBadgeColors.dot}`}></span>
+                  <span className={`text-[12px] font-medium ${qvBadgeColors.text}`}>{presentation.badgeText}</span>
+                </div>
+                {presentation.showProgressBar && (
+                  <div className="mt-1.5 w-full max-w-[200px] h-1.5 bg-[#eee] rounded-full overflow-hidden">
+                    <div className={`h-full ${qvBadgeColors.dot} rounded-full transition-all duration-300`} style={{ width: `${presentation.progressValue}%` }}></div>
+                  </div>
+                )}
+              </div>
+
               {product.description && (
                 <button onClick={() => setDescModalOpen(true)} className="w-fit flex items-center gap-1.5 px-3 py-1.5 mb-5 rounded-full bg-[#FAF9F6] border border-[#EAEAEA] hover:bg-gray-100 transition-colors">
                   <Info size={14} className="text-[#005bd3]" />
@@ -332,7 +390,15 @@ export default function QuickViewModal({ product, isOpen, onClose }) {
               )}
 
               <div className="flex gap-2 w-full mt-2">
-                <button onClick={handleAddToCartFromQuickView} disabled={isAdding} className="pay-btn-qv flex-1 font-black text-sm py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all" style={{fontFamily:"Cairo,sans-serif"}}><ShoppingBag size={16} />{isAdding ? "جاري الإضافة..." : `أضف إلي السلة — ${product.price * qvQuantity} ج.م`}</button>
+                <button
+                  onClick={handleAddToCartFromQuickView}
+                  disabled={!canPurchase || isAdding}
+                  className="pay-btn-qv flex-1 font-black text-sm py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                  style={{fontFamily:"Cairo,sans-serif"}}
+                >
+                  <ShoppingBag size={16} />
+                  {isAdding ? "جاري الإضافة..." : (canPurchase ? `أضف إلي السلة — ${product.price * qvQuantity} ج.م` : presentation.buttonText)}
+                </button>
                 <div className="flex items-center justify-between bg-white border border-gray-200 rounded-xl px-1 w-[90px] shrink-0 shadow-sm">
                   <button onClick={() => setQvQuantity(q => q + 1)} className="text-gray-500 hover:text-[#1A1A1A] p-2 transition-colors"><Plus size={16} /></button>
                   <span className="text-[#1A1A1A] font-bold text-sm">{qvQuantity}</span>

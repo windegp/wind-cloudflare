@@ -383,13 +383,13 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   // خريطة ألوان الـ badge → Tailwind (المكان الوحيد في ProductView اللي فيه ربط ألوان،
   // النص والقرار نفسه بييجي بالكامل من presentation)
   const BADGE_COLOR_MAP = {
-    green:  { dot: "bg-emerald-500", text: "text-emerald-600" },
-    orange: { dot: "bg-orange-500",  text: "text-orange-600"  },
-    blue:   { dot: "bg-blue-500",    text: "text-blue-600"    },
-    purple: { dot: "bg-purple-500",  text: "text-purple-600"  },
-    yellow: { dot: "bg-yellow-500",  text: "text-yellow-600"  },
-    red:    { dot: "bg-red-500",     text: "text-red-500"     },
-    gray:   { dot: "bg-gray-400",    text: "text-gray-500"    },
+    green:  { dot: "bg-emerald-500", text: "text-emerald-600", ring: "bg-emerald-100", shadow: "shadow-[0_0_6px_2px_rgba(16,185,129,0.4)]" },
+    orange: { dot: "bg-amber-500",   text: "text-amber-700",   ring: "bg-amber-100",   shadow: "shadow-[0_0_6px_2px_rgba(217,119,6,0.35)]"  },
+    blue:   { dot: "bg-blue-500",    text: "text-blue-600",    ring: "bg-blue-100",    shadow: "shadow-[0_0_6px_2px_rgba(37,99,235,0.35)]"   },
+    purple: { dot: "bg-purple-500",  text: "text-purple-600",  ring: "bg-purple-100",  shadow: "shadow-[0_0_6px_2px_rgba(147,51,234,0.35)]"  },
+    yellow: { dot: "bg-yellow-500",  text: "text-yellow-700",  ring: "bg-yellow-100",  shadow: "shadow-[0_0_6px_2px_rgba(202,138,4,0.35)]"   },
+    red:    { dot: "bg-red-500",     text: "text-red-500",     ring: "bg-red-100",     shadow: ""                                             },
+    gray:   { dot: "bg-gray-400",    text: "text-gray-500",    ring: "bg-gray-100",    shadow: ""                                             },
   };
   const badgeColors = BADGE_COLOR_MAP[presentation.badgeColor] || BADGE_COLOR_MAP.gray;
 
@@ -629,13 +629,15 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           {/* Stock Status — المصدر المركزي الوحيد: getInventoryPresentation() */}
           <div className="mb-7">
             <div className="flex items-center gap-2">
-              <span className={`w-2.5 h-2.5 rounded-full ${badgeColors.dot} ${canPurchase ? "animate-pulse shadow-[0_0_6px_2px_rgba(16,185,129,0.4)]" : ""}`}></span>
+              <span className={`relative flex items-center justify-center w-5 h-5 rounded-full ${badgeColors.ring}`}>
+                <span className={`w-2.5 h-2.5 rounded-full ${badgeColors.dot} ${canPurchase ? `animate-pulse ${badgeColors.shadow}` : ""}`}></span>
+              </span>
               <span className={`text-[13px] font-medium ${badgeColors.text}`}>{presentation.badgeText}</span>
             </div>
             {presentation.showProgressBar && (
-              <div className="mt-2 w-full max-w-[220px] h-1.5 bg-[#eee] rounded-full overflow-hidden">
+              <div className="mt-2.5 w-full max-w-[260px] h-2 bg-[#eee] rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-orange-500 rounded-full transition-all duration-300"
+                  className={`h-full ${badgeColors.dot} rounded-full transition-all duration-300`}
                   style={{ width: `${presentation.progressValue}%` }}
                 ></div>
               </div>

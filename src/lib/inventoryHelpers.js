@@ -311,8 +311,28 @@ export function getInventoryPresentation(inventoryStatus, opts = {}) {
     helperMessage: null,
   };
 
+  // 🔥 Phase 9: الكمية بتتحكم في شكل العرض بغض النظر عن الـ status المضبوط يدوياً —
+  // طالما الكمية متتبَّعة (inventoryManaged) ووصلت للحد المحدد أو أقل، يظهر شريط
+  // "الكمية محدودة" حتى لو الـ status نفسه لسه IN_STOCK (مفيش داعي الأدمن يغيّره يدوياً).
+  // هذا تغيير في العرض فقط — القرار التجاري (canPurchase) بيفضل زي ما هو دايماً من الـ status.
+  const isLowQty = inventoryManaged && Number.isFinite(quantity) && quantity > 0 && quantity <= lowStockThreshold;
+  const lowQtyProgress = isLowQty
+    ? Math.max(0, Math.min(100, Math.round((quantity / lowStockThreshold) * 100)))
+    : 0;
+
   switch (status) {
     case INVENTORY_STATUS.IN_STOCK:
+      if (isLowQty) {
+        return {
+          ...base,
+          badgeColor: "orange",
+          badgeText: `تبقى ${quantity} قطعة فقط - أسرع! الكمية محدودة`,
+          buttonText: "أضف إلى السلة",
+          buttonDisabled: false,
+          showProgressBar: true,
+          progressValue: lowQtyProgress,
+        };
+      }
       return {
         ...base,
         badgeColor: "green",
@@ -322,18 +342,17 @@ export function getInventoryPresentation(inventoryStatus, opts = {}) {
       };
 
     case INVENTORY_STATUS.LOW_STOCK: {
-      // Progress Bar يظهر فقط لو الكمية موثوقة (inventoryManaged) ومعروفة وأقل من الحد
       const reliableQty = inventoryManaged && Number.isFinite(quantity) && quantity > 0;
-      const showBar = reliableQty && quantity <= lowStockThreshold;
       return {
         ...base,
         badgeColor: "orange",
-        badgeText: reliableQty ? `تبقى ${quantity} قطعة فقط` : "كمية محدودة",
+        badgeText: reliableQty
+          ? `تبقى ${quantity} قطعة فقط - أسرع! الكمية محدودة`
+          : "كمية محدودة",
         buttonText: "أضف إلى السلة",
         buttonDisabled: false,
-        showProgressBar: showBar,
-        progressValue: showBar ? Math.max(0, Math.min(100, Math.round((quantity / lowStockThreshold) * 100))) : 0,
-        helperMessage: showBar ? `الكمية على وشك النفاد — سارع بالطلب` : null,
+        showProgressBar: isLowQty,
+        progressValue: lowQtyProgress,
       };
     }
 
