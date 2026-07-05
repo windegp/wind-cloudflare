@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { getDb } from "../../../lib/firebase";
 import { collection, query, where, getDocs, limit, orderBy, startAfter } from 'firebase/firestore/lite';
+import { isProductHiddenFromListings } from '@/lib/inventoryHelpers';
 import { usePageReady, useGlobalLoader } from "../../../context/GlobalLoaderContext";
 import ProductCard from "../../../components/products/ProductCard";
 import { usePaginatedProducts } from "@/hooks/useFirestore";
@@ -84,7 +85,10 @@ export default function CategoryView({ initialSlug, initialCategoryData }) {
 
       const q = query(baseQ, startAfter(lastDoc), limit(PAGE_SIZE));
       const snap = await getDocs(q);
-      let newItems = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      let newItems = snap.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        // 🔥 Phase 8: منتجات SEASONAL لا تظهر في أي قسم (بما فيها top-rated/most-liked)
+        .filter(p => !isProductHiddenFromListings(p.variants));
 
       if (newItems.length > 0) {
         try {

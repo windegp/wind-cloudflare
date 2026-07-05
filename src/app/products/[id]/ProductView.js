@@ -12,11 +12,11 @@ import SizeChartModal from "@/components/SizeChartModal";
 import BundleWidget from "@/components/BundleWidget";
 import ProductReviews from "@/components/products/ProductReviews";
 import ProductCard from "@/components/products/ProductCard";
-import { useProduct, useRelatedProducts } from "@/hooks/useFirestore";
+import { useProduct, useRelatedProducts, useSiteSettings } from "@/hooks/useFirestore";
 import { Plus, Minus, Star, Info, Share2, Heart, ImageIcon, X, Truck, Eye, ShieldCheck, ChevronLeft, Search, ChevronRight, ChevronDown, ChevronUp, CreditCard, Banknote, ArrowLeftRight } from '@/components/icons-extra';
 import { fbTrack } from "@/lib/fbTrack";
 import { gaViewItem, gaAddToCart } from "@/lib/gaTrack";
-import { getVariantBehavior } from "@/lib/inventoryHelpers";
+import { getInventoryPresentation } from "@/lib/inventoryHelpers";
 
 export default function ProductView({ initialProduct, sourceCategory }) {
   const { id } = useParams();
@@ -66,6 +66,9 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   const [isAddingToCart, setIsAddingToCart] = useState(false);
   const addToCartBtnRef = useRef(null);
   const VISIBLE_THUMBS = 6;
+  // 🔥 Phase 8: lowStockThreshold من إعدادات الموقع — يُستخدَم في getInventoryPresentation
+  const { data: siteSettings } = useSiteSettings();
+  const lowStockThreshold = siteSettings?.inventory?.defaultLowStockThreshold ?? 5;
 
    const likesFromServerRef = useRef(null);
 
@@ -352,16 +355,36 @@ export default function ProductView({ initialProduct, sourceCategory }) {
     }) || variants[0] || null;
   }, [product?.variants, selectedColor, selectedSize]);
 
-  // canPurchase: المصدر الوحيد لقرار "هل زر السلة فعّال؟"
-  // Fail Closed: إذا لا يوجد variant أو inventoryStatus → false
-  const { canPurchase, status: currentInventoryStatus } = useMemo(() => {
+  // presentation: المصدر المركزي الوحيد لكل عناصر الواجهة (badge/زر/رسالة/progress bar)
+  // Fail Closed: إذا لا يوجد variant أو inventoryStatus → OUT_OF_STOCK
+  const presentation = useMemo(() => {
     if (!selectedVariant) {
       // legacy fallback للمنتجات بدون variants (AD-2 — سيُزال لاحقاً)
       const legacy = (product?.quantity > 0) || product?.sellOutOfStock === "Yes";
-      return { canPurchase: legacy, status: legacy ? "IN_STOCK" : "OUT_OF_STOCK" };
+      return getInventoryPresentation(legacy ? "IN_STOCK" : "OUT_OF_STOCK", { lowStockThreshold });
     }
-    return getVariantBehavior(selectedVariant.inventoryStatus);
-  }, [selectedVariant, product?.quantity, product?.sellOutOfStock]);
+    return getInventoryPresentation(selectedVariant.inventoryStatus, {
+      quantity: selectedVariant.quantity,
+      lowStockThreshold,
+      inventoryManaged: selectedVariant.inventoryManaged !== false,
+      expectedAvailabilityDate: selectedVariant.expectedAvailabilityDate || null,
+    });
+  }, [selectedVariant, product?.quantity, product?.sellOutOfStock, lowStockThreshold]);
+
+  const canPurchase = presentation.canPurchase;
+
+  // خريطة ألوان الـ badge → Tailwind (المكان الوحيد في ProductView اللي فيه ربط ألوان،
+  // النص والقرار نفسه بييجي بالكامل من presentation)
+  const BADGE_COLOR_MAP = {
+    green:  { dot: "bg-emerald-500", text: "text-emerald-600" },
+    orange: { dot: "bg-orange-500",  text: "text-orange-600"  },
+    blue:   { dot: "bg-blue-500",    text: "text-blue-600"    },
+    purple: { dot: "bg-purple-500",  text: "text-purple-600"  },
+    yellow: { dot: "bg-yellow-500",  text: "text-yellow-600"  },
+    red:    { dot: "bg-red-500",     text: "text-red-500"     },
+    gray:   { dot: "bg-gray-400",    text: "text-gray-500"    },
+  };
+  const badgeColors = BADGE_COLOR_MAP[presentation.badgeColor] || BADGE_COLOR_MAP.gray;
 
   const currentColorImage = () => {
     if (!selectedColor) return gallery[1] || activeImage;
@@ -596,18 +619,22 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             </div>
           )}
 
-          {/* Stock Status — مصدر الحقيقة: inventoryStatus (Phase 6) */}
-          <div className="flex items-center gap-2 mb-7">
-            {canPurchase ? (
-              <>
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_6px_2px_rgba(16,185,129,0.4)]"></span>
-                <span className="text-[13px] font-medium text-emerald-600">متوفر في المخزون</span>
-              </>
-            ) : (
-              <>
-                <span className="w-2.5 h-2.5 rounded-full bg-red-500"></span>
-                <span className="text-[13px] font-medium text-red-500">غير متوفر في المخزون</span>
-              </>
+          {/* Stock Status — المصدر المركزي الوحيد: getInventoryPresentation() */}
+          <div className="mb-7">
+            <div className="flex items-center gap-2">
+              <span className={`w-2.5 h-2.5 rounded-full ${badgeColors.dot} ${canPurchase ? "animate-pulse shadow-[0_0_6px_2px_rgba(16,185,129,0.4)]" : ""}`}></span>
+              <span className={`text-[13px] font-medium ${badgeColors.text}`}>{presentation.badgeText}</span>
+            </div>
+            {presentation.showProgressBar && (
+              <div className="mt-2 w-full max-w-[220px] h-1.5 bg-[#eee] rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-orange-500 rounded-full transition-all duration-300"
+                  style={{ width: `${presentation.progressValue}%` }}
+                ></div>
+              </div>
+            )}
+            {presentation.helperMessage && (
+              <p className="mt-1.5 text-[12px] text-[#888]">{presentation.helperMessage}</p>
             )}
           </div>
 
@@ -642,7 +669,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                 <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#111" strokeWidth="2.5" strokeLinecap="round">
                   <path d="M12 2a10 10 0 0 1 10 10" />
                 </svg>
-              ) : (canPurchase ? "أضف إلى السلة" : "غير متوفر")}
+              ) : (presentation.buttonText)}
             </button>
             <div className="flex items-center justify-between bg-[#F2F2F2] border border-[#E0E0E0] px-1 w-[72px] shrink-0 rounded-lg">
               <button onClick={() => setQuantity(q => q + 1)} className="text-[#888] hover:text-black p-1"><Plus size={13} /></button>
@@ -717,7 +744,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                     <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
                       <path d="M12 2a10 10 0 0 1 10 10" />
                     </svg>
-                  ) : (canPurchase ? "أضف إلى السلة" : "غير متوفر")}
+                  ) : (presentation.buttonText)}
                 </button>
 
                 {/* Options Button */}
@@ -871,8 +898,8 @@ export default function ProductView({ initialProduct, sourceCategory }) {
               {product.compareAtPrice && <span className="text-sm text-[#BBBBBB] line-through">{product.compareAtPrice} ج.م</span>}
             </div>
             <div className="flex items-center gap-1.5 mb-6">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-              <span className="text-xs text-[#888]">{canPurchase ? "متوفر" : "غير متوفر"}</span>
+              <span className={`w-1.5 h-1.5 rounded-full ${badgeColors.dot}`}></span>
+              <span className="text-xs text-[#888]">{presentation.badgeText}</span>
             </div>
 
             {/* Short Desc */}
@@ -960,7 +987,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                 onMouseEnter={e => { if (canPurchase) e.currentTarget.style.opacity='0.88'; }}
                 onMouseLeave={e => { if (canPurchase) e.currentTarget.style.opacity='1'; }}
               >
-                {canPurchase ? "أضف إلى السلة" : "غير متوفر"}
+                {presentation.buttonText}
               </button>
               <div className="flex items-center justify-between bg-white border border-[#E0E0E0] px-1 w-[84px] shrink-0">
                 <button onClick={() => setQuantity(q => q+1)} className="text-[#888] hover:text-black p-2"><Plus size={14} /></button>

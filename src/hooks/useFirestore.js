@@ -5,6 +5,7 @@ import {
   collection, getDocs, doc, getDoc, query, limit, 
   orderBy, where, startAfter, documentId
 } from 'firebase/firestore/lite';
+import { isProductHiddenFromListings } from '@/lib/inventoryHelpers';
 
 // =========================================================
 // 🎯 OPTIMIZATION: Request Deduplication Layer
@@ -52,7 +53,10 @@ const fetchCollection = async ([path, limitCount, orderField, orderDir]) => {
   q = query(q, limit(limitCount || 20)); 
 
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    // 🔥 Phase 8: منتجات SEASONAL (كل الـ variants بحالة SEASONAL) لا تظهر في أي قائمة
+    .filter(p => !isProductHiddenFromListings(p.variants));
 };
 
 // مصنع جلب تقييمات الصفحة الرئيسية (Legendary Batch Fetching)
@@ -295,7 +299,10 @@ export const usePaginatedProducts = (categorySlug, limitCount = 10, lastVisibleD
     }
 
     const snap = await getDocs(q);
-    const products = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const products = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      // 🔥 Phase 8: منتجات SEASONAL لا تظهر في صفحات الأقسام
+      .filter(p => !isProductHiddenFromListings(p.variants));
     
     // 🔥 Batch fetch all stats in one request to eliminate ProductCard request storm
     if (products.length > 0) {
@@ -401,7 +408,10 @@ export const useRelatedProducts = (product) => {
       });
     }
 
-    return Array.from(new Map(related.map(item => [item.id, item])).values()).slice(0, 5);
+    return Array.from(new Map(related.map(item => [item.id, item])).values())
+      // 🔥 Phase 8: لا نقترح منتج SEASONAL كـ "منتجات ذات صلة"
+      .filter(p => !isProductHiddenFromListings(p.variants))
+      .slice(0, 5);
   };
 
   const productId = product && product.id ? product.id : null;

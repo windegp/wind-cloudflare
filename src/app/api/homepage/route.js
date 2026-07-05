@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore/lite";
 import { kvGet, kvSet } from '@/lib/kv-cache';
+import { isProductHiddenFromListings } from '@/lib/inventoryHelpers';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,11 +48,16 @@ export async function GET() {
           query(collection(db, "products"), where(documentId(), "in", uniqueIds.slice(0, 30)))
         );
         const pricesMap = {};
+        // 🔥 Phase 8: منتجات SEASONAL (كل الـ variants SEASONAL) تُستبعَد من الصفحة الرئيسية
+        const hiddenIds = new Set();
         productsSnap.docs.forEach(d => {
           pricesMap[d.id] = {
             price: d.data().price,
             compareAtPrice: d.data().compareAtPrice
           };
+          if (isProductHiddenFromListings(d.data().variants)) {
+            hiddenIds.add(d.id);
+          }
         });
 
         // Fetch review stats from ProductStats
@@ -72,7 +78,9 @@ export async function GET() {
           const sectionData = section.data || {};
           const items = sectionData.cards || sectionData.products || [];
           if (items.length === 0) return section;
-          const updatedItems = items.map(item => {
+          const updatedItems = items
+            .filter(item => !item.productId || !hiddenIds.has(item.productId))
+            .map(item => {
             if (!item.productId) return item;
             const priceData = pricesMap[item.productId] || {};
             const statsData = statsMap[item.productId] || {};

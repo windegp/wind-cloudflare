@@ -25,10 +25,10 @@
 // │  • بعد اكتمال المراجعة البشرية تختفي من البيانات نهائياً               │
 // │  • وجودها على variant = "هذا الـ variant لم يُراجَع بعد"               │
 // ├─────────────────────────────────────────────────────────────────────────┤
-// │  FINAL BUSINESS ENUM — الحالات التسع المعتمدة نهائياً                  │
+// │  FINAL BUSINESS ENUM — الحالات العشر المعتمدة نهائياً                  │
 // │  ─────────────────────────────────────────────────────────────────────  │
 // │  IN_STOCK | LOW_STOCK | OUT_OF_STOCK | PRE_ORDER | BACKORDER           │
-// │  COMING_SOON | TEMP_DISABLED | DISCONTINUED | ARCHIVED                 │
+// │  COMING_SOON | TEMP_DISABLED | DISCONTINUED | ARCHIVED | SEASONAL       │
 // │                                                                         │
 // │  • هذه فقط تظهر في Admin Dropdown                                      │
 // │  • هذه فقط تُخزَّن كقرار تجاري نهائي                                   │
@@ -39,7 +39,7 @@ export const INVENTORY_STATUS = {
   // ── Migration Marker (مؤقت — ليس جزءاً من الـ Business Enum) ────────────
   NEEDS_REVIEW:  "NEEDS_REVIEW",
 
-  // ── Final Business Enum (9 حالات نهائية معتمدة) ─────────────────────────
+  // ── Final Business Enum (10 حالات نهائية معتمدة) ────────────────────────
   IN_STOCK:      "IN_STOCK",
   LOW_STOCK:     "LOW_STOCK",
   OUT_OF_STOCK:  "OUT_OF_STOCK",
@@ -49,6 +49,11 @@ export const INVENTORY_STATUS = {
   TEMP_DISABLED: "TEMP_DISABLED",
   DISCONTINUED:  "DISCONTINUED",
   ARCHIVED:      "ARCHIVED",
+  // SEASONAL: منتج موسمي مخفي مؤقتاً عن المتجر/البحث/الأقسام، لكنه يحتفظ بكل
+  // بياناته وصوره وSEO في لوحة الإدارة، ويُعاد مباشرة لـ IN_STOCK عند بداية
+  // الموسم. مختلف عمداً عن ARCHIVED (منتج ملغي نهائياً) وعن TEMP_DISABLED
+  // (تعطيل مؤقت لكن المنتج يظهر في الموقع بحالة "غير متاح").
+  SEASONAL:      "SEASONAL",
 };
 
 // Set للتحقق السريع
@@ -72,6 +77,7 @@ const PURCHASABLE = new Set([
  *   - أي قيمة غير معروفة / undefined / null   → OUT_OF_STOCK
  *   - DISCONTINUED                            → مخفي من الواجهة
  *   - ARCHIVED                               → مخفي من الواجهة
+ *   - SEASONAL                               → مخفي من الواجهة (وصفحات القوائم/البحث)
  *
  * @param {string|undefined} inventoryStatus - قيمة inventoryStatus من Firestore
  * @returns {{ canPurchase: boolean, hideFromUI: boolean, status: string }}
@@ -108,7 +114,8 @@ export function getVariantBehavior(inventoryStatus) {
   return {
     canPurchase:   PURCHASABLE.has(inventoryStatus),
     hideFromUI:    inventoryStatus === INVENTORY_STATUS.DISCONTINUED ||
-                   inventoryStatus === INVENTORY_STATUS.ARCHIVED,
+                   inventoryStatus === INVENTORY_STATUS.ARCHIVED ||
+                   inventoryStatus === INVENTORY_STATUS.SEASONAL,
     status:        inventoryStatus,
     isNeedsReview: false,
     isUnknown:     false,
@@ -141,6 +148,7 @@ export function getMetaAvailability(inventoryStatus) {
 
     case INVENTORY_STATUS.DISCONTINUED:
     case INVENTORY_STATUS.ARCHIVED:
+    case INVENTORY_STATUS.SEASONAL:
       return null; // يُحذَف من الفيد كلياً
 
     // NEEDS_REVIEW + أي قيمة غير معروفة → out of stock (لا تُرسَل لـ Meta كـ available)
@@ -152,6 +160,9 @@ export function getMetaAvailability(inventoryStatus) {
 
 // ─── Storefront Display: getVariantDisplayInfo ────────────────────────────────
 /**
+ * @deprecated منذ Phase 8 — استخدم getInventoryPresentation() بدلاً منها للـ Storefront.
+ * باقية فقط لتوافق أماكن قديمة (Admin messages) لم تُنقَل بعد.
+ *
  * معلومات العرض للـ Storefront لكل variant.
  * يُستخدَم لعرض النصوص المناسبة (زر السلة، badge، تاريخ التوفر).
  *
@@ -245,6 +256,193 @@ export function getVariantDisplayInfo(
   }
 }
 
+// ─── Central Storefront Presentation: getInventoryPresentation ──────────────
+/**
+ * Phase 8 · المصدر المركزي الوحيد لكل عناصر واجهة المخزون في الـ Storefront.
+ *
+ * أي مكان في الموقع (ProductView، BundleWidget، Quick View، إلخ) يحتاج يعرض
+ * badge/زر/رسالة/progress bar لازم يستدعي الدالة دي فقط — ممنوع أي نص أو لون
+ * ثابت متكرر في مكان تاني. لو احتجت تغيّر نص أو لون status، التغيير هنا بس.
+ *
+ * @param {string|undefined} inventoryStatus
+ * @param {Object} opts
+ * @param {number} [opts.quantity=0]
+ * @param {number} [opts.lowStockThreshold=5] - من site settings عادةً (inventory.defaultLowStockThreshold)
+ * @param {boolean} [opts.inventoryManaged=true] - لو false، الكمية غير موثوقة فلا تُعرَض كرقم
+ * @param {string|null} [opts.expectedAvailabilityDate=null]
+ *
+ * @returns {{
+ *   status: string,
+ *   badgeColor: "green"|"orange"|"blue"|"purple"|"yellow"|"red"|"gray",
+ *   badgeText: string,
+ *   buttonText: string,
+ *   buttonDisabled: boolean,
+ *   canPurchase: boolean,
+ *   helperMessage: string|null,
+ *   showProgressBar: boolean,
+ *   progressValue: number,
+ *   hideFromUI: boolean
+ * }}
+ */
+export function getInventoryPresentation(inventoryStatus, opts = {}) {
+  const {
+    quantity = 0,
+    lowStockThreshold = 5,
+    inventoryManaged = true,
+    expectedAvailabilityDate = null,
+  } = opts;
+
+  const behavior = getVariantBehavior(inventoryStatus);
+  const status = behavior.status; // Fail Closed: normalized دايماً لقيمة نهائية صالحة
+
+  const dateStr = expectedAvailabilityDate
+    ? new Date(expectedAvailabilityDate).toLocaleDateString("ar-EG", {
+        year: "numeric", month: "long", day: "numeric",
+      })
+    : null;
+
+  // القاعدة الافتراضية — كل حالة تُعدّل اللي تحتاجه بس
+  const base = {
+    status,
+    canPurchase: behavior.canPurchase,
+    hideFromUI: behavior.hideFromUI,
+    showProgressBar: false,
+    progressValue: 0,
+    helperMessage: null,
+  };
+
+  switch (status) {
+    case INVENTORY_STATUS.IN_STOCK:
+      return {
+        ...base,
+        badgeColor: "green",
+        badgeText: "متوفر في المخزون",
+        buttonText: "أضف إلى السلة",
+        buttonDisabled: false,
+      };
+
+    case INVENTORY_STATUS.LOW_STOCK: {
+      // Progress Bar يظهر فقط لو الكمية موثوقة (inventoryManaged) ومعروفة وأقل من الحد
+      const reliableQty = inventoryManaged && Number.isFinite(quantity) && quantity > 0;
+      const showBar = reliableQty && quantity <= lowStockThreshold;
+      return {
+        ...base,
+        badgeColor: "orange",
+        badgeText: reliableQty ? `تبقى ${quantity} قطعة فقط` : "كمية محدودة",
+        buttonText: "أضف إلى السلة",
+        buttonDisabled: false,
+        showProgressBar: showBar,
+        progressValue: showBar ? Math.max(0, Math.min(100, Math.round((quantity / lowStockThreshold) * 100))) : 0,
+        helperMessage: showBar ? `الكمية على وشك النفاد — سارع بالطلب` : null,
+      };
+    }
+
+    case INVENTORY_STATUS.PRE_ORDER:
+      return {
+        ...base,
+        badgeColor: "blue",
+        badgeText: "متاح للحجز المسبق",
+        buttonText: "احجز مسبقاً",
+        buttonDisabled: false,
+        helperMessage: dateStr ? `يُشحن ${dateStr}` : null,
+      };
+
+    case INVENTORY_STATUS.BACKORDER:
+      return {
+        ...base,
+        badgeColor: "purple",
+        badgeText: "سيتم الشحن عند توفره",
+        buttonText: "اطلب الآن",
+        buttonDisabled: false,
+        helperMessage: dateStr ? `يُشحن عند توفره · ${dateStr}` : "يُشحن عند توفره",
+      };
+
+    case INVENTORY_STATUS.COMING_SOON:
+      return {
+        ...base,
+        badgeColor: "yellow",
+        badgeText: "قريباً",
+        buttonText: "قريباً",
+        buttonDisabled: true,
+        helperMessage: dateStr ? `متوقع التوفر ${dateStr}` : null,
+      };
+
+    case INVENTORY_STATUS.OUT_OF_STOCK:
+      return {
+        ...base,
+        badgeColor: "red",
+        badgeText: "غير متوفر في المخزون",
+        buttonText: "غير متوفر",
+        buttonDisabled: true,
+      };
+
+    case INVENTORY_STATUS.TEMP_DISABLED:
+      return {
+        ...base,
+        badgeColor: "gray",
+        badgeText: "غير متاح مؤقتاً",
+        buttonText: "غير متاح مؤقتاً",
+        buttonDisabled: true,
+      };
+
+    case INVENTORY_STATUS.DISCONTINUED:
+      return {
+        ...base,
+        badgeColor: "gray",
+        badgeText: "تم إيقاف المنتج",
+        buttonText: "تم إيقاف المنتج",
+        buttonDisabled: true,
+      };
+
+    case INVENTORY_STATUS.ARCHIVED:
+      return {
+        ...base,
+        badgeColor: "gray",
+        badgeText: "منتج مؤرشف",
+        buttonText: "غير متوفر",
+        buttonDisabled: true,
+      };
+
+    // SEASONAL: من المفترض ألا تصل هنا أصلاً لأن المنتج مخفي بالكامل من المتجر
+    // والبحث والأقسام (يُفلتَر عند القوائم قبل الوصول لصفحة المنتج). موجودة هنا
+    // فقط كـ safety net لو حد وصل للصفحة بلينك مباشر قديم محفوظ عنده.
+    case INVENTORY_STATUS.SEASONAL:
+      return {
+        ...base,
+        badgeColor: "gray",
+        badgeText: "غير متوفر حالياً",
+        buttonText: "غير متوفر",
+        buttonDisabled: true,
+      };
+
+    // Fallback نظري — behavior.status دايماً بيرجع قيمة من الأعلى (Fail Closed → OUT_OF_STOCK)
+    default:
+      return {
+        ...base,
+        badgeColor: "red",
+        badgeText: "غير متوفر",
+        buttonText: "غير متوفر",
+        buttonDisabled: true,
+      };
+  }
+}
+
+/**
+ * هل المنتج ده لازم يختفي بالكامل من صفحات القوائم (الأقسام/البحث/الرئيسية)؟
+ * فقط SEASONAL بالسلوك ده حالياً — منتج مخفي مؤقتاً لكن محتفظ بكل بياناته.
+ * ARCHIVED/DISCONTINUED مقصود إنهم يفضلوا يظهروا (بحالة معطّلة) وليس اختيار هنا.
+ *
+ * قاعدة المنتج بالكامل: لو كل الـ variants الفعالة SEASONAL (أو مفيش variants
+ * أصلاً بس المنتج نفسه معلّم SEASONAL عبر أول variant)، يُخفى المنتج كله.
+ *
+ * @param {Array} variants
+ * @returns {boolean}
+ */
+export function isProductHiddenFromListings(variants) {
+  if (!Array.isArray(variants) || variants.length === 0) return false;
+  return variants.every((v) => v.inventoryStatus === INVENTORY_STATUS.SEASONAL);
+}
+
 // ─── Admin: getAdminStatusLabel ───────────────────────────────────────────────
 /**
  * التسمية العربية لكل status — للعرض في لوحة الإدارة فقط.
@@ -265,6 +463,7 @@ export const ADMIN_STATUS_LABELS = {
   [INVENTORY_STATUS.TEMP_DISABLED]: "⏸️ موقوف مؤقتاً",
   [INVENTORY_STATUS.DISCONTINUED]:  "🚫 متوقف نهائياً",
   [INVENTORY_STATUS.ARCHIVED]:      "📦 مؤرشف",
+  [INVENTORY_STATUS.SEASONAL]:      "🍂 موسمي (مخفي)",
 };
 
 /** لون خلفية كل status في الـ Matrix View */
@@ -279,6 +478,7 @@ export const ADMIN_STATUS_COLORS = {
   [INVENTORY_STATUS.TEMP_DISABLED]: { bg: "bg-gray-200",   text: "text-gray-700",   border: "border-gray-400"   },
   [INVENTORY_STATUS.DISCONTINUED]:  { bg: "bg-black/10",   text: "text-gray-500",   border: "border-gray-400"   },
   [INVENTORY_STATUS.ARCHIVED]:      { bg: "bg-stone-100",  text: "text-stone-500",  border: "border-stone-300"  },
+  [INVENTORY_STATUS.SEASONAL]:      { bg: "bg-amber-100",  text: "text-amber-800",  border: "border-amber-300"  },
 };
 
 /** الـ statuses التي يمكن للأدمن الاختيار منها (NEEDS_REVIEW ليس خياراً يدوياً) */
@@ -292,10 +492,11 @@ export const ADMIN_SELECTABLE_STATUSES = [
   INVENTORY_STATUS.TEMP_DISABLED,
   INVENTORY_STATUS.DISCONTINUED,
   INVENTORY_STATUS.ARCHIVED,
+  INVENTORY_STATUS.SEASONAL,
 ];
 
 /**
- * الـ Final Business Enum الرسمي — الحالات التسع المعتمدة نهائياً.
+ * الـ Final Business Enum الرسمي — الحالات العشر المعتمدة نهائياً.
  *
  * هذه هي المرجع الوحيد لأي تحقق من "هل هذا status نهائي؟"
  * NEEDS_REVIEW غير موجودة هنا عمداً — هي migration marker وليست business status.
@@ -313,6 +514,7 @@ export const FINAL_BUSINESS_STATUSES = new Set([
   INVENTORY_STATUS.TEMP_DISABLED,
   INVENTORY_STATUS.DISCONTINUED,
   INVENTORY_STATUS.ARCHIVED,
+  INVENTORY_STATUS.SEASONAL,
 ]);
 
 /** الـ statuses التي تحتاج عرض expectedAvailabilityDate */
