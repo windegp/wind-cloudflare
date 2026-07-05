@@ -50,15 +50,41 @@ export async function GET() {
         const pricesMap = {};
         // 🔥 Phase 8: منتجات SEASONAL (كل الـ variants SEASONAL) تُستبعَد من الصفحة الرئيسية
         const hiddenIds = new Set();
+        // 🔥 Fix: رابط المنتج المحفوظ في Home Manager هو Snapshot وقت الإضافة فقط —
+        // لو الأدمن غيّر رابط (handle) المنتج بعدين، الرابط القديم يفضل محفوظاً هنا
+        // للأبد لحد ما حد يفتح Home Manager ويحفظ القسم تاني يدوياً. بدل الاعتماد على
+        // ده، نحل أي تحويل (redirect) هنا بنفس طريقة صفحة المنتج بالظبط، فالرابط المعروض
+        // في الصفحة الرئيسية يكون دايماً هو الرابط الحالي الصحيح، مهما كان المخزّن قديم.
+        const redirectMap = {}; // originalProductId -> finalCanonicalId
+        const redirectedStubIds = [];
         productsSnap.docs.forEach(d => {
-          pricesMap[d.id] = {
-            price: d.data().price,
-            compareAtPrice: d.data().compareAtPrice
-          };
-          if (isProductHiddenFromListings(d.data().variants)) {
-            hiddenIds.add(d.id);
+          const data = d.data();
+          if (data.status === "Redirected" && data.redirectedTo) {
+            redirectMap[d.id] = data.redirectedTo;
+            redirectedStubIds.push(data.redirectedTo);
+          } else {
+            pricesMap[d.id] = {
+              price: data.price,
+              compareAtPrice: data.compareAtPrice
+            };
+            if (isProductHiddenFromListings(data.variants)) {
+              hiddenIds.add(d.id);
+            }
           }
         });
+
+        // لو فيه منتجات اتحوّلت (redirect stubs)، اجيب بيانات المنتج الحقيقي (الجديد)
+        // عشان السعر/الحالة يكونوا صح كمان مش بس الرابط
+        if (redirectedStubIds.length > 0) {
+          const targetsSnap = await getDocs(
+            query(collection(db, "products"), where(documentId(), "in", [...new Set(redirectedStubIds)].slice(0, 30)))
+          );
+          targetsSnap.docs.forEach(d => {
+            const data = d.data();
+            pricesMap[d.id] = { price: data.price, compareAtPrice: data.compareAtPrice };
+            if (isProductHiddenFromListings(data.variants)) hiddenIds.add(d.id);
+          });
+        }
 
         // Fetch review stats from ProductStats
         const statsSnap = await getDocs(
@@ -79,13 +105,23 @@ export async function GET() {
           const items = sectionData.cards || sectionData.products || [];
           if (items.length === 0) return section;
           const updatedItems = items
-            .filter(item => !item.productId || !hiddenIds.has(item.productId))
+            .filter(item => {
+              if (!item.productId) return true;
+              const finalId = redirectMap[item.productId] || item.productId;
+              return !hiddenIds.has(finalId);
+            })
             .map(item => {
             if (!item.productId) return item;
-            const priceData = pricesMap[item.productId] || {};
-            const statsData = statsMap[item.productId] || {};
+            const finalId = redirectMap[item.productId] || item.productId;
+            const priceData = pricesMap[finalId] || {};
+            const statsData = statsMap[item.productId] || statsMap[finalId] || {};
             return {
               ...item,
+              productId: finalId,
+              // 🔥 دايماً نعيد بناء الرابط من الـ id الحالي الصحيح، مش من linkUrl المخزَّن
+              linkUrl: item.linkUrl && !item.linkUrl.startsWith('/products/')
+                ? item.linkUrl // روابط غير منتجات (مثلاً /collections/..) تفضل زي ما هي
+                : `/products/${finalId}`,
               price: priceData.price || item.price,
               compareAtPrice: priceData.compareAtPrice || item.compareAtPrice,
               reviewsCount: (statsData.reviewsCount != null ? statsData.reviewsCount : (item.reviewsCount != null ? item.reviewsCount : 0)),
