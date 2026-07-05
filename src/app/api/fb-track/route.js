@@ -187,8 +187,8 @@ export async function POST(request) {
     if (!fbRes.ok) {
       console.error("[fb-track] ✗ Meta rejected event:", JSON.stringify(fbData));
       return Response.json(
-        { error: fbData.error?.message || "خطأ من فيسبوك", details: fbData },
-        { status: 500 }
+        { success: false, fbResponse: fbData, status: fbRes.status },
+        { status: fbRes.status }
       );
     }
 
