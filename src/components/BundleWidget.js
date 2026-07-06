@@ -4,6 +4,8 @@ import { useCart } from "@/context/CartContext";
 import { getDb } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore/lite";
 import { getInventoryPresentation } from "@/lib/inventoryHelpers";
+import { fbTrack } from "@/lib/fbTrack";
+import { getCatalogId } from "@/lib/catalogId";
 
 // ─── لوحة التحكم ──────────────────────────────────────────────
 const DEFAULT_DISCOUNT_PERCENT    = 0;
@@ -261,7 +263,40 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
     });
 
     setTimeout(() => setAdding(false), 700);
-  }, [hasUnavailable, adding, product, mainPrice, mainQty, upsells, upsellStates, effectiveDiscount, hasFreeShippingFeature, shippingDone, addToCart]);
+
+    // 🔥 Meta tracking: حدث AddToCart واحد فقط يغطي كل ما أُضيف فعلياً في
+    // هذا الإجراء (المنتج الأساسي + كل upsell محدد ومتاح بالفعل) — هذا كان
+    // ناقصاً تماماً من BundleWidget منذ إنشائه (تأكدنا من تاريخ الملف بالكامل:
+    // لم يُضَف عمداً ثم يُحذف، ببساطة لم يكن موجوداً إطلاقاً).
+    //
+    // نفس getCatalogId المستخدَمة في كل مكان آخر بالموقع، بنفس قيمة اللون
+    // المُستخدَمة بالضبط في نداء addToCart المقابل لكل عنصر أعلاه — فـ
+    // content_ids هنا يطابق تماماً ما سيُحسب لاحقاً في InitiateCheckout/
+    // Purchase لنفس هذه العناصر بالضبط. حدث واحد مجمّع (لا حدث منفصل لكل
+    // منتج) — بنفس أسلوب content_ids كمصفوفة المُتَّبع أصلاً في
+    // InitiateCheckout/Purchase لعناصر السلة المتعددة.
+    const trackedContentIds = [
+      getCatalogId(product.handle || product.id, selectedMainVariant?.color || product.selectedColor || ""),
+    ];
+    let trackedNumItems = mainQty;
+
+    upsells.forEach((up, i) => {
+      const st = upsellStates[i];
+      if (!st?.checked) return;
+      const variant = up.variants[st.variantIdx];
+      if (!variant?.available) return;
+      trackedContentIds.push(getCatalogId(up.id, variant.color || ""));
+      trackedNumItems += st.qty || 1;
+    });
+
+    fbTrack("AddToCart", {
+      value: total,
+      currency: "EGP",
+      content_ids: trackedContentIds,
+      content_type: "product",
+      num_items: trackedNumItems,
+    });
+  }, [hasUnavailable, adding, product, mainPrice, mainQty, upsells, upsellStates, effectiveDiscount, hasFreeShippingFeature, shippingDone, addToCart, total]);
 
   // ─── Render ───────────────────────────────────────────────
   if (loading) {
