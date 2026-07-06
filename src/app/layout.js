@@ -56,7 +56,13 @@ export default function RootLayout({ children }) {
             s.parentNode.insertBefore(t,s)}(window, document,'script',
             'https://connect.facebook.net/en_US/fbevents.js');
             fbq('init', '880930164288645');
-            fbq('track', 'PageView');
+            // 🔥 Dedup: نولّد event_id مشترك لأول PageView في الجلسة، ونمرره
+            // كـ eventID لـ fbq (Browser) ونخزّنه على window ليقرأه fbTrack()
+            // لأول نداء Server-side PageView فقط — فتتطابق النسختان لدى Meta
+            // بدل احتسابهما كحدثين منفصلين.
+            var __fbPvId = 'PageView-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+            window.__fbInitialPageViewId = __fbPvId;
+            fbq('track', 'PageView', {}, {eventID: __fbPvId});
           `}
         </Script>
 

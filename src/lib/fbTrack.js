@@ -67,10 +67,56 @@ function generateEventId(eventName) {
   return `${eventName}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// 🔥 Dedup #1 — PageView: نفس الـ event_id بين Browser (fbq) و أول نداء Server.
+// layout.js يولّد event_id واحد لأول PageView في الجلسة، ويخزّنه هنا مؤقتاً.
+// عند أول استدعاء fbTrack("PageView", ...) في نفس الجلسة، نستخدم نفس الـ ID
+// (فتتطابق نسخة Browser ونسخة Server لدى Meta ولا تُحتسب مرتين)، ثم نمسحه
+// فوراً — أي تنقل لاحق بين الصفحات (route change) يولّد ID مستقل خاص به،
+// لأنه لا يقابله حدث Browser آخر أصلاً (fbq يعمل مرة واحدة فقط لكل جلسة).
+function consumeInitialPageViewId() {
+  if (typeof window === "undefined") return undefined;
+  const id = window.__fbInitialPageViewId;
+  if (id) delete window.__fbInitialPageViewId;
+  return id;
+}
+
+// 🔥 Dedup #2 — حارس عام قصير المدى ضد التكرار الفعلي لنفس الحدث
+// (مثال: نقرة مزدوجة سريعة على نفس الزر قبل تفعيل disabled). يقارن
+// (eventName + content_ids) خلال نافذة قصيرة فقط، ولا يمنع نفس الحدث لاحقاً
+// بشكل شرعي (مثال: إضافة نفس المنتج للسلة مرتين بفارق دقائق).
+const recentSends = new Map();
+const DEDUP_WINDOW_MS = 1500;
+
+function isLikelyDuplicate(eventName, data) {
+  // 🔥 لازم نضم المسار الحالي للمفتاح — أحداث PageView لا تحمل content_ids
+  // إطلاقاً، فبدون هذا كانت أي تنقلات سريعة بين صفحتين مختلفتين خلال
+  // النافذة الزمنية ستُعتبر خطأً "نفس الحدث" وتُحذف الصفحة الثانية فعلياً.
+  const path = typeof window !== "undefined" ? window.location.pathname : "";
+  const key = `${eventName}:${path}:${JSON.stringify(data.content_ids || [])}:${data.order_id || ""}`;
+  const now = Date.now();
+  const last = recentSends.get(key);
+  recentSends.set(key, now);
+  // تنظيف دوري بسيط لمنع تراكم الذاكرة
+  if (recentSends.size > 50) {
+    for (const [k, t] of recentSends) {
+      if (now - t > DEDUP_WINDOW_MS) recentSends.delete(k);
+    }
+  }
+  return last !== undefined && now - last < DEDUP_WINDOW_MS;
+}
+
 export async function fbTrack(eventName, data = {}) {
   if (typeof window === "undefined") return;
 
-  const eventId = data.event_id || generateEventId(eventName);
+  if (isLikelyDuplicate(eventName, data)) {
+    console.warn(`[fbTrack] Suppressed likely duplicate fire: ${eventName}`);
+    return;
+  }
+
+  const eventId =
+    data.event_id ||
+    (eventName === "PageView" && consumeInitialPageViewId()) ||
+    generateEventId(eventName);
   const externalId = getOrCreateExternalId();
   const fbp = await waitForFbp();
   const fbc = readCookie("_fbc");

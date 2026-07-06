@@ -62,7 +62,12 @@ function SuccessContent() {
         event_id: `Purchase-${parsed.orderId}`,   // ثابت → Meta تُلغي التكرار
         value: parsed.total || 0,
         currency: "EGP",
-        content_ids: (parsed.cartItems || []).map(it => String(it.handle || it.id || it.title)),
+        // 🔥 بدون Fallback لـ title — لو العنصر المخزَّن في الـ snapshot ما
+        // له handle/id حقيقي، يُستبعد من content_ids بدل إرسال title كقيمة
+        // مضمونة الفشل في مطابقة الـ Catalog.
+        content_ids: (parsed.cartItems || [])
+          .filter(it => it.handle || it.id)
+          .map(it => String(it.handle || it.id)),
         num_items: (parsed.cartItems || []).reduce((s, it) => s + it.qty, 0),
         order_id: parsed.orderId || "",
         ...buildCheckoutMetaUserData(parsed.formData, {

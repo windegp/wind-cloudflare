@@ -212,7 +212,10 @@ export default function CheckoutPage() {
       value: finalTotal,
       currency: "EGP",
       num_items: cartItems.reduce((s, it) => s + it.qty, 0),
-      content_ids: cartItems.map(it => String(it.handle || it.id || it.title)),
+      // 🔥 بدون Fallback لـ title — نفس منطق Purchase أعلاه
+      content_ids: cartItems
+        .filter(it => it.handle || it.id)
+        .map(it => String(it.handle || it.id)),
     });
     gaBeginCheckout(cartItems, finalTotal);
   }
@@ -609,7 +612,13 @@ export default function CheckoutPage() {
 
         // 🔥 لازم نحفظ بيانات السلة هنا (snapshot) قبل clearCart()
         // وإلا cartItems تصبح فاضية أو جزئية وقت إرسال Purchase بسبب إعادة الرندر بعد await
-        const purchaseContentIds = cartItems.map(it => String(it.handle || it.id || it.title));
+        // 🔥 لا Fallback لـ title في content_ids — title لا يطابق أي شيء في
+        // Catalog أبداً، فإرساله كان يضمن فشل المطابقة صامتاً لتلك العناصر.
+        // العناصر التي تفتقد handle/id فعلياً تُستبعد من content_ids بدل
+        // إرسال قيمة مضمونة الفشل.
+        const purchaseContentIds = cartItems
+          .filter(it => it.handle || it.id)
+          .map(it => String(it.handle || it.id));
         const purchaseNumItems = cartItems.reduce((s, it) => s + it.qty, 0);
         const purchaseCartSnapshot = cartItems.map(it => ({
           id: it.handle || it.id || it.title,
@@ -637,6 +646,11 @@ export default function CheckoutPage() {
         clearCart();
         setLoading(false);
         fbTrack("Purchase", {
+          // 🔥 event_id ثابت مبني على orderId (مثل مسار الدفع الإلكتروني في
+          // thank-you/page.js) — لو تكرر تنفيذ هذا الفرع لأي سبب (رجوع
+          // للخلف، إعادة تحميل)، تُلغي Meta التكرار تلقائياً بدل احتساب
+          // Purchase مرتين لنفس الطلب.
+          event_id: `Purchase-${orderId}`,
           value: finalTotal,
           currency: "EGP",
           content_ids: purchaseContentIds,

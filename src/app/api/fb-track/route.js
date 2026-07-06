@@ -140,7 +140,21 @@ export async function POST(request) {
       ],
     };
 
-    if (process.env.FB_TEST_EVENT_CODE) {
+    // 🔥 test_event_code هو الآن Opt-in صريح لكل طلب على حدة، وليس مفتاحاً
+    // عاماً يعتمد فقط على وجود المتغير البيئي.
+    //
+    // السبب: FB_TEST_EVENT_CODE مضبوط في بيئة Production لأغراض تشخيصية
+    // سابقة. لو اعتمدنا على وجوده فقط (كما كان الكود القديم)، فكل حدث
+    // Ecommerce حقيقي من كل عميل حقيقي كان سيُصنَّف كـ Test Event لدى Meta —
+    // وهو ما كان يحدث فعلياً: الأحداث كانت تُستقبل (تظهر في Overview) لكنها
+    // مُستبعدة من التحسين (Ads Optimization) والإحالة (Attribution).
+    //
+    // الحل: fbTrack() في الاستخدام العادي (كل صفحات المتجر) لا يرسل أي إشارة
+    // اختبار إطلاقاً. فقط طلب يحتوي صراحة على `debug_test_event: true` في
+    // الـ body يُفعّل test_event_code — وهذا الحقل لا يُرسله أي كود إنتاجي،
+    // فقط أدوات تشخيص مقصودة (نداء يدوي عبر curl/Postman عند الحاجة).
+    const wantsTestMode = body?.debug_test_event === true;
+    if (wantsTestMode && process.env.FB_TEST_EVENT_CODE) {
       eventPayload.test_event_code = process.env.FB_TEST_EVENT_CODE;
     }
 
@@ -150,23 +164,7 @@ export async function POST(request) {
       return Response.json({ error: "Server misconfiguration" }, { status: 500 });
     }
 
-    // ── DIAGNOSTIC LOGGING (temporary — remove after root cause found) ──
-    const graphUrl = `https://graph.facebook.com/v21.0/${PIXEL_ID}/events?access_token=***`;
-    console.log("[fb-track] ▶ Sending event:", {
-      event_name,
-      pixel_id: PIXEL_ID,
-      graph_url: graphUrl,
-      test_event_code: process.env.FB_TEST_EVENT_CODE || "(NOT SET — events go to PRODUCTION)",
-      has_token: !!accessToken,
-      token_prefix: accessToken.slice(0, 8) + "...",
-      payload_summary: {
-        event_time: eventPayload.data[0].event_time,
-        action_source: eventPayload.data[0].action_source,
-        event_source_url: eventPayload.data[0].event_source_url,
-        custom_data_keys: Object.keys(eventPayload.data[0].custom_data),
-        user_data_keys: Object.keys(userData),
-      },
-    });
+    console.log("[fb-track]", event_name, wantsTestMode ? "(test mode)" : "(production)");
 
     const fbRes = await fetch(
       `https://graph.facebook.com/v21.0/${PIXEL_ID}/events?access_token=${accessToken}`,
@@ -178,14 +176,9 @@ export async function POST(request) {
     );
 
     const fbData = await fbRes.json();
-    console.log("[fb-track] ◀ Meta response:", {
-      http_status: fbRes.status,
-      ok: fbRes.ok,
-      response: fbData,
-    });
 
     if (!fbRes.ok) {
-      console.error("[fb-track] ✗ Meta rejected event:", JSON.stringify(fbData));
+      console.error("[fb-track] ✗ Meta rejected event:", event_name, JSON.stringify(fbData));
       return Response.json(
         { success: false, fbResponse: fbData, status: fbRes.status },
         { status: fbRes.status }
