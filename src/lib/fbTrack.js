@@ -80,38 +80,8 @@ function consumeInitialPageViewId() {
   return id;
 }
 
-// 🔥 Dedup #2 — حارس عام قصير المدى ضد التكرار الفعلي لنفس الحدث
-// (مثال: نقرة مزدوجة سريعة على نفس الزر قبل تفعيل disabled). يقارن
-// (eventName + content_ids) خلال نافذة قصيرة فقط، ولا يمنع نفس الحدث لاحقاً
-// بشكل شرعي (مثال: إضافة نفس المنتج للسلة مرتين بفارق دقائق).
-const recentSends = new Map();
-const DEDUP_WINDOW_MS = 1500;
-
-function isLikelyDuplicate(eventName, data) {
-  // 🔥 لازم نضم المسار الحالي للمفتاح — أحداث PageView لا تحمل content_ids
-  // إطلاقاً، فبدون هذا كانت أي تنقلات سريعة بين صفحتين مختلفتين خلال
-  // النافذة الزمنية ستُعتبر خطأً "نفس الحدث" وتُحذف الصفحة الثانية فعلياً.
-  const path = typeof window !== "undefined" ? window.location.pathname : "";
-  const key = `${eventName}:${path}:${JSON.stringify(data.content_ids || [])}:${data.order_id || ""}`;
-  const now = Date.now();
-  const last = recentSends.get(key);
-  recentSends.set(key, now);
-  // تنظيف دوري بسيط لمنع تراكم الذاكرة
-  if (recentSends.size > 50) {
-    for (const [k, t] of recentSends) {
-      if (now - t > DEDUP_WINDOW_MS) recentSends.delete(k);
-    }
-  }
-  return last !== undefined && now - last < DEDUP_WINDOW_MS;
-}
-
 export async function fbTrack(eventName, data = {}) {
   if (typeof window === "undefined") return;
-
-  if (isLikelyDuplicate(eventName, data)) {
-    console.warn(`[fbTrack] Suppressed likely duplicate fire: ${eventName}`);
-    return;
-  }
 
   const eventId =
     data.event_id ||
