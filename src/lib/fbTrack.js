@@ -101,15 +101,33 @@ export async function fbTrack(eventName, data = {}) {
     ...data,
   });
 
+  // 🔧 TEMPORARY DEBUG LOGGING — لتتبّع دورة حياة الحدث الحقيقية أثناء
+  // اختبار AddToCart واحد متحكَّم فيه. يُزال بالكامل في commit تنظيف بعد
+  // انتهاء التحقيق. لا يغيّر أي شيء في الـ payload أو المنطق نفسه.
+  console.log("[PIXEL DEBUG] fbTrack →", {
+    event_name: eventName,
+    event_id:   eventId,
+    content_ids: data?.content_ids,
+    has_fbp:    !!fbp,
+    has_fbc:    !!fbc,
+  });
+
   // ── sendBeacon أولاً: لا يُعترَض من Zaraz (على خلاف window.fetch)،
   // ويُكمل الإرسال بعد مغادرة الصفحة (مثل keepalive تماماً).
   // كان fetch+keepalive يتعطل بصمت بسبب Zaraz's fetch wrapper.
   const endpoint = "/api/fb-track";
   const blob = new Blob([payload], { type: "application/json" });
 
+  let beaconQueued = false;
   try {
-    if (navigator.sendBeacon(endpoint, blob)) return;
+    beaconQueued = navigator.sendBeacon(endpoint, blob);
   } catch (_) { /* sendBeacon غير متاح */ }
+
+  // 🔧 TEMPORARY DEBUG LOGGING — القيمة الأهم: هل المتصفح قَبِل فعلاً إرسال
+  // الـ beacon؟ false هنا يعني الحدث مات داخل المتصفح ولن يصل للسيرفر إطلاقاً.
+  console.log("[PIXEL DEBUG] sendBeacon queued:", beaconQueued, "| event_id:", eventId);
+
+  if (beaconQueued) return;
 
   // Fallback: fetch بدون keepalive
   try {

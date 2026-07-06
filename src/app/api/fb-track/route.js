@@ -63,6 +63,14 @@ export async function POST(request) {
       return Response.json({ error: "event_name مطلوب" }, { status: 400 });
     }
 
+    // 🔧 TEMPORARY DEBUG LOGGING — يُزال بالكامل في commit تنظيف بعد انتهاء
+    // التحقيق. لا يغيّر أي منطق أو payload.
+    console.log("[PIXEL DEBUG] fb-track received →", {
+      event_name,
+      event_id: event_id || "(will be auto-generated below)",
+      content_ids,
+    });
+
     const cookieHeader = request.headers.get("cookie") || "";
     // 🔥 نعطي الأولوية لقيم fbp/fbc القادمة من العميل مباشرة (أحدث وأدق)
     // لأن قراءتها من الكوكي على السيرفر قد تكون متأخرة عن لحظة الحدث الفعلية
@@ -176,6 +184,18 @@ export async function POST(request) {
     );
 
     const fbData = await fbRes.json();
+
+    // 🔧 TEMPORARY DEBUG LOGGING — يُزال بالكامل في commit تنظيف بعد انتهاء
+    // التحقيق. يسجَّل على كل الحالات (نجاح/فشل) بعكس console.error أدناه
+    // اللي بيشتغل بس عند الفشل — عشان نشوف رد Meta الكامل حتى لو "نجح".
+    console.log("[PIXEL DEBUG] Graph API response →", {
+      event_name,
+      event_id: eventPayload.data[0].event_id,
+      http_status: fbRes.status,
+      ok: fbRes.ok,
+      events_received: fbData?.events_received,
+      full_response: fbData,
+    });
 
     if (!fbRes.ok) {
       console.error("[fb-track] ✗ Meta rejected event:", event_name, JSON.stringify(fbData));
