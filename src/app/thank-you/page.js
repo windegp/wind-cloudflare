@@ -8,6 +8,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { CheckCircle2, ShoppingBag, Phone, Truck, Shield, Package, CreditCard, Banknote, Smartphone } from '@/components/icons-extra';
 import { fbTrack } from "@/lib/fbTrack";
+import { getCatalogId } from "@/lib/catalogId";
 import { gaPurchase } from "@/lib/gaTrack";
 import { buildCheckoutMetaUserData } from "@/lib/metaEventData";
 
@@ -62,12 +63,12 @@ function SuccessContent() {
         event_id: `Purchase-${parsed.orderId}`,   // ثابت → Meta تُلغي التكرار
         value: parsed.total || 0,
         currency: "EGP",
-        // 🔥 بدون Fallback لـ title — لو العنصر المخزَّن في الـ snapshot ما
-        // له handle/id حقيقي، يُستبعد من content_ids بدل إرسال title كقيمة
-        // مضمونة الفشل في مطابقة الـ Catalog.
+        // 🔥 نفس getCatalogId المستخدَمة في الكتالوج و ProductView.js —
+        // it.selectedColor محفوظ فعلاً في cartItems الخام (من CartContext)،
+        // فنستخدمه لتوليد نفس g:id الخاص بلون هذا العنصر بالضبط.
         content_ids: (parsed.cartItems || [])
           .filter(it => it.handle || it.id)
-          .map(it => String(it.handle || it.id)),
+          .map(it => getCatalogId(it.handle || it.id, it.selectedColor)),
         num_items: (parsed.cartItems || []).reduce((s, it) => s + it.qty, 0),
         order_id: parsed.orderId || "",
         ...buildCheckoutMetaUserData(parsed.formData, {

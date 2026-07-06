@@ -15,6 +15,7 @@ import ProductCard from "@/components/products/ProductCard";
 import { useProduct, useRelatedProducts, useSiteSettings } from "@/hooks/useFirestore";
 import { Plus, Minus, Star, Info, Share2, Heart, ImageIcon, X, Truck, Eye, ShieldCheck, ChevronLeft, Search, ChevronRight, ChevronDown, ChevronUp, CreditCard, Banknote, ArrowLeftRight } from '@/components/icons-extra';
 import { fbTrack } from "@/lib/fbTrack";
+import { getCatalogId } from "@/lib/catalogId";
 import { gaViewItem, gaAddToCart } from "@/lib/gaTrack";
 import { getInventoryPresentation, INVENTORY_STATUS } from "@/lib/inventoryHelpers";
 
@@ -186,7 +187,10 @@ export default function ProductView({ initialProduct, sourceCategory }) {
       fbTrack("ViewContent", {
         value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
         currency: "EGP",
-        content_ids: [productHandle],
+        // 🔥 نفس getCatalogId المستخدَمة في الكتالوج (fb-catalog/route.js) —
+        // مصدر واحد، فيضمن تطابق content_ids مع g:id للون الفعلي المعروض،
+        // بدل الـ handle الخام دائماً (كان يطابق فقط لأول لون بالصدفة).
+        content_ids: [getCatalogId(productHandle, selectedColor)],
         content_name: product.title || "",
         content_type: "product",
       });
@@ -666,7 +670,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   fbTrack("AddToCart", {
     value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
     currency: "EGP",
-    content_ids: [String(product.handle || id || product.id)],
+    content_ids: [getCatalogId(product.handle || id || product.id, selectedColor)],
     content_name: product.title || "",
     content_type: "product",
     num_items: quantity,
@@ -741,7 +745,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   fbTrack("AddToCart", {
     value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
     currency: "EGP",
-    content_ids: [String(product.handle || id || product.id)],
+    content_ids: [getCatalogId(product.handle || id || product.id, selectedColor)],
     content_name: product.title || "",
     content_type: "product",
     num_items: quantity,
@@ -987,7 +991,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   fbTrack("AddToCart", {
     value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
     currency: "EGP",
-    content_ids: [String(product.handle || id || product.id)],
+    content_ids: [getCatalogId(product.handle || id || product.id, selectedColor)],
     content_name: product.title || "",
     content_type: "product",
     num_items: quantity,

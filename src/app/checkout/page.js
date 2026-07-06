@@ -14,6 +14,7 @@ import { doc, setDoc, getDoc, deleteDoc, updateDoc, increment, collection, query
 import { ChevronDown, Info, CheckCircle2, Phone, ShoppingBag, Shield, Tag, ChevronLeft, Truck, CreditCard, Banknote, Smartphone, X, Lock } from '@/components/icons-extra';
 import { SHIPPING_COST } from '@/lib/constants';
 import { fbTrack } from "@/lib/fbTrack";
+import { getCatalogId } from "@/lib/catalogId";
 import { gaBeginCheckout, gaPurchase } from "@/lib/gaTrack";
 import { buildCheckoutMetaUserData } from "@/lib/metaEventData";
 
@@ -212,10 +213,12 @@ export default function CheckoutPage() {
       value: finalTotal,
       currency: "EGP",
       num_items: cartItems.reduce((s, it) => s + it.qty, 0),
-      // 🔥 بدون Fallback لـ title — نفس منطق Purchase أعلاه
+      // 🔥 نفس getCatalogId المستخدَمة في الكتالوج و ProductView.js — كل
+      // عنصر في السلة يحمل selectedColor بالفعل (مخزَّن من addToCart)،
+      // فنستخدمه لتوليد نفس g:id الخاص بلونه بالضبط.
       content_ids: cartItems
         .filter(it => it.handle || it.id)
-        .map(it => String(it.handle || it.id)),
+        .map(it => getCatalogId(it.handle || it.id, it.selectedColor)),
     });
     gaBeginCheckout(cartItems, finalTotal);
   }
@@ -613,12 +616,12 @@ export default function CheckoutPage() {
         // 🔥 لازم نحفظ بيانات السلة هنا (snapshot) قبل clearCart()
         // وإلا cartItems تصبح فاضية أو جزئية وقت إرسال Purchase بسبب إعادة الرندر بعد await
         // 🔥 لا Fallback لـ title في content_ids — title لا يطابق أي شيء في
-        // Catalog أبداً، فإرساله كان يضمن فشل المطابقة صامتاً لتلك العناصر.
-        // العناصر التي تفتقد handle/id فعلياً تُستبعد من content_ids بدل
-        // إرسال قيمة مضمونة الفشل.
+        // Catalog أبداً. ونستخدم getCatalogId (نفس مصدر الكتالوج) بدل
+        // الـ handle الخام، لأنه لازم يطابق g:id الخاص باللون الفعلي
+        // المشترى، وليس فقط أول لون بالصدفة.
         const purchaseContentIds = cartItems
           .filter(it => it.handle || it.id)
-          .map(it => String(it.handle || it.id));
+          .map(it => getCatalogId(it.handle || it.id, it.selectedColor));
         const purchaseNumItems = cartItems.reduce((s, it) => s + it.qty, 0);
         const purchaseCartSnapshot = cartItems.map(it => ({
           id: it.handle || it.id || it.title,

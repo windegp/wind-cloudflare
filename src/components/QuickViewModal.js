@@ -9,6 +9,7 @@ import { getInventoryPresentation, INVENTORY_STATUS } from "@/lib/inventoryHelpe
 import SizeChartModal from "@/components/SizeChartModal"; 
 import ProductReviews from "@/components/products/ProductReviews";
 import { fbTrack } from "@/lib/fbTrack";
+import { getCatalogId } from "@/lib/catalogId";
 import { gaAddToCart } from "@/lib/gaTrack";
 
 export default function QuickViewModal({ product, isOpen, onClose }) {
@@ -200,7 +201,10 @@ export default function QuickViewModal({ product, isOpen, onClose }) {
     fbTrack("AddToCart", {
       value:        price * qvQuantity,
       currency:     "EGP",
-      content_ids:  [handle],
+      // 🔥 نفس getCatalogId المستخدَمة في كل مكان آخر — qvSelectedColor هو
+      // نفس القيمة الخام المرسَلة لـ addToCart أعلاه (selectedColor)، فهذا
+      // القياس الخامس والأخير لـ AddToCart أصبح متسقاً مع الأربعة الباقية.
+      content_ids:  [getCatalogId(handle, qvSelectedColor)],
       content_name: product.title || "",
       content_type: "product",
       num_items:    qvQuantity,

@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { getKV } from "@/lib/kv-cache"; 
 import { getMetaAvailability } from "@/lib/inventoryHelpers";
+import { getCatalogId, slugifyColor } from "@/lib/catalogId";
 
 const SITE_URL = "https://windeg.com";
 const BRAND = "WIND Shopping";
@@ -388,10 +389,9 @@ export async function GET() {
           if (!v) continue;
 
           const colorValue = getVariantColorValue(v);
-          const colorKey   = colorValue.toLowerCase().replace(/\s+/g, "-");
+          const colorKey   = slugifyColor(colorValue);
 
           if (seenColors.has(colorKey)) continue;
-          const isFirstColor = seenColors.size === 0;
           seenColors.add(colorKey);
 
           // اجمع المقاسات المتاحة لهذا اللون بالذبط
@@ -401,7 +401,7 @@ export async function GET() {
             sizesForThisColor = [...new Set(
               variants
                 .filter(sv => {
-                  const svColor = getVariantColorValue(sv).toLowerCase().replace(/\s+/g, "-");
+                  const svColor = slugifyColor(getVariantColorValue(sv));
                   const metaAvail = getMetaAvailability(sv["inventoryStatus"]?.stringValue);
                   return svColor === colorKey && (metaAvail === "in stock" || metaAvail === "preorder");
                 })
@@ -415,7 +415,7 @@ export async function GET() {
 
           // Phase 6: availability لهذا اللون — من inventoryStatus فقط (Golden Rule)
           const anyColorInStock = variants.some(sv => {
-            const svColor = getVariantColorValue(sv).toLowerCase().replace(/\s+/g, "-");
+            const svColor = slugifyColor(getVariantColorValue(sv));
             const metaAvail = getMetaAvailability(sv["inventoryStatus"]?.stringValue);
             return svColor === colorKey && (metaAvail === "in stock" || metaAvail === "preorder");
           });
@@ -425,7 +425,12 @@ export async function GET() {
           if (!variantImage) continue;
 
           const colorLabel  = colorLabels[colorKey] ?? colorLabels[colorValue] ?? colorValue;
-          const itemId      = isFirstColor ? handle : `${handle}-${colorKey}`;
+          // 🔥 لا استثناء لـ"أول لون" بعد الآن — كل لون، بما فيه الأول،
+          // يحصل على id فريد عبر getCatalogId (المصدر الموحّد). هذا يمنع
+          // بنيوياً تطابق أي g:id مع أي item_group_id (الذي يبقى = handle
+          // الخام دائماً، وهو قيمة لا يعود يُنتجها getCatalogId أبداً طالما
+          // colorValue غير فاضٍ).
+          const itemId      = getCatalogId(handle, colorValue);
           const itemTitle   = colorValue ? `${baseTitle} - ${colorLabel}` : baseTitle;
           const extraImages = images.filter(img => img !== variantImage).slice(0, 9);
           const hasSale     = variantCompare && parseFloat(variantCompare) > parseFloat(variantPrice);
