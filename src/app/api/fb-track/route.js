@@ -1,12 +1,10 @@
 // app/api/fb-track/route.js
 //
-// نقطة موحّدة لإرسال كل أحداث Facebook Pixel (ViewContent, AddToCart,
-// InitiateCheckout, Purchase) مباشرة لـ Conversions API من السيرفر،
-// بدون المرور بـ Zaraz — لتجنب مشكلة flattening الخاصة بمعالجة
-// الـ arrays (content_ids) داخل Zaraz Custom Actions.
+// نصف Server-side لأي حدث Meta Pixel — الطرف الآخر لـ Dual Fire (انظر
+// lib/fbTrack.js). يُستدعى بنفس event_id الذي يُرسله المتصفح لنفس الحدث،
+// فتدمج Meta النسختين معاً بدل احتسابهما كحدثين منفصلين.
 //
-// الكود في الصفحات يستدعي هذا الـ route بدل zaraz.track() لهذه الأحداث.
-// PageView يبقى يعمل عبر Zaraz كما هو (لا مشكلة فيه أصلاً).
+// Zaraz أُزيل نهائياً من المشروع (Phase 1) — لا يوجد أي Workaround خاص به هنا.
 
 import { normalizePhoneForMetaHash } from "@/lib/metaEventData";
 
@@ -33,7 +31,6 @@ function readCookie(cookieHeader, name) {
 export async function POST(request) {
   try {
     const body = await request.json();
-    console.log("[fb-track] ✓ Route hit — event_name:", body?.event_name, "| url:", body?.event_source_url);
     const {
       event_name,
       event_id,           // لازم يكون فريد لكل حدث (لمنع التكرار/dedup)
@@ -62,14 +59,6 @@ export async function POST(request) {
     if (!event_name) {
       return Response.json({ error: "event_name مطلوب" }, { status: 400 });
     }
-
-    // 🔧 TEMPORARY DEBUG LOGGING — يُزال بالكامل في commit تنظيف بعد انتهاء
-    // التحقيق. لا يغيّر أي منطق أو payload.
-    console.log("[PIXEL DEBUG] fb-track received →", {
-      event_name,
-      event_id: event_id || "(will be auto-generated below)",
-      content_ids,
-    });
 
     const cookieHeader = request.headers.get("cookie") || "";
     // 🔥 نعطي الأولوية لقيم fbp/fbc القادمة من العميل مباشرة (أحدث وأدق)
@@ -148,22 +137,19 @@ export async function POST(request) {
       ],
     };
 
-    // 🔥 test_event_code هو الآن Opt-in صريح لكل طلب على حدة، وليس مفتاحاً
-    // عاماً يعتمد فقط على وجود المتغير البيئي.
-    //
-    // السبب: FB_TEST_EVENT_CODE مضبوط في بيئة Production لأغراض تشخيصية
-    // سابقة. لو اعتمدنا على وجوده فقط (كما كان الكود القديم)، فكل حدث
-    // Ecommerce حقيقي من كل عميل حقيقي كان سيُصنَّف كـ Test Event لدى Meta —
-    // وهو ما كان يحدث فعلياً: الأحداث كانت تُستقبل (تظهر في Overview) لكنها
-    // مُستبعدة من التحسين (Ads Optimization) والإحالة (Attribution).
-    //
-    // الحل: fbTrack() في الاستخدام العادي (كل صفحات المتجر) لا يرسل أي إشارة
-    // اختبار إطلاقاً. فقط طلب يحتوي صراحة على `debug_test_event: true` في
-    // الـ body يُفعّل test_event_code — وهذا الحقل لا يُرسله أي كود إنتاجي،
-    // فقط أدوات تشخيص مقصودة (نداء يدوي عبر curl/Postman عند الحاجة).
-    const wantsTestMode = body?.debug_test_event === true;
-    if (wantsTestMode && process.env.FB_TEST_EVENT_CODE) {
-      eventPayload.test_event_code = process.env.FB_TEST_EVENT_CODE;
+    // 🔥 test_event_code لا يعتمد على أي Environment Variable إطلاقاً بعد
+    // الآن — لا يوجد أي قيمة مخزَّنة في البيئة يمكن أن تُفعِّل وضع الاختبار
+    // بالخطأ في Production. الطريقة الوحيدة لتفعيله: أن يرسل المطوّر الكود
+    // الفعلي بشكل صريح ومتعمَّد ضمن جسم الطلب نفسه (نسخه يدوياً من جلسة
+    // Test Events الحيّة في Events Manager وقت الاختبار فقط). أي كود إنتاجي
+    // في المتجر لا يرسل هذا الحقل إطلاقاً، فيستحيل بنيوياً وصول أي حدث
+    // Production مُصنَّف كـ Test Event لدى Meta.
+    const debugTestEventCode =
+      typeof body?.debug_test_event_code === "string" && body.debug_test_event_code.trim()
+        ? body.debug_test_event_code.trim()
+        : undefined;
+    if (debugTestEventCode) {
+      eventPayload.test_event_code = debugTestEventCode;
     }
 
     const accessToken = process.env.FB_CONVERSIONS_TOKEN;
@@ -172,30 +158,41 @@ export async function POST(request) {
       return Response.json({ error: "Server misconfiguration" }, { status: 500 });
     }
 
-    console.log("[fb-track]", event_name, wantsTestMode ? "(test mode)" : "(production)");
+    const graphUrl = `https://graph.facebook.com/v21.0/${PIXEL_ID}/events?access_token=${accessToken}`;
 
-    const fbRes = await fetch(
-      `https://graph.facebook.com/v21.0/${PIXEL_ID}/events?access_token=${accessToken}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(eventPayload),
+    // 🔥 محاولة واحدة إضافية فقط عند فشل شبكي أو خطأ 5xx من Meta (أمر خارج
+    // سيطرتنا، وغالباً مؤقت). لا إعادة محاولة عند 4xx — هذا رفض حقيقي
+    // (بيانات ناقصة/توكن غير صالح/...)، وإعادة الإرسال لن تصلحه، بل قد
+    // تُنتج حدثاً مكرراً بلا داعٍ.
+    async function postToGraphWithRetry(attempt = 1) {
+      let res;
+      try {
+        res = await fetch(graphUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(eventPayload),
+        });
+      } catch (networkErr) {
+        if (attempt < 2) return postToGraphWithRetry(attempt + 1);
+        throw networkErr;
       }
-    );
+      if (!res.ok && res.status >= 500 && attempt < 2) {
+        return postToGraphWithRetry(attempt + 1);
+      }
+      return res;
+    }
 
+    const fbRes = await postToGraphWithRetry();
     const fbData = await fbRes.json();
 
-    // 🔧 TEMPORARY DEBUG LOGGING — يُزال بالكامل في commit تنظيف بعد انتهاء
-    // التحقيق. يسجَّل على كل الحالات (نجاح/فشل) بعكس console.error أدناه
-    // اللي بيشتغل بس عند الفشل — عشان نشوف رد Meta الكامل حتى لو "نجح".
-    console.log("[PIXEL DEBUG] Graph API response →", {
+    console.log(
+      "[fb-track]",
       event_name,
-      event_id: eventPayload.data[0].event_id,
-      http_status: fbRes.status,
-      ok: fbRes.ok,
-      events_received: fbData?.events_received,
-      full_response: fbData,
-    });
+      debugTestEventCode ? "(test mode)" : "(production)",
+      "→",
+      fbRes.status,
+      fbData?.events_received !== undefined ? `events_received=${fbData.events_received}` : ""
+    );
 
     if (!fbRes.ok) {
       console.error("[fb-track] ✗ Meta rejected event:", event_name, JSON.stringify(fbData));

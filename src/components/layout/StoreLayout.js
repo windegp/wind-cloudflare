@@ -12,10 +12,9 @@ export default function StoreLayout({ children }) {
   const pathname = usePathname();
   const isAdmin = pathname?.startsWith('/admin');
 
-  // 🔥 نرسل PageView للسيرفر (Conversions API) عند كل تغيير مسار حقيقي
-  // (بخلاف fbq الذي يرسل من المتصفح فقط مرة واحدة عند أول تحميل).
-  // هذا يحسّن "Conversions API coverage" لحدث PageView كما أوصى فيسبوك،
-  // ولا يحمل أي array فيتأثر بمشكلة flattening.
+  // 🔥 PageView يُطلق من هنا فقط (نقطة استدعاء واحدة، لا يوجد fbq('track','PageView')
+  // منفصل في layout.js بعد الآن) — كل تغيير مسار حقيقي يستدعي fbTrack()
+  // الموحّدة، فتُطلق Browser + Server معاً بنفس event_id تلقائياً (Dual Fire).
   useEffect(() => {
     if (!isAdmin) {
       fbTrack("PageView", {});

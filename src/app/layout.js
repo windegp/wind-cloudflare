@@ -37,13 +37,18 @@ export default function RootLayout({ children }) {
     <html lang="ar" dir="rtl" className={`${cairo.variable} ${tajawal.variable}`}> 
       <head>
         {/*
-          🔥 Facebook Pixel — Base Code فقط (Browser-side)
-          الهدف الوحيد هنا: توليد وتحديث كوكيز _fbp/_fbc بشكل صحيح ومستمر،
-          وإرسال PageView تلقائياً (هذا الحدث لا يحتوي على arrays، فلا يتأثر
-          بمشكلة الـ flattening في Zaraz/أي وسيط).
-          باقي الأحداث (ViewContent, AddToCart, InitiateCheckout, Purchase)
-          تُرسل عبر /api/fb-track مباشرة للسيرفر لتجنب نفس المشكلة،
-          وتُستخدم نفس قيم _fbp/_fbc المُولّدة هنا لرفع جودة المطابقة (EMQ).
+          🔥 Facebook Pixel — Base Code فقط (Browser-side).
+          Zaraz أُزيل نهائياً من المشروع — المسار الوحيد الآن هو:
+          Browser Pixel (هنا) + Conversions API (عبر fbTrack.js/api/fb-track)،
+          يطلقان كل حدث معاً بنفس event_id (Dual Fire + Deduplication).
+
+          autoConfig معطّل عمداً: يمنع Meta من فحص الصفحة تلقائياً وإطلاق
+          أحداث تخمينية (مثل SubscribedButtonClick) لم يطلبها أي كود هنا —
+          هذا كان مصدر التحذيرات وغير القابلة للتفسير في الجلسات السابقة.
+          كل حدث نُرسله الآن مقصود ومُتحكَّم به بالكامل من fbTrack.js فقط.
+
+          PageView نفسه لا يُطلق من هنا — StoreLayout.js يستدعي fbTrack()
+          الموحّدة عند كل تغيير مسار، فتُطلق Browser + Server معاً بنفس الـ ID.
         */}
         <Script id="fb-pixel-base" strategy="afterInteractive">
           {`
@@ -55,14 +60,8 @@ export default function RootLayout({ children }) {
             t.src=v;s=b.getElementsByTagName(e)[0];
             s.parentNode.insertBefore(t,s)}(window, document,'script',
             'https://connect.facebook.net/en_US/fbevents.js');
+            fbq('set', 'autoConfig', false, '880930164288645');
             fbq('init', '880930164288645');
-            // 🔥 Dedup: نولّد event_id مشترك لأول PageView في الجلسة، ونمرره
-            // كـ eventID لـ fbq (Browser) ونخزّنه على window ليقرأه fbTrack()
-            // لأول نداء Server-side PageView فقط — فتتطابق النسختان لدى Meta
-            // بدل احتسابهما كحدثين منفصلين.
-            var __fbPvId = 'PageView-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
-            window.__fbInitialPageViewId = __fbPvId;
-            fbq('track', 'PageView', {}, {eventID: __fbPvId});
           `}
         </Script>
 

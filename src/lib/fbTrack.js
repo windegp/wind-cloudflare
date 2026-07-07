@@ -1,15 +1,12 @@
 // lib/fbTrack.js
 //
-// دالة موحّدة لإرسال أحداث Facebook Pixel عبر /api/fb-track
-// (مباشرة لـ Conversions API من السيرفر فقط، بدون fbq() ولا Zaraz).
+// دالة موحّدة واحدة لإرسال كل حدث Meta Pixel من نقطة واحدة فقط:
+// Dual Fire — تُطلق نفس الحدث عبر Browser Pixel (fbq) و Conversions API
+// (عبر /api/fb-track) معاً، بنفس event_id بالضبط، فتُدمَج الاثنتان لدى Meta
+// كحدث واحد بأعلى جودة مطابقة ممكنة (EMQ) بدل احتسابهما منفصلَين أو
+// الاعتماد على قناة واحدة فقط.
 //
-// 🔥 لماذا لا نرسل من fbq() (Browser) لهذه الأحداث:
-// كان يحدث Deduplication بين حدث Browser (فقير: بلا content_ids)
-// وحدث Server (غني: يحتوي content_ids الصحيحة)، وفيسبوك كان يحتفظ
-// بنسخة Browser في بعض عمليات الحساب (مثل Catalogue Match Rate)،
-// فتُفقد content_ids من المعادلة فعلياً رغم وصولها للسيرفر بنجاح.
-// الحل: الاعتماد على السيرفر فقط لهذه الأحداث (الأغنى والأدق بيانات).
-// PageView يبقى عبر fbq() في layout.js (لا يحتوي على arrays، لا مشكلة).
+// Zaraz أُزيل نهائياً من المشروع (Phase 1) — لا يوجد أي Workaround خاص به هنا.
 
 function getOrCreateExternalId() {
   if (typeof window === "undefined") return undefined;
@@ -67,30 +64,52 @@ function generateEventId(eventName) {
   return `${eventName}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-// 🔥 Dedup #1 — PageView: نفس الـ event_id بين Browser (fbq) و أول نداء Server.
-// layout.js يولّد event_id واحد لأول PageView في الجلسة، ويخزّنه هنا مؤقتاً.
-// عند أول استدعاء fbTrack("PageView", ...) في نفس الجلسة، نستخدم نفس الـ ID
-// (فتتطابق نسخة Browser ونسخة Server لدى Meta ولا تُحتسب مرتين)، ثم نمسحه
-// فوراً — أي تنقل لاحق بين الصفحات (route change) يولّد ID مستقل خاص به،
-// لأنه لا يقابله حدث Browser آخر أصلاً (fbq يعمل مرة واحدة فقط لكل جلسة).
-function consumeInitialPageViewId() {
-  if (typeof window === "undefined") return undefined;
-  const id = window.__fbInitialPageViewId;
-  if (id) delete window.__fbInitialPageViewId;
-  return id;
+// 🔥 قائمة بيضاء صريحة لِما يُسمح بإرساله لـ fbq() كـ Custom Data في المتصفح.
+// نتعمّد عدم تمرير كائن data كاملاً كما هو: بعض الأحداث (خصوصاً Purchase)
+// تحمل حقول بيانات عميل (email, phone, ...) مخصّصة فقط لـ Conversions API
+// من السيرفر (حيث تُشفَّر Hashing قبل إرسالها لـ Meta) — تمرير هذه الحقول
+// كما هي إلى fbq() في المتصفح سيُظهرها Plain Text في custom_data وهو
+// استخدام غير صحيح وغير آمن. القناة الصحيحة لبيانات العميل في المتصفح هي
+// Advanced Matching (خارج نطاق Phase 1 الحالي، موثّق كتحسين مستقبلي).
+const BROWSER_EVENT_PARAM_KEYS = [
+  "value",
+  "currency",
+  "content_ids",
+  "content_name",
+  "content_type",
+  "contents",
+  "num_items",
+  "order_id",
+];
+
+function pickBrowserParams(data) {
+  const out = {};
+  for (const key of BROWSER_EVENT_PARAM_KEYS) {
+    if (data[key] !== undefined) out[key] = data[key];
+  }
+  return out;
 }
 
 export async function fbTrack(eventName, data = {}) {
   if (typeof window === "undefined") return;
 
-  const eventId =
-    data.event_id ||
-    (eventName === "PageView" && consumeInitialPageViewId()) ||
-    generateEventId(eventName);
+  const eventId = data.event_id || generateEventId(eventName);
   const externalId = getOrCreateExternalId();
   const fbp = await waitForFbp();
   const fbc = readCookie("_fbc");
 
+  // ── 1) Browser Pixel — نفس event_id بالضبط، حقول قياسية فقط (Whitelist) ──
+  if (typeof window.fbq === "function") {
+    try {
+      window.fbq("track", eventName, pickBrowserParams(data), { eventID: eventId });
+    } catch (_) {
+      // fbq قد يكون معطَّلاً (أداة حجب إعلانات مثلاً) — لا يوقف الجزء
+      // السيرفري أدناه؛ الـ CAPI يبقى يعمل بشكل مستقل تماماً.
+    }
+  }
+
+  // ── 2) Conversions API — نفس event_id بالضبط، بيانات كاملة (بما فيها
+  // حقول العميل الخام التي سيُشفّرها السيرفر قبل إرسالها لـ Meta) ──
   const payload = JSON.stringify({
     event_name:       eventName,
     event_id:         eventId,
@@ -101,20 +120,6 @@ export async function fbTrack(eventName, data = {}) {
     ...data,
   });
 
-  // 🔧 TEMPORARY DEBUG LOGGING — لتتبّع دورة حياة الحدث الحقيقية أثناء
-  // اختبار AddToCart واحد متحكَّم فيه. يُزال بالكامل في commit تنظيف بعد
-  // انتهاء التحقيق. لا يغيّر أي شيء في الـ payload أو المنطق نفسه.
-  console.log("[PIXEL DEBUG] fbTrack →", {
-    event_name: eventName,
-    event_id:   eventId,
-    content_ids: data?.content_ids,
-    has_fbp:    !!fbp,
-    has_fbc:    !!fbc,
-  });
-
-  // ── sendBeacon أولاً: لا يُعترَض من Zaraz (على خلاف window.fetch)،
-  // ويُكمل الإرسال بعد مغادرة الصفحة (مثل keepalive تماماً).
-  // كان fetch+keepalive يتعطل بصمت بسبب Zaraz's fetch wrapper.
   const endpoint = "/api/fb-track";
   const blob = new Blob([payload], { type: "application/json" });
 
@@ -123,13 +128,9 @@ export async function fbTrack(eventName, data = {}) {
     beaconQueued = navigator.sendBeacon(endpoint, blob);
   } catch (_) { /* sendBeacon غير متاح */ }
 
-  // 🔧 TEMPORARY DEBUG LOGGING — القيمة الأهم: هل المتصفح قَبِل فعلاً إرسال
-  // الـ beacon؟ false هنا يعني الحدث مات داخل المتصفح ولن يصل للسيرفر إطلاقاً.
-  console.log("[PIXEL DEBUG] sendBeacon queued:", beaconQueued, "| event_id:", eventId);
-
   if (beaconQueued) return;
 
-  // Fallback: fetch بدون keepalive
+  // Fallback: fetch بدون keepalive (نادر الحدوث — فقط لو sendBeacon فشل)
   try {
     fetch(endpoint, {
       method:  "POST",

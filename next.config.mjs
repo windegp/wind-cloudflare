@@ -5,7 +5,7 @@ const nextConfig = {
   // ============================================
   transpilePackages: ['firebase', '@firebase/app', '@firebase/firestore', 'swr'],
   compiler: {
-    removeConsole: process.env.NODE_ENV === 'production',
+    removeConsole: process.env.NODE_ENV === 'production' ? { exclude: ['error'] } : false,
   },
 
   // ============================================
