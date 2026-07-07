@@ -4,6 +4,10 @@ import Link from 'next/link';
 import QuickViewModal from "@/components/QuickViewModal";
 import { Star, ChevronRight, ChevronLeft, Eye, Plus } from '@/components/icons-extra';
 import ProductCard from '../products/ProductCard';
+// 🧪 EXPERIMENTAL DIAGNOSTIC PATCH — راجع الكومنت جوا CircularCollections تحت.
+// هذا الاستيراد يُستخدم في مكان واحد فقط (تجربة إثبات فرضية)، الست حالات
+// الأخرى لـ IntersectionObserver في هذا الملف لم تُلمَس عمداً.
+import { createSafeObserver } from '@/lib/featureDetection';
 
 // الهوكات المجمعة اللي عملناها مع بعض للـ SWR
 // تم إزالة الاستدعاءات الداخلية - البيانات تمرر عبر props الآن
@@ -1080,7 +1084,14 @@ export const CircularCollections = ({ data }) => {
   const [isSectionVisible, setIsSectionVisible] = useState(false);
 
   useEffect(() => {
-    const observer = new IntersectionObserver(
+    // 🧪 EXPERIMENTAL DIAGNOSTIC PATCH (تجربة إثبات فرضية — مؤقتة):
+    // استبدال `new IntersectionObserver` الخام بـ createSafeObserver() الموجودة
+    // بالفعل في lib/featureDetection.js. لو المتصفح ماعندوش IntersectionObserver،
+    // createSafeObserver بترجع كائن وهمي (observe/unobserve/disconnect بدون فعل
+    // حقيقي) بدل ما ترمي ReferenceError. الهدف: التأكد هل رمي الاستثناء هنا هو
+    // فعلاً سبب اختفاء الـ Hero/الكروت/تعطّل Navbar على المتصفحات القديمة.
+    // الست استخدامات التانية لـ IntersectionObserver في هذا الملف لم تُمَس عمداً.
+    const observer = createSafeObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
           setIsSectionVisible(true);
