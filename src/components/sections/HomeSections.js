@@ -191,6 +191,9 @@ export const EditorialCenteredHero = ({ data }) => {
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
+    if (typeof window !== 'undefined' && window.__WIND_DIAG__) {
+      window.__WIND_DIAG__.mark('Hero mounted');
+    }
     setIsMounted(true);
     if (slides.length === 0) return;
     const timer = setInterval(() => {
@@ -1084,6 +1087,9 @@ export const CircularCollections = ({ data }) => {
   const [isSectionVisible, setIsSectionVisible] = useState(false);
 
   useEffect(() => {
+    if (typeof window !== 'undefined' && window.__WIND_DIAG__) {
+      window.__WIND_DIAG__.mark('CircularCollections effect start');
+    }
     // 🧪 EXPERIMENTAL DIAGNOSTIC PATCH (تجربة إثبات فرضية — مؤقتة):
     // استبدال `new IntersectionObserver` الخام بـ createSafeObserver() الموجودة
     // بالفعل في lib/featureDetection.js. لو المتصفح ماعندوش IntersectionObserver،
@@ -1194,6 +1200,9 @@ export const TabbedHighlights = ({ data }) => {
   const carouselRef = useRef(null);
 
   useEffect(() => {
+    if (typeof window !== 'undefined' && window.__WIND_DIAG__) {
+      window.__WIND_DIAG__.mark('TabbedHighlights effect start');
+    }
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
@@ -1297,6 +1306,9 @@ export const BannerProductGrid = ({ data }) => {
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
+    if (typeof window !== 'undefined' && window.__WIND_DIAG__) {
+      window.__WIND_DIAG__.mark('BannerProductGrid effect start');
+    }
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
@@ -1390,6 +1402,9 @@ export const VisualBreakSection = ({ data }) => {
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
+    if (typeof window !== 'undefined' && window.__WIND_DIAG__) {
+      window.__WIND_DIAG__.mark('VisualBreakSection effect start');
+    }
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
@@ -1482,6 +1497,9 @@ export const CustomerReviewsSection = ({ data, bundle }) => {
 
   useEffect(() => {
     if (!reviews || reviews.length === 0) return;
+    if (typeof window !== 'undefined' && window.__WIND_DIAG__) {
+      window.__WIND_DIAG__.mark('CustomerReviewsSection effect start');
+    }
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
@@ -1691,6 +1709,9 @@ export const FloatingCollectionsSection = ({ data }) => {
   const cards = data?._adminItems || [];
 
   useEffect(() => {
+    if (typeof window !== 'undefined' && window.__WIND_DIAG__) {
+      window.__WIND_DIAG__.mark('FloatingCollectionsSection effect start');
+    }
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {

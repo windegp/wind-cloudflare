@@ -17,10 +17,16 @@ export default function HomeSectionsMainContent() {
 
   // 1. جلب التنسيق (Layout) والهيرو من ال API عبر ال KV cache
   const { data: homepageData, isLoading: isHomepageLoading } = useSWR('homepage/data', async () => {
+    if (typeof window !== 'undefined' && window.__WIND_DIAG__) {
+      window.__WIND_DIAG__.mark('HomeSections fetch started');
+    }
     const response = await fetch("/api/homepage");
     const result = await response.json();
     if (!result.success) {
       throw new Error('Failed to fetch homepage data');
+    }
+    if (typeof window !== 'undefined' && window.__WIND_DIAG__) {
+      window.__WIND_DIAG__.mark('HomeSections data loaded');
     }
     return result.data;
   }, { dedupingInterval: 300000 });
@@ -56,6 +62,9 @@ export default function HomeSectionsMainContent() {
   // استخدام useMemo لتجنب إعادة حساب الأقسام في كل رندر (تحسين أداء)
   const renderedSections = useMemo(() => {
     if (!layoutConfig) return null;
+    if (layoutConfig.length > 0 && typeof window !== 'undefined' && window.__WIND_DIAG__) {
+      window.__WIND_DIAG__.mark('HomeSections rendered');
+    }
 
     return layoutConfig.map((section, index) => {
       const SectionCategory = DESIGN_REGISTRY[section.category];

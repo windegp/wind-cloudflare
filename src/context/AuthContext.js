@@ -13,6 +13,9 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (typeof window !== 'undefined' && window.__WIND_DIAG__) {
+      window.__WIND_DIAG__.mark('AuthProvider effect start');
+    }
     const auth = getAuth();
     // مراقب حالة التسجيل - بيشتغل مرة واحدة ويفضل مراقب
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {

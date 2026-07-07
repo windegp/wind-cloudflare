@@ -25,6 +25,9 @@ export const SettingsProvider = ({ children }) => {
   // Each visitor gets one event per day per session
   // Also updates counters.visitors and counters.todayVisitors
   useEffect(() => {
+    if (typeof window !== 'undefined' && window.__WIND_DIAG__) {
+      window.__WIND_DIAG__.mark('SettingsProvider effect start');
+    }
     const hasBeenCounted = sessionStorage.getItem("wind_v_counted");
     
     if (!hasBeenCounted && !isAdmin) {

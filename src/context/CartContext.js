@@ -15,6 +15,9 @@ export function CartProvider({ children }) {
   const [promoSettings, setPromoSettings] = useState(null);
 
   useEffect(() => {
+    if (typeof window !== 'undefined' && window.__WIND_DIAG__) {
+      window.__WIND_DIAG__.mark('CartProvider effect start');
+    }
     // لو الـ settings جاءت وفيها promotions → استخدمها مباشرة
     if (settings?.promotions) {
       setPromoSettings(settings.promotions);
@@ -154,6 +157,9 @@ export function CartProvider({ children }) {
 
   // ── Persistence ────────────────────────────────────────────────
   useEffect(() => {
+    if (typeof window !== 'undefined' && window.__WIND_DIAG__) {
+      window.__WIND_DIAG__.mark('CartProvider localStorage read start');
+    }
     const saved = localStorage.getItem('wind_cart');
     if (saved) {
       try { setCartItems(JSON.parse(saved)); }
