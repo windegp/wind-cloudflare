@@ -8,18 +8,24 @@ import { AuthProvider } from "../context/AuthContext";
 import { SWRProvider } from "../components/SWRProvider"; // ✅ استيراد الـ SWRProvider الجديد
 import GlobalLoader from "../components/GlobalLoader";
 import Script from 'next/script';
+import { Cairo, Tajawal } from 'next/font/google';
 
 import StoreLayout from "../components/layout/StoreLayout";
 import LiveTracker from "../components/LiveTracker";
 
-// 🔥 Legacy Browser Fix (يوليو 2026): next/font/google بيتطلب SWC حصرياً،
-// وده بيتعارض مع babel.config اللي أضفناه عشان نصلّح مشكلة عدم عمل الموقع
-// على المتصفحات القديمة (SWC كان بيتجاهل browserslist بتاعنا في تحويل صيغ
-// الجافاسكريبت الحديثة زي ?. و ??). فبدل next/font، بنحمّل نفس الخطوط
-// بالضبط (نفس الأوزان، نفس subset العربي) عبر <link> عادي لـ Google Fonts —
-// نفس الشكل بالضبط، بدون أي تغيير في التصميم أو الخط الظاهر للعميل.
-const GOOGLE_FONTS_URL =
-  "https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&family=Tajawal:wght@400;700;900&display=swap";
+const cairo = Cairo({
+  subsets: ['arabic'],
+  weight: ['400', '700', '900'],
+  display: 'swap',
+  variable: '--font-cairo',
+});
+
+const tajawal = Tajawal({
+  subsets: ['arabic'],
+  weight: ['400', '700', '900'],
+  display: 'swap',
+  variable: '--font-tajawal',
+});
 
 export const metadata = {
   title: 'WIND Shopping | الأناقة والدفء في مكان واحد',
@@ -28,11 +34,8 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="ar" dir="rtl">
+    <html lang="ar" dir="rtl" className={`${cairo.variable} ${tajawal.variable}`}> 
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href={GOOGLE_FONTS_URL} rel="stylesheet" />
         {/*
           🔥 Facebook Pixel — Base Code فقط (Browser-side)
           الهدف الوحيد هنا: توليد وتحديث كوكيز _fbp/_fbc بشكل صحيح ومستمر،
@@ -93,7 +96,7 @@ export default function RootLayout({ children }) {
           }}
         />
       </head>
-      <body className="font-sans bg-white text-[#1A1A1A] antialiased overflow-x-hidden">
+      <body className={`${cairo.className} bg-white text-[#1A1A1A] antialiased overflow-x-hidden`}>
         {/* ✅ تغليف الموقع بالكامل بـ SWRProvider لضمان حماية الكوتا عالمياً */}
         <SWRProvider>
           <GlobalLoaderProvider>
