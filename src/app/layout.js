@@ -36,17 +36,6 @@ export default function RootLayout({ children }) {
   return (
     <html lang="ar" dir="rtl" className={`${cairo.variable} ${tajawal.variable}`}> 
       <head>
-        {/* 🧪 EXPERIMENTAL DIAGNOSTIC PROBE — تعديل مؤقت بالكامل للتحقيق في مشكلة
-            المتصفحات القديمة. لازم يكون أول سكريبت يتحمّل، قبل أي حاجة تانية،
-            عشان يمسك أي استثناء من أول لحظة (بما فيها lib/polyfills.js).
-            الحذف: امسح السطر ده + public/wind-diag-probe.js + كل استدعاءات
-            window.__WIND_DIAG__.mark(...) في باقي الملفات. */}
-        <script src="/wind-diag-probe.js"></script>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: "if(window.__WIND_DIAG__){window.__WIND_DIAG__.mark('RootLayout loaded');}"
-          }}
-        />
         {/*
           🔥 Facebook Pixel — Base Code فقط (Browser-side).
           Zaraz أُزيل نهائياً من المشروع — المسار الوحيد الآن هو:

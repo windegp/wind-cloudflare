@@ -33,9 +33,6 @@ export default function LiveTracker() {
   }, [handleVisibilityChange]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.__WIND_DIAG__) {
-      window.__WIND_DIAG__.mark('LiveTracker effect start');
-    }
     // 1. حظر تتبع الأدمن نهائياً لتوفير الموارد
     if (pathname?.startsWith('/admin')) return;
 

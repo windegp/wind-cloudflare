@@ -14,9 +14,6 @@ export default function HeroSection({ data }) {
 
   // مؤقت تقليب الصور (مضبوط على 6 ثواني ليتمكن العميل من قراءة النقاط)
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.__WIND_DIAG__) {
-      window.__WIND_DIAG__.mark('Hero mounted');
-    }
     if (slides.length === 0) return;
     const timer = setInterval(() => {
       setCurrent((prev) => (prev === slides.length - 1 ? 0 : prev + 1));

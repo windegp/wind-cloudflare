@@ -1,15 +1,7 @@
 "use client";
 import { SWRConfig } from 'swr';
-import { useEffect } from 'react';
 
 export const SWRProvider = ({ children }) => {
-  // 🧪 EXPERIMENTAL DIAGNOSTIC MARK — تعديل مؤقت للتحقيق، يُحذف لاحقاً
-  useEffect(() => {
-    if (typeof window !== 'undefined' && window.__WIND_DIAG__) {
-      window.__WIND_DIAG__.mark('SWRProvider mounted');
-    }
-  }, []);
-
   return (
     <SWRConfig 
       value={{

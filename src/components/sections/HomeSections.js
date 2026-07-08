@@ -4,10 +4,6 @@ import Link from 'next/link';
 import QuickViewModal from "@/components/QuickViewModal";
 import { Star, ChevronRight, ChevronLeft, Eye, Plus } from '@/components/icons-extra';
 import ProductCard from '../products/ProductCard';
-// 🧪 EXPERIMENTAL DIAGNOSTIC PATCH — راجع الكومنت جوا CircularCollections تحت.
-// هذا الاستيراد يُستخدم في مكان واحد فقط (تجربة إثبات فرضية)، الست حالات
-// الأخرى لـ IntersectionObserver في هذا الملف لم تُلمَس عمداً.
-import { createSafeObserver } from '@/lib/featureDetection';
 
 // الهوكات المجمعة اللي عملناها مع بعض للـ SWR
 // تم إزالة الاستدعاءات الداخلية - البيانات تمرر عبر props الآن
@@ -191,9 +187,6 @@ export const EditorialCenteredHero = ({ data }) => {
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.__WIND_DIAG__) {
-      window.__WIND_DIAG__.mark('Hero mounted');
-    }
     setIsMounted(true);
     if (slides.length === 0) return;
     const timer = setInterval(() => {
@@ -1087,17 +1080,7 @@ export const CircularCollections = ({ data }) => {
   const [isSectionVisible, setIsSectionVisible] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.__WIND_DIAG__) {
-      window.__WIND_DIAG__.mark('CircularCollections effect start');
-    }
-    // 🧪 EXPERIMENTAL DIAGNOSTIC PATCH (تجربة إثبات فرضية — مؤقتة):
-    // استبدال `new IntersectionObserver` الخام بـ createSafeObserver() الموجودة
-    // بالفعل في lib/featureDetection.js. لو المتصفح ماعندوش IntersectionObserver،
-    // createSafeObserver بترجع كائن وهمي (observe/unobserve/disconnect بدون فعل
-    // حقيقي) بدل ما ترمي ReferenceError. الهدف: التأكد هل رمي الاستثناء هنا هو
-    // فعلاً سبب اختفاء الـ Hero/الكروت/تعطّل Navbar على المتصفحات القديمة.
-    // الست استخدامات التانية لـ IntersectionObserver في هذا الملف لم تُمَس عمداً.
-    const observer = createSafeObserver(
+    const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
           setIsSectionVisible(true);
@@ -1200,9 +1183,6 @@ export const TabbedHighlights = ({ data }) => {
   const carouselRef = useRef(null);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.__WIND_DIAG__) {
-      window.__WIND_DIAG__.mark('TabbedHighlights effect start');
-    }
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
@@ -1306,9 +1286,6 @@ export const BannerProductGrid = ({ data }) => {
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.__WIND_DIAG__) {
-      window.__WIND_DIAG__.mark('BannerProductGrid effect start');
-    }
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
@@ -1402,9 +1379,6 @@ export const VisualBreakSection = ({ data }) => {
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.__WIND_DIAG__) {
-      window.__WIND_DIAG__.mark('VisualBreakSection effect start');
-    }
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
@@ -1497,9 +1471,6 @@ export const CustomerReviewsSection = ({ data, bundle }) => {
 
   useEffect(() => {
     if (!reviews || reviews.length === 0) return;
-    if (typeof window !== 'undefined' && window.__WIND_DIAG__) {
-      window.__WIND_DIAG__.mark('CustomerReviewsSection effect start');
-    }
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
@@ -1709,9 +1680,6 @@ export const FloatingCollectionsSection = ({ data }) => {
   const cards = data?._adminItems || [];
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.__WIND_DIAG__) {
-      window.__WIND_DIAG__.mark('FloatingCollectionsSection effect start');
-    }
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
