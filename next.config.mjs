@@ -3,7 +3,7 @@ const nextConfig = {
   // ============================================
   // 🌐 LEGACY BROWSER COMPATIBILITY
   // ============================================
-  transpilePackages: ['firebase', '@firebase/app', '@firebase/firestore', 'swr'],
+  transpilePackages: ['firebase', '@firebase/app', '@firebase/auth', '@firebase/database', '@firebase/firestore', '@firebase/storage', '@firebase/component', '@firebase/util', 'swr'],
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production' ? { exclude: ['error'] } : false,
   },
