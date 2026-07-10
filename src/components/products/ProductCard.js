@@ -262,7 +262,8 @@ mergedProduct;
           <Link href={productLink} className="block w-full h-full" onClick={(e) => e.stopPropagation()}>
             <div className="relative w-full h-full">
               <img
-                src={getImageUrl(activeCardImage || defaultProductImage)}
+                // [DEBUG] Experiment 3: Replace with static /test.jpg to isolate image source vs rendering
+                src="/test.jpg"
                 alt={title}
                 onLoad={() => setImgLoaded(true)}
                 className={`absolute inset-0 w-full h-full object-cover transition-all duration-500 ease-out ${imgLoaded ? 'scale-100 opacity-100' : 'scale-[1.15] opacity-0'} group-hover:scale-105 ${hoverImageUrl ? (isHovered ? 'opacity-0' : 'opacity-100') : ''}`}
