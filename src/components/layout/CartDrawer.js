@@ -142,7 +142,10 @@ export default function CartDrawer() {
     setQuickViewProduct(product);
   };
 
-  if (!isCartOpen) return null;
+  // [DEBUG] Experiment 1: Force CartDrawer to render unconditionally
+  // Ignoring isCartOpen state to test whether the issue is in state propagation
+  // or in the rendering/portal mechanism itself.
+  // if (!isCartOpen) return null;
 
   return (
     <>
