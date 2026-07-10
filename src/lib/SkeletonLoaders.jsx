@@ -30,7 +30,7 @@ export function SkeletonCard() {
   return (
     <div className="space-y-4 animate-pulse">
       {/* Image skeleton */}
-      <div className="aspect-square bg-gray-700 rounded-lg"></div>
+      <div className="aspect-square-fallback bg-gray-700 rounded-lg"></div>
       
       {/* Title skeleton */}
       <div className="space-y-2">

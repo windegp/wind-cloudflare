@@ -257,7 +257,7 @@ mergedProduct;
         onMouseEnter={() => { if (hasMultipleImages) setIsHovered(true); }}
         onMouseLeave={() => setIsHovered(false)}
       >
-        <div className="relative aspect-[4/5] bg-[#EFEFEF] overflow-hidden cursor-pointer" onClick={handleOpenQuickView}>
+        <div className="relative aspect-4-5 bg-[#EFEFEF] overflow-hidden cursor-pointer" onClick={handleOpenQuickView}>
           {discount && <div className="absolute top-2.5 right-2.5 z-20 bg-[#E04040] text-white text-[11px] font-semibold px-2.5 py-1 rounded-full shadow-sm font-cairo">تخفيض</div>}
           <Link href={productLink} className="block w-full h-full" onClick={(e) => e.stopPropagation()}>
             <div className="relative w-full h-full">

@@ -701,7 +701,7 @@ function CreateProductForm() {
               {images.length > 0 && (
                 <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4 mt-6">
                   {images.map((src, i) => (
-                    <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-gray-200 group bg-gray-50">
+                    <div key={i} className="relative aspect-square-fallback rounded-lg overflow-hidden border border-gray-200 group bg-gray-50">
                       <img src={src} className="w-full h-full object-cover" alt="product media"/>
                       
                       <div className="absolute top-1.5 right-1.5 bg-black/70 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow">

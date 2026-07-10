@@ -77,7 +77,7 @@ export default function HeroSection({ data }) {
       <div className="relative w-full bg-white px-4 pt-4 md:px-6 md:pt-6 z-20">
         
         {/* حاوية الصورة بحواف دائرية واضحة aspect-[21/9] للديسكتوب و [4/5] للموبايل */}
-        <div className="relative w-full aspect-[4/5] md:aspect-[21/9] overflow-hidden rounded-2xl shadow-sm bg-[#F0EEE6]">
+        <div className="relative w-full aspect-4-5 md:aspect-21-9 overflow-hidden rounded-2xl shadow-sm bg-[#F0EEE6]">
           {slides.map((slide, index) => (
             <img 
               key={index}

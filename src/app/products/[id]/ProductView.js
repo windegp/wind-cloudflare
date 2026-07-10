@@ -497,7 +497,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
         {/* Hero Image */}
         <div className="px-4 bg-white">
         <div
-          className="relative w-full aspect-[3/4] bg-[#F7F7F7] overflow-hidden"
+          className="relative w-full aspect-3-4 bg-[#F7F7F7] overflow-hidden"
           onClick={() => openGallery(activeIdx)}
           onTouchStart={handleHeroTouchStart}
           onTouchMove={handleHeroTouchMove}
@@ -863,7 +863,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                   const idx = thumbScrollTop + relIdx;
                   return (
                     <button key={idx} onClick={() => { setActiveImage(img); setActiveIdx(idx); }}
-                      className={`w-full aspect-[3/4] overflow-hidden border transition-all duration-200 flex-shrink-0 ${activeIdx===idx ? 'border-black' : 'border-[#E5E5E5] hover:border-[#999]'}`}>
+                      className={`w-full aspect-3-4 overflow-hidden border transition-all duration-200 flex-shrink-0 ${activeIdx===idx ? 'border-black' : 'border-[#E5E5E5] hover:border-[#999]'}`}>
                       <img src={getImageUrl(img)} alt="" className="w-full h-full object-cover" />
                     </button>
                   );
@@ -877,7 +877,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
             </div>
 
             {/* Main Image */}
-            <div className="flex-1 relative bg-[#F7F7F7] aspect-[3/4] cursor-zoom-in overflow-hidden main-img-wrap"
+            <div className="flex-1 relative bg-[#F7F7F7] aspect-3-4 cursor-zoom-in overflow-hidden main-img-wrap"
               onClick={() => openGallery(activeIdx)}>
               <img key={activeImage} src={getImageUrl(activeImage)} alt={product.title}
                 className="w-full h-full object-cover transition-transform duration-500 ease-out main-img-hover" />
@@ -1126,7 +1126,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
       {/* ===== COLOR ZOOM MODAL ===== */}
       {isImageZoomModalOpen && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-[#FAFAFA] p-4 animate-[fadeIn_0.3s_ease-out]" onClick={() => setImageZoomModalOpen(false)}>
-          <div className="relative w-full max-w-lg aspect-[3/4] overflow-hidden border border-[#E0E0E0]" onClick={e => e.stopPropagation()}>
+          <div className="relative w-full max-w-lg aspect-3-4 overflow-hidden border border-[#E0E0E0]" onClick={e => e.stopPropagation()}>
             <img src={getImageUrl(currentColorImage())} alt="" className="w-full h-full object-cover" />
             <button onClick={() => setImageZoomModalOpen(false)} className="absolute top-4 left-4 bg-white/90 p-2.5 rounded-full border border-[#E0E0E0] text-[#333]"><X size={18} /></button>
             <div className="absolute bottom-4 right-4 bg-white/90 px-4 py-2 border border-[#E0E0E0]">

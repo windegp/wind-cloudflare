@@ -141,7 +141,7 @@ export default function CategoryView({ initialSlug, initialCategoryData }) {
 {/* ── HERO BANNER ── */}
 {hasBanner ? (
           <div className="relative w-full bg-[#FAF8F3] overflow-hidden px-4 md:px-8">
-            <div className="relative w-full aspect-[16/9] md:aspect-[16/6] max-h-[400px]">
+            <div className="relative w-full aspect-16-9 md:aspect-16-6 max-h-[400px]">
 
               <img
                 src={categoryData.bannerImage || categoryData.image}

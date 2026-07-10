@@ -200,7 +200,7 @@ export const EditorialCenteredHero = ({ data }) => {
   return (
     <div className="relative w-full bg-white text-black pb-14" dir="rtl">
       
-      <div className="relative w-full aspect-[4/5] md:aspect-[21/9] bg-[#EAEAEA] overflow-hidden rounded-none">
+      <div className="relative w-full aspect-4-5 md:aspect-21-9 bg-[#EAEAEA] overflow-hidden rounded-none">
         {slides.map((slide, index) => (
           <img 
             key={index}
@@ -351,7 +351,7 @@ export const FeaturedToday = ({ data }) => {
                       className={`min-w-[200px] md:min-w-[260px] block card-lift
                                  ${isExpanded && hasSubCards ? 'rounded-r-2xl rounded-l-none' : 'rounded-2xl'}`}
                     >
-                      <div className={`relative aspect-[3/4] overflow-hidden bg-[#FAF8F3]
+                      <div className={`relative aspect-3-4 overflow-hidden bg-[#FAF8F3]
                                       border border-[#EEEBE5] transition-all duration-500
                                       ${isExpanded && hasSubCards ? 'rounded-r-2xl rounded-l-none' : 'rounded-2xl'}`}>
                         <img src={mainCard.image} alt={mainCard.mainTitle}
@@ -420,7 +420,7 @@ export const FeaturedToday = ({ data }) => {
                                    ${isExpanded ? 'mr-0 opacity-100 scale-100' : '-mr-[200px] md:-mr-[260px] opacity-0 scale-95 pointer-events-none'}`}
                         style={{ zIndex: 40 - sIndex }}
                       >
-                        <div className={`relative aspect-[3/4] overflow-hidden bg-[#FAF8F3]
+                        <div className={`relative aspect-3-4 overflow-hidden bg-[#FAF8F3]
                                        border border-[#EEEBE5] border-r-0
                                        shadow-[-8px_0_24px_rgba(0,0,0,0.07)]
                                        ${isLast ? 'rounded-l-2xl' : 'rounded-none'}`}>
@@ -495,7 +495,7 @@ export const TopTenProducts = ({ data }) => {
                 <img
                   src={card.image}
                   alt={card.mainTitle}
-                  className="w-full h-full object-cover aspect-[2/3] img-zoom"
+                  className="w-full h-full object-cover aspect-2-3 img-zoom"
                 />
                 <div
                   className="absolute top-0 right-0 w-9 flex items-start justify-center pt-2"
@@ -619,7 +619,7 @@ export const MarqueeProducts = ({ data }) => {
                 href={product.linkUrl || "#"}
                 className="w-[165px] md:w-[230px] flex-none group block"
               >
-                <div className="relative aspect-[3/4] w-full overflow-hidden bg-[#FAF8F3]
+                <div className="relative aspect-3-4 w-full overflow-hidden bg-[#FAF8F3]
                                rounded-2xl border border-[#EEEBE5] mb-3.5
                                group-hover:border-[#1A1A1A]/30 group-hover:shadow-lg
                                transition-all duration-400">
@@ -696,7 +696,7 @@ export const BestSellersSection = ({ data }) => {
               </div>
 
               <Link href={heroProduct.linkUrl || "#"} className="block h-full">
-                <div className="relative aspect-[3/4] w-full overflow-hidden bg-white rounded-2xl
+                <div className="relative aspect-3-4 w-full overflow-hidden bg-white rounded-2xl
                                border border-[#EEEBE5] shadow-sm
                                group-hover:border-[#1A1A1A]/30 group-hover:shadow-xl
                                transition-all duration-500">
@@ -729,7 +729,7 @@ export const BestSellersSection = ({ data }) => {
             {gridProducts.map((p, index) => (
               <div key={index} className="group card-lift">
                 <Link href={p.linkUrl || "#"} className="block h-full">
-                  <div className="relative aspect-[3/4] w-full overflow-hidden bg-white rounded-2xl
+                  <div className="relative aspect-3-4 w-full overflow-hidden bg-white rounded-2xl
                                  border border-[#EEEBE5]
                                  group-hover:border-[#1A1A1A]/30 group-hover:shadow-lg
                                  transition-all duration-500">
@@ -779,7 +779,7 @@ export const ExclusiveOffers = ({ data }) => {
             <Link
               key={index}
               href={p.linkUrl || "#"}
-              className="group relative block aspect-[4/5] overflow-hidden bg-[#FAF8F3] rounded-2xl
+              className="group relative block aspect-4-5 overflow-hidden bg-[#FAF8F3] rounded-2xl
                         border border-[#EEEBE5]
                         card-lift"
             >
@@ -959,7 +959,7 @@ export const MostLikedWeekly = ({ data, bundle }) => {
         <div className="grid grid-cols-2 md:grid-cols-5 gap-5 md:gap-7 px-4 md:px-6 pb-16">
           {products.map((p, idx) => (
             <div key={idx} className="group relative flex flex-col items-center text-center">
-              <div className="relative aspect-[3/4] w-full arch-frame bg-[#EDEAE3] shadow-sm group-hover:shadow-xl transition-all duration-500 border border-[#E2DDD5] group-hover:border-[#1A1A1A]/30">
+              <div className="relative aspect-3-4 w-full arch-frame bg-[#EDEAE3] shadow-sm group-hover:shadow-xl transition-all duration-500 border border-[#E2DDD5] group-hover:border-[#1A1A1A]/30">
                 <Link href={`/products/${p.id}`} className="block w-full h-full"><img src={p.images?.[0] || p.mainImage} alt={p.title} className="w-full h-full object-cover img-zoom" /></Link>
                 <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setQuickViewProduct(p); }} aria-label="نظرة سريعة" className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 bg-white/92 backdrop-blur-sm text-[#1A1A1A] p-2.5 rounded-full shadow-md hover:bg-[#1A1A1A] hover:text-white transition-all duration-300 opacity-100 md:opacity-0 md:translate-y-2 md:group-hover:opacity-100 md:group-hover:translate-y-0"><Eye size={15} strokeWidth={2} /></button>
               </div>
@@ -1054,7 +1054,7 @@ export const MostLikedAllTime = ({ data, bundle }) => {
                 {p.likesCount}
               </div>
               <button onClick={(e) => { e.preventDefault(); setQuickViewProduct(p); }} className="absolute bottom-[95px] left-3 z-20 bg-white/90 backdrop-blur-sm text-[#1A1A1A] border border-[#EAEAEA] p-2.5 rounded-full shadow-md opacity-100 md:opacity-0 md:-translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 hover:bg-[#1A1A1A] hover:text-white"><Eye size={18} /></button>
-              <Link href={`/products/${p.id}`} className="block relative w-full aspect-[3/4] overflow-hidden bg-[#F0EEE6]"><img src={p.images?.[0] || p.mainImage} alt={p.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" /></Link>
+              <Link href={`/products/${p.id}`} className="block relative w-full aspect-3-4 overflow-hidden bg-[#F0EEE6]"><img src={p.images?.[0] || p.mainImage} alt={p.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" /></Link>
               <Link href={`/products/${p.id}`} className="flex flex-col justify-between flex-1 p-4 text-right">
                 <h3 className="text-[#1A1A1A] text-sm md:text-base font-bold line-clamp-2 group-hover:text-gray-500 transition-colors leading-snug" style={{fontFamily:"Cairo,sans-serif"}}>{p.title}</h3>
                 <p className="text-[#1A1A1A] text-base md:text-lg font-black mt-3" style={{fontFamily:"Impact, sans-serif"}}>{p.price} <span className="text-xs font-bold text-gray-500 font-sans">ج.م</span></p>
@@ -1314,7 +1314,7 @@ export const BannerProductGrid = ({ data }) => {
 
         {data.bannerImage && (
           <div className={`relative w-full overflow-hidden mb-4 md:mb-6 transition-all duration-[1000ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
-            <div className="relative w-full aspect-[3/4] md:aspect-[21/9] bg-[#F5F5F5] overflow-hidden group">
+            <div className="relative w-full aspect-3-4 md:aspect-21-9 bg-[#F5F5F5] overflow-hidden group">
               <img 
                 src={data.bannerImage} 
                 alt={data.bannerTitle || "Section Banner"} 
