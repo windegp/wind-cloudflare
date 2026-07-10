@@ -81,7 +81,8 @@ export default function HeroSection({ data }) {
           {slides.map((slide, index) => (
             <img 
               key={index}
-              src={slide.image} 
+              // [DEBUG] Experiment 2: Replace with static /test.jpg to isolate image source vs rendering
+              src="/test.jpg"
               alt={slide.title}
               // أنيميشن ناعم جداً عند انتقال الصور (Cross-fade)
               className={`absolute inset-0 w-full h-full object-cover origin-center transition-opacity duration-1500 ease-in-out ${index === current ? 'opacity-100 z-10 scale-100' : 'opacity-0 z-0 scale-102'}`} 
