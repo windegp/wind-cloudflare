@@ -7,6 +7,7 @@ import { getDb } from "@/lib/firebase";
 import { doc, getDoc, setDoc, serverTimestamp, collection, getDocs, updateDoc, increment, query, where, limit } from "firebase/firestore/lite";
 import ImageUploader from "@/components/ImageUploader";
 import { buildVariantsFromOptions, validateVariants } from "@/lib/inventoryHelpers";
+import { GENERIC_COLLECTIONS } from "@/lib/constants";
 import { Loader2, Save, Plus, Minus, Star, Info, Share2, Heart, ImageIcon, X, Truck, Eye, ShieldCheck, ChevronLeft, Search, ChevronRight, ShoppingBag, CreditCard, Banknote, Smartphone, Lock, Edit2, ExternalLink, CheckSquare, Square, FolderTree, CheckCircle2, Globe, Box, Settings, Tag, AlertCircle, Database, Layout, Trash2, Monitor, Archive, Layers, ChevronDown, ChevronUp, Menu, Target, Mail, Crown, UserMinus, MonitorSmartphone, LinkIcon, Paintbrush, ListFilter, PackageSearch, ArrowRight } from '@/components/icons-extra';
 
 export const dynamic = 'force-dynamic';
@@ -87,6 +88,7 @@ function CreateProductForm() {
     countryOfOrigin: "Egypt",
     status: "Active",
     type: "",
+    productType: "", // 🔥 Phase 7: الحقل المخصص الجديد لـ Product Type — منفصل تماماً عن Collections/categories
     vendor: "WIND",
     selectedCollections: [], 
     tags: "",
@@ -210,6 +212,7 @@ function CreateProductForm() {
               countryOfOrigin: data.countryOfOrigin || "Egypt",
               status: data.status || "Active",
               type: data.type || "",
+              productType: data.productType || "",
               vendor: data.vendor || "WIND",
               selectedCollections: finalSelected,
               tags: data.tags || "",
@@ -443,6 +446,19 @@ function CreateProductForm() {
         if (!valid) {
           setIsSaving(false);
           return alert("⚠️ لا يمكن حفظ المنتج:\n\n" + errors.join("\n"));
+        }
+
+        // 🔥 Phase 7: Product Type إلزامي، ويجب أن يكون slug معروف من قائمة
+        // Collections الفعلية — يمنع القيم الفاضية أو غير الصالحة قبل أي كتابة لـ Firestore.
+        // 🔥 Phase 7: نفس الاستبعاد المُطبَّق على قائمة الـ Dropdown — يمنع حفظ
+        // قيمة تسويقية حتى لو وصلت بطريقة غير متوقعة (state قديم، إلخ).
+        const isValidProductType =
+          productData.productType &&
+          !GENERIC_COLLECTIONS.has(productData.productType) &&
+          availableCollections.some((c) => c.slug === productData.productType);
+        if (!isValidProductType) {
+          setIsSaving(false);
+          return alert("⚠️ لا يمكن حفظ المنتج:\n\nيجب اختيار نوع المنتج (Product Type) من القائمة.");
         }
 
         const finalProduct = {
@@ -1114,16 +1130,28 @@ function CreateProductForm() {
             <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm space-y-4">
               <h3 className="text-sm font-bold text-[#202223] mb-1">التنظيم (Organization)</h3>
               <div>
-                <label className="block text-xs text-gray-600 mb-1.5">النوع (Product type)</label>
-                <input 
-                  type="text" 
-                  name="type" 
-                  value={productData.type} 
-                  onChange={handleProductChange} 
-                  list="csv-types" 
-                  placeholder="مثال: تيشرتات" 
-                  className="w-full bg-white border border-gray-300 px-3 py-2 rounded-lg text-sm outline-none focus:border-[#008060] focus:ring-1 focus:ring-[#008060] text-[#202223]" 
-                />
+                <label className="block text-xs text-gray-600 mb-1.5">
+                  نوع المنتج (Product Type) <span className="text-red-500">*</span>
+                </label>
+                {/* 🔥 Phase 7: Dropdown إلزامي بدل حقل نصي حر — القيمة المخزَّنة هي
+                    الـ slug الثابت من نفس مصدر Collections الموجود بالفعل (availableCollections)،
+                    وليس تصنيفاً جديداً منفصلاً. لا كتابة يدوية، لا قيم مكررة، لا اختلاف إملائي. */}
+                <select
+                  name="productType"
+                  value={productData.productType}
+                  onChange={handleProductChange}
+                  required
+                  className="w-full bg-white border border-gray-300 px-3 py-2 rounded-lg text-sm outline-none focus:border-[#008060] focus:ring-1 focus:ring-[#008060] text-[#202223]"
+                >
+                  <option value="">-- اختر نوع المنتج --</option>
+                  {availableCollections
+                    .filter((col) => col.slug && !GENERIC_COLLECTIONS.has(col.slug))
+                    .slice()
+                    .sort((a, b) => (a.name || "").localeCompare(b.name || "", "ar"))
+                    .map((col) => (
+                      <option key={col.slug} value={col.slug}>{col.name}</option>
+                    ))}
+                </select>
               </div>
               <div>
                 <label className="block text-xs text-gray-600 mb-1.5">المورد (Vendor)</label>

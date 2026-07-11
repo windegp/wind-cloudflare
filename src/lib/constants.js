@@ -134,3 +134,14 @@ export const VALIDATION = {
   MAX_PRODUCT_NAME_LENGTH: 200,
   MAX_DESCRIPTION_LENGTH: 5000,
 };
+
+// ============================================
+// 🏷️ MERCHANDISING TAXONOMY (Phase 7)
+// ============================================
+// 🔥 Collections تسويقية/مؤقتة — ليست تصنيف منتج حقيقي. مصدر واحد يستخدمه
+// كل من: fb-catalog/route.js (استبعادها من product_type/custom_label)
+// و admin/products/create/page.js (استبعادها من قائمة Product Type Dropdown).
+// أي تعديل هنا ينعكس تلقائياً في الاثنين — لا تكرار، لا احتمال تباعد لاحقاً.
+export const GENERIC_COLLECTIONS = new Set([
+  "shop-all", "new-arrivals", "best-sellers", "sale", "women-sale", "men-sale",
+]);

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getKV } from "@/lib/kv-cache"; 
 import { getMetaAvailability } from "@/lib/inventoryHelpers";
 import { getCatalogId, slugifyColor } from "@/lib/catalogId";
+import { GENERIC_COLLECTIONS } from "@/lib/constants";
 
 const SITE_URL = "https://windeg.com";
 const BRAND = "WIND Shopping";
@@ -142,6 +143,7 @@ export async function GET() {
           colorSwatches: fMap("colorSwatches"),
           selectedCollections: fArr("selectedCollections"),
           categories: fArr("categories"), // 🔥 المصدر الموثوق — مزامَن مع collections وصفحات العرض، بعكس selectedCollections الذي قد يكون فاضياً لمنتجات قديمة
+          productType: f("productType"), // 🔥 Phase 7: الحقل المخصص الجديد — مستقل تماماً عن ترتيب Collections
           variants: fArrMaps("variants"),
           seoDescription: rawFields["seo"]?.mapValue?.fields?.description?.stringValue ?? "",
         };
@@ -165,9 +167,8 @@ export async function GET() {
         
         // 🌟 الأقسام العامة دي مش مفيدة كفلتر Set في فيسبوك (موجودة في كل المنتجات تقريباً)
         // فبنستبعدها من الـ product_type/custom_labels، مع استبعاد نسخ السلاش المكررة "/slug"
-        const GENERIC_COLLECTIONS = new Set([
-          "shop-all", "new-arrivals", "best-sellers", "sale", "women-sale", "men-sale",
-        ]);
+        // 🔥 Phase 7: GENERIC_COLLECTIONS مستوردة الآن من @/lib/constants (مصدر
+        // مشترك مع Admin Product Type Dropdown) — لم تعد مُعرَّفة محلياً هنا.
         const meaningfulCollections = Array.from(
           new Set(
             sourceCollections
@@ -178,11 +179,21 @@ export async function GET() {
 
         // 🌟 كل الأقسام الحقيقية: أول قسم في product_type، والباقي في custom_label_0..4
         // ده بيخلي Meta تقدر تعمل Set بناءً على أي قسم منهم وقت اختيار "Filter by product_type/custom_label"
-        const productType =
-          meaningfulCollections.length > 0
-            ? meaningfulCollections[0].replace(/-/g, " ")
-            : "WIND Collection";
-        const customLabels = meaningfulCollections.slice(1, 6).map((c) => c.replace(/-/g, " "));
+        // 🌟 Phase 7: product_type يُقرأ الآن من الحقل المخصص productType أولاً —
+        // مستقل تماماً عن ترتيب Collections (المشكلة الأصلية التي أثبتها Phase 6:
+        // كان يعتمد على meaningfulCollections[0]، أي ترتيب نقر الأدمن على الأقسام).
+        // الـ fallback القديم يبقى فقط للمنتجات الموجودة (~70) التي لم تُراجَع يدوياً
+        // بعد — بدون أي Migration تلقائي، تماماً كما طُلب. أي منتج جديد أو مُعدَّل
+        // سيحمل productType دائماً (إلزامي في الأدمن)، فلن يحتاج الـ fallback إطلاقاً.
+        const productType = p.productType
+          ? p.productType.replace(/-/g, " ")
+          : (meaningfulCollections.length > 0
+              ? meaningfulCollections[0].replace(/-/g, " ")
+              : "WIND Collection");
+        // 🌟 Collections تُصدَّر بالكامل ومستقلة تماماً الآن في custom_label_0..4 —
+        // لم تعد تفقد أول عنصر لصالح product_type (كان ده سلوك النظام القديم
+        // فقط، طالما product_type أصبح مصدره منفصل تماماً الآن).
+        const customLabels = meaningfulCollections.slice(0, 5).map((c) => c.replace(/-/g, " "));
         while (customLabels.length < 5) customLabels.push(""); // تفريغ الباقي لو الأقسام أقل من 5
         const customLabelsXml = customLabels
           .map((label, i) => `<g:custom_label_${i}>${escapeXml(label)}</g:custom_label_${i}>`)
