@@ -266,7 +266,8 @@ mergedProduct;
                 src="/test.jpg"
                 alt={title}
                 onLoad={() => setImgLoaded(true)}
-                className={`absolute inset-0 w-full h-full object-cover transition-all duration-500 ease-out ${imgLoaded ? 'scale-100 opacity-100' : 'scale-[1.15] opacity-0'} group-hover:scale-105 ${hoverImageUrl ? (isHovered ? 'opacity-0' : 'opacity-100') : ''}`}
+                // [DEBUG] Experiment 4: opacity/scale no longer depend on imgLoaded — always visible from first render
+                className={`absolute inset-0 w-full h-full object-cover transition-all duration-500 ease-out scale-100 opacity-100 group-hover:scale-105 ${hoverImageUrl ? (isHovered ? 'opacity-0' : 'opacity-100') : ''}`}
                 loading="lazy"
               />
               {hoverImageUrl && (
