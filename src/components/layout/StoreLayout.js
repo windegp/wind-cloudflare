@@ -7,7 +7,7 @@ import Footer from "./Footer";
 import CartDrawer from "./CartDrawer";
 import ScrollToTop from "./ScrollToTop";
 import { fbTrack } from "@/lib/fbTrack";
-
+import WhatsAppWidget from "@/components/WhatsAppWidget";
 export default function StoreLayout({ children }) {
   const pathname = usePathname();
   const isAdmin = pathname?.startsWith('/admin');
@@ -35,6 +35,7 @@ export default function StoreLayout({ children }) {
       {/* لو مش في الأدمن، اعرض الفوتر وزر الصعود */}
       {!isAdmin && <Footer />}
       {!isAdmin && <ScrollToTop />}
+      {!isAdmin && <WhatsAppWidget />}
     </>
   );
 }
