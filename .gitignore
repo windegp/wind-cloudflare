@@ -15,7 +15,9 @@ out/
 .env.development.local
 .env.test.local
 .env.production.local
+serviceAccountKey.json
 scripts/serviceAccountKey.json
+firestore-export/
 
 # OS files
 .DS_Store
