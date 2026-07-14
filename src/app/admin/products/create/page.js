@@ -313,6 +313,7 @@ function CreateProductForm() {
   // 🔥 استبدال صورة الغلاف (images[0]) بالكامل بصورة جديدة — رفع + استبدال الموضع
   // نفسه في المصفوفة (مش إضافة في الآخر)، مع حذف الصورة القديمة فعلياً من ImageKit
   const [isReplacingCover, setIsReplacingCover] = useState(false);
+  const [pendingDeletedUrls, setPendingDeletedUrls] = useState([]);
   const handleReplaceCoverImage = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = null;
@@ -349,13 +350,9 @@ function CreateProductForm() {
         return next;
       });
 
-      // حذف الصورة القديمة فعلياً من ImageKit (بعد التأكد من نجاح رفع الجديدة)
+      // لا نحذف الصورة القديمة الآن — نحتفظ بها معلّقة لحد ما الحفظ ينجح فعلياً
       if (oldCoverUrl) {
-        fetch('/api/delete-image', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: oldCoverUrl }),
-        }).catch((err) => console.error('ImageKit delete failed (non-blocking):', err));
+        setPendingDeletedUrls((prev) => [...prev, oldCoverUrl]);
       }
     } catch (err) {
       console.error("Cover replace failed:", err);
@@ -570,6 +567,21 @@ function CreateProductForm() {
 
       const db = getDb();
      await setDoc(doc(db, "products", documentId), finalProduct, { merge: true });
+
+      // 🔥 الحفظ نجح فعلياً — دلوقتي بس نحذف أي صور غلاف قديمة كانت معلّقة
+      // (لو فشل الحفظ أو المستخدم قفل الصفحة قبل كده، الصور دي كانت هتفضل موجودة)
+      if (pendingDeletedUrls.length > 0) {
+        await Promise.all(
+          pendingDeletedUrls.map((url) =>
+            fetch('/api/delete-image', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ url }),
+            }).catch((err) => console.error('ImageKit delete failed (non-blocking):', url, err))
+          )
+        );
+        setPendingDeletedUrls([]);
+      }
 
       // 🔥 الخطوة الأخيرة من الترحيل الآمن: تحويل المستند القديم لمستند Redirect
       // (بدون حذفه نهائياً — يحافظ على أي بيانات/مراجع قديمة، فقط يصبح غير نشط ويوجّه الزوار)
