@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { ImageIcon, Loader2, CheckCircle2 } from '@/components/icons-extra';
 
-export default function ImageUploader({ onUploadSuccess }) {
+export default function ImageUploader({ onUploadSuccess, folder = "/WIND_Shopping/Reviews" }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [uploadCount, setUploadCount] = useState(0);
@@ -31,7 +31,7 @@ export default function ImageUploader({ onUploadSuccess }) {
           formData.append("signature", authData.signature);
           formData.append("expire", authData.expire);
           formData.append("token", authData.token);
-          formData.append("folder", "/WIND_Shopping/Reviews");
+          formData.append("folder", folder);
 
           const uploadRes = await fetch("https://upload.imagekit.io/api/v1/files/upload", {
             method: "POST",

@@ -309,6 +309,61 @@ function CreateProductForm() {
       setImages((prev) => [...prev, urls]);
     }
   };
+
+  // 🔥 استبدال صورة الغلاف (images[0]) بالكامل بصورة جديدة — رفع + استبدال الموضع
+  // نفسه في المصفوفة (مش إضافة في الآخر)، مع حذف الصورة القديمة فعلياً من ImageKit
+  const [isReplacingCover, setIsReplacingCover] = useState(false);
+  const handleReplaceCoverImage = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = null;
+    if (!file) return;
+
+    setIsReplacingCover(true);
+    const oldCoverUrl = images[0];
+    try {
+      const authRes = await fetch('/api/upload');
+      if (!authRes.ok) throw new Error("Auth Failed");
+      const authData = await authRes.json();
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("fileName", `wind_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`);
+      formData.append("publicKey", process.env.NEXT_PUBLIC_IMAGEKIT_PUBLIC_KEY);
+      formData.append("signature", authData.signature);
+      formData.append("expire", authData.expire);
+      formData.append("token", authData.token);
+      formData.append("folder", "/WIND-Shopping");
+
+      const uploadRes = await fetch("https://upload.imagekit.io/api/v1/files/upload", {
+        method: "POST",
+        body: formData,
+      });
+      if (!uploadRes.ok) throw new Error("Upload failed");
+      const data = await uploadRes.json();
+      if (!data.url) throw new Error("No URL returned");
+
+      // استبدال حقيقي للموضع الأول، مش إضافة صورة جديدة
+      setImages((prev) => {
+        const next = [...prev];
+        next[0] = data.url;
+        return next;
+      });
+
+      // حذف الصورة القديمة فعلياً من ImageKit (بعد التأكد من نجاح رفع الجديدة)
+      if (oldCoverUrl) {
+        fetch('/api/delete-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: oldCoverUrl }),
+        }).catch((err) => console.error('ImageKit delete failed (non-blocking):', err));
+      }
+    } catch (err) {
+      console.error("Cover replace failed:", err);
+      alert("فشل استبدال صورة الغلاف. حاول مرة أخرى.");
+    } finally {
+      setIsReplacingCover(false);
+    }
+  };
   
   const handleAddImageUrl = () => {
     if (imageUrlInput.trim() !== "") {
@@ -318,7 +373,17 @@ function CreateProductForm() {
   };
 
   const removeImage = (indexToRemove) => {
+    const removedUrl = images[indexToRemove];
     setImages(images.filter((_, index) => index !== indexToRemove));
+    // 🔥 حذف الملف فعلياً من ImageKit (مش بس من الـ state) — عملية غير متزامنة،
+    // ما بتأخرش الواجهة، ولو فشلت مش بتمنع حذف الصورة من المنتج نفسه
+    if (removedUrl) {
+      fetch('/api/delete-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: removedUrl }),
+      }).catch((err) => console.error('ImageKit delete failed (non-blocking):', err));
+    }
   };
 
   const moveImageLeft = (index) => {
@@ -694,7 +759,7 @@ function CreateProductForm() {
               </div>
               
               <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center bg-gray-50 hover:bg-gray-100 transition-colors group relative">
-                <ImageUploader onUploadSuccess={handleImageKitSuccess} />
+                <ImageUploader onUploadSuccess={handleImageKitSuccess} folder="/WIND-Shopping" />
                 
                 <div className="mt-6 pt-6 border-t border-gray-200 flex flex-col sm:flex-row gap-3">
                   <input 
@@ -725,6 +790,21 @@ function CreateProductForm() {
                       </div>
 
                       <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5">
+                        {i === 0 && (
+                          <label
+                            className={`p-1.5 bg-white text-gray-800 rounded shadow-sm transition-colors cursor-pointer ${isReplacingCover ? 'opacity-60 pointer-events-none' : 'hover:bg-gray-200'}`}
+                            title="استبدال صورة الغلاف"
+                          >
+                            {isReplacingCover ? <Loader2 size={15} className="animate-spin" /> : <Edit2 size={15} />}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={handleReplaceCoverImage}
+                              disabled={isReplacingCover}
+                            />
+                          </label>
+                        )}
                         {i > 0 && (
                           <button 
                             type="button"

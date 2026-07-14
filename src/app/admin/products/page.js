@@ -103,12 +103,25 @@ export default function ProductsList() {
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (product) => {
     if(!confirm("هل أنت متأكد من حذف هذا المنتج بشكل نهائي؟")) return;
     try {
       const db = getDb();
-      
-      await deleteDoc(doc(db, "products", id));
+
+      // 🔥 حذف كل صور المنتج فعلياً من ImageKit قبل حذف المستند، لمنع بقاء ملفات يتيمة
+      if (Array.isArray(product.images) && product.images.length > 0) {
+        await Promise.all(
+          product.images.map((url) =>
+            fetch('/api/delete-image', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ url }),
+            }).catch((err) => console.error('ImageKit delete failed (non-blocking):', url, err))
+          )
+        );
+      }
+
+      await deleteDoc(doc(db, "products", product.id));
       
       try {
         const settingsRef = doc(db, "settings", "siteSettings");
@@ -125,7 +138,7 @@ export default function ProductsList() {
         await fetch('/api/revalidate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ type: 'product', id: id })
+          body: JSON.stringify({ type: 'product', id: product.id })
         });
       } catch {}
       
@@ -140,7 +153,7 @@ export default function ProductsList() {
         console.error("[fb-catalog] Invalidation failed on product delete:", e.message);
       }
 
-      const updatedProducts = products.filter(p => p.id !== id);
+      const updatedProducts = products.filter(p => p.id !== product.id);
       setProducts(updatedProducts);
       globalProductsCache.data = updatedProducts;
     } catch (error) {
@@ -299,7 +312,7 @@ export default function ProductsList() {
                             <Edit size={16} />
                           </button>
                           <button 
-                            onClick={() => handleDelete(product.id)} 
+                            onClick={() => handleDelete(product)} 
                             className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
                             title="حذف المنتج"
                           >
