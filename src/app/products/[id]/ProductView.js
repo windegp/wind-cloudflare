@@ -73,14 +73,26 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
    const likesFromServerRef = useRef(null);
 
+  // 👇 الكود الشامل: يحل مشكلة النافذة المنبثقة ويمنع التاب الأساسي من الإغلاق
   useEffect(() => {
-    const handleOpenSizeGuide = (e) => {
-      e?.preventDefault();
-      setSizeGuideOpen(true);
+    const handleGlobalClick = (e) => {
+      // البحث هل العنصر المضغوط هو زر يحتوي على كلمة "دليل القياسات"
+      const btn = e.target.closest('button');
+      if (btn && btn.textContent.includes('دليل القياسات')) {
+        e.preventDefault();
+        e.stopPropagation(); // هذا السطر السحري يمنع التاب من الإغلاق
+        setSizeGuideOpen(true); // يفتح دليل القياسات
+      }
     };
-    window.addEventListener('openSizeGuide', handleOpenSizeGuide);
-    return () => window.removeEventListener('openSizeGuide', handleOpenSizeGuide);
+
+    // نستخدم true (Capture Phase) لاصطياد الضغطة قبل أن تصل للتاب وتقفله
+    document.addEventListener('click', handleGlobalClick, true);
+
+    return () => {
+      document.removeEventListener('click', handleGlobalClick, true);
+    };
   }, []);
+  // 👆 نهاية الكود الجديد
 
   useEffect(() => {
     if (product?.id) {
