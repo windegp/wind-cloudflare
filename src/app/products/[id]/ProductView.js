@@ -80,7 +80,8 @@ export default function ProductView({ initialProduct, sourceCategory }) {
       const btn = e.target.closest('button');
       if (btn && btn.textContent.includes('دليل القياسات')) {
         e.preventDefault();
-        e.stopPropagation(); // هذا السطر السحري يمنع التاب من الإغلاق
+        e.stopPropagation(); 
+        setDescModalOpen(false); // 🔥 إغلاق نافذة الوصف المختصر لتجنب ظهور المقاسات خلفها
         setSizeGuideOpen(true); // يفتح دليل القياسات
       }
     };
@@ -484,8 +485,8 @@ export default function ProductView({ initialProduct, sourceCategory }) {
     </nav>
   );
 
-  // Accordion مشترك
- const AccordionSections = () => (
+  // Accordion مشترك - تم تحويله لدالة عادية لمنع إعادة الرسم وإغلاق التاب
+ const renderAccordionSections = () => (
     <div className="space-y-0">
       {accordionSections.map(({ key, title, html, extraClass = "" }, i, arr) => (
         <details key={key} className={`group ${i < arr.length - 1 ? "border-b border-[#EBEBEB]" : ""}`}>
@@ -849,7 +850,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
           {/* Accordion Mobile */}
           {product.description && (
             <div className="mt-8 pt-2">
-              <AccordionSections />
+              {renderAccordionSections()}
               {renderCustomHtml('below_description')}
             </div>
           )}
@@ -1067,10 +1068,10 @@ export default function ProductView({ initialProduct, sourceCategory }) {
               </div>
             </div>
 
-            {/* Accordion Desktop */}
+           {/* Accordion Desktop */}
             {product.description && (
               <div className="pt-2">
-                <AccordionSections />
+                {renderAccordionSections()}
                 {renderCustomHtml('below_description')}
               </div>
             )}
