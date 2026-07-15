@@ -18,7 +18,7 @@ export default function SizeChartModal({ isOpen, onClose, product }) {
   const productImage = product?.images?.[0] || product?.mainImage || "";
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm bg-black/60 animate-fadeIn" dir="rtl">
+    <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4 backdrop-blur-sm bg-black/60 animate-fadeIn" dir="rtl">
 
       <div className="bg-white w-full max-w-md border border-[#EBEBEB] shadow-2xl relative animate-slideUp">
 

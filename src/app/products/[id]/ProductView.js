@@ -77,12 +77,11 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   useEffect(() => {
     const handleGlobalClick = (e) => {
       // البحث هل العنصر المضغوط هو زر يحتوي على كلمة "دليل القياسات"
-      const btn = e.target.closest('button');
+     const btn = e.target.closest('button');
       if (btn && btn.textContent.includes('دليل القياسات')) {
         e.preventDefault();
         e.stopPropagation(); 
-        setDescModalOpen(false); // 🔥 إغلاق نافذة الوصف المختصر لتجنب ظهور المقاسات خلفها
-        setSizeGuideOpen(true); // يفتح دليل القياسات
+        setSizeGuideOpen(true); // يفتح دليل القياسات فقط ويترك ما خلفه مفتوحاً
       }
     };
 
