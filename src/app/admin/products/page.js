@@ -108,7 +108,10 @@ export default function ProductsList() {
     try {
       const db = getDb();
 
-      // 🔥 حذف كل صور المنتج فعلياً من ImageKit قبل حذف المستند، لمنع بقاء ملفات يتيمة
+      await deleteDoc(doc(db, "products", product.id));
+
+      // 🔥 حذف المستند نجح فعلاً — دلوقتي بس نحذف كل صور المنتج من ImageKit
+      // (لو رتبناها قبل حذف المستند وفشل الحذف، كان هيفضل منتج نشط بصور مكسورة)
       if (Array.isArray(product.images) && product.images.length > 0) {
         await Promise.all(
           product.images.map((url) =>
@@ -120,8 +123,6 @@ export default function ProductsList() {
           )
         );
       }
-
-      await deleteDoc(doc(db, "products", product.id));
       
       try {
         const settingsRef = doc(db, "settings", "siteSettings");

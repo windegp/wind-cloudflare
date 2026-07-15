@@ -372,14 +372,9 @@ function CreateProductForm() {
   const removeImage = (indexToRemove) => {
     const removedUrl = images[indexToRemove];
     setImages(images.filter((_, index) => index !== indexToRemove));
-    // 🔥 حذف الملف فعلياً من ImageKit (مش بس من الـ state) — عملية غير متزامنة،
-    // ما بتأخرش الواجهة، ولو فشلت مش بتمنع حذف الصورة من المنتج نفسه
+    // لا نحذف من ImageKit الآن — نحتفظ بالرابط معلّقاً لحد ما الحفظ ينجح فعلياً
     if (removedUrl) {
-      fetch('/api/delete-image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: removedUrl }),
-      }).catch((err) => console.error('ImageKit delete failed (non-blocking):', err));
+      setPendingDeletedUrls((prev) => [...prev, removedUrl]);
     }
   };
 
