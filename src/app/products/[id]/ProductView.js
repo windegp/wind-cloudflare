@@ -73,13 +73,14 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
    const likesFromServerRef = useRef(null);
 
-  // 👇 هذا هو الكود الجديد الذي يستمع لزر دليل القياسات من داخل كود الـ HTML
   useEffect(() => {
-    const handleOpenSizeGuide = () => setSizeGuideOpen(true);
+    const handleOpenSizeGuide = (e) => {
+      e?.preventDefault();
+      setSizeGuideOpen(true);
+    };
     window.addEventListener('openSizeGuide', handleOpenSizeGuide);
     return () => window.removeEventListener('openSizeGuide', handleOpenSizeGuide);
   }, []);
-  // 👆 نهاية الكود الجديد
 
   useEffect(() => {
     if (product?.id) {
