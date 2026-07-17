@@ -18,7 +18,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getRtdb } from "@/lib/firebase";
-import { ref, set, onDisconnect, remove, onValue, serverTimestamp } from "firebase/database";
+import { ref, set, onDisconnect, onValue, serverTimestamp } from "firebase/database";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, AlertCircle, RefreshCw } from "@/components/icons-extra";
 
@@ -105,13 +105,12 @@ export default function OnDisconnectTestPage() {
   };
 
   // تنظيف عند مغادرة الصفحة
+  // cleanup: يوقف العداد والـ listener فقط — لا يحذف الـ node أبداً
+  // الجهة الوحيدة المسموح لها بالحذف هي onDisconnect على Firebase server
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       if (listenerUnsub.current) listenerUnsub.current();
-      if (testRef.current && status !== "done") {
-        remove(testRef.current).catch(() => {});
-      }
     };
   }, [status]);
 
