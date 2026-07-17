@@ -63,8 +63,8 @@ export default function LiveViewPage() {
             const session = data[key];
             const lastActive = getValidTimestamp(session);
             const ageMin = Math.floor((now - lastActive) / 60000);
-            // EXTENDED: 2 hours (7200000ms) to show visitors despite onDisconnect issues
-            if (now - lastActive < 7200000) {
+            // 90 seconds — heartbeat كل 20 ثانية = هامش 4.5 heartbeat قبل الاختفاء
+            if (now - lastActive < 90000) {
               activeSessions.push({ id: key, ...session, _lastActiveComputed: lastActive, _ageMinutes: ageMin });
             }
           });
