@@ -4,6 +4,7 @@ import { getKV } from "@/lib/kv-cache";
 import { getMetaAvailability } from "@/lib/inventoryHelpers";
 import { getCatalogId, slugifyColor } from "@/lib/catalogId";
 import { GENERIC_COLLECTIONS } from "@/lib/constants";
+import { htmlToPlainText } from "@/lib/htmlToPlainText";
 
 const SITE_URL = "https://windeg.com";
 const BRAND = "WIND Shopping";
@@ -15,14 +16,6 @@ const KV_KEY = "fb_catalog_xml_v8";
 export const dynamic = 'force-dynamic';
 
 // -------- helpers --------
-
-function stripHtml(html) {
-  return html
-    .replace(/<[^>]*>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 5000);
-}
 
 function escapeXml(str) {
   return str
@@ -151,7 +144,7 @@ export async function GET() {
         const productUrl = `${SITE_URL}/products/${handle}`;
         const baseTitle = p.title ?? "";
         const rawDescription = p.description || p.seoDescription || "";
-        const cleanDescription = escapeXml(stripHtml(rawDescription));
+        const cleanDescription = escapeXml(htmlToPlainText(rawDescription));
         const basePrice = p.price ?? "0";
         const compareAtPrice = p.compareAtPrice ?? "";
         const images = Array.isArray(p.images) ? p.images : [];
