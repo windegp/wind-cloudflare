@@ -20,7 +20,7 @@ import { useEffect, useRef, useState } from "react";
 import { getRtdb } from "@/lib/firebase";
 import { ref, set, onDisconnect, remove, onValue, serverTimestamp } from "firebase/database";
 import Link from "next/link";
-import { ArrowRight, CheckCircle2, Clock, AlertCircle, RefreshCw } from "@/components/icons-extra";
+import { ArrowRight, CheckCircle2, AlertCircle, RefreshCw } from "@/components/icons-extra";
 
 export const dynamic = "force-dynamic";
 
@@ -156,7 +156,7 @@ export default function OnDisconnectTestPage() {
           {/* Status badge */}
           <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold mb-4 ${statusColor}`}>
             {status === "registering" && <RefreshCw size={14} className="animate-spin"/>}
-            {status === "registered"  && <Clock size={14}/>}
+            {status === "registered"  && <span className="text-sm">⏱</span>}
             {status === "done"        && <CheckCircle2 size={14}/>}
             {status === "failed"      && <AlertCircle size={14}/>}
             {statusLabel}
