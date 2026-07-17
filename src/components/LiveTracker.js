@@ -52,10 +52,9 @@ export default function LiveTracker() {
       // تحديد مسار الزائر في الـ Realtime Database
       sessionRef = ref(rtdb, `LiveSessions/${sessionIdRef.current}`);
 
-      // 🪄 onDisconnect (فشل في Cloudflare - نحتاج backup)
-      onDisconnect(sessionRef).remove().catch(() => {
-        // Silent fail - we'll use heartbeat instead
-      });
+      // 🪄 onDisconnect — يُنفَّذ على Firebase server عند انقطاع الاتصال
+      // ثبت بالاختبار أنه يعمل: يحذف الـ node في ≤ 10 ثوانٍ من الانقطاع
+      onDisconnect(sessionRef).remove();
 
       // 3. تحديد حالة الزائر بناءً على مساره وسلته
       let status = 'browsing';
