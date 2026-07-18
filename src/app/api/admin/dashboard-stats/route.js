@@ -279,10 +279,22 @@ export async function GET(request) {
         )
       );
     } else if (period === 'today') {
-      // TODAY: Use counters directly — 1 read total, no collection scans
-      // counters.todayVisitors is incremented on every visit via SettingsContext
-      // This is the fast path for polling — saves 200+ reads every 60s
-      visitorsForPeriod = todayVisitors;
+      // TODAY fast path — 1 read total (counters), no visitor_events scan
+      //
+      // PATCH: verify counters.todayDate matches today before using todayVisitors.
+      // Without this, if rollover hasn't happened yet (no regular visitor since midnight),
+      // todayVisitors still holds yesterday's count → wrong Dashboard display.
+      //
+      // NOTE: This fixes the display only. The root cause remains:
+      // rollover depends on the first regular visitor triggering SettingsContext
+      // (admin visits are excluded via !isAdmin check).
+      // TODO: Move rollover to a server-side scheduled function or a Firestore
+      // Transaction in dashboard-stats itself, so it doesn't depend on
+      // the first client-side visitor of the day.
+      const cairoTodayStr = getCairoDateStr(new Date());
+      visitorsForPeriod = counters.todayDate === cairoTodayStr
+        ? todayVisitors
+        : 0; // rollover not yet triggered — day genuinely started at zero
       periodDays = 1;
 
       // Orders today: light query with limit — today only
