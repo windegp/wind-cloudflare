@@ -1564,7 +1564,7 @@ export const CustomerReviewsSection = ({ data, bundle }) => {
                     <Star
                       key={i}
                       size={11}
-                      className={i < safeRating ? "fill-[#1A1A1A] text-[#1A1A1A]" : "fill-gray-200 text-gray-200"}
+                      className={i < safeRating ? "fill-[#E6AE00] text-[#E6AE00]" : "fill-gray-200 text-gray-200"}
                     />
                   ))}
                 </div>
