@@ -17,15 +17,7 @@ import { fbTrack } from "@/lib/fbTrack";
 import { getCatalogId } from "@/lib/catalogId";
 import { gaBeginCheckout, gaPurchase } from "@/lib/gaTrack";
 import { buildCheckoutMetaUserData } from "@/lib/metaEventData";
-
-// Helper function to get Cairo-local ISO timestamp for Firestore queries
-// Format: "YYYY-MM-DD HH:MM:SS" — matches dashboard query format
-function getCairoTimestamp() {
-  const cairoStr = new Date().toLocaleString('en-US', { timeZone: 'Africa/Cairo' });
-  const cairoDate = new Date(cairoStr);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${cairoDate.getFullYear()}-${pad(cairoDate.getMonth()+1)}-${pad(cairoDate.getDate())} ${pad(cairoDate.getHours())}:${pad(cairoDate.getMinutes())}:${pad(cairoDate.getSeconds())}`;
-}
+import { getCairoTimestamp } from '@/lib/analytics-helpers';
 
 // Helper function to handle Firebase errors
 async function hashSHA256(text) {
@@ -323,7 +315,7 @@ export default function CheckoutPage() {
             Total: finalTotal,
             Currency: "EGP",
             "Financial Status": "abandoned",
-            "Created at": new Date().toLocaleString('en-US', { timeZone: 'Africa/Cairo' }),
+            "Created at": getCairoTimestamp(),
             data_source: "WIND_Web",
             lineItems: cartItems.map(item => ({
               name: `${item.title} ${item.selectedSize ? '- ' + item.selectedSize : ''}`,
@@ -353,7 +345,7 @@ export default function CheckoutPage() {
               data_source: "WIND_Web",
               segments: ["Abandoned_Checkout"],
               hasAbandoned: true, 
-              last_active: new Date().toLocaleString('en-US', { timeZone: 'Africa/Cairo' })
+              last_active: getCairoTimestamp()
             }, { merge: true });
           }
 

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getCairoTimestamp } from '@/lib/analytics-helpers';
 import { verifyWebhookSignature } from '@/lib/kashier';
 import { successResponse, errorResponse, unauthorizedError } from '@/lib/apiResponse';
 import { getDb } from "@/lib/firebase";
@@ -6,12 +7,6 @@ import { doc, getDoc, setDoc, updateDoc, increment } from "firebase/firestore/li
 import { sendNewOrderNotification } from '@/lib/fcmAdmin';
 
 // Helper: Cairo-local ISO timestamp matching dashboard query format "YYYY-MM-DD HH:MM:SS"
-function getCairoTimestamp() {
-  const cairoStr = new Date().toLocaleString('en-US', { timeZone: 'Africa/Cairo' });
-  const cairoDate = new Date(cairoStr);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${cairoDate.getFullYear()}-${pad(cairoDate.getMonth()+1)}-${pad(cairoDate.getDate())} ${pad(cairoDate.getHours())}:${pad(cairoDate.getMinutes())}:${pad(cairoDate.getSeconds())}`;
-}
 
 // 🛡️ حماية الذاكرة المؤقتة (تمنع الهجمات المتكررة - DDoS & Replay Attacks)
 const requestCounts = new Map();
