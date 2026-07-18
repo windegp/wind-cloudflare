@@ -234,85 +234,100 @@ export default function ProductReviews({ productHandle, onReviewStatsUpdate }) {
 
   return (
     <>
-      <section className="bg-white rounded-2xl border border-[#EAEAEA] p-5 md:p-8 shadow-sm font-sans mt-8" id="reviews-section" dir="rtl">
-        
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-          <div className="flex items-center gap-3">
-            <div className="w-[4px] h-[24px] bg-[#E6AE00] rounded-full" />
-            <h2 className="text-xl md:text-2xl font-black text-[#1A1A1A] tracking-tight" style={{fontFamily:"Cairo,sans-serif"}}>
-              تقييمات العملاء
-            </h2>
-          </div>
-          <button onClick={() => setShowAddModal(true)} className="bg-white border-2 border-[#1A1A1A] text-[#1A1A1A] px-6 py-2.5 font-bold text-sm hover:bg-[#1A1A1A] hover:text-white transition-all duration-300 rounded-full shadow-sm" style={{fontFamily:"Cairo,sans-serif"}}>
-            + أضف تجربتك
-          </button>
-        </div>
+      <section className="bg-[#F5F5F5] py-12 md:py-16 font-sans mt-8" id="reviews-section" dir="rtl">
+        <div className="max-w-[1400px] mx-auto px-4">
 
-        {!loading && (reviews.length > 0 || filter !== "all") && (
-          <div className="flex flex-wrap gap-2.5 mb-8">
-            <button onClick={() => setFilter("all")} className={`px-4 py-2 rounded-full text-xs font-bold border transition-colors ${filter === "all" ? "bg-[#1A1A1A] text-white border-[#1A1A1A]" : "bg-white text-gray-600 border-[#EAEAEA]"}`}>الكل</button>
-            <button onClick={() => setFilter("images")} className={`px-4 py-2 rounded-full text-xs font-bold border flex items-center gap-1.5 transition-colors ${filter === "images" ? "bg-[#1A1A1A] text-white border-[#1A1A1A]" : "bg-white text-gray-600 border-[#EAEAEA]"}`}><ImageIcon size={14} /> بصور</button>
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+            <div className="flex items-center gap-3">
+              <div className="w-[4px] h-[24px] bg-[#E6AE00] rounded-full" />
+              <h2 className="text-xl md:text-2xl font-black text-[#1A1A1A] tracking-tight" style={{fontFamily:"Cairo,sans-serif"}}>
+                تقييمات العملاء
+              </h2>
+            </div>
+            <button onClick={() => setShowAddModal(true)} className="bg-white border-2 border-[#1A1A1A] text-[#1A1A1A] px-6 py-2.5 font-bold text-sm hover:bg-[#1A1A1A] hover:text-white transition-all duration-300 rounded-full shadow-sm" style={{fontFamily:"Cairo,sans-serif"}}>
+              + أضف تجربتك
+            </button>
           </div>
-        )}
 
-        {loading ? (
-          <div className="text-center text-gray-400 py-10 text-sm font-bold animate-pulse font-cairo">جاري التحميل...</div>
-        ) : filteredReviews.length === 0 ? (
-          <div className="text-center bg-[#FAF9F6] rounded-xl p-10 border border-[#EAEAEA]">
-            <Star className="mx-auto text-gray-300 mb-4" size={40} fill="currentColor" />
-            <p className="text-[#1A1A1A] font-bold mb-2 font-cairo">
-              {filter === "images" ? "لا توجد تقييمات تحتوي على صور حالياً" : "كن أول من يشاركنا رأيه!"}
-            </p>
-            {filter !== "all" && (
-              <button onClick={() => setFilter("all")} className="text-[#E6AE00] text-sm font-bold underline mt-2 font-cairo">عرض كل التقييمات</button>
-            )}
-          </div>
-        ) : (
-          <div className="flex flex-col gap-6">
-            {filteredReviews.map((rev) => (
-              <div key={rev.id} className="border-b border-[#EAEAEA] pb-6 last:border-0 last:pb-0 relative group">
-                <div className="flex justify-between items-start mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-[#FAF9F6] border border-[#EAEAEA] flex items-center justify-center text-[#1A1A1A] font-black text-sm uppercase">
-                      {rev.reviewerName?.charAt(0) || "ع"}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-sm text-[#1A1A1A] font-cairo">{rev.reviewerName}</span>
-                        <span className="flex items-center gap-1 text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-100 font-bold"><CheckCircle size={11} /> موثق</span>
+          {!loading && (reviews.length > 0 || filter !== "all") && (
+            <div className="flex flex-wrap gap-2.5 mb-8">
+              <button onClick={() => setFilter("all")} className={`px-4 py-2 rounded-full text-xs font-bold border transition-colors ${filter === "all" ? "bg-[#1A1A1A] text-white border-[#1A1A1A]" : "bg-white text-gray-600 border-[#EAEAEA]"}`}>الكل</button>
+              <button onClick={() => setFilter("images")} className={`px-4 py-2 rounded-full text-xs font-bold border flex items-center gap-1.5 transition-colors ${filter === "images" ? "bg-[#1A1A1A] text-white border-[#1A1A1A]" : "bg-white text-gray-600 border-[#EAEAEA]"}`}><ImageIcon size={14} /> بصور</button>
+            </div>
+          )}
+
+          {loading ? (
+            <div className="text-center text-gray-400 py-10 text-sm font-bold animate-pulse font-cairo">جاري التحميل...</div>
+          ) : filteredReviews.length === 0 ? (
+            <div className="text-center bg-[#FAF9F6] rounded-xl p-10 border border-[#EAEAEA]">
+              <Star className="mx-auto text-gray-300 mb-4" size={40} fill="currentColor" />
+              <p className="text-[#1A1A1A] font-bold mb-2 font-cairo">
+                {filter === "images" ? "لا توجد تقييمات تحتوي على صور حالياً" : "كن أول من يشاركنا رأيه!"}
+              </p>
+              {filter !== "all" && (
+                <button onClick={() => setFilter("all")} className="text-[#E6AE00] text-sm font-bold underline mt-2 font-cairo">عرض كل التقييمات</button>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-5 max-w-2xl mx-auto">
+              {filteredReviews.map((rev) => (
+                <div key={rev.id} className="bg-white rounded-[2px] shadow-sm p-6 md:p-8 relative">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-[#FAF9F6] border border-[#EAEAEA] flex items-center justify-center text-[#1A1A1A] font-black text-sm uppercase">
+                        {rev.reviewerName?.charAt(0) || "ع"}
                       </div>
-                      <div className="flex items-center gap-0.5 text-[#E6AE00] mt-0.5">
-                        {[...Array(5)].map((_, i) => <Star key={i} size={12} fill={i < rev.rating} className={i >= rev.rating ? "text-gray-300" : ""} />)}
+                      <div>
+                        <h3 className="font-bold text-[15px] md:text-[18px] text-[#1A1A1A] font-cairo">
+                          {rev.reviewerName}
+                        </h3>
+                        <div className="flex items-center gap-[1.5px] mt-1">
+                          {[...Array(5)].map((_, i) => (
+                            <Star
+                              key={i}
+                              size={11}
+                              className={i < rev.rating ? "fill-[#E6AE00] text-[#E6AE00]" : "fill-gray-200 text-gray-200"}
+                            />
+                          ))}
+                        </div>
                       </div>
                     </div>
+                    <span className="text-xs text-gray-400 font-medium">{formatDate(rev.date)}</span>
                   </div>
-                  <span className="text-xs text-gray-400 font-medium">{formatDate(rev.date)}</span>
+                  <p className="text-[#333333] text-[14px] md:text-[16px] leading-[1.7] font-tajawal">
+                    "{rev.text}"
+                  </p>
+                  {rev.imageUrls && rev.imageUrls.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-4">
+                      {rev.imageUrls.map((imgUrl, idx) => (
+                        <div key={idx} className="w-20 h-20 md:w-24 md:h-24 rounded-lg overflow-hidden border border-[#EAEAEA] shadow-sm">
+                          <img src={imgUrl} alt="Review" className="w-full h-full object-cover hover:scale-110 transition-transform duration-500 cursor-zoom-in" onClick={() => window.open(imgUrl, '_blank')} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="w-[98%] mx-auto h-[1px] bg-[#EEEEEE] mt-5"></div>
+                  <div className="flex items-center gap-1.5 mt-3">
+                    <span className="flex items-center gap-1 text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-100 font-bold">
+                      <CheckCircle size={11} /> موثق
+                    </span>
+                  </div>
                 </div>
-                <p className="text-gray-600 text-sm md:text-base leading-relaxed mb-4 font-tajawal">{rev.text}</p>
-                {rev.imageUrls && rev.imageUrls.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    {rev.imageUrls.map((imgUrl, idx) => (
-                      <div key={idx} className="w-20 h-20 md:w-24 md:h-24 rounded-lg overflow-hidden border border-[#EAEAEA] shadow-sm">
-                        <img src={imgUrl} alt="Review" className="w-full h-full object-cover hover:scale-110 transition-transform duration-500 cursor-zoom-in" onClick={() => window.open(imgUrl, '_blank')} />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
+              ))}
 
-            {hasMore && (
-              <button 
-                onClick={fetchMoreFromFirebase} 
-                disabled={loadingMore} 
-                className="mt-4 w-full flex items-center justify-center gap-2 py-3 bg-white border-2 border-[#1A1A1A] text-[#1A1A1A] rounded-xl font-bold text-sm hover:bg-[#1A1A1A] hover:text-white transition-all shadow-sm font-cairo"
-              >
-                {loadingMore ? "جاري التحميل..." : "مشاهدة المزيد من التقييمات"}
-                <ChevronDown size={16} />
-              </button>
-            )}
-          </div>
-        )}
+              {hasMore && (
+                <button 
+                  onClick={fetchMoreFromFirebase} 
+                  disabled={loadingMore} 
+                  className="mt-4 w-full flex items-center justify-center gap-2 py-3 bg-white border-2 border-[#1A1A1A] text-[#1A1A1A] rounded-xl font-bold text-sm hover:bg-[#1A1A1A] hover:text-white transition-all shadow-sm font-cairo"
+                >
+                  {loadingMore ? "جاري التحميل..." : "مشاهدة المزيد من التقييمات"}
+                  <ChevronDown size={16} />
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </section>
 
       {showAddModal && (
