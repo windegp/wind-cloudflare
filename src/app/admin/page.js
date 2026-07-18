@@ -95,21 +95,22 @@ export default function Dashboard() {
   }, [activePeriod, fetchDashboardStats]);
   // ملاحظة: customStartDate/customEndDate مش متضمنين — بنستخدمهم يدوي
 
-  // تحديث دوري كل 15 ثانية — استجابة شبه فورية
+  // تحديث دوري كل 60 ثانية — لـ "اليوم" فقط (البيانات التاريخية لا تتغير)
+  // قبل الإصلاح: كل الفترات كانت تُعيد قراءة مئات الـ documents كل 15 ثانية
+  // بعد الإصلاح: polling فقط لـ today + يعتمد على counters (1 read) لا collections
   const lastFetchRef = useRef(0);
   useEffect(() => {
-    if (activePeriod === 'custom') return;
+    // الفترات التاريخية لا تحتاج polling — بياناتها لا تتغير
+    if (activePeriod !== 'today') return;
+
     const interval = setInterval(() => {
-      // إيقاف الـ polling لو التاب مش نشط (مخفي)
       if (document.hidden) return;
-      // منع الـ fetch لو آخر مرة كانت من أقل من 10 ثوانٍ
       const now = Date.now();
-      if (now - lastFetchRef.current < 10000) return;
+      if (now - lastFetchRef.current < 30000) return; // حد أدنى 30 ثانية بين الطلبات
       lastFetchRef.current = now;
       fetchDashboardStats(activePeriod, customStartDate, customEndDate);
-    }, 15000);
-    // Fetch فوري عند أول تحميل
-    lastFetchRef.current = 0; // السماح ب fetch فوري
+    }, 60000); // كل 60 ثانية بدل 15
+    lastFetchRef.current = 0;
     return () => clearInterval(interval);
   }, [activePeriod, customStartDate, customEndDate, fetchDashboardStats]);
 

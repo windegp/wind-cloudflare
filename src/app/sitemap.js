@@ -1,24 +1,35 @@
 import { getDb } from "@/lib/firebase"; 
 import { collection, getDocs, query, limit } from "firebase/firestore/lite";
 import { products as staticProducts } from "@/lib/products";
+import { kvGet, kvSet } from "@/lib/kv-cache";
 
-// 🔥 الدرع الواقي: Cloudflare CDN هيحفظ الخريطة لمدة 24 ساعة (86400 ثانية)
-// شيلنا سطر الـ edge عشان بيعمل تعارض مع مكتبة فايربيز أثناء الـ Build
 export const revalidate = 86400;
+
+const SITEMAP_KV_KEY = "sitemap_products_v1";
 
 export default async function sitemap() {
   const baseUrl = "https://www.windeg.com";
-  const db = getDb();
 
-  // 1. جلب المنتجات من Firebase (🛡️ مع حماية الكوتا بحد أقصى 1000 منتج)
+  // 1. جرب KV أولاً — بيوفر 1000 Firestore reads لكل bot request
   let fbProducts = [];
   try {
-    const q = query(collection(db, "products"), limit(1000));
-    const querySnapshot = await getDocs(q);
-    fbProducts = querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    const cached = await kvGet(SITEMAP_KV_KEY);
+    if (cached && Array.isArray(cached)) {
+      fbProducts = cached;
+    } else {
+      // KV miss — اجيب من Firestore وخزّن
+      const db = getDb();
+      const q = query(collection(db, "products"), limit(1000));
+      const querySnapshot = await getDocs(q);
+      fbProducts = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        handle: doc.data().handle,
+        updatedAt: doc.data().updatedAt || null,
+        status: doc.data().status,
+      }));
+      // خزّن في KV — يُحذف عند /api/revalidate?type=sitemap أو product update
+      await kvSet(SITEMAP_KV_KEY, fbProducts);
+    }
   } catch (error) {
     console.error("Error fetching products for sitemap:", error);
   }

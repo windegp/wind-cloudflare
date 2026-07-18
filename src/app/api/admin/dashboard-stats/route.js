@@ -278,6 +278,21 @@ export async function GET(request) {
           (1000 * 60 * 60 * 24)
         )
       );
+    } else if (period === 'today') {
+      // TODAY: Use counters directly — 1 read total, no collection scans
+      // counters.todayVisitors is incremented on every visit via SettingsContext
+      // This is the fast path for polling — saves 200+ reads every 60s
+      visitorsForPeriod = todayVisitors;
+      periodDays = 1;
+
+      // Orders today: light query with limit — today only
+      if (dateFilterStart && filterStartMs && filterEndMs) {
+        const startDateOnly = dateFilterStart.split(' ')[0];
+        const endDateOnly = dateFilterEnd.split(' ')[0];
+        orderStats = await queryOrdersForRange(db, dateFilterStart, dateFilterEnd, filterStartMs, filterEndMs);
+        // Skip customers query for today polling — not needed for real-time display
+        customersForPeriod = 0;
+      }
     } else {
       // ═══════════════════════════════════════════════════════════
       // ALL FILTERED PERIODS: Use visitor_events as source of truth

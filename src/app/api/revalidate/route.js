@@ -17,7 +17,11 @@ export async function POST(request) {
   } else if (type === 'homepage') {
     keysToDelete = ['homepage_data_v1'];
     revalidatePath('/');
+  } else if (type === 'sitemap') {
+    keysToDelete.push('sitemap_products_v1');
   } else if (type === 'product' && id) {
+    // عند تعديل منتج → نحذف sitemap cache كمان
+    keysToDelete.push('sitemap_products_v1');
     keysToDelete = [`product_${id}`, 'homepage_data_v1'];
     if (handle) keysToDelete.push(`product_stats_${handle}`);
     revalidatePath('/');
