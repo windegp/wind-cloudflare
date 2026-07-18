@@ -129,7 +129,6 @@ export default function Dashboard() {
     }
     
     setActivePeriod(periodId);
-    fetchDashboardStats(periodId, '', '');
   };
 
   const handleCustomDateSubmit = () => {
