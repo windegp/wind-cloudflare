@@ -6,7 +6,7 @@ import {
   collection, getDocs, query, limit, 
   orderBy, where, startAfter, addDoc, doc, getDoc, setDoc, increment 
 } from 'firebase/firestore/lite';
-import { X, CheckCircle, ImageIcon, ChevronDown, Star } from '@/components/icons-extra';
+import { X, CheckCircle, ImageIcon, ChevronDown, Star, Verified } from '@/components/icons-extra';
 import { usePaginatedReviews } from "@/hooks/useFirestore";
 import ImageUploader from "@/components/ImageUploader";
 
@@ -237,20 +237,17 @@ export default function ProductReviews({ productHandle, onReviewStatsUpdate }) {
       <section className="bg-[#F5F5F5] py-12 md:py-16 font-sans mt-8" id="reviews-section" dir="rtl">
         <div className="max-w-[1400px] mx-auto px-4">
 
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-            <div className="flex items-center gap-3">
-              <div className="w-[4px] h-[24px] bg-[#E6AE00] rounded-full" />
-              <h2 className="text-xl md:text-2xl font-black text-[#1A1A1A] tracking-tight" style={{fontFamily:"Cairo,sans-serif"}}>
-                تقييمات العملاء
-              </h2>
-            </div>
-            <button onClick={() => setShowAddModal(true)} className="bg-white border-2 border-[#1A1A1A] text-[#1A1A1A] px-6 py-2.5 font-bold text-sm hover:bg-[#1A1A1A] hover:text-white transition-all duration-300 rounded-full shadow-sm" style={{fontFamily:"Cairo,sans-serif"}}>
+          <div className="flex flex-row justify-between items-center gap-4 mb-6">
+            <h2 className="text-xl md:text-2xl font-black text-[#1A1A1A] tracking-tight" style={{fontFamily:"Cairo,sans-serif"}}>
+              تقييمات العملاء
+            </h2>
+            <button onClick={() => setShowAddModal(true)} className="bg-white border-2 border-[#1A1A1A] text-[#1A1A1A] px-5 py-2 font-bold text-sm hover:bg-[#1A1A1A] hover:text-white transition-all duration-300 rounded-[2px]" style={{fontFamily:"Cairo,sans-serif"}}>
               + أضف تجربتك
             </button>
           </div>
 
           {!loading && (reviews.length > 0 || filter !== "all") && (
-            <div className="flex flex-wrap gap-2.5 mb-8">
+            <div className="flex flex-wrap gap-2.5 mb-6">
               <button onClick={() => setFilter("all")} className={`px-4 py-2 rounded-full text-xs font-bold border transition-colors ${filter === "all" ? "bg-[#1A1A1A] text-white border-[#1A1A1A]" : "bg-white text-gray-600 border-[#EAEAEA]"}`}>الكل</button>
               <button onClick={() => setFilter("images")} className={`px-4 py-2 rounded-full text-xs font-bold border flex items-center gap-1.5 transition-colors ${filter === "images" ? "bg-[#1A1A1A] text-white border-[#1A1A1A]" : "bg-white text-gray-600 border-[#EAEAEA]"}`}><ImageIcon size={14} /> بصور</button>
             </div>
@@ -278,9 +275,12 @@ export default function ProductReviews({ productHandle, onReviewStatsUpdate }) {
                         {rev.reviewerName?.charAt(0) || "ع"}
                       </div>
                       <div>
-                        <h3 className="font-bold text-[15px] md:text-[18px] text-[#1A1A1A] font-cairo">
-                          {rev.reviewerName}
-                        </h3>
+                        <div className="flex items-center gap-1.5">
+                          <h3 className="font-bold text-[15px] md:text-[18px] text-[#1A1A1A] font-cairo">
+                            {rev.reviewerName}
+                          </h3>
+                          <Verified size={14} className="text-[#1877F2] shrink-0" />
+                        </div>
                         <div className="flex items-center gap-[1.5px] mt-1">
                           {[...Array(5)].map((_, i) => (
                             <Star
@@ -306,12 +306,7 @@ export default function ProductReviews({ productHandle, onReviewStatsUpdate }) {
                       ))}
                     </div>
                   )}
-                  <div className="w-[98%] mx-auto h-[1px] bg-[#EEEEEE] mt-5"></div>
-                  <div className="flex items-center gap-1.5 mt-3">
-                    <span className="flex items-center gap-1 text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-100 font-bold">
-                      <CheckCircle size={11} /> موثق
-                    </span>
-                  </div>
+
                 </div>
               ))}
 
