@@ -67,7 +67,8 @@ async function queryRealCustomersForRange(db, startDateStr, endDateStr, filterSt
   try {
     const snap = await getDocs(query(
       collection(db, "Customers"),
-      where("last_active", ">=", startDateStr)
+      where("last_active", ">=", startDateStr),
+      where("last_active", "<=", endDateStr)
     ));
     
     const realCustomers = new Map();
@@ -116,7 +117,8 @@ async function queryOrdersForRange(db, startDateStr, endDateStr, filterStartMs, 
 // This avoids Cloudflare Worker CPU explosions from analytics rebuild-style scans.
 const snap = await getDocs(query(
   collection(db, "Orders"),
-  where("Created at", ">=", startDateStr)
+  where("Created at", ">=", startDateStr),
+  where("Created at", "<=", endDateStr)
 ));
     
     for (const d of snap.docs) {
