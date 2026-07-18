@@ -19,10 +19,10 @@ export async function POST(request) {
     revalidatePath('/');
   } else if (type === 'sitemap') {
     keysToDelete.push('sitemap_products_v1');
-  } else if (type === 'product' && id) {
-    // عند تعديل منتج → نحذف sitemap cache كمان
-    keysToDelete.push('sitemap_products_v1');
-    keysToDelete = [`product_${id}`, 'homepage_data_v1'];
+  } else if ((type === 'product' || type === 'product_update') && id) {
+    // عند تعديل/إنشاء/حذف منتج → نحذف sitemap cache كمان
+    // اجمع المفاتيح المطلوبة من دون الكتابة فوق القيم السابقة
+    keysToDelete = Array.from(new Set([`product_${id}`, 'homepage_data_v1', 'sitemap_products_v1', ...keysToDelete]));
     if (handle) keysToDelete.push(`product_stats_${handle}`);
     revalidatePath('/');
     if (handle) revalidatePath(`/products/${handle}`);
