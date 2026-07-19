@@ -83,6 +83,7 @@ export async function generateMetadata({ params }) {
   return {
     title: `${title} | WIND`,
     description: description,
+    alternates: { canonical: `https://windeg.com/collections/${slug}` },
     openGraph: {
       title: `${title} | WIND`,
       description: description,
