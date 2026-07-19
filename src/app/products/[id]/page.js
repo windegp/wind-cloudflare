@@ -5,7 +5,7 @@ import { doc, getDoc } from "firebase/firestore/lite";
 import { products as staticProducts } from "@/lib/products";
 import ProductView from "./ProductView"; 
 import { cache } from 'react';
-import { redirect } from 'next/navigation';
+import { redirect, notFound } from 'next/navigation';
 import { kvGet, kvSet } from "@/lib/kv-cache"; // 🔥 KV Cache
 import { getVariantBehavior } from "@/lib/inventoryHelpers";
 
@@ -121,7 +121,7 @@ export default async function Page({ params, searchParams }) {
     redirect(`/products/${product.__redirectTo}`);
   }
 
-  if (!product) return null; // Silent fallback
+  if (!product) notFound();
 
   // تنظيف الوصف الخاص بمخطط جوجل (Schema)
   const cleanSchemaDesc = product.description 
