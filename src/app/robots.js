@@ -5,6 +5,6 @@ export default function robots() {
       allow: '/',
       disallow: ['/admin/', '/api/'], // بنمنع جوجل يدخل على لوحة التحكم أو ملفات الـ API
     },
-    sitemap: 'https://www.windeg.com/sitemap.xml',
+    sitemap: 'https://windeg.com/sitemap.xml',
   }
 }

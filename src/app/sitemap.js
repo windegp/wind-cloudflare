@@ -8,7 +8,7 @@ export const revalidate = 86400;
 const SITEMAP_KV_KEY = "sitemap_products_v1";
 
 export default async function sitemap() {
-  const baseUrl = "https://www.windeg.com";
+  const baseUrl = "https://windeg.com";
 
   // 1. جرب KV أولاً — بيوفر 1000 Firestore reads لكل bot request
   let fbProducts = [];
