@@ -96,6 +96,7 @@ export async function generateMetadata({ params }) {
     title: finalTitle,
     description: finalDescription,
     keywords: product.tags ? product.tags.split(',').map(tag => tag.trim()) : [],
+    alternates: { canonical: `https://windeg.com/products/${id}` },
     openGraph: {
       title: finalTitle,
       description: finalDescription,
