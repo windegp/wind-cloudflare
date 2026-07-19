@@ -28,6 +28,7 @@ const tajawal = Tajawal({
 });
 
 export const metadata = {
+  metadataBase: new URL('https://www.windeg.com'),
   title: 'WIND Shopping | الأناقة والدفء في مكان واحد',
   description: 'اكتشف مجموعات WIND Shopping الفريدة من الشيلان والملابس الراقية المصممة بعناية.',
 };
