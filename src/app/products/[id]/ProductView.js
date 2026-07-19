@@ -1081,7 +1081,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
       {/* ===== BOTTOM SECTIONS ===== */}
       <div className="max-w-[1440px] mx-auto px-5 lg:px-12" dir="rtl">
-        <div id="reviews-section" className="pt-3 lg:pt-5 pb-6 lg:pb-10">
+        <div id="reviews-section" className="pt-2 lg:pt-4 pb-6 lg:pb-10">
           <ProductReviews
             productHandle={product.handle || product.id}
             onReviewStatsUpdate={(rating, count) => { setRealRating(rating); setRealReviewsCount(count); }}
