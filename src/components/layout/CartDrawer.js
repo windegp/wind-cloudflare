@@ -5,7 +5,6 @@ import Link from "next/link";
 import { ShoppingBag, Trash2, X, Plus, ZoomIn, Loader2, Minus, Eye } from '@/components/icons-extra';
 import { getDb } from "../../lib/firebase";
 import { doc, getDoc, collection, query, where, getDocs, documentId } from "firebase/firestore/lite";
-import { products as staticProducts } from "../../lib/products";
 import QuickViewModal from "@/components/QuickViewModal"; 
 
 export default function CartDrawer() {
@@ -53,21 +52,10 @@ export default function CartDrawer() {
         handles = handles.filter(h => !cartIdsAndHandles.includes(h));
 
         let fetchedProducts = [];
-        
-        // 1. البحث في الملف الستاتيك (صفر كوتا)
-        handles.forEach(h => {
-          const sp = staticProducts.find(p => {
-            const seoHandle = (p.seo && p.seo.handle) || null;
-            return p.id.toString() === h || p.handle === h || seoHandle === h;
-          });
-          if (sp && !fetchedProducts.some(fp => fp.id === sp.id)) fetchedProducts.push(sp);
-        });
 
-        // 2. 🛡️ جلب المنتجات الناقصة من فايربيز في قراءة واحدة (Batch Fetch)
+        // 🛡️ جلب المنتجات المقترحة من فايربيز في قراءة واحدة (Batch Fetch)
         // قص العدد لـ 10 بس (لأننا محتاجين 6 بس للعرض) عشان حماية الـ Limits
-        const missingHandles = handles
-          .filter(h => !fetchedProducts.some(fp => fp.id.toString() === h || fp.handle === h))
-          .slice(0, 10);
+        const missingHandles = handles.slice(0, 10);
 
         if (missingHandles.length > 0) {
           const db = getDb();
@@ -97,23 +85,6 @@ export default function CartDrawer() {
           }
         }
 
-        // 3. لو مفيش أي مقترحات مخصصة، نستخدم منطق الـ Fallback (المنتجات المشابهة)
-        if (fetchedProducts.length === 0) {
-          const firstItem = cartItems[0];
-          const refValue = (Array.isArray(firstItem.categories) && firstItem.categories[0]) ||
-                           (Array.isArray(firstItem.collections) && firstItem.collections[0]) ||
-                           firstItem.type;
-
-          if (refValue) {
-            let fallbacks = staticProducts.filter(p => {
-              const matchCat = Array.isArray(p.categories) ? p.categories.includes(refValue) : p.categories === refValue;
-              const matchCol = Array.isArray(p.collections) ? p.collections.includes(refValue) : p.collections === refValue;
-              return (matchCat || matchCol || p.type === refValue) && !cartIdsAndHandles.includes(p.id.toString());
-            });
-            fetchedProducts.push(...fallbacks);
-          }
-        }
-        
         setSuggestedProducts(fetchedProducts.slice(0, 6));
       } catch (error) { 
         console.error("WIND Error: Suggested products fetch failed", error); 

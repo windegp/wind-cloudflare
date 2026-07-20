@@ -1,6 +1,5 @@
 import { getDb } from "@/lib/firebase"; 
 import { collection, getDocs, query, limit } from "firebase/firestore/lite";
-import { products as staticProducts } from "@/lib/products";
 import { kvGet, kvSet } from "@/lib/kv-cache";
 
 export const revalidate = 86400;
@@ -34,8 +33,8 @@ export default async function sitemap() {
     console.error("Error fetching products for sitemap:", error);
   }
 
-  // 2. دمج المنتجات
-  const allProducts = [...staticProducts, ...fbProducts];
+  // 2. المنتجات (Firestore فقط — تمت إزالة staticProducts القديمة/التجريبية)
+  const allProducts = fbProducts;
 
   // 3. تحويل المنتجات لروابط مع معالجة ذكية للتاريخ
   const productEntries = allProducts.map((p) => {

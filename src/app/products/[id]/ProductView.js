@@ -2,7 +2,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, usePathname } from "next/navigation";
 import Link from "next/link";
-import { products as staticProducts } from "../../../lib/products";
 import { useCart } from "../../../context/CartContext";
 import { usePageReady, useGlobalLoader } from "../../../context/GlobalLoaderContext";
 import { getDb } from "../../../lib/firebase";
@@ -167,9 +166,8 @@ export default function ProductView({ initialProduct, sourceCategory }) {
     return () => { document.body.style.overflow = ''; };
   }, [isGalleryOpen, isImageZoomModalOpen, isDescModalOpen]);
 
-  const staticProd = useMemo(() => staticProducts.find(p => p.id.toString() === id?.toString()), [id]);
   const { data: fbProduct, isLoading: productLoading } = useProduct(id);
-  const activeProduct = fbProduct || staticProd || initialProduct;
+  const activeProduct = fbProduct || initialProduct;
   const { data: swrRelated, isLoading: relatedLoading } = useRelatedProducts(activeProduct);
 
   useEffect(() => {

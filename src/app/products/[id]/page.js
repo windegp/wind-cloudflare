@@ -2,7 +2,6 @@
 import { getDb } from "@/lib/firebase"; 
 import { getFirebaseEdge, getEdgeDb } from "@/lib/firebase-edge";
 import { doc, getDoc } from "firebase/firestore/lite";
-import { products as staticProducts } from "@/lib/products";
 import ProductView from "./ProductView"; 
 import { cache } from 'react';
 import { redirect, notFound } from 'next/navigation';
@@ -19,11 +18,7 @@ const firestoreDb = isEdgeRuntime ? getEdgeDb() : getDb();
 const getProductData = cache(async (id) => {
   if (!id) return null;
 
-  // 1. ابحث في Static Products أولاً
-  const staticProduct = staticProducts.find((p) => p.id.toString() === id.toString());
-  if (staticProduct) return staticProduct;
-
-  // 2. حاول تجيب من KV Cache
+  // 1. حاول تجيب من KV Cache
   const cacheKey = `product_${id}`;
   const cached = await kvGet(cacheKey);
   if (cached) {
@@ -34,7 +29,7 @@ const getProductData = cache(async (id) => {
     return cached;
   }
 
-  // 3. اجيب من Firebase (مرة واحدة بس لحد ما يحصل تحديث)
+  // 2. اجيب من Firebase (مرة واحدة بس لحد ما يحصل تحديث)
   try {
     const docRef = doc(firestoreDb, "products", id);
     const docSnap = await getDoc(docRef);
