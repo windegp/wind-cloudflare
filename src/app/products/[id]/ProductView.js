@@ -249,16 +249,24 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
   const parsedSections = useMemo(() => {
     if (!product?.description) return {};
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(product.description, 'text/html');
+    // نستخدم Regex بدل DOMParser لأن DOMParser غير متاح في Cloudflare Workers أثناء SSR
+    // النتيجة مطابقة تماماً: { "عن المنتج": "<p>...</p>", "الخامة والمواصفات": "..." }
     const map = {};
-    doc.querySelectorAll('.wind-tabs-container > details').forEach(det => {
-      const summarySpan = det.querySelector('summary > span:first-child');
-      const key = summarySpan?.textContent?.trim();
-      if (!key) return;
-      const contentDiv = det.querySelector(':scope > div');
-      if (contentDiv) { map[key] = contentDiv.innerHTML; }
-    });
+    const detailsRe = /<details[^>]*>([\s\S]*?)<\/details>/gi;
+    let detailsMatch;
+    while ((detailsMatch = detailsRe.exec(product.description)) !== null) {
+      const inner = detailsMatch[1];
+      // استخراج الـ key من أول <span> داخل <summary>
+      const keyMatch = /<summary[^>]*>[\s\S]*?<span[^>]*>([\s\S]*?)<\/span>/i.exec(inner);
+      if (!keyMatch) continue;
+      const key = keyMatch[1].trim();
+      if (!key) continue;
+      // استخراج المحتوى من أول <div> بعد <\/summary>
+      const afterSummary = inner.replace(/<summary[^>]*>[\s\S]*?<\/summary>/i, '').trim();
+      const divMatch = /^<div[^>]*>([\s\S]*)<\/div>\s*$/i.exec(afterSummary);
+      if (divMatch) map[key] = divMatch[1];
+      else if (afterSummary) map[key] = afterSummary;
+    }
     return map;
   }, [product?.description]);
 
