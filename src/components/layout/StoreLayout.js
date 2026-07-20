@@ -17,7 +17,7 @@ export default function StoreLayout({ children }) {
   // منفصل في layout.js بعد الآن) — كل تغيير مسار حقيقي يستدعي fbTrack()
   // الموحّدة، فتُطلق Browser + Server معاً بنفس event_id تلقائياً (Dual Fire).
   useEffect(() => {
-    if (!isAdmin && !isCheckout) {
+    if (!isAdmin) {
       fbTrack("PageView", {});
     }
   }, [pathname, isAdmin]);
