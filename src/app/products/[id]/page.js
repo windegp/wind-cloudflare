@@ -84,7 +84,7 @@ export async function generateMetadata({ params }) {
   // تنظيف الوصف الأساسي من الـ HTML كبديل آمن لو مفيش وصف سيو
   const cleanFallbackDesc = product.description 
     ? String(product.description).replace(/<[^>]+>/g, '').substring(0, 160) 
-    : `تسوقي ${product.title} من WIND. جودة وتصاميم عصرية.`;
+    : `اكتشف ${product.title} من WIND Shopping، بتصميم عصري وجودة مختارة بعناية لتناسب أسلوبك.`;
     
   const finalDescription = product.seo?.description || cleanFallbackDesc;
 
@@ -99,7 +99,7 @@ export async function generateMetadata({ params }) {
       url: `https://windeg.com/products/${id}`, // ✅ تم تحديث الرابط بـ S
       siteName: 'WIND',
       images: [{ url: product.images?.[0] || product.mainImage || "" }],
-      type: 'article',
+      type: 'website',
     },
   };
 }

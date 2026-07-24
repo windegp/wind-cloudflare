@@ -16,7 +16,7 @@ export async function POST(request) {
     keysToDelete = keys;
   } else if (type === 'homepage') {
     keysToDelete = ['homepage_data_v1'];
-    revalidatePath('/');
+    revalidatePath('/', 'layout');
   } else if (type === 'sitemap') {
     keysToDelete.push('sitemap_products_v1');
   } else if ((type === 'product' || type === 'product_update') && id) {
