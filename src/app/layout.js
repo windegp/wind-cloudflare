@@ -29,8 +29,8 @@ const tajawal = Tajawal({
   variable: '--font-tajawal',
 });
 
-const SITE_TITLE = 'WIND Shopping | الأناقة والدفء في مكان واحد';
-const SITE_DESCRIPTION = 'اكتشف مجموعات WIND Shopping الفريدة من الشيلان والملابس الراقية المصممة بعناية.';
+const SITE_TITLE = 'WIND Shopping | أسلوبك يبدأ من هنا';
+const SITE_DESCRIPTION = 'اكتشف تشكيلة مختارة بعناية تجمع بين التصميم العصري والراحة والجودة، وصمّم إطلالتك بأسلوب يعكس شخصيتك مع WIND Shopping.';
 
 // 🔥 SEO: تحويل metadata الثابت إلى generateMetadata async
 // ملاحظة: هذا التحويل SEO-only — لا يغيّر أي منطق تتبع (Pixel/CAPI/GA4) الموجود
