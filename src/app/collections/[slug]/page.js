@@ -3,6 +3,7 @@ import { getFirebaseEdge, getEdgeDb } from "../../../lib/firebase-edge";
 import { collection, query, where, getDocs, limit } from "firebase/firestore/lite";
 import CategoryView from "./CategoryView";
 import { kvGet, kvSet } from "../../../lib/kv-cache"; // 🔥 KV Cache
+import { buildBreadcrumbJsonLd } from "../../../lib/seo-helpers";
 
 // Use edge-compatible Firebase when running on edge runtime
 const isEdgeRuntime = typeof window === 'undefined' && process.env.NEXT_RUNTIME === 'edge';
@@ -119,11 +120,21 @@ export default async function CategoryPageServer({ params }) {
     "image": finalCategoryData.image || ""
   };
 
+  // 🔥 SEO: BreadcrumbList منفصل تماماً عن CollectionPage schema أعلاه — بدون أي تعديل عليه
+  const breadcrumbJsonLd = buildBreadcrumbJsonLd([
+    { name: "WIND Shopping", url: "https://windeg.com" },
+    { name: finalCategoryData.name, url: `https://windeg.com/collections/${slug}` },
+  ]);
+
   return (
     <>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
       />
       <CategoryView initialSlug={slug} initialCategoryData={finalCategoryData} />
     </>

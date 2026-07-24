@@ -7,6 +7,7 @@ import { cache } from 'react';
 import { redirect, notFound } from 'next/navigation';
 import { kvGet, kvSet } from "@/lib/kv-cache"; // 🔥 KV Cache
 import { getVariantBehavior } from "@/lib/inventoryHelpers";
+import { buildBreadcrumbJsonLd } from "@/lib/seo-helpers";
 
 // Use edge-compatible Firebase when running on edge runtime
 const isEdgeRuntime = typeof window === 'undefined' && process.env.NEXT_RUNTIME === 'edge';
@@ -155,6 +156,12 @@ export default async function Page({ params, searchParams }) {
     }
   };
 
+  // 🔥 SEO: BreadcrumbList منفصل تماماً عن Product schema أعلاه — بدون أي تعديل عليه
+  const breadcrumbJsonLd = buildBreadcrumbJsonLd([
+    { name: "WIND Shopping", url: "https://windeg.com" },
+    { name: product.title, url: `https://windeg.com/products/${id}` },
+  ]);
+
   // تأمين أخير لضمان تمرير داتا نظيفة للواجهة
   const sanitizedProduct = JSON.parse(JSON.stringify(product));
 
@@ -163,6 +170,10 @@ export default async function Page({ params, searchParams }) {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
       />
       <ProductView initialProduct={sanitizedProduct} sourceCategory={sourceCat} /> 
     </>

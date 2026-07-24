@@ -12,6 +12,8 @@ import { Cairo, Tajawal } from 'next/font/google';
 
 import StoreLayout from "../components/layout/StoreLayout";
 import LiveTracker from "../components/LiveTracker";
+import { getSiteSettingsServer } from "../lib/getSiteSettingsServer";
+import { buildOrganizationJsonLd, buildWebSiteJsonLd } from "../lib/seo-helpers";
 
 const cairo = Cairo({
   subsets: ['arabic'],
@@ -27,16 +29,69 @@ const tajawal = Tajawal({
   variable: '--font-tajawal',
 });
 
-export const metadata = {
-  metadataBase: new URL('https://windeg.com'),
-  title: 'WIND Shopping | الأناقة والدفء في مكان واحد',
-  description: 'اكتشف مجموعات WIND Shopping الفريدة من الشيلان والملابس الراقية المصممة بعناية.',
-};
+const SITE_TITLE = 'WIND Shopping | الأناقة والدفء في مكان واحد';
+const SITE_DESCRIPTION = 'اكتشف مجموعات WIND Shopping الفريدة من الشيلان والملابس الراقية المصممة بعناية.';
 
-export default function RootLayout({ children }) {
+// 🔥 SEO: تحويل metadata الثابت إلى generateMetadata async
+// ملاحظة: هذا التحويل SEO-only — لا يغيّر أي منطق تتبع (Pixel/CAPI/GA4) الموجود
+// داخل <head> في RootLayout نفسه، ولا أي جزء من شجرة الـ Providers تحت <body>.
+// getSiteSettingsServer() تقرأ KV مباشرة (site_settings_v1) بدون أي fetch لـ /api/site-settings
+// وبدون أي تأثير على SettingsContext الحالي (Client-side) أو أي Firestore read إضافي عند KV HIT.
+export async function generateMetadata() {
+  const settings = await getSiteSettingsServer();
+  const logo = settings?.logoUrl || 'https://windeg.com/logo.png';
+
+  return {
+    metadataBase: new URL('https://windeg.com'),
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    icons: {
+      icon: [
+        { url: '/favicon.ico' },
+        { url: '/favicon-48x48.png', sizes: '48x48', type: 'image/png' },
+      ],
+      apple: [{ url: '/apple-touch-icon.png' }],
+    },
+    openGraph: {
+      title: SITE_TITLE,
+      description: SITE_DESCRIPTION,
+      url: 'https://windeg.com',
+      siteName: 'WIND Shopping',
+      images: [{ url: logo }],
+      locale: 'ar_EG',
+      type: 'website',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: SITE_TITLE,
+      description: SITE_DESCRIPTION,
+      images: [logo],
+    },
+    alternates: {
+      canonical: 'https://windeg.com',
+    },
+  };
+}
+
+export default async function RootLayout({ children }) {
+  // نفس الدالة (React cache()) — لا تسبب Firestore read إضافي لأنها اتنادت بالفعل من generateMetadata لنفس الـ request
+  const settings = await getSiteSettingsServer();
+  const organizationJsonLd = buildOrganizationJsonLd(settings);
+  const websiteJsonLd = buildWebSiteJsonLd();
+
   return (
     <html lang="ar" dir="rtl" className={`${cairo.variable} ${tajawal.variable}`}> 
       <head>
+        {/* 🔥 SEO JSON-LD — Organization/OnlineStore + WebSite. لا علاقة لها بأي Tracking/Pixel/CAPI/GA4 أدناه. */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
+        />
+
         {/*
           🔥 Facebook Pixel — Base Code فقط (Browser-side).
           Zaraz أُزيل نهائياً من المشروع — المسار الوحيد الآن هو:
