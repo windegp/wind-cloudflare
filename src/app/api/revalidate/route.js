@@ -16,7 +16,7 @@ export async function POST(request) {
     keysToDelete = keys;
   } else if (type === 'homepage') {
     keysToDelete = ['homepage_data_v1'];
-      revalidatePath('/');
+    revalidatePath('/');
   } else if (type === 'sitemap') {
     keysToDelete.push('sitemap_products_v1');
   } else if ((type === 'product' || type === 'product_update') && id) {
@@ -43,17 +43,17 @@ export async function POST(request) {
     revalidatePath(`/collections/${slug}`);
   } else if (type === 'site_settings') {
     keysToDelete = ['site_settings_v1'];
-      revalidatePath('/', 'layout');
+    revalidatePath('/', 'layout');
   } else if (type === 'fb_catalog') {
     keysToDelete = ['fb_catalog_xml_v8'];
   } else if (type === 'all') {
-    try {
-      const kv = await getKV();
-      if (kv) {
+  try {
+    const kv = await getKV();
+    if (kv) {
         const list = await kv.list();
         keysToDelete = list.keys.map(k => k.name);
       }
-    revalidatePath('/', 'layout');
+      revalidatePath('/', 'layout');
     } catch {}
   }
 
