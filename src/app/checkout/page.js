@@ -159,6 +159,7 @@ export default function CheckoutPage() {
     isFirstOrder,
     setIsFirstOrder,
     shippingSettings,
+    setSelectedGovernorate,
   } = useCart();
   
   const { signalPageReady } = usePageReady();
@@ -375,6 +376,8 @@ export default function CheckoutPage() {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
     if (errors[name]) setErrors({ ...errors, [name]: false });
+    // 🔥 تحديث فوري لسعر الشحن حسب المحافظة — نفس event handler، React بيعمل batch للـ state updates مع بعض
+    if (name === 'governorate') setSelectedGovernorate(value);
   };
 
   const handleSubmit = async (e) => {

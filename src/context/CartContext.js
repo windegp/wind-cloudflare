@@ -14,6 +14,10 @@ export function CartProvider({ children }) {
   // إعدادات الشحن — تييجي من SettingsContext أو مباشرة من Firestore لو promotions مش موجودة
   const [promoSettings, setPromoSettings] = useState(null);
 
+  // 🔥 المحافظة المختارة حالياً في Checkout — نفس القيمة الافتراضية بتاعة formData.governorate
+  // عشان الحساب الأول يتطابق مع القيمة الظاهرة فعلياً في الـ select من أول render
+  const [selectedGovernorate, setSelectedGovernorate] = useState('القاهرة');
+
   useEffect(() => {
     // لو الـ settings جاءت وفيها promotions → استخدمها مباشرة
     if (settings?.promotions) {
@@ -35,11 +39,14 @@ export function CartProvider({ children }) {
   }, [settings]);
 
   const shippingSettings = useMemo(() => ({
-    shippingCost:          promoSettings?.shippingCost          ?? settings?.promotions?.shippingCost          ?? 70,
+    // 🔥 سعر المحافظة (لو موجود) بيحل محل السعر العام تماماً — مش بيتجمع معاه
+    shippingCost:          promoSettings?.shippingCostByGovernorate?.[selectedGovernorate]
+                         ?? settings?.promotions?.shippingCostByGovernorate?.[selectedGovernorate]
+                         ?? promoSettings?.shippingCost          ?? settings?.promotions?.shippingCost          ?? 70,
     freeShippingThreshold: promoSettings?.freeShippingThreshold ?? settings?.promotions?.freeShippingThreshold ?? 0,
     firstOrderEnabled:     promoSettings?.firstOrderEnabled     ?? settings?.promotions?.firstOrderEnabled     ?? false,
     firstOrderDiscount:    promoSettings?.firstOrderDiscount    ?? settings?.promotions?.firstOrderDiscount    ?? 0,
-  }), [promoSettings, settings]);
+  }), [promoSettings, settings, selectedGovernorate]);
 
   // هل العميل الحالي مؤهل لخصم الطلب الأول؟
   const [isFirstOrder, setIsFirstOrder] = useState(false);
@@ -175,6 +182,7 @@ export function CartProvider({ children }) {
     discountError, setDiscountError, promoLoading,
     shippingSettings,
     isFirstOrder, setIsFirstOrder,
+    setSelectedGovernorate,
   }), [
     cartItems, addToCart, removeFromCart, updateQty, clearCart,
     isCartOpen, toggleCart, openCart, closeCart,
@@ -182,6 +190,7 @@ export function CartProvider({ children }) {
     appliedPromo, applyPromoCode, removePromoCode,
     discountError, setDiscountError, promoLoading, shippingSettings,
     isFirstOrder, setIsFirstOrder,
+    setSelectedGovernorate,
   ]);
 
   return <CartContext.Provider value={contextValue}>{children}</CartContext.Provider>;
