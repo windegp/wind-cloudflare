@@ -8,6 +8,7 @@ import { redirect, notFound } from 'next/navigation';
 import { kvGet, kvSet } from "@/lib/kv-cache"; // 🔥 KV Cache
 import { getVariantBehavior } from "@/lib/inventoryHelpers";
 import { buildBreadcrumbJsonLd } from "@/lib/seo-helpers";
+import { getProductStatsServer } from "@/lib/getProductStatsServer";
 
 // Use edge-compatible Firebase when running on edge runtime
 const isEdgeRuntime = typeof window === 'undefined' && process.env.NEXT_RUNTIME === 'edge';
@@ -155,6 +156,18 @@ export default async function Page({ params, searchParams }) {
       "itemCondition": "https://schema.org/NewCondition"
     }
   };
+
+  // 🔥 SEO: aggregateRating — يُضاف فقط لو فيه بيانات تقييمات حقيقية فعلاً (KV أولاً، Firestore عند MISS فقط)
+  // لا يُلمس أي حقل من jsonLd الأصلي أعلاه — إضافة خاصية جديدة بس بعد بنائه
+  const productStats = await getProductStatsServer(product.handle || id);
+  if (productStats && productStats.count > 0 && productStats.rating > 0) {
+    jsonLd.aggregateRating = {
+      "@type": "AggregateRating",
+      "ratingValue": productStats.rating,
+      "reviewCount": productStats.count,
+      "bestRating": 5
+    };
+  }
 
   // 🔥 SEO: BreadcrumbList منفصل تماماً عن Product schema أعلاه — بدون أي تعديل عليه
   const breadcrumbJsonLd = buildBreadcrumbJsonLd([
