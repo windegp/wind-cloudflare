@@ -7,8 +7,9 @@ import { cache } from 'react';
 import { redirect, notFound } from 'next/navigation';
 import { kvGet, kvSet } from "@/lib/kv-cache"; // 🔥 KV Cache
 import { getVariantBehavior } from "@/lib/inventoryHelpers";
-import { buildBreadcrumbJsonLd } from "@/lib/seo-helpers";
+import { buildBreadcrumbJsonLd, buildShippingDetailsJsonLd } from "@/lib/seo-helpers";
 import { getProductStatsServer } from "@/lib/getProductStatsServer";
+import { getSiteSettingsServer } from "@/lib/getSiteSettingsServer";
 
 // Use edge-compatible Firebase when running on edge runtime
 const isEdgeRuntime = typeof window === 'undefined' && process.env.NEXT_RUNTIME === 'edge';
@@ -156,6 +157,15 @@ export default async function Page({ params, searchParams }) {
       "itemCondition": "https://schema.org/NewCondition"
     }
   };
+
+  // 🔥 SEO: shippingDetails — من نفس settings/siteSettings عبر getSiteSettingsServer()
+  // (نفس دالة/كاش site_settings_v1 المستخدمة في layout.js — React cache() يمنع أي قراءة KV/Firestore
+  // مكررة في نفس الـ request)، مش من product_${id} cache. لا يُلمس أي حقل من jsonLd.offers الأصلي أعلاه.
+  const siteSettings = await getSiteSettingsServer();
+  const shippingDetails = buildShippingDetailsJsonLd(siteSettings);
+  if (shippingDetails) {
+    jsonLd.offers.shippingDetails = shippingDetails;
+  }
 
   // 🔥 SEO: aggregateRating — يُضاف فقط لو فيه بيانات تقييمات حقيقية فعلاً (KV أولاً، Firestore عند MISS فقط)
   // لا يُلمس أي حقل من jsonLd الأصلي أعلاه — إضافة خاصية جديدة بس بعد بنائه
