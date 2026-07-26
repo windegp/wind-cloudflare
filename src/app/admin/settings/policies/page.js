@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { getDb } from "@/lib/firebase";
-import { doc, getDoc, setDoc } from "firebase/firestore/lite";
+import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore/lite";
 import { Settings, ShieldCheck, Truck, RefreshCw, Scale, Save, Loader2, Code2, Eye } from '@/components/icons-extra';
 
 export const dynamic = 'force-dynamic';
@@ -20,6 +20,12 @@ export default function SettingsPolicies() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+
+  // 🔥 merchantReturnDays — حقل مهيكل مستقل في settings/siteSettings.returnPolicy
+  // (منفصل تمامًا عن مستند Policies الخاص بالنص الحر، ومنفصل عن دالة handleSave الحالية)
+  const [merchantReturnDays, setMerchantReturnDays] = useState(14);
+  const [savingReturnDays, setSavingReturnDays] = useState(false);
+  const [returnDaysToast, setReturnDaysToast] = useState(null);
 
   // جلب البيانات من الفايربيس
   useEffect(() => {
@@ -40,12 +46,57 @@ export default function SettingsPolicies() {
     fetchPolicy();
   }, [activeTab]);
 
+  // 🔥 قراءة منفصلة لـ settings/siteSettings.returnPolicy.merchantReturnDays —
+  // فقط لما تبويب "سياسة الاستبدال والاسترجاع" يكون مفتوح (مش على كل الصفحة)
+  useEffect(() => {
+    if (activeTab !== 'refund-policy') return;
+    const fetchReturnDays = async () => {
+      try {
+        const db = getDb();
+        const snap = await getDoc(doc(db, "settings", "siteSettings"));
+        const days = snap.exists() ? snap.data()?.returnPolicy?.merchantReturnDays : null;
+        setMerchantReturnDays(typeof days === 'number' ? days : 14);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    fetchReturnDays();
+  }, [activeTab]);
+
+  // 🔥 حفظ مستقل لـ merchantReturnDays فقط — dot-notation، بيلمس نفس الحقل بس
+  // جوه settings/siteSettings، بدون أي تأثير على باقي المستند (promotions, logoUrl, counters...)
+  const handleSaveReturnDays = async () => {
+    if (!Number.isFinite(Number(merchantReturnDays)) || Number(merchantReturnDays) < 0) {
+      setReturnDaysToast({ ok: false, msg: "قيمة غير صحيحة" });
+      return;
+    }
+    setSavingReturnDays(true);
+    try {
+      const db = getDb();
+      await updateDoc(doc(db, "settings", "siteSettings"), {
+        "returnPolicy.merchantReturnDays": Number(merchantReturnDays),
+      });
+      // نفس مسار الكاش الموجود بالفعل — بدون أي مفتاح KV جديد
+      await fetch('/api/revalidate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'site_settings' }),
+      });
+      setReturnDaysToast({ ok: true, msg: "تم الحفظ ✓" });
+    } catch (err) {
+      console.error(err);
+      setReturnDaysToast({ ok: false, msg: "فشل الحفظ" });
+    } finally {
+      setSavingReturnDays(false);
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
       const db = getDb();
-      await setDoc(doc(db, "Policies", tab), {
-        content: content,
+      await setDoc(doc(db, "Policies", activeTab), {
+        htmlContent: htmlContent,
         updatedAt: new Date().toISOString()
       });
 
@@ -115,6 +166,39 @@ export default function SettingsPolicies() {
 
           {/* محرر الـ HTML */}
           <div className="md:col-span-3 p-6">
+            {activeTab === 'refund-policy' && (
+              <div className="mb-6 p-4 bg-gray-50 rounded-2xl border border-gray-200">
+                <label className="block text-xs font-black text-gray-500 mb-2 uppercase tracking-widest">
+                  عدد أيام الاسترجاع (Structured Data لجوجل)
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min="0"
+                    value={merchantReturnDays}
+                    onChange={(e) => setMerchantReturnDays(e.target.value)}
+                    className="w-28 border border-gray-300 rounded-lg px-3 py-2 text-sm font-bold"
+                  />
+                  <span className="text-xs text-gray-500">يوم</span>
+                  <button
+                    onClick={handleSaveReturnDays}
+                    disabled={savingReturnDays}
+                    className="flex items-center gap-1 bg-gray-900 text-white rounded-lg px-4 py-2 text-xs font-bold disabled:opacity-50"
+                  >
+                    {savingReturnDays ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />}
+                    حفظ
+                  </button>
+                  {returnDaysToast && (
+                    <span className={`text-xs font-bold ${returnDaysToast.ok ? 'text-emerald-600' : 'text-red-600'}`}>
+                      {returnDaysToast.msg}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-gray-400 mt-2">
+                  هذا الرقم يُستخدم في بيانات الموقع المهيكلة لجوجل (Structured Data) فقط — حدّثه ليطابق نص السياسة المكتوب أسفل هذا الحقل.
+                </p>
+              </div>
+            )}
             <div className="flex justify-between items-center mb-4">
               <span className="text-xs font-black text-gray-400 flex items-center gap-1 uppercase tracking-widest">
                 <Code2 size={14} /> HTML Editor

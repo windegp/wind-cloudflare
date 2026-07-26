@@ -11,12 +11,26 @@ const SITE_URL = "https://windeg.com";
  */
 export function buildOrganizationJsonLd(settings) {
   const logo = settings?.logoUrl || `${SITE_URL}/logo.png`;
+  const merchantReturnDays = settings?.returnPolicy?.merchantReturnDays ?? 14;
   return {
     "@context": "https://schema.org",
     "@type": "OnlineStore",
     "name": "WIND Shopping",
     "url": SITE_URL,
     "logo": logo,
+    // 🔥 MerchantReturnPolicy — لا يوجد returnFees عام (السياسة تختلف حسب السبب)،
+    // ولا returnMethod (غير محدد صراحة في سياسة الموقع الحالية). merchantReturnDays
+    // من settings.returnPolicy (قابل للتعديل من لوحة الأدمن)، الباقي قيم بنيوية ثابتة
+    // (عيب صناعة/منتج خطأ = مجاني، تغيير مقاس/لون = العميل يتحمل المصاريف).
+    "hasMerchantReturnPolicy": {
+      "@type": "MerchantReturnPolicy",
+      "applicableCountry": "EG",
+      "returnPolicyCountry": "EG",
+      "returnPolicyCategory": "https://schema.org/MerchantReturnFiniteReturnWindow",
+      "merchantReturnDays": merchantReturnDays,
+      "itemDefectReturnFees": "https://schema.org/FreeReturn",
+      "customerRemorseReturnFees": "https://schema.org/ReturnFeesCustomerResponsibility"
+    }
   };
 }
 
