@@ -448,7 +448,14 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
   const renderCustomHtml = (position) => {
     if (product?.metafields?.customHtmlSnippet && product?.metafields?.customHtmlPosition === position) {
-      return <div className={`w-full custom-html-snippet ${position === 'below_cart' ? 'mt-6' : 'mb-6'}`} dangerouslySetInnerHTML={{ __html: product.metafields.customHtmlSnippet }} />;
+      return (
+        <section
+          className={`w-full custom-html-snippet ${position === 'below_cart' ? 'mt-6' : 'mb-6'}`}
+          aria-label="محتوى إضافي مخصص"
+          data-custom-html-snippet="true"
+          dangerouslySetInnerHTML={{ __html: product.metafields.customHtmlSnippet }}
+        />
+      );
     }
     return null;
   };
@@ -1095,7 +1102,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
         </div>
 
         {product.metafields?.hideRelatedSection !== "Yes" && relatedProducts.length > 0 && (
-          <div className="py-10 lg:py-14">
+          <section className="py-10 lg:py-14" aria-label="منتجات قد تعجبك" data-related-products="true">
             <h2 className="text-[22px] lg:text-[26px] font-medium text-[#1A1A1A] tracking-wide mb-8 lg:mb-10" style={{fontFamily:"'Cairo', sans-serif"}}>منتجات قد تعجبك</h2>
             <div className="flex lg:grid lg:grid-cols-4 gap-4 lg:gap-8 overflow-x-auto hide-scrollbar-horizontal pb-4 -mx-5 px-5 lg:mx-0 lg:px-0 snap-x snap-mandatory" dir="rtl">
               {relatedProducts.map(rp => (
@@ -1117,7 +1124,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                 </div>
               ))}
             </div>
-          </div>
+          </section>
         )}
         {renderCustomHtml('bottom_page')}
       </div>

@@ -310,7 +310,7 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
   if (!upsells.length) return null;
 
   return (
-    <div style={styles.root} dir="rtl">
+    <section style={styles.root} dir="rtl" aria-label="منتجات مرتبطة أو مجموعة" data-bundle-products="true">
 
       {/* عنوان */}
       <h3 style={styles.title}>{title}</h3>
@@ -417,7 +417,7 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
       <style>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
-    </div>
+    </section>
   );
 }
 
