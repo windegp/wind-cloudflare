@@ -46,6 +46,15 @@ const colorLabels = {
   purple: "بنفسجي",
 };
 
+// طبقة عرض فقط — لا تُستخدَم في توليد أي ID (getCatalogId يعتمد على colorValue
+// الخام عبر slugifyColor في lib/catalogId.js، وليس على هذه الخريطة إطلاقًا)،
+// لذلك صفر تأثير على g:id / item_group_id / content_ids. الهدف الوحيد هنا:
+// توحيد التهجئة الأمريكية والبريطانية لنفس اللون عند اختيار التسمية المعروضة
+// في g:color، بدون لمس slugifyColor أو أي منطق IDs.
+const COLOR_LABEL_ALIASES = {
+  gray: "grey",
+};
+
 function buildXml(items) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">
@@ -428,14 +437,20 @@ export async function GET() {
           const variantImage = colorSwatches[colorKey] ?? colorSwatches[colorValue] ?? images[0] ?? "";
           if (!variantImage) continue;
 
-          const colorLabel  = colorLabels[colorKey] ?? colorLabels[colorValue] ?? colorValue;
+          const normalizedColorKey = COLOR_LABEL_ALIASES[colorKey] ?? colorKey;
+          const colorLabel  = colorLabels[normalizedColorKey] ?? colorLabels[colorValue] ?? colorValue;
           // 🔥 لا استثناء لـ"أول لون" بعد الآن — كل لون، بما فيه الأول،
           // يحصل على id فريد عبر getCatalogId (المصدر الموحّد). هذا يمنع
           // بنيوياً تطابق أي g:id مع أي item_group_id (الذي يبقى = handle
           // الخام دائماً، وهو قيمة لا يعود يُنتجها getCatalogId أبداً طالما
           // colorValue غير فاضٍ).
+          // ⚠️ getCatalogId يعتمد على colorValue الخام (وليس على colorLabel/
+          // normalizedColorKey أعلاه) — تعديل التسمية المعروضة هنا لا يغيّر
+          // ولا يُقرَّب من أي g:id/item_group_id/content_ids حالية.
           const itemId      = getCatalogId(handle, colorValue);
-          const itemTitle   = colorValue ? `${baseTitle} - ${colorLabel}` : baseTitle;
+          // g:title = اسم المنتج الأساسي فقط (بدون لون) — اللون يبقى فقط في
+          // g:color أدناه. هذا التغيير المقصود الوحيد على شكل g:title.
+          const itemTitle   = baseTitle;
           const extraImages = images.filter(img => img !== variantImage).slice(0, 9);
           const hasSale     = variantCompare && parseFloat(variantCompare) > parseFloat(variantPrice);
 
