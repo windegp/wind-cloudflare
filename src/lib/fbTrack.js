@@ -64,6 +64,44 @@ function generateEventId(eventName) {
   return `${eventName}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// 🔥 نفس منطق waitForFbp أعلاه، لكن لـ _fbc تحديدًا — وشرطي فقط عند وجود
+// fbclid في الرابط الحالي (أي: زائر قادم لتوّه من نقرة إعلان Meta). فبدون
+// fbclid لا داعي للانتظار إطلاقًا (لا يوجد شيء تتوقع الكوكي أن تحمله).
+// بهذا الشرط، لا يتأخر أي حدث لزائر لا يحمل fbclid أصلاً — فقط الحالة
+// التي قد تفقد fbc فعليًا بسبب التوقيت (fbevents.js لم يُثبّت الكوكي بعد).
+const FBC_POLL_INTERVAL_MS = 50;
+const FBC_MAX_WAIT_MS = 500;
+
+function waitForFbc() {
+  return new Promise((resolve) => {
+    const existing = readCookie("_fbc");
+    if (existing) {
+      resolve(existing);
+      return;
+    }
+    let hasFbclid = false;
+    try {
+      hasFbclid = new URLSearchParams(window.location.search).has("fbclid");
+    } catch {
+      hasFbclid = false;
+    }
+    if (!hasFbclid) {
+      // لا fbclid في الرابط الحالي → لا سبب لانتظار كوكي لن تُنشأ أصلاً
+      resolve(undefined);
+      return;
+    }
+    let elapsed = 0;
+    const interval = setInterval(() => {
+      const fbc = readCookie("_fbc");
+      elapsed += FBC_POLL_INTERVAL_MS;
+      if (fbc || elapsed >= FBC_MAX_WAIT_MS) {
+        clearInterval(interval);
+        resolve(fbc); // قد تكون undefined لو انتهى الوقت بدون نجاح، وهذا مقبول
+      }
+    }, FBC_POLL_INTERVAL_MS);
+  });
+}
+
 // 🔥 قائمة بيضاء صريحة لِما يُسمح بإرساله لـ fbq() كـ Custom Data في المتصفح.
 // نتعمّد عدم تمرير كائن data كاملاً كما هو: بعض الأحداث (خصوصاً Purchase)
 // تحمل حقول بيانات عميل (email, phone, ...) مخصّصة فقط لـ Conversions API
@@ -96,7 +134,7 @@ export async function fbTrack(eventName, data = {}) {
   const eventId = data.event_id || generateEventId(eventName);
   const externalId = getOrCreateExternalId();
   const fbp = await waitForFbp();
-  const fbc = readCookie("_fbc");
+  const fbc = await waitForFbc();
 
   // ── 1) Browser Pixel — نفس event_id بالضبط، حقول قياسية فقط (Whitelist) ──
   if (typeof window.fbq === "function") {

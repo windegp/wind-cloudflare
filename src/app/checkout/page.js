@@ -302,7 +302,18 @@ export default function CheckoutPage() {
 
         try {
           const orderRef = doc(getDb(), "Orders", activeOrderId);
-          
+
+          // 🔥 ربط الطلب بمعرّف المتصفح المجهول (wind_external_id، نفس القيمة
+          // التي يرسلها fbTrack.js لـ Meta) — لأغراض WIND الداخلية فقط
+          // (لا علاقة له بـ external_id المُرسَل لـ Meta، ولا يغيّر معناه ولا
+          // قيمته هناك). إضافة حقل جديد فقط، لا تعديل على أي حقل موجود.
+          let anonymousBrowserId;
+          try {
+            anonymousBrowserId = window.localStorage.getItem("wind_external_id") || null;
+          } catch {
+            anonymousBrowserId = null;
+          }
+
           const draftData = {
             Name: activeOrderId,
             "Billing Name": `${formData.firstName} ${formData.lastName}`.trim() || 'عميل محتمل',
@@ -318,6 +329,7 @@ export default function CheckoutPage() {
             "Financial Status": "abandoned",
             "Created at": getCairoTimestamp(),
             data_source: "WIND_Web",
+            AnonymousBrowserId: anonymousBrowserId,
             lineItems: cartItems.map(item => ({
               name: `${item.title} ${item.selectedSize ? '- ' + item.selectedSize : ''}`,
               price: item.price,
@@ -340,6 +352,7 @@ export default function CheckoutPage() {
               "Last Name": formData.lastName || "",
               Email: formData.email ? formData.email.toLowerCase().trim() : "",
               Phone: formData.phone || "",
+              AnonymousBrowserId: anonymousBrowserId,
               "Default Address Address1": formData.address || "",
               "Default Address City": formData.city || "",
               "Default Address Province": formData.governorate || "",
