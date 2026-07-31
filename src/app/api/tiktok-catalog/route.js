@@ -6,19 +6,24 @@
 // fb-catalog/route.js.
 //
 // الاستيراد الوحيد المشترك مع منظومة Meta: getCatalogId() — للقراءة فقط،
-// كما صرَّح صاحب المشروع، لضمان أن Product ID الموحَّد نفسه يُستخدَم عبر كل
-// المنصات الإعلانية لنفس المنتج (لا تعديل على catalogId.js إطلاقًا).
+// كما صرَّح صاحب المشروع، لضمان أن sku_id الموحَّد نفسه يُستخدَم عبر كل
+// المنصات الإعلانية لنفس المنتج (لا تعديل على catalogId.js إطلاقًا) —
+// ونفس القيمة تُرسَل كـ content_id عبر أحداث TikTok (ttTrack.js).
+// كذلك htmlToPlainText — أداة عامة نقية لتنظيف النصوص، ليست خاصة بـ Meta.
 //
-// ⚠️ الحقول هنا مبنية على معايير TikTok Product Feed العامة (sku_id,
-// item_group_id, title, availability, condition, price, link, image_link,
-// brand) — يُنصَح بمطابقتها مع متطلبات TikTok Catalog Manager الفعلية عند
-// ربط هذا الفيد بالكتالوج المناسب يدويًا (لن يُنشَأ أو يُعدَّل أي Catalog
-// من الكود).
+// الكتالوج المستهدَف E-commerce Catalog → يستخدم g:sku_id (وليس g:id).
+//
+// RSS 2.0 + xmlns:g — الصيغة القياسية التي تتطلبها TikTok فعليًا (مطابقة
+// شبه كاملة لبنية Google Product Data Specification)، بعد أن كانت النسخة
+// السابقة تُخرِج جذر <items> مخصَّصًا غير قياسي (السبب المؤكَّد لظهور
+// "0 files / 0 products / Rejected" في TikTok Catalog upload log).
 
 import { getCatalogId } from "@/lib/catalogId";
+import { htmlToPlainText } from "@/lib/htmlToPlainText";
 
 const PROJECT_ID = "wind-reviews";
 const BRAND = "WIND Shopping";
+const SITE_URL = "https://windeg.com";
 
 function escapeXml(str) {
   return String(str ?? "")
@@ -88,6 +93,12 @@ export async function GET() {
         };
 
         const title = f("title");
+        // 🔥 description من بيانات المنتج الموجودة بالفعل في Firestore —
+        // نفس المصدر ونفس الـ fallback المستخدَمين في fb-catalog/route.js
+        // (description المنتج، وإلا seo.description)، بلا اختراع أي نص.
+        const seoDescription = rawFields["seo"]?.mapValue?.fields?.description?.stringValue ?? "";
+        const rawDescription = f("description") || seoDescription || "";
+        const cleanDescription = htmlToPlainText(rawDescription);
         const price = parseFloat(f("price")) || 0;
         const images = rawFields["images"]?.arrayValue?.values?.map((v) => v.stringValue ?? "").filter(Boolean) ?? [];
         const colorSwatches = fMap("colorSwatches");
@@ -104,16 +115,19 @@ export async function GET() {
           const image = (colorValue && colorSwatches[colorValue]) || images[0] || "";
 
           rows.push({
+            // 🔥 نفس getCatalogId المستخدَمة في fb-catalog/route.js وفي كل
+            // أحداث ttTrack (content_id) — sku_id هنا = نفس القيمة بالضبط.
             sku_id: getCatalogId(handle, colorValue),
             item_group_id: handle,
             title,
+            description: cleanDescription,
             color: colorValue || undefined,
             availability: ttAvailability(inventoryStatus),
             condition: "new",
             price: `${price.toFixed(2)} EGP`,
             link: colorValue
-              ? `https://windeg.com/products/${handle}?color=${encodeURIComponent(colorValue)}`
-              : `https://windeg.com/products/${handle}`,
+              ? `${SITE_URL}/products/${handle}?color=${encodeURIComponent(colorValue)}`
+              : `${SITE_URL}/products/${handle}`,
             image_link: image,
             brand: BRAND,
           });
@@ -125,10 +139,11 @@ export async function GET() {
             sku_id: getCatalogId(handle, ""),
             item_group_id: handle,
             title,
+            description: cleanDescription,
             availability: "in stock",
             condition: "new",
             price: `${price.toFixed(2)} EGP`,
-            link: `https://windeg.com/products/${handle}`,
+            link: `${SITE_URL}/products/${handle}`,
             image_link: images[0] || "",
             brand: BRAND,
           });
@@ -138,25 +153,31 @@ export async function GET() {
 
     const itemsXml = rows
       .map(
-        (r) => `  <item>
-    <sku_id>${escapeXml(r.sku_id)}</sku_id>
-    <item_group_id>${escapeXml(r.item_group_id)}</item_group_id>
-    <title>${escapeXml(r.title)}</title>
-    ${r.color ? `<color>${escapeXml(r.color)}</color>` : ""}
-    <availability>${escapeXml(r.availability)}</availability>
-    <condition>${escapeXml(r.condition)}</condition>
-    <price>${escapeXml(r.price)}</price>
-    <link>${escapeXml(r.link)}</link>
-    <image_link>${escapeXml(r.image_link)}</image_link>
-    <brand>${escapeXml(r.brand)}</brand>
-  </item>`
+        (r) => `    <item>
+      <g:sku_id>${escapeXml(r.sku_id)}</g:sku_id>
+      <g:item_group_id>${escapeXml(r.item_group_id)}</g:item_group_id>
+      <g:title>${escapeXml(r.title)}</g:title>
+      <g:description>${escapeXml(r.description)}</g:description>
+      ${r.color ? `<g:color>${escapeXml(r.color)}</g:color>` : ""}
+      <g:availability>${escapeXml(r.availability)}</g:availability>
+      <g:condition>${escapeXml(r.condition)}</g:condition>
+      <g:price>${escapeXml(r.price)}</g:price>
+      <g:link>${escapeXml(r.link)}</g:link>
+      <g:image_link>${escapeXml(r.image_link)}</g:image_link>
+      <g:brand>${escapeXml(r.brand)}</g:brand>
+    </item>`
       )
       .join("\n");
 
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<items>
+<rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">
+  <channel>
+    <title>WIND Shopping — TikTok Product Feed</title>
+    <link>${SITE_URL}</link>
+    <description>WIND Shopping TikTok E-commerce Catalog Feed</description>
 ${itemsXml}
-</items>`;
+  </channel>
+</rss>`;
 
     return new Response(xml, {
       headers: {
@@ -165,9 +186,12 @@ ${itemsXml}
       },
     });
   } catch (err) {
-    return new Response(`<?xml version="1.0"?><error>${escapeXml(err.message)}</error>`, {
-      status: 500,
-      headers: { "Content-Type": "application/xml; charset=utf-8" },
-    });
+    return new Response(
+      `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>Error</title><description>${escapeXml(err.message)}</description></channel></rss>`,
+      {
+        status: 500,
+        headers: { "Content-Type": "application/xml; charset=utf-8" },
+      }
+    );
   }
 }
