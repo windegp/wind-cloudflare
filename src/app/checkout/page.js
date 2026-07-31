@@ -14,6 +14,7 @@ import { doc, setDoc, getDoc, deleteDoc, updateDoc, increment, collection, query
 import { ChevronDown, Info, CheckCircle2, Phone, ShoppingBag, Shield, Tag, ChevronLeft, Truck, CreditCard, Banknote, Smartphone, X, Lock } from '@/components/icons-extra';
 import { SHIPPING_COST } from '@/lib/constants';
 import { fbTrack } from "@/lib/fbTrack";
+import { ttTrack, buildTtUserData } from "@/lib/ttTrack";
 import { getCatalogId } from "@/lib/catalogId";
 import { gaBeginCheckout, gaPurchase } from "@/lib/gaTrack";
 import { buildCheckoutMetaUserData } from "@/lib/metaEventData";
@@ -213,6 +214,14 @@ export default function CheckoutPage() {
         .filter(it => it.handle || it.id)
         .map(it => getCatalogId(it.handle || it.id, it.selectedColor)),
     });
+    ttTrack("InitiateCheckout", {
+      value: finalTotal,
+      currency: "EGP",
+      num_items: cartItems.reduce((s, it) => s + it.qty, 0),
+      content_ids: cartItems
+        .filter(it => it.handle || it.id)
+        .map(it => getCatalogId(it.handle || it.id, it.selectedColor)),
+    }); // TikTok — مستقل تمامًا عن fbTrack أعلاه
     gaBeginCheckout(cartItems, finalTotal);
   }
 }, [pathname, signalPageReady, cartItems]);
@@ -668,6 +677,17 @@ export default function CheckoutPage() {
           num_items: purchaseNumItems,
           order_id: orderId,
           ...buildCheckoutMetaUserData(formData),
+        });
+        // TikTok — مستقل تمامًا عن fbTrack أعلاه. event_id الخاص بـ TikTok
+        // يُبنى داخل ttTrack.js نفسها من order_id (وليس من event_id الممرَّر
+        // هنا، الذي يُتجاهَل عمداً لأنه خاص بـ Meta فقط).
+        ttTrack("CompletePayment", {
+          value: finalTotal,
+          currency: "EGP",
+          content_ids: purchaseContentIds,
+          num_items: purchaseNumItems,
+          order_id: orderId,
+          ...buildTtUserData(formData),
         });
         gaPurchase(orderId, purchaseCartSnapshot, finalTotal);
 router.push(`/thank-you?orderId=${orderId}`);

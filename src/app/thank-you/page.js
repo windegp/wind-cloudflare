@@ -8,6 +8,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { CheckCircle2, ShoppingBag, Phone, Truck, Shield, Package, CreditCard, Banknote, Smartphone } from '@/components/icons-extra';
 import { fbTrack } from "@/lib/fbTrack";
+import { ttTrack, buildTtUserData } from "@/lib/ttTrack";
 import { getCatalogId } from "@/lib/catalogId";
 import { gaPurchase } from "@/lib/gaTrack";
 import { buildCheckoutMetaUserData } from "@/lib/metaEventData";
@@ -72,6 +73,21 @@ function SuccessContent() {
         num_items: (parsed.cartItems || []).reduce((s, it) => s + it.qty, 0),
         order_id: parsed.orderId || "",
         ...buildCheckoutMetaUserData(parsed.formData, {
+          email: parsed.customerEmail,
+          phone: parsed.phone,
+        }),
+      });
+      // TikTok — مستقل تمامًا عن fbTrack أعلاه، بنفس فلسفة event_id المبني
+      // على order_id (يُبنى داخل ttTrack.js نفسها، وليس مُستوردًا من هنا).
+      ttTrack("CompletePayment", {
+        value: parsed.total || 0,
+        currency: "EGP",
+        content_ids: (parsed.cartItems || [])
+          .filter(it => it.handle || it.id)
+          .map(it => getCatalogId(it.handle || it.id, it.selectedColor)),
+        num_items: (parsed.cartItems || []).reduce((s, it) => s + it.qty, 0),
+        order_id: parsed.orderId || "",
+        ...buildTtUserData(parsed.formData, {
           email: parsed.customerEmail,
           phone: parsed.phone,
         }),

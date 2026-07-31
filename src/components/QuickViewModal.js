@@ -9,6 +9,7 @@ import { getInventoryPresentation, INVENTORY_STATUS } from "@/lib/inventoryHelpe
 import SizeChartModal from "@/components/SizeChartModal"; 
 import ProductReviews from "@/components/products/ProductReviews";
 import { fbTrack } from "@/lib/fbTrack";
+import { ttTrack } from "@/lib/ttTrack";
 import { getCatalogId } from "@/lib/catalogId";
 import { gaAddToCart } from "@/lib/gaTrack";
 
@@ -209,6 +210,14 @@ export default function QuickViewModal({ product, isOpen, onClose }) {
       content_type: "product",
       num_items:    qvQuantity,
     });
+    ttTrack("AddToCart", {
+      value:        price * qvQuantity,
+      currency:     "EGP",
+      content_ids:  [getCatalogId(handle, qvSelectedColor)],
+      content_name: product.title || "",
+      content_type: "product",
+      num_items:    qvQuantity,
+    }); // TikTok — مستقل تمامًا عن fbTrack أعلاه
 
     gaAddToCart({
       id:    handle,

@@ -122,6 +122,25 @@ export default async function RootLayout({ children }) {
         </Script>
 
         {/*
+          🔥 TikTok Pixel — مستقل تمامًا عن Meta Pixel أعلاه (سكريبت منفصل،
+          لا مشاركة أي متغيّر أو دالة). Pixel ID عبر env var (غير حساس، لكن
+          بطلب صريح من صاحب المشروع لإبقائه env var بدل hardcode).
+
+          ⚠️ لا يوجد استدعاء ttq.page() هنا عمدًا — بالضبط بنفس فلسفة Meta
+          أعلاه (autoConfig معطّل، لا PageView تلقائي): StoreLayout.js هو
+          المصدر الوحيد لكل حدث "Page" عبر ttTrack()، لتفادي أي احتمال
+          Double PageView (مرة من هنا تلقائيًا، ومرة من StoreLayout).
+        */}
+        <Script id="tiktok-pixel-base" strategy="afterInteractive">
+          {`
+            !function (w, d, t) {
+              w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods=["page","track","identify","instances","debug","on","off","once","ready","alias","group","enableCookie","disableCookie"],ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};for(var i=0;i<ttq.methods.length;i++)ttq.setAndDefer(ttq,ttq.methods[i]);ttq.instance=function(t){for(var e=ttq._i[t]||[],n=0;n<e.methods.length;n++)ttq.setAndDefer(e,e.methods[n]);return e},ttq.load=function(e,n){var i="https://analytics.tiktok.com/i18n/pixel/events.js",o=n&&n.partner;ttq._i=ttq._i||{},ttq._i[e]=[],ttq._i[e]._u=i,ttq._t=ttq._t||{},ttq._t[e]=+new Date,ttq._o=ttq._o||{},ttq._o[e]=n||{};n=document.createElement("script");n.type="text/javascript",n.async=!0,n.src=i+"?sdkid="+e+"&lib="+t;e=document.getElementsByTagName("script")[0];e.parentNode.insertBefore(n,e)};
+              ttq.load('${process.env.NEXT_PUBLIC_TIKTOK_PIXEL_ID || "D4K5SMBC77U6QK8E5OMG"}');
+            }(window, document, 'ttq');
+          `}
+        </Script>
+
+        {/*
           🔥 Google Analytics 4 (GA4) — مشروع مستقل تماماً عن Facebook Pixel،
           لا تداخل بينهما. يُستخدم لقياس سلوك الزوار العام (مصدر الزيارة،
           مدة الجلسة، معدل الارتداد) + أحداث Enhanced Ecommerce

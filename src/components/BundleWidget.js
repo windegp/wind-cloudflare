@@ -5,6 +5,7 @@ import { getDb } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore/lite";
 import { getInventoryPresentation } from "@/lib/inventoryHelpers";
 import { fbTrack } from "@/lib/fbTrack";
+import { ttTrack } from "@/lib/ttTrack";
 import { getCatalogId } from "@/lib/catalogId";
 
 // ─── لوحة التحكم ──────────────────────────────────────────────
@@ -296,6 +297,13 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
       content_type: "product",
       num_items: trackedNumItems,
     });
+    ttTrack("AddToCart", {
+      value: total,
+      currency: "EGP",
+      content_ids: trackedContentIds,
+      content_type: "product",
+      num_items: trackedNumItems,
+    }); // TikTok — مستقل تمامًا عن fbTrack أعلاه
   }, [hasUnavailable, adding, product, mainPrice, mainQty, upsells, upsellStates, effectiveDiscount, hasFreeShippingFeature, shippingDone, addToCart, total]);
 
   // ─── Render ───────────────────────────────────────────────

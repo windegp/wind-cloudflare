@@ -7,6 +7,7 @@ import Footer from "./Footer";
 import CartDrawer from "./CartDrawer";
 import ScrollToTop from "./ScrollToTop";
 import { fbTrack } from "@/lib/fbTrack";
+import { ttTrack } from "@/lib/ttTrack";
 import WhatsAppWidget from "@/components/WhatsAppWidget";
 export default function StoreLayout({ children }) {
   const pathname = usePathname();
@@ -19,6 +20,7 @@ export default function StoreLayout({ children }) {
   useEffect(() => {
     if (!isAdmin) {
       fbTrack("PageView", {});
+      ttTrack("PageView", {}); // TikTok — مستقل تمامًا عن fbTrack أعلاه
     }
   }, [pathname, isAdmin]);
 
