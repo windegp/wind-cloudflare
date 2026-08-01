@@ -12,6 +12,9 @@ const GOOGLE_APPAREL = "Apparel & Accessories > Clothing";
 
 // Keep legacy WIND productType slugs working while giving feeds a real,
 // standardized Google Product Category value.
+//
+// TikTok's Google Product Category field supports only three levels, so
+// every value below intentionally contains exactly three category levels.
 export const PRODUCT_TAXONOMY = {
   "mens-pants": {
     label: "بنطلونات",
@@ -27,31 +30,31 @@ export const PRODUCT_TAXONOMY = {
   },
   "trousers": {
     label: "بنطلونات",
-    googleProductCategory: "Apparel & Accessories > Clothing > Pants > Trousers",
+    googleProductCategory: "Apparel & Accessories > Clothing > Pants",
   },
   "t-shirts": {
     label: "تيشيرتات",
-    googleProductCategory: "Apparel & Accessories > Clothing > Clothing Tops > T-Shirts",
+    googleProductCategory: "Apparel & Accessories > Clothing > Shirts",
   },
   "shirts": {
     label: "قمصان",
-    googleProductCategory: "Apparel & Accessories > Clothing > Clothing Tops > Shirts",
+    googleProductCategory: "Apparel & Accessories > Clothing > Shirts",
   },
   "hoodies": {
     label: "هوديز",
-    googleProductCategory: "Apparel & Accessories > Clothing > Clothing Tops > Hoodies",
+    googleProductCategory: "Apparel & Accessories > Clothing > Hoodies",
   },
   "sweatshirts": {
     label: "سويت شيرت",
-    googleProductCategory: "Apparel & Accessories > Clothing > Clothing Tops > Sweatshirts",
+    googleProductCategory: "Apparel & Accessories > Clothing > Sweatshirts",
   },
   "jackets": {
     label: "جاكيتات",
-    googleProductCategory: "Apparel & Accessories > Clothing > Outerwear > Coats & Jackets",
+    googleProductCategory: "Apparel & Accessories > Clothing > Outerwear",
   },
   "coats": {
     label: "معاطف",
-    googleProductCategory: "Apparel & Accessories > Clothing > Outerwear > Coats & Jackets",
+    googleProductCategory: "Apparel & Accessories > Clothing > Outerwear",
   },
   "dresses": {
     label: "فساتين",
@@ -83,11 +86,11 @@ export const PRODUCT_TAXONOMY = {
   },
   "sweatshirt": {
     label: "سويت شيرت",
-    googleProductCategory: "Apparel & Accessories > Clothing > Clothing Tops > Sweatshirts",
+    googleProductCategory: "Apparel & Accessories > Clothing > Sweatshirts",
   },
   "hoodie": {
     label: "هودي",
-    googleProductCategory: "Apparel & Accessories > Clothing > Clothing Tops > Hoodies",
+    googleProductCategory: "Apparel & Accessories > Clothing > Hoodies",
   },
 };
 
