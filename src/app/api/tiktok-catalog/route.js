@@ -105,11 +105,20 @@ export async function GET() {
         const variants = fArrMaps("variants");
 
         const colorsSeen = new Set();
+        let pushedColorless = false; // 🔥 يمنع تكرار sku_id لمنتج فيه مقاسات بلا لون
         for (const v of variants) {
           const colorValue = v.color?.stringValue ?? "";
           const colorKey = colorValue.trim().toLowerCase();
-          if (colorValue && colorsSeen.has(colorKey)) continue;
-          if (colorValue) colorsSeen.add(colorKey);
+          if (colorValue) {
+            if (colorsSeen.has(colorKey)) continue;
+            colorsSeen.add(colorKey);
+          } else {
+            // لا لون لهذا الـ variant (مقاس فقط) — عنصر TikTok واحد يمثّل
+            // المنتج كله بلا لون، وليس عنصرًا لكل مقاس (نفس sku_id سيتكرر
+            // حرفيًا خلاف ذلك). لا تغيير على variants/مقاسات الموقع نفسها.
+            if (pushedColorless) continue;
+            pushedColorless = true;
+          }
 
           const inventoryStatus = v.inventoryStatus?.stringValue;
           const image = (colorValue && colorSwatches[colorValue]) || images[0] || "";
@@ -133,7 +142,7 @@ export async function GET() {
           });
         }
 
-        // منتج بلا variants ألوان على الإطلاق → عنصر واحد بلا لون
+        // منتج بلا variants على الإطلاق (لا لون ولا مقاس) → عنصر واحد بلا لون
         if (variants.length === 0) {
           rows.push({
             sku_id: getCatalogId(handle, ""),
