@@ -20,6 +20,7 @@
 
 import { getCatalogId } from "@/lib/catalogId";
 import { htmlToPlainText } from "@/lib/htmlToPlainText";
+import { GENERIC_COLLECTIONS } from "@/lib/constants";
 
 const PROJECT_ID = "wind-reviews";
 const BRAND = "WIND Shopping";
@@ -104,6 +105,25 @@ export async function GET() {
         const colorSwatches = fMap("colorSwatches");
         const variants = fArrMaps("variants");
 
+        // 🔥 نفس منطق product_type النهائي الموجود في fb-catalog/route.js
+        // حرفيًا من حيث النتيجة (منسوخ منطقيًا، غير مستورَد من الملف الآخر):
+        // 1) p.productType لو موجود، 2) وإلا أول meaningfulCollections،
+        // 3) وإلا "WIND Collection". بلا أي تغيير على بيانات Firestore.
+        const categoriesArr = rawFields["categories"]?.arrayValue?.values?.map((v) => v.stringValue ?? "").filter(Boolean) ?? [];
+        const selectedCollectionsArr = rawFields["selectedCollections"]?.arrayValue?.values?.map((v) => v.stringValue ?? "").filter(Boolean) ?? [];
+        const sourceCollections = categoriesArr.length > 0 ? categoriesArr : selectedCollectionsArr;
+        const meaningfulCollections = [...new Set(
+          sourceCollections
+            .map((c) => c.replace(/^\//, "").trim())
+            .filter((c) => c && !c.includes(">") && !GENERIC_COLLECTIONS.has(c))
+        )];
+        const rawProductType = f("productType");
+        const productType = rawProductType
+          ? rawProductType.replace(/-/g, " ")
+          : (meaningfulCollections.length > 0
+              ? meaningfulCollections[0].replace(/-/g, " ")
+              : "WIND Collection");
+
         const colorsSeen = new Set();
         let pushedColorless = false; // 🔥 يمنع تكرار sku_id لمنتج فيه مقاسات بلا لون
         for (const v of variants) {
@@ -139,6 +159,7 @@ export async function GET() {
               : `${SITE_URL}/products/${handle}`,
             image_link: image,
             brand: BRAND,
+            product_type: productType,
           });
         }
 
@@ -155,6 +176,7 @@ export async function GET() {
             link: `${SITE_URL}/products/${handle}`,
             image_link: images[0] || "",
             brand: BRAND,
+            product_type: productType,
           });
         }
       }
@@ -174,6 +196,7 @@ export async function GET() {
       <g:link>${escapeXml(r.link)}</g:link>
       <g:image_link>${escapeXml(r.image_link)}</g:image_link>
       <g:brand>${escapeXml(r.brand)}</g:brand>
+      <g:product_type>${escapeXml(r.product_type)}</g:product_type>
     </item>`
       )
       .join("\n");
