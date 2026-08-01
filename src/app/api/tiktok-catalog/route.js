@@ -5,22 +5,14 @@
 // يُقرأ هنا من جديد (طلب Firestore REST مستقل)، وليس عبر استيراد أي كود من
 // fb-catalog/route.js.
 //
-// الاستيراد الوحيد المشترك مع منظومة Meta: getCatalogId() — للقراءة فقط،
-// كما صرَّح صاحب المشروع، لضمان أن sku_id الموحَّد نفسه يُستخدَم عبر كل
-// المنصات الإعلانية لنفس المنتج (لا تعديل على catalogId.js إطلاقًا) —
-// ونفس القيمة تُرسَل كـ content_id عبر أحداث TikTok (ttTrack.js).
-// كذلك htmlToPlainText — أداة عامة نقية لتنظيف النصوص، ليست خاصة بـ Meta.
-//
-// الكتالوج المستهدَف E-commerce Catalog → يستخدم g:sku_id (وليس g:id).
-//
-// RSS 2.0 + xmlns:g — الصيغة القياسية التي تتطلبها TikTok فعليًا (مطابقة
-// شبه كاملة لبنية Google Product Data Specification)، بعد أن كانت النسخة
-// السابقة تُخرِج جذر <items> مخصَّصًا غير قياسي (السبب المؤكَّد لظهور
-// "0 files / 0 products / Rejected" في TikTok Catalog upload log).
+// الاستيرادات المشتركة هنا للقراءة فقط: getCatalogId للـ sku_id الموحّد،
+// htmlToPlainText لتنظيف الوصف، و getGoogleProductCategory لتصنيف التجارة.
+// لا تعديل على Firestore ولا على catalogId.js.
 
 import { getCatalogId } from "@/lib/catalogId";
 import { htmlToPlainText } from "@/lib/htmlToPlainText";
 import { GENERIC_COLLECTIONS } from "@/lib/constants";
+import { getGoogleProductCategory } from "@/lib/productTaxonomy";
 
 const PROJECT_ID = "wind-reviews";
 const BRAND = "WIND Shopping";
@@ -35,9 +27,6 @@ function escapeXml(str) {
     .replace(/'/g, "&apos;");
 }
 
-// 🔥 تحويل حالة المخزون لصيغة TikTok — دالة مستقلة عن getMetaAvailability
-// في lib/inventoryHelpers.js (نفس المنطق العام: Fail-Closed لأي حالة غير
-// معروفة، لكن مكتوبة من الصفر هنا، بلا استيراد).
 function ttAvailability(inventoryStatus) {
   switch (inventoryStatus) {
     case "IN_STOCK":
@@ -94,9 +83,6 @@ export async function GET() {
         };
 
         const title = f("title");
-        // 🔥 description من بيانات المنتج الموجودة بالفعل في Firestore —
-        // نفس المصدر ونفس الـ fallback المستخدَمين في fb-catalog/route.js
-        // (description المنتج، وإلا seo.description)، بلا اختراع أي نص.
         const seoDescription = rawFields["seo"]?.mapValue?.fields?.description?.stringValue ?? "";
         const rawDescription = f("description") || seoDescription || "";
         const cleanDescription = htmlToPlainText(rawDescription);
@@ -105,10 +91,6 @@ export async function GET() {
         const colorSwatches = fMap("colorSwatches");
         const variants = fArrMaps("variants");
 
-        // 🔥 نفس منطق product_type النهائي الموجود في fb-catalog/route.js
-        // حرفيًا من حيث النتيجة (منسوخ منطقيًا، غير مستورَد من الملف الآخر):
-        // 1) p.productType لو موجود، 2) وإلا أول meaningfulCollections،
-        // 3) وإلا "WIND Collection". بلا أي تغيير على بيانات Firestore.
         const categoriesArr = rawFields["categories"]?.arrayValue?.values?.map((v) => v.stringValue ?? "").filter(Boolean) ?? [];
         const selectedCollectionsArr = rawFields["selectedCollections"]?.arrayValue?.values?.map((v) => v.stringValue ?? "").filter(Boolean) ?? [];
         const sourceCollections = categoriesArr.length > 0 ? categoriesArr : selectedCollectionsArr;
@@ -124,8 +106,13 @@ export async function GET() {
               ? meaningfulCollections[0].replace(/-/g, " ")
               : "WIND Collection");
 
+        // Commerce taxonomy is independent from WIND marketing Collections.
+        // Existing productType values remain the source of truth; this mapping
+        // adds a standardized Google Product Category without changing Firestore.
+        const googleProductCategory = getGoogleProductCategory(rawProductType || productType);
+
         const colorsSeen = new Set();
-        let pushedColorless = false; // 🔥 يمنع تكرار sku_id لمنتج فيه مقاسات بلا لون
+        let pushedColorless = false;
         for (const v of variants) {
           const colorValue = v.color?.stringValue ?? "";
           const colorKey = colorValue.trim().toLowerCase();
@@ -133,9 +120,6 @@ export async function GET() {
             if (colorsSeen.has(colorKey)) continue;
             colorsSeen.add(colorKey);
           } else {
-            // لا لون لهذا الـ variant (مقاس فقط) — عنصر TikTok واحد يمثّل
-            // المنتج كله بلا لون، وليس عنصرًا لكل مقاس (نفس sku_id سيتكرر
-            // حرفيًا خلاف ذلك). لا تغيير على variants/مقاسات الموقع نفسها.
             if (pushedColorless) continue;
             pushedColorless = true;
           }
@@ -144,8 +128,6 @@ export async function GET() {
           const image = (colorValue && colorSwatches[colorValue]) || images[0] || "";
 
           rows.push({
-            // 🔥 نفس getCatalogId المستخدَمة في fb-catalog/route.js وفي كل
-            // أحداث ttTrack (content_id) — sku_id هنا = نفس القيمة بالضبط.
             sku_id: getCatalogId(handle, colorValue),
             item_group_id: handle,
             title,
@@ -160,10 +142,10 @@ export async function GET() {
             image_link: image,
             brand: BRAND,
             product_type: productType,
+            google_product_category: googleProductCategory,
           });
         }
 
-        // منتج بلا variants على الإطلاق (لا لون ولا مقاس) → عنصر واحد بلا لون
         if (variants.length === 0) {
           rows.push({
             sku_id: getCatalogId(handle, ""),
@@ -177,6 +159,7 @@ export async function GET() {
             image_link: images[0] || "",
             brand: BRAND,
             product_type: productType,
+            google_product_category: googleProductCategory,
           });
         }
       }
@@ -197,6 +180,7 @@ export async function GET() {
       <g:image_link>${escapeXml(r.image_link)}</g:image_link>
       <g:brand>${escapeXml(r.brand)}</g:brand>
       <g:product_type>${escapeXml(r.product_type)}</g:product_type>
+      <g:google_product_category>${escapeXml(r.google_product_category)}</g:google_product_category>
     </item>`
       )
       .join("\n");
