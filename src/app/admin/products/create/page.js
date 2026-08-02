@@ -540,17 +540,17 @@ function CreateProductForm() {
           updatedAt: serverTimestamp(),
 
           // 🔥 حذف الحقول المكررة والقديمة (تم الإبقاء على categories)
+          // 🔥 category: تم إصلاح الحفظ — كانت تُصفَّر لـ null دائمًا رغم اختيار
+          // الأدمن لها فعليًا في الواجهة. الآن تُحفَظ قيمتها الحقيقية (أو null
+          // لو لم يُدخِل الأدمن شيئًا). لا تأثير على productType/categories/
+          // selectedCollections، ولا تُستخدَم كمصدر تصنيف في أي feed حاليًا.
           Price: null,
           type: null,
-          category: null,
+          category: productData.category || null,
           productCategory: null,
           barcode: null
         };
         
-
-        // حذف الحقول القديمة من فايربيز لضمان نظافة الوثيقة
-        finalProduct.type = null;
-        finalProduct.category = null;
 
       if (!isEditing) {
         finalProduct.createdAt = serverTimestamp();

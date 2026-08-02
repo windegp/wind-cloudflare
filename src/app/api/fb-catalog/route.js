@@ -5,6 +5,7 @@ import { getMetaAvailability } from "@/lib/inventoryHelpers";
 import { getCatalogId, slugifyColor } from "@/lib/catalogId";
 import { GENERIC_COLLECTIONS } from "@/lib/constants";
 import { htmlToPlainText } from "@/lib/htmlToPlainText";
+import { getGoogleProductCategory } from "@/lib/productTaxonomy";
 
 const SITE_URL = "https://windeg.com";
 const BRAND = "WIND Shopping";
@@ -163,9 +164,10 @@ export async function GET() {
         const sourceCollections =
           (p.categories && p.categories.length > 0) ? p.categories : p.selectedCollections;
 
-        const googleCategory =
-          sourceCollections.find((c) => c.includes(">")) ??
-          "Apparel & Accessories > Clothing";
+        // 🔥 توحيد المصدر: googleCategory لم يعد يُحسَب هنا بمنطق مستقل —
+        // يُحسَب الآن (بعد تعريف productType أدناه) عبر getGoogleProductCategory()
+        // من lib/productTaxonomy.js، نفس المصدر المستخدَم في tiktok-catalog/route.js.
+        // لا تغيير على sourceCollections/meaningfulCollections/productType نفسها.
         
         // 🌟 الأقسام العامة دي مش مفيدة كفلتر Set في فيسبوك (موجودة في كل المنتجات تقريباً)
         // فبنستبعدها من الـ product_type/custom_labels، مع استبعاد نسخ السلاش المكررة "/slug"
@@ -192,6 +194,10 @@ export async function GET() {
           : (meaningfulCollections.length > 0
               ? meaningfulCollections[0].replace(/-/g, " ")
               : "WIND Collection");
+        // 🔥 نفس المصدر الموحَّد المستخدَم في tiktok-catalog/route.js — يمرَّر
+        // productType الخام (بلا استبدال الشرطات بمسافات) لأن مفاتيح
+        // PRODUCT_TAXONOMY نفسها بصيغة slug (بشرطات)، تماماً كما في TikTok.
+        const googleCategory = getGoogleProductCategory(p.productType || "");
         // 🌟 Collections تُصدَّر بالكامل ومستقلة تماماً الآن في custom_label_0..4 —
         // لم تعد تفقد أول عنصر لصالح product_type (كان ده سلوك النظام القديم
         // فقط، طالما product_type أصبح مصدره منفصل تماماً الآن).
