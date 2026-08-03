@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - fix/tiktok-color-size-sku-matching
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -23,9 +26,7 @@ jobs:
         run: |
           from pathlib import Path
           import re
-
           root = Path('.')
-
           helper = root / 'src/lib/tiktokCatalogId.js'
           helper.write_text('''// TikTok-only catalog SKU generator.\n// Meta continues to use getCatalogId() unchanged.\n\nimport { slugifyColor } from "@/lib/catalogId";\n\nexport function getTikTokCatalogId(handle, colorValue, sizeValue) {\n  const safeHandle = String(handle || "").trim();\n  const parts = [colorValue, sizeValue]\n    .map((value) => String(value || "").trim())\n    .filter(Boolean)\n    .map((value) => slugifyColor(value));\n\n  return [safeHandle, ...parts].filter(Boolean).join("-");\n}\n''', encoding='utf-8')
 
@@ -35,126 +36,65 @@ jobs:
                   raise SystemExit(f'{label}: expected 1 occurrence, found {count}')
               return text.replace(old, new)
 
-          def add_import(text, old_import, new_import, label):
-              if new_import in text:
-                  return text
-              return replace_once(text, old_import, old_import + new_import, label)
-
-          # 1) TikTok catalog: one row per actual variant (color x size), with
-          #    TikTok SKU IDs independent from Meta's getCatalogId().
           p = root / 'src/app/api/tiktok-catalog/route.js'
           s = p.read_text(encoding='utf-8')
-          s = replace_once(
-              s,
-              'import { getCatalogId } from "@/lib/catalogId";\n',
-              '',
-              'remove TikTok catalogId import',
-          )
-          s = replace_once(
-              s,
-              'import { getGoogleProductCategory } from "@/lib/productTaxonomy";\n',
-              'import { getGoogleProductCategory } from "@/lib/productTaxonomy";\nimport { getTikTokCatalogId } from "@/lib/tiktokCatalogId";\n',
-              'add TikTok catalogId import',
-          )
-
+          s = replace_once(s, 'import { getCatalogId } from "@/lib/catalogId";\n', '', 'remove TikTok catalogId import')
+          s = replace_once(s, 'import { getGoogleProductCategory } from "@/lib/productTaxonomy";\n', 'import { getGoogleProductCategory } from "@/lib/productTaxonomy";\nimport { getTikTokCatalogId } from "@/lib/tiktokCatalogId";\n', 'add TikTok catalogId import')
           old_loop = '''        const colorsSeen = new Set();\n        let pushedColorless = false;\n        for (const v of variants) {\n          const colorValue = v.color?.stringValue ?? "";\n          const colorKey = colorValue.trim().toLowerCase();\n          if (colorValue) {\n            if (colorsSeen.has(colorKey)) continue;\n            colorsSeen.add(colorKey);\n          } else {\n            if (pushedColorless) continue;\n            pushedColorless = true;\n          }\n\n          const inventoryStatus = v.inventoryStatus?.stringValue;\n          const image = (colorValue && colorSwatches[colorValue]) || images[0] || "";\n\n          rows.push({\n            sku_id: getCatalogId(handle, colorValue),\n            item_group_id: handle,\n            title,\n            description: cleanDescription,\n            color: colorValue || undefined,\n            availability: ttAvailability(inventoryStatus),\n            condition: "new",\n            price: `${price.toFixed(2)} EGP`,\n            link: colorValue\n              ? `${SITE_URL}/products/${handle}?color=${encodeURIComponent(colorValue)}`\n              : `${SITE_URL}/products/${handle}`,\n            image_link: image,\n            brand: BRAND,\n            product_type: productType,\n            google_product_category: googleProductCategory,\n          });\n        }\n'''
-
-          new_loop = '''        for (const v of variants) {\n          const option1Name = v.option1Name?.stringValue ?? "";\n          const option1Value = v.option1Value?.stringValue ?? "";\n          const option2Name = v.option2Name?.stringValue ?? "";\n          const option2Value = v.option2Value?.stringValue ?? "";\n\n          const optionPairs = [\n            [option1Name, option1Value],\n            [option2Name, option2Value],\n          ];\n          const getOptionValue = (kind) => {\n            const pair = optionPairs.find(([name]) => {\n              const n = String(name || "").trim().toLowerCase();\n              if (kind === "color") return n.includes("color") || n.includes("colour") || n.includes("لون");\n              if (kind === "size") return n.includes("size") || n.includes("مقاس");\n              return false;\n            });\n            return pair?.[1] || "";\n          };\n\n          const colorValue = getOptionValue("color");\n          const sizeValue = getOptionValue("size");\n          const inventoryStatus = v.inventoryStatus?.stringValue;\n          const image = (colorValue && colorSwatches[colorValue]) || images[0] || "";\n\n          rows.push({\n            sku_id: getTikTokCatalogId(handle, colorValue, sizeValue),\n            item_group_id: handle,\n            title,\n            description: cleanDescription,\n            color: colorValue || undefined,\n            size: sizeValue || undefined,\n            availability: ttAvailability(inventoryStatus),\n            condition: "new",\n            price: `${price.toFixed(2)} EGP`,\n            link: `${SITE_URL}/products/${handle}${colorValue || sizeValue ? `?${new URLSearchParams({ ...(colorValue ? { color: colorValue } : {}), ...(sizeValue ? { size: sizeValue } : {}) }).toString()}` : ""}`,\n            image_link: image,\n            brand: BRAND,\n            product_type: productType,\n            google_product_category: googleProductCategory,\n          });\n        }\n'''
+          new_loop = '''        for (const v of variants) {\n          const option1Name = v.option1Name?.stringValue ?? "";\n          const option1Value = v.option1Value?.stringValue ?? "";\n          const option2Name = v.option2Name?.stringValue ?? "";\n          const option2Value = v.option2Value?.stringValue ?? "";\n          const optionPairs = [[option1Name, option1Value], [option2Name, option2Value]];\n          const getOptionValue = (kind) => {\n            const pair = optionPairs.find(([name]) => {\n              const n = String(name || "").trim().toLowerCase();\n              if (kind === "color") return n.includes("color") || n.includes("colour") || n.includes("لون");\n              if (kind === "size") return n.includes("size") || n.includes("مقاس");\n              return false;\n            });\n            return pair?.[1] || "";\n          };\n          const colorValue = getOptionValue("color");\n          const sizeValue = getOptionValue("size");\n          const inventoryStatus = v.inventoryStatus?.stringValue;\n          const image = (colorValue && colorSwatches[colorValue]) || images[0] || "";\n          rows.push({\n            sku_id: getTikTokCatalogId(handle, colorValue, sizeValue),\n            item_group_id: handle,\n            title,\n            description: cleanDescription,\n            color: colorValue || undefined,\n            size: sizeValue || undefined,\n            availability: ttAvailability(inventoryStatus),\n            condition: "new",\n            price: `${price.toFixed(2)} EGP`,\n            link: `${SITE_URL}/products/${handle}${colorValue || sizeValue ? `?${new URLSearchParams({ ...(colorValue ? { color: colorValue } : {}), ...(sizeValue ? { size: sizeValue } : {}) }).toString()}` : ""}`,\n            image_link: image,\n            brand: BRAND,\n            product_type: productType,\n            google_product_category: googleProductCategory,\n          });\n        }\n'''
           s = replace_once(s, old_loop, new_loop, 'TikTok variant loop')
-
-          # Legacy no-variant product: getTikTokCatalogId(handle) == handle.
           s = replace_once(s, 'sku_id: getCatalogId(handle, ""),', 'sku_id: getTikTokCatalogId(handle, "", ""),', 'TikTok legacy SKU')
-          s = replace_once(
-              s,
-              '      ${r.color ? `<g:color>${escapeXml(r.color)}</g:color>` : ""}\n',
-              '      ${r.color ? `<g:color>${escapeXml(r.color)}</g:color>` : ""}\n      ${r.size ? `<g:size>${escapeXml(r.size)}</g:size>` : ""}\n',
-              'TikTok XML size field',
-          )
+          s = replace_once(s, '      ${r.color ? `<g:color>${escapeXml(r.color)}</g:color>` : ""}\n', '      ${r.color ? `<g:color>${escapeXml(r.color)}</g:color>` : ""}\n      ${r.size ? `<g:size>${escapeXml(r.size)}</g:size>` : ""}\n', 'TikTok XML size field')
           p.write_text(s, encoding='utf-8')
 
-          # Helper to add TikTok import beside existing catalogId import.
-          files = [
-              'src/app/products/[id]/ProductView.js',
-              'src/components/QuickViewModal.js',
-              'src/components/BundleWidget.js',
-              'src/app/checkout/page.js',
-              'src/app/thank-you/page.js',
-          ]
+          files = ['src/app/products/[id]/ProductView.js','src/components/QuickViewModal.js','src/components/BundleWidget.js','src/app/checkout/page.js','src/app/thank-you/page.js']
           for rel in files:
               p = root / rel
               s = p.read_text(encoding='utf-8')
               if 'getTikTokCatalogId' not in s:
-                  s = replace_once(
-                      s,
-                      'import { getCatalogId } from "@/lib/catalogId";\n',
-                      'import { getCatalogId } from "@/lib/catalogId";\nimport { getTikTokCatalogId } from "@/lib/tiktokCatalogId";\n',
-                      f'add TikTok import {rel}',
-                  )
+                  s = replace_once(s, 'import { getCatalogId } from "@/lib/catalogId";\n', 'import { getCatalogId } from "@/lib/catalogId";\nimport { getTikTokCatalogId } from "@/lib/tiktokCatalogId";\n', f'add TikTok import {rel}')
               p.write_text(s, encoding='utf-8')
 
-          # ProductView: only TikTok events change; Meta getCatalogId() remains untouched.
           p = root / 'src/app/products/[id]/ProductView.js'
           s = p.read_text(encoding='utf-8')
           pattern = re.compile(r'(ttTrack\("(?:ViewContent|AddToCart)",\s*\{[\s\S]*?\n\s*\}\);)')
-          matches = list(pattern.finditer(s))
-          if len(matches) != 4:
-              raise SystemExit(f'ProductView: expected 4 TikTok event blocks, found {len(matches)}')
-          def repl(m):
-              block = m.group(1)
-              block = block.replace(
-                  'getCatalogId(productHandle, selectedColor)',
-                  'getTikTokCatalogId(productHandle, selectedColor, selectedSize)'
-              )
-              block = block.replace(
-                  'getCatalogId(product.handle || id || product.id, selectedColor)',
-                  'getTikTokCatalogId(product.handle || id || product.id, selectedColor, selectedSize)'
-              )
-              return block
-          s = pattern.sub(repl, s)
-          p.write_text(s, encoding='utf-8')
+          if len(pattern.findall(s)) != 4: raise SystemExit('ProductView: expected 4 TikTok event blocks')
+          def pv(m):
+              b = m.group(1)
+              b = b.replace('getCatalogId(productHandle, selectedColor)', 'getTikTokCatalogId(productHandle, selectedColor, selectedSize)')
+              b = b.replace('getCatalogId(product.handle || id || product.id, selectedColor)', 'getTikTokCatalogId(product.handle || id || product.id, selectedColor, selectedSize)')
+              return b
+          p.write_text(pattern.sub(pv, s), encoding='utf-8')
 
-          # QuickView: TikTok gets color+size; Meta stays on getCatalogId().
           p = root / 'src/components/QuickViewModal.js'
           s = p.read_text(encoding='utf-8')
           pattern = re.compile(r'(ttTrack\("AddToCart",\s*\{[\s\S]*?\n\s*\}\);)')
-          if len(pattern.findall(s)) != 1:
-              raise SystemExit('QuickView: expected exactly one TikTok AddToCart block')
-          s = pattern.sub(lambda m: m.group(1).replace('getCatalogId(handle, qvSelectedColor)', 'getTikTokCatalogId(handle, qvSelectedColor, qvSelectedSize)'), s)
-          p.write_text(s, encoding='utf-8')
+          if len(pattern.findall(s)) != 1: raise SystemExit('QuickView: expected 1 TikTok AddToCart block')
+          p.write_text(pattern.sub(lambda m: m.group(1).replace('getCatalogId(handle, qvSelectedColor)', 'getTikTokCatalogId(handle, qvSelectedColor, qvSelectedSize)'), s), encoding='utf-8')
 
-          # Checkout: preserve Meta IDs; use selectedSize for TikTok IDs only.
           p = root / 'src/app/checkout/page.js'
           s = p.read_text(encoding='utf-8')
           pattern = re.compile(r'(ttTrack\("InitiateCheckout",\s*\{[\s\S]*?\n\s*\}\);)')
-          if len(pattern.findall(s)) != 1:
-              raise SystemExit('Checkout: expected exactly one TikTok InitiateCheckout block')
-          s = pattern.sub(lambda m: m.group(1).replace('getCatalogId(it.handle || it.id, it.selectedColor)', 'getTikTokCatalogId(it.handle || it.id, it.selectedColor, it.selectedSize)'), s)
-          p.write_text(s, encoding='utf-8')
+          if len(pattern.findall(s)) != 1: raise SystemExit('Checkout: expected 1 TikTok InitiateCheckout block')
+          p.write_text(pattern.sub(lambda m: m.group(1).replace('getCatalogId(it.handle || it.id, it.selectedColor)', 'getTikTokCatalogId(it.handle || it.id, it.selectedColor, it.selectedSize)'), s), encoding='utf-8')
 
-          # Thank-you: preserve Meta IDs; use selectedSize for TikTok Purchase IDs only.
           p = root / 'src/app/thank-you/page.js'
           s = p.read_text(encoding='utf-8')
           pattern = re.compile(r'(ttTrack\("CompletePayment",\s*\{[\s\S]*?\n\s*\}\);)')
-          if len(pattern.findall(s)) != 1:
-              raise SystemExit('Thank-you: expected exactly one TikTok CompletePayment block')
-          s = pattern.sub(lambda m: m.group(1).replace('getCatalogId(it.handle || it.id, it.selectedColor)', 'getTikTokCatalogId(it.handle || it.id, it.selectedColor, it.selectedSize)'), s)
-          p.write_text(s, encoding='utf-8')
+          if len(pattern.findall(s)) != 1: raise SystemExit('Thank-you: expected 1 TikTok CompletePayment block')
+          p.write_text(pattern.sub(lambda m: m.group(1).replace('getCatalogId(it.handle || it.id, it.selectedColor)', 'getTikTokCatalogId(it.handle || it.id, it.selectedColor, it.selectedSize)'), s), encoding='utf-8')
 
-          # BundleWidget: Meta keeps trackedContentIds; TikTok gets a parallel array.
           p = root / 'src/components/BundleWidget.js'
           s = p.read_text(encoding='utf-8')
           old = '''    const trackedContentIds = [\n      getCatalogId(product.handle || product.id, selectedMainVariant?.color || product.selectedColor || ""),\n    ];\n    let trackedNumItems = mainQty;\n\n    upsells.forEach((up, i) => {\n      const st = upsellStates[i];\n      if (!st?.checked) return;\n      const variant = up.variants[st.variantIdx];\n      if (!variant?.available) return;\n      trackedContentIds.push(getCatalogId(up.id, variant.color || ""));\n      trackedNumItems += st.qty || 1;\n    });\n'''
-          new = '''    const trackedContentIds = [\n      getCatalogId(product.handle || product.id, selectedMainVariant?.color || product.selectedColor || ""),\n    ];\n    const tiktokTrackedContentIds = [\n      getTikTokCatalogId(\n        product.handle || product.id,\n        selectedMainVariant?.color || product.selectedColor || "",\n        selectedMainVariant?.size || product.selectedSize || ""\n      ),\n    ];\n    let trackedNumItems = mainQty;\n\n    upsells.forEach((up, i) => {\n      const st = upsellStates[i];\n      if (!st?.checked) return;\n      const variant = up.variants[st.variantIdx];\n      if (!variant?.available) return;\n      trackedContentIds.push(getCatalogId(up.id, variant.color || ""));\n      tiktokTrackedContentIds.push(getTikTokCatalogId(up.id, variant.color || "", variant.size || ""));\n      trackedNumItems += st.qty || 1;\n    });\n'''
+          new = '''    const trackedContentIds = [\n      getCatalogId(product.handle || product.id, selectedMainVariant?.color || product.selectedColor || ""),\n    ];\n    const tiktokTrackedContentIds = [\n      getTikTokCatalogId(product.handle || product.id, selectedMainVariant?.color || product.selectedColor || "", selectedMainVariant?.size || product.selectedSize || ""),\n    ];\n    let trackedNumItems = mainQty;\n\n    upsells.forEach((up, i) => {\n      const st = upsellStates[i];\n      if (!st?.checked) return;\n      const variant = up.variants[st.variantIdx];\n      if (!variant?.available) return;\n      trackedContentIds.push(getCatalogId(up.id, variant.color || ""));\n      tiktokTrackedContentIds.push(getTikTokCatalogId(up.id, variant.color || "", variant.size || ""));\n      trackedNumItems += st.qty || 1;\n    });\n'''
           s = replace_once(s, old, new, 'Bundle tracked IDs')
           s = replace_once(s, 'content_ids: trackedContentIds,\n      content_type: "product",\n      num_items: trackedNumItems,\n    });\n  }, [hasUnavailable', 'content_ids: tiktokTrackedContentIds,\n      content_type: "product",\n      num_items: trackedNumItems,\n    });\n  }, [hasUnavailable', 'Bundle TikTok IDs')
           p.write_text(s, encoding='utf-8')
 
-          # Sanity checks: Meta source remains unchanged in the touched files.
           for rel in files:
-              text = (root / rel).read_text(encoding='utf-8')
-              if 'getCatalogId' not in text:
-                  raise SystemExit(f'{rel}: Meta getCatalogId import/calls unexpectedly disappeared')
-
+              if 'getCatalogId' not in (root / rel).read_text(encoding='utf-8'):
+                  raise SystemExit(f'{rel}: Meta getCatalogId unexpectedly disappeared')
           print('TikTok variant fix applied successfully.')
 
       - name: Commit and push
