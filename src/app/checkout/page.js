@@ -211,7 +211,7 @@ export default function CheckoutPage() {
       // Meta Catalog ID — لا يتغير.
       content_ids: cartItems
         .filter(it => it.handle || it.id)
-        .map(it => getCatalogId(it.handle || it.id, it.selectedColor)),
+        .map(it => getTikTokSkuIdForItem(it)),
     });
     ttTrack("InitiateCheckout", {
       value: finalTotal,

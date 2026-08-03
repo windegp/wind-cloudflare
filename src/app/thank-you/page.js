@@ -83,7 +83,7 @@ function SuccessContent() {
         currency: "EGP",
         content_ids: (parsed.cartItems || [])
           .filter(it => it.handle || it.id)
-          .map(it => getCatalogId(it.handle || it.id, it.selectedColor)),
+          .map(it => getTikTokSkuIdForItem(it)),
         num_items: (parsed.cartItems || []).reduce((s, it) => s + it.qty, 0),
         order_id: parsed.orderId || "",
         ...buildTtUserData(parsed.formData, {
