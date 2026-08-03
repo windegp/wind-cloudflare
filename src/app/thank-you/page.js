@@ -10,6 +10,7 @@ import { CheckCircle2, ShoppingBag, Phone, Truck, Shield, Package, CreditCard, B
 import { fbTrack } from "@/lib/fbTrack";
 import { ttTrack, buildTtUserData } from "@/lib/ttTrack";
 import { getCatalogId } from "@/lib/catalogId";
+import { getTikTokSkuIdForItem } from "@/lib/tiktokCatalogId";
 import { gaPurchase } from "@/lib/gaTrack";
 import { buildCheckoutMetaUserData } from "@/lib/metaEventData";
 
@@ -69,7 +70,7 @@ function SuccessContent() {
         // فنستخدمه لتوليد نفس g:id الخاص بلون هذا العنصر بالضبط.
         content_ids: (parsed.cartItems || [])
           .filter(it => it.handle || it.id)
-          .map(it => getCatalogId(it.handle || it.id, it.selectedColor)),
+          .map(it => getTikTokSkuIdForItem(it)),
         num_items: (parsed.cartItems || []).reduce((s, it) => s + it.qty, 0),
         order_id: parsed.orderId || "",
         ...buildCheckoutMetaUserData(parsed.formData, {

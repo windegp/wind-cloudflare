@@ -16,6 +16,7 @@ import { SHIPPING_COST } from '@/lib/constants';
 import { fbTrack } from "@/lib/fbTrack";
 import { ttTrack, buildTtUserData } from "@/lib/ttTrack";
 import { getCatalogId } from "@/lib/catalogId";
+import { getTikTokSkuIdForItem } from "@/lib/tiktokCatalogId";
 import { gaBeginCheckout, gaPurchase } from "@/lib/gaTrack";
 import { buildCheckoutMetaUserData } from "@/lib/metaEventData";
 import { getCairoTimestamp } from '@/lib/analytics-helpers';
@@ -212,7 +213,7 @@ export default function CheckoutPage() {
       // فنستخدمه لتوليد نفس g:id الخاص بلونه بالضبط.
       content_ids: cartItems
         .filter(it => it.handle || it.id)
-        .map(it => getCatalogId(it.handle || it.id, it.selectedColor)),
+        .map(it => getTikTokSkuIdForItem(it)),
     });
     ttTrack("InitiateCheckout", {
       value: finalTotal,
