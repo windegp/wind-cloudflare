@@ -27,11 +27,6 @@ function ttAvailability(status) {
   }
 }
 
-function hiddenFromTikTok(status) {
-  const s = String(status || "").toUpperCase();
-  return s === "ARCHIVED" || s === "TEMP_DISABLED" || s === "NEEDS_REVIEW";
-}
-
 export async function GET() {
   try {
     const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents:runQuery`;
@@ -58,8 +53,7 @@ export async function GET() {
       const colorSwatches = Object.fromEntries(Object.entries(swatchFields).map(([k, v]) => [k, v.stringValue ?? ""]));
       const variants = arr(fields, "variants").map(v => v.mapValue?.fields || {}).filter(Boolean);
       const productOptions = arr(fields, "options").map(v => v.mapValue?.fields || {}).filter(Boolean).map(o => ({
-        name: o.name?.stringValue || "",
-        values: o.values?.stringValue || "",
+        name: o.name?.stringValue || "", values: o.values?.stringValue || "",
       }));
 
       const categories = arr(fields, "categories").map(v => v.stringValue ?? "").filter(Boolean);
@@ -79,8 +73,8 @@ export async function GET() {
           };
           const attrs = getTikTokVariantAttributes({ options: productOptions }, plainVariant);
           const skuId = getTikTokSkuId(handle, plainVariant);
+          if (!skuId) continue;
           const inventoryStatus = str(v, "inventoryStatus");
-          if (!skuId || hiddenFromTikTok(inventoryStatus)) continue;
           const variantPrice = parseFloat(str(v, "price"));
           const price = Number.isFinite(variantPrice) && variantPrice > 0 ? variantPrice : productPrice;
           const image = (attrs.color && colorSwatches[attrs.color]) || images[0] || "";
