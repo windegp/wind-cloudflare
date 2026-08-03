@@ -57,6 +57,10 @@ export async function GET() {
       const swatchFields = fields.colorSwatches?.mapValue?.fields || {};
       const colorSwatches = Object.fromEntries(Object.entries(swatchFields).map(([k, v]) => [k, v.stringValue ?? ""]));
       const variants = arr(fields, "variants").map(v => v.mapValue?.fields || {}).filter(Boolean);
+      const productOptions = arr(fields, "options").map(v => v.mapValue?.fields || {}).filter(Boolean).map(o => ({
+        name: o.name?.stringValue || "",
+        values: o.values?.stringValue || "",
+      }));
 
       const categories = arr(fields, "categories").map(v => v.stringValue ?? "").filter(Boolean);
       const collections = arr(fields, "selectedCollections").map(v => v.stringValue ?? "").filter(Boolean);
@@ -73,7 +77,7 @@ export async function GET() {
             option1Name: str(v, "option1Name"), option1Value: str(v, "option1Value"),
             option2Name: str(v, "option2Name"), option2Value: str(v, "option2Value"),
           };
-          const attrs = getTikTokVariantAttributes({}, plainVariant);
+          const attrs = getTikTokVariantAttributes({ options: productOptions }, plainVariant);
           const skuId = getTikTokSkuId(handle, plainVariant);
           const inventoryStatus = str(v, "inventoryStatus");
           if (!skuId || hiddenFromTikTok(inventoryStatus)) continue;
