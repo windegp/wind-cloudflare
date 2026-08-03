@@ -16,6 +16,7 @@ import { Plus, Minus, Star, Info, Share2, Heart, ImageIcon, X, Truck, Eye, Shiel
 import { fbTrack } from "@/lib/fbTrack";
 import { ttTrack } from "@/lib/ttTrack";
 import { getCatalogId } from "@/lib/catalogId";
+import { findTikTokVariant, getTikTokSkuId } from "@/lib/tiktokCatalogId"; // TIKTOK_VARIANT_MATCHING_PHASE1
 import { gaViewItem, gaAddToCart } from "@/lib/gaTrack";
 import { getInventoryPresentation, INVENTORY_STATUS } from "@/lib/inventoryHelpers";
 
@@ -214,10 +215,12 @@ export default function ProductView({ initialProduct, sourceCategory }) {
         content_name: product.title || "",
         content_type: "product",
       });
+      const tiktokViewVariant = findTikTokVariant(product, selectedColor, selectedSize);
+      const tiktokViewSkuId = getTikTokSkuId(productHandle, tiktokViewVariant);
       ttTrack("ViewContent", {
         value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
         currency: "EGP",
-        content_ids: [getCatalogId(productHandle, selectedColor)],
+        content_ids: [tiktokViewSkuId],
         content_name: product.title || "",
         content_type: "product",
       }); // TikTok — مستقل تمامًا عن fbTrack أعلاه
@@ -720,7 +723,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   ttTrack("AddToCart", {
     value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
     currency: "EGP",
-    content_ids: [getCatalogId(product.handle || id || product.id, selectedColor)],
+    content_ids: [getTikTokSkuId(product.handle || id || product.id, findTikTokVariant(product, selectedColor, selectedSize))],
     content_name: product.title || "",
     content_type: "product",
     num_items: quantity,
@@ -803,7 +806,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   ttTrack("AddToCart", {
     value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
     currency: "EGP",
-    content_ids: [getCatalogId(product.handle || id || product.id, selectedColor)],
+    content_ids: [getTikTokSkuId(product.handle || id || product.id, findTikTokVariant(product, selectedColor, selectedSize))],
     content_name: product.title || "",
     content_type: "product",
     num_items: quantity,
@@ -1057,7 +1060,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   ttTrack("AddToCart", {
     value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
     currency: "EGP",
-    content_ids: [getCatalogId(product.handle || id || product.id, selectedColor)],
+    content_ids: [getTikTokSkuId(product.handle || id || product.id, findTikTokVariant(product, selectedColor, selectedSize))],
     content_name: product.title || "",
     content_type: "product",
     num_items: quantity,

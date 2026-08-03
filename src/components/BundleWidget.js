@@ -7,6 +7,7 @@ import { getInventoryPresentation } from "@/lib/inventoryHelpers";
 import { fbTrack } from "@/lib/fbTrack";
 import { ttTrack } from "@/lib/ttTrack";
 import { getCatalogId } from "@/lib/catalogId";
+import { getTikTokSkuId } from "@/lib/tiktokCatalogId";
 
 // ─── لوحة التحكم ──────────────────────────────────────────────
 const DEFAULT_DISCOUNT_PERCENT    = 0;
@@ -91,7 +92,7 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
               ? getInventoryPresentation(matchedVariant.inventoryStatus, { quantity: matchedVariant.quantity })
               : getInventoryPresentation(legacyAvailable ? "IN_STOCK" : "OUT_OF_STOCK", {}))
           : getInventoryPresentation("IN_STOCK", {}); // بيانات غير مكتملة → افتراضي متاح
-        result.push({ label, img, color, size, available: presentation.canPurchase, presentation });
+        result.push({ label, img, color, size, variantId: matchedVariant?.variantId || "", available: presentation.canPurchase, presentation });
       });
     });
     return result;
@@ -150,7 +151,7 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
                           : getInventoryPresentation(legacyAvailable ? "IN_STOCK" : "OUT_OF_STOCK", {}))
                       : getInventoryPresentation("IN_STOCK", {}); // fallback: بيانات غير مكتملة
                     const available = presentation.canPurchase;
-                    variants.push({ label, img, color, size, price: parseFloat(d.price || 0), available, presentation });
+                    variants.push({ label, img, color, size, variantId: matchedVariant?.variantId || "", price: parseFloat(d.price || 0), available, presentation });
                   });
                 });
               }
@@ -239,6 +240,7 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
       compareAtPrice:      effectiveDiscount > 0 ? Math.round(mainPrice) : undefined,
       qty:                 mainQty,
       bundleFreeShipping:  bundleFreeShipping || undefined,
+      tiktokSkuId:          selectedMainVariant?.variantId ? getTikTokSkuId(product.handle || product.id, { variantId: selectedMainVariant.variantId }) : undefined,
     });
 
     // المنتجات المقترحة
@@ -260,6 +262,7 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
         selectedColor:      variant.color || "",
         qty:                st.qty || 1,
         bundleFreeShipping: bundleFreeShipping || undefined,
+        tiktokSkuId:       variant.variantId ? getTikTokSkuId(up.id, { variantId: variant.variantId }) : undefined,
       });
     });
 
@@ -297,10 +300,24 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
       content_type: "product",
       num_items: trackedNumItems,
     });
+    const trackedTikTokContentIds = [
+      selectedMainVariant?.variantId
+        ? getTikTokSkuId(product.handle || product.id, { variantId: selectedMainVariant.variantId })
+        : getTikTokSkuId(product.handle || product.id),
+    ];
+    upsells.forEach((up, i) => {
+      const st = upsellStates[i];
+      if (!st?.checked) return;
+      const variant = up.variants[st.variantIdx];
+      if (!variant?.available) return;
+      trackedTikTokContentIds.push(
+        variant.variantId ? getTikTokSkuId(up.id, { variantId: variant.variantId }) : getTikTokSkuId(up.id)
+      );
+    });
     ttTrack("AddToCart", {
       value: total,
       currency: "EGP",
-      content_ids: trackedContentIds,
+      content_ids: trackedTikTokContentIds,
       content_type: "product",
       num_items: trackedNumItems,
     }); // TikTok — مستقل تمامًا عن fbTrack أعلاه
