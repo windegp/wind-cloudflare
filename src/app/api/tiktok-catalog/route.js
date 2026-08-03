@@ -227,20 +227,36 @@ export async function GET() {
             ),
           ];
 
-          const inventoryStatus = v.inventoryStatus?.stringValue;
-          const image =
-            (colorValue && colorSwatches[colorValue]) ||
-            images[0] ||
-            "";
+          const colorVariants = variants.filter((cv) => {
+  const cvColor = cv.color?.stringValue ?? "";
+  return cvColor.trim().toLowerCase() === colorKey;
+});
+
+const anyColorAvailable = colorVariants.some((cv) => {
+  const status = cv.inventoryStatus?.stringValue;
+  return status === "IN_STOCK" || status === "LOW_STOCK" || status === "PREORDER";
+});
+
+const inventoryStatus = anyColorAvailable ? "IN_STOCK" : "OUT_OF_STOCK";
+const image = (colorValue && colorSwatches[colorValue]) || images[0] || "";
 
           rows.push({
             sku_id: getCatalogId(handle, colorValue),
             item_group_id: handle,
             title,
             description: cleanDescription,
-            color: colorValue || undefined,
-            size: colorSizes.length > 0 ? colorSizes.join(", ") : undefined,
-            availability: ttAvailability(inventoryStatus),
+           color: colorValue || undefined,
+size: colorVariants
+  .filter((cv) => {
+    const status = cv.inventoryStatus?.stringValue;
+    return status === "IN_STOCK" || status === "LOW_STOCK" || status === "PREORDER";
+  })
+  .map((cv) => cv.size?.stringValue ?? "")
+  .map((size) => size.trim())
+  .filter(Boolean)
+  .filter((size, index, arr) => arr.indexOf(size) === index)
+  .join(", "),
+availability: ttAvailability(inventoryStatus),
             condition: "new",
             price: `${price.toFixed(2)} EGP`,
             link: colorValue
@@ -280,8 +296,8 @@ export async function GET() {
       <g:title>${escapeXml(r.title)}</g:title>
       <g:description>${escapeXml(r.description)}</g:description>
            ${r.color ? `<g:color>${escapeXml(r.color)}</g:color>` : ""}
-      ${r.size ? `<g:size>${escapeXml(r.size)}</g:size>` : ""}
-      <g:availability>${escapeXml(r.availability)}</g:availability>
+${r.size ? `<g:size>${escapeXml(r.size)}</g:size>` : ""}
+<g:availability>
       <g:condition>${escapeXml(r.condition)}</g:condition>
       <g:price>${escapeXml(r.price)}</g:price>
       <g:link>${escapeXml(r.link)}</g:link>
