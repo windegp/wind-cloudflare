@@ -211,34 +211,29 @@ export async function GET() {
           }
 
           // اجمع كل المقاسات المتاحة لهذا اللون فقط.
-          const colorSizes = [
-            ...new Set(
-              variants
-                .filter((variant) => {
-                  const variantColor = getVariantColorValue(variant);
-                  return (
-                    variantColor.trim().toLowerCase() === colorKey &&
-                    variant.inventoryStatus?.stringValue &&
-                    ttAvailability(variant.inventoryStatus.stringValue) !== "out of stock"
-                  );
-                })
-                .map((variant) => getVariantSizeValue(variant).trim())
-                .filter(Boolean)
-            ),
-          ];
-
+          const colorSizes = [];
           const colorVariants = variants.filter((cv) => {
-  const cvColor = cv.color?.stringValue ?? "";
+  const cvColor = getVariantColorValue(cv);
   return cvColor.trim().toLowerCase() === colorKey;
 });
 
 const anyColorAvailable = colorVariants.some((cv) => {
   const status = cv.inventoryStatus?.stringValue;
-  return status === "IN_STOCK" || status === "LOW_STOCK" || status === "PREORDER";
+  return (
+    status === "IN_STOCK" ||
+    status === "LOW_STOCK" ||
+    status === "PREORDER"
+  );
 });
 
-const inventoryStatus = anyColorAvailable ? "IN_STOCK" : "OUT_OF_STOCK";
-const image = (colorValue && colorSwatches[colorValue]) || images[0] || "";
+const inventoryStatus = anyColorAvailable
+  ? "IN_STOCK"
+  : "OUT_OF_STOCK";
+
+const image =
+  (colorValue && colorSwatches[colorValue]) ||
+  images[0] ||
+  "";
 
           rows.push({
             sku_id: getCatalogId(handle, colorValue),
@@ -249,10 +244,13 @@ const image = (colorValue && colorSwatches[colorValue]) || images[0] || "";
 size: colorVariants
   .filter((cv) => {
     const status = cv.inventoryStatus?.stringValue;
-    return status === "IN_STOCK" || status === "LOW_STOCK" || status === "PREORDER";
+    return (
+      status === "IN_STOCK" ||
+      status === "LOW_STOCK" ||
+      status === "PREORDER"
+    );
   })
-  .map((cv) => cv.size?.stringValue ?? "")
-  .map((size) => size.trim())
+  .map((cv) => getVariantSizeValue(cv).trim())
   .filter(Boolean)
   .filter((size, index, arr) => arr.indexOf(size) === index)
   .join(", "),
@@ -295,9 +293,9 @@ availability: ttAvailability(inventoryStatus),
       <g:item_group_id>${escapeXml(r.item_group_id)}</g:item_group_id>
       <g:title>${escapeXml(r.title)}</g:title>
       <g:description>${escapeXml(r.description)}</g:description>
-           ${r.color ? `<g:color>${escapeXml(r.color)}</g:color>` : ""}
-${r.size ? `<g:size>${escapeXml(r.size)}</g:size>` : ""}
-<g:availability>
+                ${r.color ? `<g:color>${escapeXml(r.color)}</g:color>` : ""}
+      ${r.size ? `<g:size>${escapeXml(r.size)}</g:size>` : ""}
+      <g:availability>${escapeXml(r.availability)}</g:availability>
       <g:condition>${escapeXml(r.condition)}</g:condition>
       <g:price>${escapeXml(r.price)}</g:price>
       <g:link>${escapeXml(r.link)}</g:link>
