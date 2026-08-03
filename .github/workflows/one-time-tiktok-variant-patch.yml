@@ -1,0 +1,120 @@
+name: One-time TikTok variant matching patch
+
+on:
+  push:
+    branches: [fix/tiktok-catalog-variant-schema-matching]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[tiktok-patched]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/tiktok-catalog-variant-schema-matching
+          fetch-depth: 0
+
+      - name: Patch ProductView TikTok IDs
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          path = Path('src/app/products/[id]/ProductView.js')
+          text = path.read_text(encoding='utf-8')
+
+          if 'TIKTOK_VARIANT_MATCHING_PHASE1' in text:
+              raise SystemExit(0)
+
+          text = text.replace(
+              'import { getCatalogId } from "@/lib/catalogId";\n',
+              'import { getCatalogId } from "@/lib/catalogId";\nimport { findTikTokVariant, getTikTokSkuId } from "@/lib/tiktokCatalogId"; // TIKTOK_VARIANT_MATCHING_PHASE1\n',
+              1,
+          )
+
+          old_view = '''      ttTrack("ViewContent", {\n        value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,\n        currency: "EGP",\n        content_ids: [getCatalogId(productHandle, selectedColor)],\n        content_name: product.title || "",\n        content_type: "product",\n      }); // TikTok — مستقل تمامًا عن fbTrack أعلاه'''
+          new_view = '''      const tiktokViewVariant = findTikTokVariant(product, selectedColor, selectedSize);\n      const tiktokViewSkuId = getTikTokSkuId(productHandle, tiktokViewVariant);\n      ttTrack("ViewContent", {\n        value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,\n        currency: "EGP",\n        content_ids: [tiktokViewSkuId],\n        content_name: product.title || "",\n        content_type: "product",\n      }); // TikTok — مستقل تمامًا عن fbTrack أعلاه'''
+          if old_view not in text:
+              raise SystemExit('ProductView ViewContent block not found')
+          text = text.replace(old_view, new_view, 1)
+
+          pattern = re.compile(
+              r'(ttTrack\("AddToCart", \{.*?\n\s*content_ids: )\[getCatalogId\(product\.handle \|\| id \|\| product\.id, selectedColor\)\](,\n\s*content_name:)',
+              re.S,
+          )
+          replacement = r'\1[getTikTokSkuId(product.handle || id || product.id, findTikTokVariant(product, selectedColor, selectedSize))]\2'
+          text, count = pattern.subn(replacement, text)
+          if count != 3:
+              raise SystemExit(f'Expected 3 ProductView TikTok AddToCart blocks, patched {count}')
+
+          path.write_text(text, encoding='utf-8')
+
+      - name: Patch QuickView and Bundle TikTok IDs
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          qv = Path('src/components/QuickViewModal.js')
+          text = qv.read_text(encoding='utf-8')
+          text = text.replace(
+              'import { getCatalogId } from "@/lib/catalogId";\n',
+              'import { getCatalogId } from "@/lib/catalogId";\nimport { getTikTokSkuId } from "@/lib/tiktokCatalogId";\n',
+              1,
+          )
+          text = text.replace(
+              'content_ids:  [getCatalogId(handle, qvSelectedColor)],\n      content_name:',
+              'content_ids:  [getTikTokSkuId(handle, selectedVariant)],\n      content_name:',
+              1,
+          )
+          qv.write_text(text, encoding='utf-8')
+
+          bundle = Path('src/components/BundleWidget.js')
+          text = bundle.read_text(encoding='utf-8')
+          text = text.replace(
+              'import { getCatalogId } from "@/lib/catalogId";\n',
+              'import { getCatalogId } from "@/lib/catalogId";\nimport { getTikTokSkuId } from "@/lib/tiktokCatalogId";\n',
+              1,
+          )
+
+          # Preserve variantId in bundle choices so the TikTok event can use the
+          # same stable SKU that the catalog emits.
+          text = text.replace(
+              'result.push({ label, img, color, size, available: presentation.canPurchase, presentation });',
+              'result.push({ label, img, color, size, variantId: matchedVariant?.variantId || "", available: presentation.canPurchase, presentation });',
+              1,
+          )
+          text = text.replace(
+              'variants.push({ label, img, color, size, price: parseFloat(d.price || 0), available, presentation });',
+              'variants.push({ label, img, color, size, variantId: matchedVariant?.variantId || "", price: parseFloat(d.price || 0), available, presentation });',
+              1,
+          )
+          text = text.replace(
+              'bundleFreeShipping:  bundleFreeShipping || undefined,\n    });',
+              'bundleFreeShipping:  bundleFreeShipping || undefined,\n      tiktokSkuId:          selectedMainVariant?.variantId ? getTikTokSkuId(product.handle || product.id, { variantId: selectedMainVariant.variantId }) : undefined,\n    });',
+              1,
+          )
+          text = text.replace(
+              'bundleFreeShipping: bundleFreeShipping || undefined,\n      });',
+              'bundleFreeShipping: bundleFreeShipping || undefined,\n        tiktokSkuId:       variant.variantId ? getTikTokSkuId(up.id, { variantId: variant.variantId }) : undefined,\n      });',
+              1,
+          )
+
+          old_tt = '''    ttTrack("AddToCart", {\n      value: total,\n      currency: "EGP",\n      content_ids: trackedContentIds,\n      content_type: "product",\n      num_items: trackedNumItems,\n    }); // TikTok — مستقل تمامًا عن fbTrack أعلاه'''
+          new_tt = '''    const trackedTikTokContentIds = [\n      selectedMainVariant?.variantId\n        ? getTikTokSkuId(product.handle || product.id, { variantId: selectedMainVariant.variantId })\n        : getTikTokSkuId(product.handle || product.id),\n    ];\n    upsells.forEach((up, i) => {\n      const st = upsellStates[i];\n      if (!st?.checked) return;\n      const variant = up.variants[st.variantIdx];\n      if (!variant?.available) return;\n      trackedTikTokContentIds.push(\n        variant.variantId ? getTikTokSkuId(up.id, { variantId: variant.variantId }) : getTikTokSkuId(up.id)\n      );\n    });\n    ttTrack("AddToCart", {\n      value: total,\n      currency: "EGP",\n      content_ids: trackedTikTokContentIds,\n      content_type: "product",\n      num_items: trackedNumItems,\n    }); // TikTok — مستقل تمامًا عن fbTrack أعلاه'''
+          if old_tt not in text:
+              raise SystemExit('Bundle TikTok AddToCart block not found')
+          text = text.replace(old_tt, new_tt, 1)
+          bundle.write_text(text, encoding='utf-8')
+
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/app/products/'[id]'/ProductView.js src/components/QuickViewModal.js src/components/BundleWidget.js
+          git diff --cached --quiet && exit 0
+          git commit -m "fix(tiktok): align storefront variant events with catalog [tiktok-patched]"
+          git push origin HEAD:fix/tiktok-catalog-variant-schema-matching
