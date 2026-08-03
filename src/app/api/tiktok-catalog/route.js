@@ -211,7 +211,6 @@ export async function GET() {
           }
 
           // اجمع كل المقاسات المتاحة لهذا اللون فقط.
-          const colorSizes = [];
           const colorVariants = variants.filter((cv) => {
   const cvColor = getVariantColorValue(cv);
   return cvColor.trim().toLowerCase() === colorKey;
