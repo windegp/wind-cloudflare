@@ -208,12 +208,10 @@ export default function CheckoutPage() {
       value: finalTotal,
       currency: "EGP",
       num_items: cartItems.reduce((s, it) => s + it.qty, 0),
-      // 🔥 نفس getCatalogId المستخدَمة في الكتالوج و ProductView.js — كل
-      // عنصر في السلة يحمل selectedColor بالفعل (مخزَّن من addToCart)،
-      // فنستخدمه لتوليد نفس g:id الخاص بلونه بالضبط.
+      // Meta Catalog ID — لا يتغير.
       content_ids: cartItems
         .filter(it => it.handle || it.id)
-        .map(it => getTikTokSkuIdForItem(it)),
+        .map(it => getCatalogId(it.handle || it.id, it.selectedColor)),
     });
     ttTrack("InitiateCheckout", {
       value: finalTotal,
@@ -221,7 +219,7 @@ export default function CheckoutPage() {
       num_items: cartItems.reduce((s, it) => s + it.qty, 0),
       content_ids: cartItems
         .filter(it => it.handle || it.id)
-        .map(it => getCatalogId(it.handle || it.id, it.selectedColor)),
+        .map(it => getTikTokSkuIdForItem(it)),
     }); // TikTok — مستقل تمامًا عن fbTrack أعلاه
     gaBeginCheckout(cartItems, finalTotal);
   }
@@ -640,6 +638,9 @@ export default function CheckoutPage() {
         const purchaseContentIds = cartItems
           .filter(it => it.handle || it.id)
           .map(it => getCatalogId(it.handle || it.id, it.selectedColor));
+        const purchaseTikTokContentIds = cartItems
+          .filter(it => it.handle || it.id)
+          .map(it => getTikTokSkuIdForItem(it));
         const purchaseNumItems = cartItems.reduce((s, it) => s + it.qty, 0);
         const purchaseCartSnapshot = cartItems.map(it => ({
           id: it.handle || it.id || it.title,
@@ -685,7 +686,7 @@ export default function CheckoutPage() {
         ttTrack("CompletePayment", {
           value: finalTotal,
           currency: "EGP",
-          content_ids: purchaseContentIds,
+          content_ids: purchaseTikTokContentIds,
           num_items: purchaseNumItems,
           order_id: orderId,
           ...buildTtUserData(formData),

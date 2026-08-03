@@ -65,9 +65,7 @@ function SuccessContent() {
         event_id: `Purchase-${parsed.orderId}`,   // ثابت → Meta تُلغي التكرار
         value: parsed.total || 0,
         currency: "EGP",
-        // 🔥 نفس getCatalogId المستخدَمة في الكتالوج و ProductView.js —
-        // it.selectedColor محفوظ فعلاً في cartItems الخام (من CartContext)،
-        // فنستخدمه لتوليد نفس g:id الخاص بلون هذا العنصر بالضبط.
+        // Meta Catalog ID — لا يتغير.
         content_ids: (parsed.cartItems || [])
           .filter(it => it.handle || it.id)
           .map(it => getTikTokSkuIdForItem(it)),
