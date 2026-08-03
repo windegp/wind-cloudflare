@@ -1,14 +1,9 @@
 // lib/ttTrack.js
-//
-// طبقة تتبّع TikTok مستقلة تمامًا عن Meta (fbTrack.js). لا تشارك أي:
-// event_id، external_id، cookies، أو دوال مع منظومة Meta — فقط نفس الفلسفة
-// المعمارية (Dual Fire: Browser Pixel + Events API بنفس event_id الخاص
-// بـ TikTok وحده، عبر نقطة استدعاء واحدة موحّدة).
-//
-// Pixel: TikTok Pixel 07/2026 — D4K5SMBC77U6QK8E5OMG (مُهيَّأ في layout.js فقط).
+// Independent TikTok tracking layer. TikTok owns its own SKU namespace.
 
-// 🔥 مولّد event_id مستقل تمامًا عن generateEventId() الموجودة في fbTrack.js —
-// لا يُستدعى أي كود من fbTrack.js من هذا الملف إطلاقًا.
+import { getCatalogId } from "@/lib/catalogId";
+import { getTikTokSkuIdForItem } from "@/lib/tiktokCatalogId";
+
 function generateTtEventId(eventName) {
   return `tt-${eventName}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -19,53 +14,29 @@ function readCookie(name) {
   return match ? decodeURIComponent(match[1]) : undefined;
 }
 
-// 🔥 نفس الدرس المُستفاد من waitForFbc() في fbTrack.js (تجنّب فقدان معرّف
-// النقرة الإعلانية بسبب توقيت تحميل سكريبت المنصة) — لكن دالة مستقلة تمامًا
-// هنا، مبنية لـ TikTok تحديدًا (_ttp بدل _fbc، ttclid بدل fbclid).
 const TTP_POLL_INTERVAL_MS = 50;
 const TTP_MAX_WAIT_MS = 500;
-
 function waitForTtp() {
   return new Promise((resolve) => {
     const existing = readCookie("_ttp");
-    if (existing) {
-      resolve(existing);
-      return;
-    }
+    if (existing) { resolve(existing); return; }
     let hasTtclid = false;
-    try {
-      hasTtclid = new URLSearchParams(window.location.search).has("ttclid");
-    } catch {
-      hasTtclid = false;
-    }
-    if (!hasTtclid) {
-      resolve(undefined);
-      return;
-    }
+    try { hasTtclid = new URLSearchParams(window.location.search).has("ttclid"); } catch { hasTtclid = false; }
+    if (!hasTtclid) { resolve(undefined); return; }
     let elapsed = 0;
     const interval = setInterval(() => {
       const ttp = readCookie("_ttp");
       elapsed += TTP_POLL_INTERVAL_MS;
-      if (ttp || elapsed >= TTP_MAX_WAIT_MS) {
-        clearInterval(interval);
-        resolve(ttp);
-      }
+      if (ttp || elapsed >= TTP_MAX_WAIT_MS) { clearInterval(interval); resolve(ttp); }
     }, TTP_POLL_INTERVAL_MS);
   });
 }
 
 function getTtclidFromUrl() {
   if (typeof window === "undefined") return undefined;
-  try {
-    return new URLSearchParams(window.location.search).get("ttclid") || undefined;
-  } catch {
-    return undefined;
-  }
+  try { return new URLSearchParams(window.location.search).get("ttclid") || undefined; } catch { return undefined; }
 }
 
-// 🔥 معرّف متصفح مجهول خاص بـ TikTok فقط — مفتاح تخزين مستقل تمامًا عن
-// wind_external_id الخاص بـ Meta (لا مشاركة قيمة ولا مفتاح). القرار
-// المعماري: لا نخلط هوية المنصتين، حتى لو كانت الآلية متشابهة شكليًا.
 function getOrCreateTtExternalId() {
   if (typeof window === "undefined") return undefined;
   try {
@@ -75,22 +46,15 @@ function getOrCreateTtExternalId() {
       localStorage.setItem("wind_tt_external_id", id);
     }
     return id;
-  } catch {
-    return undefined;
-  }
+  } catch { return undefined; }
 }
 
-// 🔥 بناء بيانات هوية العميل الحقيقية (لحظة توفرها فقط — بلا بيانات مصطنعة)
-// خاص بـ TikTok، مستقل تمامًا عن buildCheckoutMetaUserData في metaEventData.js.
-// يُعيد قيمًا خامًا (غير مُجزَّأة) — التجزئة SHA-256 تتم في /api/tt-track/route.js
-// بنفس فلسفة fbTrack.js (hashing على السيرفر لا على المتصفح).
 export function buildTtUserData(formData = {}, fallback = {}) {
   const data = {};
   const add = (key, value) => {
     if (value === undefined || value === null) return;
     const normalized = String(value).trim();
-    if (!normalized) return;
-    data[key] = normalized;
+    if (normalized) data[key] = normalized;
   };
   add("email", formData.email || fallback.email);
   add("phone", formData.phone || fallback.phone);
@@ -99,23 +63,40 @@ export function buildTtUserData(formData = {}, fallback = {}) {
   return data;
 }
 
-// 🔥 الحقول المسموح بها فقط — نفس فلسفة الـ Whitelist الصريحة في fbTrack.js
-// (concept فقط، قائمة مستقلة هنا).
 const ALLOWED_FIELDS = [
   "value", "currency", "content_ids", "content_name", "content_type",
   "num_items", "order_id", "email", "phone", "first_name", "last_name",
 ];
 
+// Backward-compatible boundary: if an older caller still supplies a Meta
+// getCatalogId(), translate it to the exact TikTok sku_id from the cart.
+// Canonical TikTok IDs are left unchanged. If no cart mapping exists, do not
+// guess; preserve the supplied ID.
+function normalizeTikTokCatalogIds(data) {
+  if (typeof window === "undefined" || !Array.isArray(data?.content_ids)) return data;
+  try {
+    const saved = JSON.parse(localStorage.getItem("wind_cart") || "[]");
+    if (!Array.isArray(saved) || !saved.length) return data;
+    const map = new Map();
+    for (const item of saved) {
+      const handle = item.handle || item.id;
+      if (!handle) continue;
+      const metaId = getCatalogId(handle, item.selectedColor);
+      const ttSku = getTikTokSkuIdForItem(item);
+      if (metaId && ttSku) map.set(String(metaId), String(ttSku));
+    }
+    if (!map.size) return data;
+    return { ...data, content_ids: data.content_ids.map(id => map.get(String(id)) || id) };
+  } catch {
+    return data;
+  }
+}
+
 function buildContents(data) {
   const ids = Array.isArray(data.content_ids) ? data.content_ids.filter(Boolean) : [];
-  if (ids.length === 0) return [];
+  if (!ids.length) return [];
   const perItemQty = ids.length === 1 ? (data.num_items || 1) : 1;
-  // ⚠️ توزيع تقريبي للسعر عبر العناصر المتعددة — البيانات الحالية المشتركة
-  // مع fbTrack() لا تحمل سعرًا منفصلًا لكل عنصر في حالة عربة متعددة
-  // المنتجات (نفس القيد الموجود أصلًا في شكل البيانات، لم نخترعه هنا).
-  const perItemPrice = ids.length > 0 && typeof data.value === "number"
-    ? Number((data.value / ids.length).toFixed(2))
-    : undefined;
+  const perItemPrice = ids.length && typeof data.value === "number" ? Number((data.value / ids.length).toFixed(2)) : undefined;
   return ids.map((id) => ({
     content_id: id,
     content_type: data.content_type || "product",
@@ -125,48 +106,23 @@ function buildContents(data) {
   }));
 }
 
-/**
- * نقطة الاستدعاء الموحّدة الوحيدة لكل أحداث TikTok — Dual Fire (Browser + Events API)
- * بنفس event_id الخاص بـ TikTok وحده.
- *
- * الشكل المقبول لـ `data` هو نفس الشكل المُمرَّر أصلًا لـ fbTrack() في كل نقاط
- * الاستدعاء الحالية (content_ids, content_name, content_type, value, currency,
- * num_items, order_id) — إعادة استخدام لنفس الكائن، وليس لأي كود أو منطق من
- * fbTrack.js نفسه. أي حقل خارج ALLOWED_FIELDS (مثل event_id أو em/ph المُجزَّأة
- * الخاصة بـ Meta) يُتجاهَل عمدًا هنا — TikTok event_id يُولَّد دائمًا محليًا.
- */
-// 🔥 اسم WIND الداخلي "PageView" لا يطابق اسم الحدث القياسي لدى TikTok
-// ("Page") — هذا التحويل الوحيد المطلوب؛ باقي الأحداث (ViewContent,
-// AddToCart, InitiateCheckout, CompletePayment) أسماؤها الداخلية مطابقة
-// أصلاً لأسماء TikTok الرسمية، فلا تحتاج أي تحويل.
 const TT_EVENT_NAME_MAP = { PageView: "Page" };
 
 export async function ttTrack(eventName, rawData = {}) {
   if (typeof window === "undefined") return;
 
-  const data = {};
-  for (const key of ALLOWED_FIELDS) {
-    if (rawData[key] !== undefined) data[key] = rawData[key];
-  }
+  const data = normalizeTikTokCatalogIds(Object.fromEntries(
+    ALLOWED_FIELDS.filter(key => rawData[key] !== undefined).map(key => [key, rawData[key]])
+  ));
 
-  // event_id: لا نقبل أبدًا أي event_id قادم من الخارج (حتى لو كان موجودًا في
-  // rawData بسبب مشاركة نفس الكائن مع استدعاء fbTrack المجاور) — TikTok
-  // event_id مسؤولية هذا الملف فقط. يُبنى من eventName الأصلي كما هو
-  // (بلا تغيير في هذا المنطق إطلاقًا).
   const eventId = eventName === "CompletePayment" && data.order_id
     ? `tt-CompletePayment-${data.order_id}`
     : generateTtEventId(eventName);
-
-  // اسم الحدث الفعلي المُرسَل لـ TikTok (بعد التحويل عند الحاجة فقط) —
-  // يُستخدَم حصريًا في نقطتي الإرسال أدناه (Browser + Events API)، وليس في
-  // توليد event_id أعلاه.
   const ttEventName = TT_EVENT_NAME_MAP[eventName] || eventName;
-
   const ttp = await waitForTtp();
   const ttclid = getTtclidFromUrl();
   const externalId = getOrCreateTtExternalId();
 
-  // 1) Browser Pixel
   try {
     if (typeof window.ttq !== "undefined") {
       window.ttq.track(ttEventName, {
@@ -177,11 +133,8 @@ export async function ttTrack(eventName, rawData = {}) {
         order_id: data.order_id,
       }, { event_id: eventId });
     }
-  } catch {
-    // صامت — لا نكسر تجربة المستخدم لخطأ في التتبع
-  }
+  } catch {}
 
-  // 2) Events API (Server-side) — نفس event_id بالضبط
   const payload = {
     event: ttEventName,
     event_id: eventId,
@@ -204,19 +157,9 @@ export async function ttTrack(eventName, rawData = {}) {
   const body = JSON.stringify(payload);
   try {
     const blob = new Blob([body], { type: "application/json" });
-    const queued = navigator.sendBeacon(endpoint, blob);
-    if (queued) return;
-  } catch {
-    // sendBeacon غير متاح — fallback أدناه
-  }
+    if (navigator.sendBeacon(endpoint, blob)) return;
+  } catch {}
   try {
-    fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body,
-      keepalive: true,
-    }).catch(() => {});
-  } catch {
-    // صامت
-  }
+    fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true }).catch(() => {});
+  } catch {}
 }
