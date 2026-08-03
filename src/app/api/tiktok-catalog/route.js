@@ -111,11 +111,97 @@ export async function GET() {
         // adds a standardized Google Product Category without changing Firestore.
         const googleProductCategory = getGoogleProductCategory(rawProductType || productType);
 
+               // ── قراءة أسماء الخيارات على مستوى المنتج ────────────────────────
+        // نفس منطق fb-catalog: نحدد أي option هو Color وأي option هو Size.
+        const productOptions = fArrMaps("options");
+
+        const isColorOptName = (name = "") => {
+          const n = name.toLowerCase().trim();
+          return (
+            n.includes("color") ||
+            n.includes("colour") ||
+            n.includes("لون") ||
+            n.includes("الوان")
+          );
+        };
+
+        const isSizeOptName = (name = "") => {
+          const n = name.toLowerCase().trim();
+          return (
+            n.includes("size") ||
+            n.includes("مقاس") ||
+            n.includes("حجم")
+          );
+        };
+
+        let productColorOptIndex = -1;
+        let productSizeOptIndex = -1;
+
+        for (const opt of productOptions) {
+          const optName = opt["name"]?.stringValue ?? "";
+          const index = productOptions.indexOf(opt);
+
+          if (isColorOptName(optName)) {
+            productColorOptIndex = index === 0 ? 1 : 2;
+          } else if (isSizeOptName(optName)) {
+            productSizeOptIndex = index === 0 ? 1 : 2;
+          }
+        }
+
+        const getVariantColorValue = (v) => {
+          const n1 = v["option1Name"]?.stringValue ?? "";
+          const n2 = v["option2Name"]?.stringValue ?? "";
+
+          if (isColorOptName(n1)) {
+            return v["option1Value"]?.stringValue ?? "";
+          }
+
+          if (isColorOptName(n2)) {
+            return v["option2Value"]?.stringValue ?? "";
+          }
+
+          if (productColorOptIndex === 1) {
+            return v["option1Value"]?.stringValue ?? "";
+          }
+
+          if (productColorOptIndex === 2) {
+            return v["option2Value"]?.stringValue ?? "";
+          }
+
+          return v.color?.stringValue ?? "";
+        };
+
+        const getVariantSizeValue = (v) => {
+          const n1 = v["option1Name"]?.stringValue ?? "";
+          const n2 = v["option2Name"]?.stringValue ?? "";
+
+          if (isSizeOptName(n1)) {
+            return v["option1Value"]?.stringValue ?? "";
+          }
+
+          if (isSizeOptName(n2)) {
+            return v["option2Value"]?.stringValue ?? "";
+          }
+
+          if (productSizeOptIndex === 1) {
+            return v["option1Value"]?.stringValue ?? "";
+          }
+
+          if (productSizeOptIndex === 2) {
+            return v["option2Value"]?.stringValue ?? "";
+          }
+
+          return v.size?.stringValue ?? "";
+        };
+
+        // ── TikTok: row واحد لكل لون، والمقاسات داخل size ──────────────
         const colorsSeen = new Set();
         let pushedColorless = false;
+
         for (const v of variants) {
-          const colorValue = v.color?.stringValue ?? "";
+          const colorValue = getVariantColorValue(v);
           const colorKey = colorValue.trim().toLowerCase();
+
           if (colorValue) {
             if (colorsSeen.has(colorKey)) continue;
             colorsSeen.add(colorKey);
@@ -124,8 +210,28 @@ export async function GET() {
             pushedColorless = true;
           }
 
+          // اجمع كل المقاسات المتاحة لهذا اللون فقط.
+          const colorSizes = [
+            ...new Set(
+              variants
+                .filter((variant) => {
+                  const variantColor = getVariantColorValue(variant);
+                  return (
+                    variantColor.trim().toLowerCase() === colorKey &&
+                    variant.inventoryStatus?.stringValue &&
+                    ttAvailability(variant.inventoryStatus.stringValue) !== "out of stock"
+                  );
+                })
+                .map((variant) => getVariantSizeValue(variant).trim())
+                .filter(Boolean)
+            ),
+          ];
+
           const inventoryStatus = v.inventoryStatus?.stringValue;
-          const image = (colorValue && colorSwatches[colorValue]) || images[0] || "";
+          const image =
+            (colorValue && colorSwatches[colorValue]) ||
+            images[0] ||
+            "";
 
           rows.push({
             sku_id: getCatalogId(handle, colorValue),
@@ -133,6 +239,7 @@ export async function GET() {
             title,
             description: cleanDescription,
             color: colorValue || undefined,
+            size: colorSizes.length > 0 ? colorSizes.join(", ") : undefined,
             availability: ttAvailability(inventoryStatus),
             condition: "new",
             price: `${price.toFixed(2)} EGP`,
@@ -172,7 +279,8 @@ export async function GET() {
       <g:item_group_id>${escapeXml(r.item_group_id)}</g:item_group_id>
       <g:title>${escapeXml(r.title)}</g:title>
       <g:description>${escapeXml(r.description)}</g:description>
-      ${r.color ? `<g:color>${escapeXml(r.color)}</g:color>` : ""}
+           ${r.color ? `<g:color>${escapeXml(r.color)}</g:color>` : ""}
+      ${r.size ? `<g:size>${escapeXml(r.size)}</g:size>` : ""}
       <g:availability>${escapeXml(r.availability)}</g:availability>
       <g:condition>${escapeXml(r.condition)}</g:condition>
       <g:price>${escapeXml(r.price)}</g:price>
