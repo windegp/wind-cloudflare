@@ -36,10 +36,26 @@ function slugify(value = "") {
 }
 
 function variantId(handle, color = "", size = "") {
-  const parts = [handle];
-  if (color) parts.push(slugifyColor(color));
-  if (size) parts.push(slugify(size));
-  return parts.join("-");
+  const base = String(handle || "").trim();
+  const colorPart = color ? slugifyColor(color) : "";
+  const sizePart = size ? slugify(size) : "";
+
+  const variantKey = [colorPart, sizePart].filter(Boolean).join("-");
+  const rawId = variantKey ? `${base}-${variantKey}` : base;
+
+  if (rawId.length <= 50) {
+    return rawId;
+  }
+
+  const hash = Array.from(rawId)
+    .reduce((hash, char) => ((hash << 5) - hash + char.charCodeAt(0)) | 0, 0)
+    .toString(36)
+    .replace("-", "");
+
+  const suffix = `-${hash.slice(0, 8)}`;
+  const maxBaseLength = 50 - suffix.length;
+
+  return `${rawId.slice(0, maxBaseLength)}${suffix}`;
 }
 
 function buildVariantOption(name, value) {
@@ -325,8 +341,8 @@ export async function GET() {
           const variantPrice = variant.price?.stringValue || basePrice;
           const variantCompareAt = variant.compareAtPrice?.stringValue || compareAtPrice;
           const variantImage = color
-            ? colorSwatches[slugifyColor(color)] || colorSwatches[color] || mainImage
-            : mainImage;
+  ? colorSwatches[slugifyColor(color)] || colorSwatches[color] || mainImage
+  : mainImage;
           const additionalImages = images.filter((image) => image !== variantImage).slice(0, 10);
           const colorLabel = color || "";
           const availability = variantAvailability(variant);
