@@ -87,6 +87,7 @@ export async function GET() {
         const rawDescription = f("description") || seoDescription || "";
         const cleanDescription = htmlToPlainText(rawDescription);
         const price = parseFloat(f("price")) || 0;
+        const compareAtPrice = parseFloat(f("compareAtPrice")) || 0;
         const images = rawFields["images"]?.arrayValue?.values?.map((v) => v.stringValue ?? "").filter(Boolean) ?? [];
         const colorSwatches = fMap("colorSwatches");
         const variants = fArrMaps("variants");
@@ -256,10 +257,17 @@ size: colorVariants
 availability: ttAvailability(inventoryStatus),
             condition: "new",
             price: `${price.toFixed(2)} EGP`,
+            sale_price:
+              compareAtPrice > price
+                ? `${price.toFixed(2)} EGP`
+                : undefined,
             link: colorValue
               ? `${SITE_URL}/products/${handle}?color=${encodeURIComponent(colorValue)}`
               : `${SITE_URL}/products/${handle}`,
             image_link: image,
+            additional_image_links: images
+              .filter((img) => img && img !== image)
+              .slice(0, 10),
             brand: BRAND,
             product_type: productType,
             google_product_category: googleProductCategory,
@@ -274,9 +282,16 @@ availability: ttAvailability(inventoryStatus),
             description: cleanDescription,
             availability: "in stock",
             condition: "new",
-            price: `${price.toFixed(2)} EGP`,
+                       price: `${price.toFixed(2)} EGP`,
+            sale_price:
+              compareAtPrice > price
+                ? `${price.toFixed(2)} EGP`
+                : undefined,
             link: `${SITE_URL}/products/${handle}`,
             image_link: images[0] || "",
+            additional_image_links: images
+              .filter((img) => img && img !== images[0])
+              .slice(0, 10),
             brand: BRAND,
             product_type: productType,
             google_product_category: googleProductCategory,
@@ -296,9 +311,17 @@ availability: ttAvailability(inventoryStatus),
       ${r.size ? `<g:size>${escapeXml(r.size)}</g:size>` : ""}
       <g:availability>${escapeXml(r.availability)}</g:availability>
       <g:condition>${escapeXml(r.condition)}</g:condition>
-      <g:price>${escapeXml(r.price)}</g:price>
+            <g:price>${escapeXml(r.price)}</g:price>
+      ${r.sale_price ? `<g:sale_price>${escapeXml(r.sale_price)}</g:sale_price>` : ""}
       <g:link>${escapeXml(r.link)}</g:link>
-      <g:image_link>${escapeXml(r.image_link)}</g:image_link>
+            <g:image_link>${escapeXml(r.image_link)}</g:image_link>
+      ${
+        r.additional_image_links?.length
+          ? r.additional_image_links
+              .map((img) => `<g:additional_image_link>${escapeXml(img)}</g:additional_image_link>`)
+              .join("\n      ")
+          : ""
+      }
       <g:brand>${escapeXml(r.brand)}</g:brand>
       <g:product_type>${escapeXml(r.product_type)}</g:product_type>
       <g:google_product_category>${escapeXml(r.google_product_category)}</g:google_product_category>
