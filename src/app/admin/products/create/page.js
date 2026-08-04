@@ -89,9 +89,13 @@ function CreateProductForm() {
     status: "Active",
     type: "",
     productType: "", // 🔥 Phase 7: الحقل المخصص الجديد لـ Product Type — منفصل تماماً عن Collections/categories
-    vendor: "WIND",
-    selectedCollections: [], 
+       vendor: "WIND",
+    selectedCollections: [],
     tags: "",
+    gender: "",
+    ageGroup: "",
+    material: "",
+    pattern: "",
     themeTemplate: "Default product"
   });
 
@@ -213,9 +217,13 @@ function CreateProductForm() {
               status: data.status || "Active",
               type: data.type || "",
               productType: data.productType || "",
-              vendor: data.vendor || "WIND",
+                           vendor: data.vendor || "WIND",
               selectedCollections: finalSelected,
               tags: data.tags || "",
+              gender: data.gender || "",
+              ageGroup: data.ageGroup || "",
+              material: data.material || "",
+              pattern: data.pattern || "",
               themeTemplate: data.themeTemplate || "Default product"
             });
 
@@ -1240,6 +1248,60 @@ function CreateProductForm() {
                     ))}
                 </select>
               </div>
+                           <div>
+                <label className="block text-xs text-gray-600 mb-1.5">الجنس (Gender)</label>
+                <select
+                  name="gender"
+                  value={productData.gender}
+                  onChange={handleProductChange}
+                  className="w-full bg-white border border-gray-300 px-3 py-2 rounded-lg text-sm outline-none focus:border-[#008060] focus:ring-1 focus:ring-[#008060] text-[#202223]"
+                >
+                  <option value="">-- غير محدد --</option>
+                  <option value="male">رجالي (Male)</option>
+                  <option value="female">نسائي (Female)</option>
+                  <option value="unisex">للجنسين (Unisex)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs text-gray-600 mb-1.5">الفئة العمرية (Age Group)</label>
+                <select
+                  name="ageGroup"
+                  value={productData.ageGroup}
+                  onChange={handleProductChange}
+                  className="w-full bg-white border border-gray-300 px-3 py-2 rounded-lg text-sm outline-none focus:border-[#008060] focus:ring-1 focus:ring-[#008060] text-[#202223]"
+                >
+                  <option value="">-- غير محدد --</option>
+                  <option value="adult">بالغ (Adult)</option>
+                  <option value="teen">مراهق (Teen)</option>
+                  <option value="kids">أطفال (Kids)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs text-gray-600 mb-1.5">الخامة (Material)</label>
+                <input
+                  type="text"
+                  name="material"
+                  value={productData.material}
+                  onChange={handleProductChange}
+                  placeholder="مثال: قطن، بوليستر، صوف"
+                  className="w-full bg-white border border-gray-300 px-3 py-2 rounded-lg text-sm outline-none focus:border-[#008060] focus:ring-1 focus:ring-[#008060] text-[#202223]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-gray-600 mb-1.5">النقشة / التصميم (Pattern)</label>
+                <input
+                  type="text"
+                  name="pattern"
+                  value={productData.pattern}
+                  onChange={handleProductChange}
+                  placeholder="مثال: سادة، مخطط، مموه"
+                  className="w-full bg-white border border-gray-300 px-3 py-2 rounded-lg text-sm outline-none focus:border-[#008060] focus:ring-1 focus:ring-[#008060] text-[#202223]"
+                />
+              </div>
+
               <div>
                 <label className="block text-xs text-gray-600 mb-1.5">المورد (Vendor)</label>
                 <input 
