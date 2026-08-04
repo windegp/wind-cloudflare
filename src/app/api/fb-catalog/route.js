@@ -11,7 +11,7 @@ const SITE_URL = "https://windeg.com";
 const BRAND = "WIND Shopping";
 const CURRENCY = "EGP";
 // 🌟 تم تغيير المفتاح هنا لكسر الكاش القديم تماماً وإجبار السيرفر على التحديث
-const KV_KEY = "fb_catalog_xml_v8";
+const KV_KEY = "fb_catalog_xml_v9";
 
 // اجبار Next.js على عدم كاش الـ Route نفسه في Vercel
 export const dynamic = 'force-dynamic';

@@ -265,11 +265,14 @@ availability: ttAvailability(inventoryStatus),
             age_group: ageGroup || undefined,
             material: material || undefined,
             pattern: pattern || undefined,
-            price: `${price.toFixed(2)} EGP`,
-            sale_price:
-              compareAtPrice > price
-                ? `${price.toFixed(2)} EGP`
-                : undefined,
+            price:
+  compareAtPrice > price
+    ? `${compareAtPrice.toFixed(2)} EGP`
+    : `${price.toFixed(2)} EGP`,
+sale_price:
+  compareAtPrice > price
+    ? `${price.toFixed(2)} EGP`
+    : undefined,
             link: colorValue
               ? `${SITE_URL}/products/${handle}?color=${encodeURIComponent(colorValue)}`
               : `${SITE_URL}/products/${handle}`,
@@ -295,11 +298,14 @@ availability: ttAvailability(inventoryStatus),
             age_group: ageGroup || undefined,
             material: material || undefined,
             pattern: pattern || undefined,
-            price: `${price.toFixed(2)} EGP`,
-            sale_price:
-              compareAtPrice > price
-                ? `${price.toFixed(2)} EGP`
-                : undefined,
+            price:
+  compareAtPrice > price
+    ? `${compareAtPrice.toFixed(2)} EGP`
+    : `${price.toFixed(2)} EGP`,
+sale_price:
+  compareAtPrice > price
+    ? `${price.toFixed(2)} EGP`
+    : undefined,
             link: `${SITE_URL}/products/${handle}`,
             image_link: images[0] || "",
             additional_image_links: images
