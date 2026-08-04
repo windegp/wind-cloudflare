@@ -282,7 +282,7 @@ availability: ttAvailability(inventoryStatus),
             description: cleanDescription,
             availability: "in stock",
             condition: "new",
-                       price: `${price.toFixed(2)} EGP`,
+            price: `${price.toFixed(2)} EGP`,
             sale_price:
               compareAtPrice > price
                 ? `${price.toFixed(2)} EGP`
@@ -311,10 +311,10 @@ availability: ttAvailability(inventoryStatus),
       ${r.size ? `<g:size>${escapeXml(r.size)}</g:size>` : ""}
       <g:availability>${escapeXml(r.availability)}</g:availability>
       <g:condition>${escapeXml(r.condition)}</g:condition>
-            <g:price>${escapeXml(r.price)}</g:price>
+      <g:price>${escapeXml(r.price)}</g:price>
       ${r.sale_price ? `<g:sale_price>${escapeXml(r.sale_price)}</g:sale_price>` : ""}
       <g:link>${escapeXml(r.link)}</g:link>
-            <g:image_link>${escapeXml(r.image_link)}</g:image_link>
+      <g:image_link>${escapeXml(r.image_link)}</g:image_link>
       ${
         r.additional_image_links?.length
           ? r.additional_image_links
