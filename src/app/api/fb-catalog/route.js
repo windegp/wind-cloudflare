@@ -146,7 +146,11 @@ export async function GET() {
           colorSwatches: fMap("colorSwatches"),
           selectedCollections: fArr("selectedCollections"),
           categories: fArr("categories"), // 🔥 المصدر الموثوق — مزامَن مع collections وصفحات العرض، بعكس selectedCollections الذي قد يكون فاضياً لمنتجات قديمة
-          productType: f("productType"), // 🔥 Phase 7: الحقل المخصص الجديد — مستقل تماماً عن ترتيب Collections
+                    productType: f("productType"),
+          gender: f("gender"),
+          ageGroup: f("ageGroup"),
+          material: f("material"),
+          pattern: f("pattern"),
           variants: fArrMaps("variants"),
           seoDescription: rawFields["seo"]?.mapValue?.fields?.description?.stringValue ?? "",
         };
@@ -292,7 +296,11 @@ export async function GET() {
           ? `<g:price>${parseFloat(compareAtPrice).toFixed(2)} ${CURRENCY}</g:price>\n       <g:sale_price>${parseFloat(basePrice).toFixed(2)} ${CURRENCY}</g:sale_price>`
           : `<g:price>${parseFloat(basePrice).toFixed(2)} ${CURRENCY}</g:price>`}
         <g:brand>${BRAND}</g:brand>
-        <g:condition>new</g:condition>
+                <g:condition>new</g:condition>
+        ${p.gender ? `<g:gender>${escapeXml(p.gender)}</g:gender>` : ""}
+        ${p.ageGroup ? `<g:age_group>${escapeXml(p.ageGroup)}</g:age_group>` : ""}
+        ${p.material ? `<g:material>${escapeXml(p.material)}</g:material>` : ""}
+        ${p.pattern ? `<g:pattern>${escapeXml(p.pattern)}</g:pattern>` : ""}
         <g:google_product_category>${escapeXml(googleCategory)}</g:google_product_category>
         <g:product_type>${escapeXml(productType)}</g:product_type>
         ${customLabelsXml}
@@ -342,7 +350,11 @@ export async function GET() {
           ? `<g:price>${parseFloat(compareAtPrice).toFixed(2)} ${CURRENCY}</g:price>\n       <g:sale_price>${parseFloat(basePrice).toFixed(2)} ${CURRENCY}</g:sale_price>`
           : `<g:price>${parseFloat(basePrice).toFixed(2)} ${CURRENCY}</g:price>`}
         <g:brand>${BRAND}</g:brand>
-        <g:condition>new</g:condition>
+                <g:condition>new</g:condition>
+        ${p.gender ? `<g:gender>${escapeXml(p.gender)}</g:gender>` : ""}
+        ${p.ageGroup ? `<g:age_group>${escapeXml(p.ageGroup)}</g:age_group>` : ""}
+        ${p.material ? `<g:material>${escapeXml(p.material)}</g:material>` : ""}
+        ${p.pattern ? `<g:pattern>${escapeXml(p.pattern)}</g:pattern>` : ""}
         <g:google_product_category>${escapeXml(googleCategory)}</g:google_product_category>
         <g:product_type>${escapeXml(productType)}</g:product_type>
         ${customLabelsXml}
@@ -390,7 +402,11 @@ export async function GET() {
           ? `<g:price>${parseFloat(vCompare).toFixed(2)} ${CURRENCY}</g:price>\n       <g:sale_price>${parseFloat(vPrice).toFixed(2)} ${CURRENCY}</g:sale_price>`
           : `<g:price>${parseFloat(vPrice).toFixed(2)} ${CURRENCY}</g:price>`}
         <g:brand>${BRAND}</g:brand>
-        <g:condition>new</g:condition>
+                <g:condition>new</g:condition>
+        ${p.gender ? `<g:gender>${escapeXml(p.gender)}</g:gender>` : ""}
+        ${p.ageGroup ? `<g:age_group>${escapeXml(p.ageGroup)}</g:age_group>` : ""}
+        ${p.material ? `<g:material>${escapeXml(p.material)}</g:material>` : ""}
+        ${p.pattern ? `<g:pattern>${escapeXml(p.pattern)}</g:pattern>` : ""}
         ${availableSizes.length > 0 ? `<g:size>${escapeXml(availableSizes.join(", "))}</g:size>` : ""}
         <g:google_product_category>${escapeXml(googleCategory)}</g:google_product_category>
         <g:product_type>${escapeXml(productType)}</g:product_type>
@@ -473,7 +489,11 @@ export async function GET() {
           ? `<g:price>${parseFloat(variantCompare).toFixed(2)} ${CURRENCY}</g:price>\n       <g:sale_price>${parseFloat(variantPrice).toFixed(2)} ${CURRENCY}</g:sale_price>`
           : `<g:price>${parseFloat(variantPrice).toFixed(2)} ${CURRENCY}</g:price>`}
         <g:brand>${BRAND}</g:brand>
-        <g:condition>new</g:condition>
+                <g:condition>new</g:condition>
+        ${p.gender ? `<g:gender>${escapeXml(p.gender)}</g:gender>` : ""}
+        ${p.ageGroup ? `<g:age_group>${escapeXml(p.ageGroup)}</g:age_group>` : ""}
+        ${p.material ? `<g:material>${escapeXml(p.material)}</g:material>` : ""}
+        ${p.pattern ? `<g:pattern>${escapeXml(p.pattern)}</g:pattern>` : ""}
         <g:color>${escapeXml(colorLabel)}</g:color>
         ${sizesForThisColor.length > 0 ? `<g:size>${escapeXml(sizesForThisColor.join(", "))}</g:size>` : ""}
         <g:google_product_category>${escapeXml(googleCategory)}</g:google_product_category>

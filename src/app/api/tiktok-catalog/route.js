@@ -88,7 +88,12 @@ export async function GET() {
         const cleanDescription = htmlToPlainText(rawDescription);
         const price = parseFloat(f("price")) || 0;
         const compareAtPrice = parseFloat(f("compareAtPrice")) || 0;
+        const gender = f("gender");
+        const ageGroup = f("ageGroup");
+        const material = f("material");
+        const pattern = f("pattern");
         const images = rawFields["images"]?.arrayValue?.values?.map((v) => v.stringValue ?? "").filter(Boolean) ?? [];
+        
         const colorSwatches = fMap("colorSwatches");
         const variants = fArrMaps("variants");
 
@@ -255,7 +260,11 @@ size: colorVariants
   .filter((size, index, arr) => arr.indexOf(size) === index)
   .join(", "),
 availability: ttAvailability(inventoryStatus),
-            condition: "new",
+                        condition: "new",
+            gender: gender || undefined,
+            age_group: ageGroup || undefined,
+            material: material || undefined,
+            pattern: pattern || undefined,
             price: `${price.toFixed(2)} EGP`,
             sale_price:
               compareAtPrice > price
@@ -281,7 +290,11 @@ availability: ttAvailability(inventoryStatus),
             title,
             description: cleanDescription,
             availability: "in stock",
-            condition: "new",
+                        condition: "new",
+            gender: gender || undefined,
+            age_group: ageGroup || undefined,
+            material: material || undefined,
+            pattern: pattern || undefined,
             price: `${price.toFixed(2)} EGP`,
             sale_price:
               compareAtPrice > price
@@ -310,7 +323,11 @@ availability: ttAvailability(inventoryStatus),
                 ${r.color ? `<g:color>${escapeXml(r.color)}</g:color>` : ""}
       ${r.size ? `<g:size>${escapeXml(r.size)}</g:size>` : ""}
       <g:availability>${escapeXml(r.availability)}</g:availability>
-      <g:condition>${escapeXml(r.condition)}</g:condition>
+            <g:condition>${escapeXml(r.condition)}</g:condition>
+      ${r.gender ? `<g:gender>${escapeXml(r.gender)}</g:gender>` : ""}
+      ${r.age_group ? `<g:age_group>${escapeXml(r.age_group)}</g:age_group>` : ""}
+      ${r.material ? `<g:material>${escapeXml(r.material)}</g:material>` : ""}
+      ${r.pattern ? `<g:pattern>${escapeXml(r.pattern)}</g:pattern>` : ""}
       <g:price>${escapeXml(r.price)}</g:price>
       ${r.sale_price ? `<g:sale_price>${escapeXml(r.sale_price)}</g:sale_price>` : ""}
       <g:link>${escapeXml(r.link)}</g:link>
