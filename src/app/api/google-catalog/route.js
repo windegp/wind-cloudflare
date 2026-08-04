@@ -110,10 +110,16 @@ function variantAvailability(variant) {
   return availability === "in stock" || availability === "preorder" ? "in stock" : "out of stock";
 }
 
-function hasSale(price, compareAtPrice) {
-  const current = parseFloat(price);
-  const compare = parseFloat(compareAtPrice);
-  return Number.isFinite(current) && Number.isFinite(compare) && compare > current;
+function productAvailability(fields, variants) {
+  if (variants.length > 0) {
+    return variants.some((variant) => variantAvailability(variant) === "in stock")
+      ? "in stock"
+      : "out of stock";
+  }
+
+  const quantity = Number(readFirestoreString(fields, "quantity") || 0);
+  const sellOutOfStock = readFirestoreString(fields, "sellOutOfStock");
+  return quantity > 0 || sellOutOfStock === "Yes" ? "in stock" : "out of stock";
 }
 
 function priceXml(price, compareAtPrice) {
@@ -282,13 +288,6 @@ export async function GET() {
         const isVariantProduct = hasColors || hasSizes;
 
         if (!isVariantProduct) {
-          const anyVariantInStock = variants.length > 0
-            ? variants.some((variant) => variantAvailability(variant) === "in stock")
-            : Number(basePrice) >= 0;
-          const availability = variants.length > 0
-            ? (anyVariantInStock ? "in stock" : "out of stock")
-            : "in stock";
-
           items.push(makeItem({
             id: handle,
             title,
@@ -296,7 +295,7 @@ export async function GET() {
             link: productUrl,
             image: mainImage,
             additionalImages: images.slice(1, 11),
-            availability,
+            availability: productAvailability(fields, variants),
             price: basePrice,
             compareAtPrice,
             gender,
@@ -310,8 +309,8 @@ export async function GET() {
           continue;
         }
 
-        // Google expects each apparel variant to be a separate product row.
-        // Each row gets one size and/or one color, while item_group_id groups them.
+        // Google requires each apparel variant to be a separate product row.
+        // Each row has one size and/or one color; item_group_id groups the rows.
         const emittedKeys = new Set();
 
         for (const variant of variants) {
@@ -342,7 +341,11 @@ export async function GET() {
             itemGroupTitle,
             title: [title, colorLabel, size].filter(Boolean).join(" - "),
             description,
-            link: `${productUrl}?color=${encodeURIComponent(color)}${size ? `&size=${encodeURIComponent(size)}` : ""}`,
+            // WIND currently supports color query parameters. Size is therefore
+            // represented in the feed/variant_option but is not invented into the URL.
+            link: color
+              ? `${productUrl}?color=${encodeURIComponent(color)}`
+              : productUrl,
             image: variantImage,
             additionalImages,
             availability,
