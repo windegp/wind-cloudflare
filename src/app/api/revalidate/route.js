@@ -22,7 +22,16 @@ export async function POST(request) {
   } else if ((type === 'product' || type === 'product_update') && id) {
     // عند تعديل/إنشاء/حذف منتج → نحذف sitemap cache كمان
     // اجمع المفاتيح المطلوبة من دون الكتابة فوق القيم السابقة
-    keysToDelete = Array.from(new Set([`product_${id}`, 'homepage_data_v1', 'sitemap_products_v1', ...keysToDelete]));
+    keysToDelete = Array.from(
+  new Set([
+    `product_${id}`,
+    'homepage_data_v1',
+    'sitemap_products_v1',
+    'fb_catalog_xml_v9',
+    'google_catalog_xml_v1',
+    ...keysToDelete,
+  ])
+);
     if (handle) keysToDelete.push(`product_stats_${handle}`);
     revalidatePath('/');
     if (handle) revalidatePath(`/products/${handle}`);
@@ -45,7 +54,9 @@ export async function POST(request) {
     keysToDelete = ['site_settings_v1'];
     revalidatePath('/', 'layout');
   } else if (type === 'fb_catalog') {
-    keysToDelete = ['fb_catalog_xml_v8'];
+    keysToDelete = ['fb_catalog_xml_v9'];
+    } else if (type === 'google_catalog') {
+    keysToDelete = ['google_catalog_xml_v1'];
   } else if (type === 'all') {
   try {
     const kv = await getKV();
