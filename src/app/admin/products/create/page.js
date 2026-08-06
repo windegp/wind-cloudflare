@@ -74,6 +74,7 @@ function CreateProductForm() {
 
   const [productData, setProductData] = useState({
     title: "",
+    createdAt: null,
     description: "",
     category: "",
     price: "",
@@ -202,13 +203,14 @@ function CreateProductForm() {
 
             setProductData({
               title: data.title || "",
+              createdAt: data.createdAt || null,
               description: data.description || "",
               category: data.category || "",
-              price: data.price || (data.variants?.[0]?.price) || "",
-              compareAtPrice: data.compareAtPrice || (data.variants?.[0]?.compareAtPrice) || "",
+              price: data.price || "",
+              compareAtPrice: data.compareAtPrice || "",
               costPerItem: data.costPerItem || "",
-              quantity: data.quantity || (data.variants?.[0]?.quantity) || "",
-              sku: data.sku || (data.variants?.[0]?.sku) || "",
+              quantity: data.quantity || "",
+              sku: data.sku || "",
               barcode: data.barcode || "",
               sellOutOfStock: data.sellOutOfStock || "No",
               weight: data.weight || "",
@@ -501,10 +503,10 @@ function CreateProductForm() {
         // أي variant موجود مسبقاً (نفس تركيبة Color×Size) يحافظ على كل بياناته كما هي.
         const defaultQty = Math.max(0, parseInt(productData.quantity, 10) || 0);
         let variants = buildVariantsFromOptions(options, existingVariants, { defaultQuantity: defaultQty });
-        variants = variants.map((v) => ({
+                variants = variants.map((v) => ({
           ...v,
-          price: v.price !== "" ? v.price : (productData.price || "0"),
-          compareAtPrice: v.compareAtPrice !== "" ? v.compareAtPrice : (productData.compareAtPrice || ""),
+          price: productData.price || "0",
+          compareAtPrice: productData.compareAtPrice || "",
         }));
 
         const { valid, errors } = validateVariants(variants);
@@ -556,7 +558,7 @@ function CreateProductForm() {
           type: null,
           category: productData.category || null,
           productCategory: null,
-          barcode: null
+          barcode: productData.barcode || "",
         };
         
 
@@ -569,21 +571,34 @@ function CreateProductForm() {
       }
 
       const db = getDb();
-     await setDoc(doc(db, "products", documentId), finalProduct, { merge: true });
+    await setDoc(
+  doc(db, "products", documentId),
+  finalProduct,
+  { merge: !isHandleChanged }
+);
 
       // 🔥 الحفظ نجح فعلياً — دلوقتي بس نحذف أي صور غلاف قديمة كانت معلّقة
       // (لو فشل الحفظ أو المستخدم قفل الصفحة قبل كده، الصور دي كانت هتفضل موجودة)
-      if (pendingDeletedUrls.length > 0) {
+            const urlsToDelete = pendingDeletedUrls.filter(
+        (url) => url && !images.includes(url)
+      );
+
+      if (urlsToDelete.length > 0) {
         await Promise.all(
-          pendingDeletedUrls.map((url) =>
+          urlsToDelete.map((url) =>
             fetch('/api/delete-image', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ url }),
-            }).catch((err) => console.error('ImageKit delete failed (non-blocking):', url, err))
+            }).catch((err) =>
+              console.error('ImageKit delete failed (non-blocking):', url, err)
+            )
           )
         );
-        setPendingDeletedUrls([]);
+
+        setPendingDeletedUrls((prev) =>
+          prev.filter((url) => images.includes(url))
+        );
       }
 
       // 🔥 الخطوة الأخيرة من الترحيل الآمن: تحويل المستند القديم لمستند Redirect
