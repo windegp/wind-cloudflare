@@ -68,6 +68,7 @@ function CreateProductForm() {
   // 🔥 Phase 7: variants[] الحالية المحمَّلة من Firestore عند التعديل — تُستخدَم للحفاظ
   // على بيانات كل variant (variantId, inventoryStatus, quantity...) بدل استبدالها بالكامل
   const [existingVariants, setExistingVariants] = useState([]);
+  const [existingProductCollections, setExistingProductCollections] = useState([]);
   const [seoTitle, setSeoTitle] = useState("");
   const [seoDesc, setSeoDesc] = useState("");
   const [urlHandle, setUrlHandle] = useState("");
@@ -199,9 +200,11 @@ function CreateProductForm() {
               }
             }
 
-            const finalSelected = [...new Set(combinedSlugs)];
+           const finalSelected = [...new Set(combinedSlugs)];
 
-            setProductData({
+          setExistingProductCollections(finalSelected);
+
+          setProductData({
               title: data.title || "",
               createdAt: data.createdAt || null,
               description: data.description || "",
@@ -651,20 +654,34 @@ function CreateProductForm() {
         console.error("WIND Error: FB Catalog revalidate failed", e);
       }
       
-      // 🔥 مسح كاش الأقسام المرتبطة بالمنتج لضمان ظهوره فوراً
-      if (finalProduct.collections && finalProduct.collections.length > 0) {
-        try {
-          await Promise.all(finalProduct.collections.map(async (slug) => {
-            await fetch("/api/revalidate", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ type: 'collection', slug: slug })
-            });
-          }));
-        } catch (e) { 
-          console.error("WIND Error: Collections revalidate failed", e); 
-        }
-      }
+      // 🔥 مسح كاش كل الـCollections القديمة والجديدة عند الحفظ.
+// مهم جداً: الـCollections القديمة لازم يتم مسحها أيضاً،
+// لأن إزالة المنتج منها لا يمكن اكتشافها من finalProduct بعد الحفظ.
+const collectionsToRevalidate = Array.from(
+  new Set([
+    ...(existingProductCollections || []),
+    ...(finalProduct.collections || []),
+  ])
+);
+
+if (collectionsToRevalidate.length > 0) {
+  try {
+    await Promise.all(
+      collectionsToRevalidate.map(async (slug) => {
+        await fetch("/api/revalidate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "collection",
+            slug,
+          }),
+        });
+      })
+    );
+  } catch (e) {
+    console.error("WIND Error: Collections revalidate failed", e);
+  }
+}
 
       // 🔥 Update product counter atomically (only for new products, not edits)
       if (!isEditing) {
