@@ -186,33 +186,41 @@ export async function ttTrack(eventName, rawData = {}) {
   // توليد event_id أعلاه.
   const ttEventName = TT_EVENT_NAME_MAP[eventName] || eventName;
 
-    const pixelReady = await waitForTiktokPixel();
-  const ttp = await waitForTtp();
-  const ttclid = getTtclidFromUrl();
-  const externalId = getOrCreateTtExternalId();
+    const pixelReadyPromise = waitForTiktokPixel();
+const ttpPromise = waitForTtp();
+
+const ttclid = getTtclidFromUrl();
+const externalId = getOrCreateTtExternalId();
+
+const pixelReady = await pixelReadyPromise;
+const ttp = await ttpPromise;
 
   // 1) Browser Pixel
-  if (pixelReady) {
-    try {
-      if (eventName === "PageView") {
-        window.ttq.page();
-      } else {
-        window.ttq.track(ttEventName, {
-          contents: buildContents(data),
-          value: data.value,
-          currency: data.currency || "EGP",
-          content_type: data.content_type || "product",
-          order_id: data.order_id,
-        }, { event_id: eventId });
-      }
-    } catch (error) {
-      console.error("[TikTok Pixel] Browser event failed:", error);
+if (pixelReady) {
+  try {
+    if (eventName === "PageView") {
+      window.ttq.page();
+    } else {
+      window.ttq.track(ttEventName, {
+  contents: buildContents(data),
+  value: data.value,
+  currency: data.currency || "EGP",
+  content_type: data.content_type || "product",
+  order_id: data.order_id,
+}, { event_id: eventId });
     }
-  } else {
-    console.error("[TikTok Pixel] Pixel was not ready within timeout.");
+  } catch (error) {
+    console.error("[TikTok Pixel] Browser event failed:", error);
   }
+} else {
+  console.error("[TikTok Pixel] Pixel was not ready within timeout.");
+}
 
-  // 2) Events API (Server-side) — نفس event_id بالضبط
+if (eventName === "PageView") {
+  window.ttq.page();
+}
+
+// 2) Events API (Server-side) — نفس event_id بالضبط
   const payload = {
     event: ttEventName,
     event_id: eventId,

@@ -65,45 +65,66 @@ export async function POST(request) {
     ]);
 
         const ttBody = {
-      pixel_code: PIXEL_ID,
+  event_source: "web",
+  event_source_id: PIXEL_ID,
+  ...(process.env.TIKTOK_TEST_EVENT_CODE
+    ? { test_event_code: process.env.TIKTOK_TEST_EVENT_CODE }
+    : {}),
+  data: [
+    {
       event: data.event,
+      event_time: Math.floor(Date.now() / 1000),
       event_id: data.event_id,
-      timestamp: new Date().toISOString(),
-      ...(process.env.TIKTOK_TEST_EVENT_CODE
-        ? { test_event_code: process.env.TIKTOK_TEST_EVENT_CODE }
-        : {}),
-      context: {
-        page: {
-          url: data.page_url,
-          referrer: data.referrer,
-        },
-        user: {
-          ttp: data.ttp,
-          external_id: hashedExternalId ? [hashedExternalId] : undefined,
-          email: hashedEmail ? [hashedEmail] : undefined,
-          phone_number: hashedPhone ? [hashedPhone] : undefined,
-          ip,
-          user_agent: userAgent,
-        },
-        ad: data.ttclid ? { callback: data.ttclid } : undefined,
+
+      user: {
+        ...(hashedEmail ? { email: [hashedEmail] } : {}),
+        ...(hashedPhone ? { phone: [hashedPhone] } : {}),
+        ...(hashedExternalId ? { external_id: [hashedExternalId] } : {}),
+        ...(data.ttp ? { ttp: data.ttp } : {}),
+        ...(data.ttclid ? { ttclid: data.ttclid } : {}),
+        ...(ip ? { ip } : {}),
+        ...(userAgent ? { user_agent: userAgent } : {}),
       },
+
+      page: {
+        ...(data.page_url ? { url: data.page_url } : {}),
+        ...(data.referrer ? { referrer: data.referrer } : {}),
+      },
+
       properties: {
-        contents: data.contents,
-        currency: data.currency || "EGP",
-        value: data.value,
-        order_id: data.order_id,
+        ...(data.contents?.length ? { contents: data.contents } : {}),
+        ...(data.currency ? { currency: data.currency } : {}),
+        ...(typeof data.value === "number" ? { value: data.value } : {}),
+        ...(data.order_id ? { order_id: data.order_id } : {}),
       },
-    };
+    },
+  ],
+};
 
     const result = await postToTikTokEventsAPI(ttBody);
-    return new Response(JSON.stringify(result), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
-  } catch (err) {
-    return new Response(JSON.stringify({ ok: false, error: err.message }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
+
+return new Response(JSON.stringify(result), {
+  status: result.ok ? 200 : 502,
+  headers: {
+    "Content-Type": "application/json",
+    "Cache-Control": "no-store",
+  },
+});
+    } catch (err) {
+    console.error("[TikTok Events API] Request failed:", err);
+
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        error: err.message || "TikTok Events API request failed",
+      }),
+      {
+        status: 500,
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+        },
+      }
+    );
   }
 }
