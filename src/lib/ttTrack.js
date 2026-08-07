@@ -163,7 +163,7 @@ function buildContents(data) {
 // ("Page") — هذا التحويل الوحيد المطلوب؛ باقي الأحداث (ViewContent,
 // AddToCart, InitiateCheckout, CompletePayment) أسماؤها الداخلية مطابقة
 // أصلاً لأسماء TikTok الرسمية، فلا تحتاج أي تحويل.
-const TT_EVENT_NAME_MAP = { PageView: "Page" };
+const TT_EVENT_NAME_MAP = {};
 
 export async function ttTrack(eventName, rawData = {}) {
   if (typeof window === "undefined") return;
@@ -201,13 +201,17 @@ if (pixelReady) {
     if (eventName === "PageView") {
       window.ttq.page();
     } else {
-      window.ttq.track(ttEventName, {
-  contents: buildContents(data),
-  value: data.value,
-  currency: data.currency || "EGP",
-  content_type: data.content_type || "product",
-  order_id: data.order_id,
-}, { event_id: eventId });
+      window.ttq.track(
+        ttEventName,
+        {
+          contents: buildContents(data),
+          value: data.value,
+          currency: data.currency || "EGP",
+          content_type: data.content_type || "product",
+          order_id: data.order_id,
+        },
+        { event_id: eventId }
+      );
     }
   } catch (error) {
     console.error("[TikTok Pixel] Browser event failed:", error);
@@ -216,12 +220,14 @@ if (pixelReady) {
   console.error("[TikTok Pixel] Pixel was not ready within timeout.");
 }
 
+// PageView يتم إرساله تلقائيًا بواسطة TikTok Pixel.
+// لا نرسله مرة ثانية عبر Events API حتى لا يتحول إلى Server event باسم "Page".
 if (eventName === "PageView") {
-  window.ttq.page();
+  return;
 }
 
 // 2) Events API (Server-side) — نفس event_id بالضبط
-  const payload = {
+const payload = {
     event: ttEventName,
     event_id: eventId,
     page_url: window.location.href,
