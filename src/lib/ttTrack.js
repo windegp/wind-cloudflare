@@ -23,7 +23,38 @@ function readCookie(name) {
 // النقرة الإعلانية بسبب توقيت تحميل سكريبت المنصة) — لكن دالة مستقلة تمامًا
 // هنا، مبنية لـ TikTok تحديدًا (_ttp بدل _fbc، ttclid بدل fbclid).
 const TTP_POLL_INTERVAL_MS = 50;
-const TTP_MAX_WAIT_MS = 500;
+const TTP_MAX_WAIT_MS = 3000;
+
+function waitForTiktokPixel() {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined") {
+      resolve(false);
+      return;
+    }
+
+    if (window.ttq && typeof window.ttq.track === "function") {
+      resolve(true);
+      return;
+    }
+
+    let elapsed = 0;
+
+    const interval = setInterval(() => {
+      elapsed += TTP_POLL_INTERVAL_MS;
+
+      if (window.ttq && typeof window.ttq.track === "function") {
+        clearInterval(interval);
+        resolve(true);
+        return;
+      }
+
+      if (elapsed >= TTP_MAX_WAIT_MS) {
+        clearInterval(interval);
+        resolve(false);
+      }
+    }, TTP_POLL_INTERVAL_MS);
+  });
+}
 
 function waitForTtp() {
   return new Promise((resolve) => {
@@ -32,20 +63,13 @@ function waitForTtp() {
       resolve(existing);
       return;
     }
-    let hasTtclid = false;
-    try {
-      hasTtclid = new URLSearchParams(window.location.search).has("ttclid");
-    } catch {
-      hasTtclid = false;
-    }
-    if (!hasTtclid) {
-      resolve(undefined);
-      return;
-    }
+
     let elapsed = 0;
+
     const interval = setInterval(() => {
       const ttp = readCookie("_ttp");
       elapsed += TTP_POLL_INTERVAL_MS;
+
       if (ttp || elapsed >= TTP_MAX_WAIT_MS) {
         clearInterval(interval);
         resolve(ttp);
@@ -162,23 +186,30 @@ export async function ttTrack(eventName, rawData = {}) {
   // توليد event_id أعلاه.
   const ttEventName = TT_EVENT_NAME_MAP[eventName] || eventName;
 
+    const pixelReady = await waitForTiktokPixel();
   const ttp = await waitForTtp();
   const ttclid = getTtclidFromUrl();
   const externalId = getOrCreateTtExternalId();
 
   // 1) Browser Pixel
-  try {
-    if (typeof window.ttq !== "undefined") {
-      window.ttq.track(ttEventName, {
-        contents: buildContents(data),
-        value: data.value,
-        currency: data.currency || "EGP",
-        content_type: data.content_type || "product",
-        order_id: data.order_id,
-      }, { event_id: eventId });
+  if (pixelReady) {
+    try {
+      if (eventName === "PageView") {
+        window.ttq.page();
+      } else {
+        window.ttq.track(ttEventName, {
+          contents: buildContents(data),
+          value: data.value,
+          currency: data.currency || "EGP",
+          content_type: data.content_type || "product",
+          order_id: data.order_id,
+        }, { event_id: eventId });
+      }
+    } catch (error) {
+      console.error("[TikTok Pixel] Browser event failed:", error);
     }
-  } catch {
-    // صامت — لا نكسر تجربة المستخدم لخطأ في التتبع
+  } else {
+    console.error("[TikTok Pixel] Pixel was not ready within timeout.");
   }
 
   // 2) Events API (Server-side) — نفس event_id بالضبط

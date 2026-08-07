@@ -126,10 +126,10 @@ export default async function RootLayout({ children }) {
           لا مشاركة أي متغيّر أو دالة). Pixel ID عبر env var (غير حساس، لكن
           بطلب صريح من صاحب المشروع لإبقائه env var بدل hardcode).
 
-          ⚠️ لا يوجد استدعاء ttq.page() هنا عمدًا — بالضبط بنفس فلسفة Meta
-          أعلاه (autoConfig معطّل، لا PageView تلقائي): StoreLayout.js هو
-          المصدر الوحيد لكل حدث "Page" عبر ttTrack()، لتفادي أي احتمال
-          Double PageView (مرة من هنا تلقائيًا، ومرة من StoreLayout).
+          ⚠️ لا يوجد استدعاء ttq.page() تلقائيًا من هذا السكريبت.
+StoreLayout.js هو المصدر الوحيد لـ PageView، وttTrack.js يستخدم
+ttq.page() عند استقبال PageView، بينما باقي الأحداث تستخدم ttq.track().
+هذا يمنع Double PageView ويجعل PageView منفصلًا عن أحداث التحويل.
         */}
         <Script id="tiktok-pixel-base" strategy="afterInteractive">
           {`

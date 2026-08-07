@@ -64,11 +64,14 @@ export async function POST(request) {
       ttSha256(data.external_id),
     ]);
 
-    const ttBody = {
+        const ttBody = {
       pixel_code: PIXEL_ID,
       event: data.event,
       event_id: data.event_id,
       timestamp: new Date().toISOString(),
+      ...(process.env.TIKTOK_TEST_EVENT_CODE
+        ? { test_event_code: process.env.TIKTOK_TEST_EVENT_CODE }
+        : {}),
       context: {
         page: {
           url: data.page_url,
