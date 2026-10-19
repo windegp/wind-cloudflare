@@ -235,7 +235,7 @@ export async function POST(req) {
     //    (إيميل للأدمن + إيميل تأكيد للعميل)
     // ============================================
     try {
-      await fetch('https://api.resend.com/emails', {
+      const response = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
@@ -248,9 +248,28 @@ export async function POST(req) {
           html: htmlContent,
         })
       });
-      console.log('✅ Admin email sent successfully via Resend REST API');
-    } catch (emailError) {
-      console.error('❌ Resend Admin Email Error:', emailError.message);
+      let result;
+      try {
+        result = await response.json();
+      } catch {
+        result = null;
+      }
+
+      if (response.ok) {
+        const messageId = typeof result?.id === 'string' ? result.id : null;
+        console.log('✅ Admin email sent successfully via Resend REST API', messageId ? { messageId } : '');
+      } else {
+        const errorMessage = typeof result?.message === 'string'
+          ? result.message
+          : typeof result?.error === 'string'
+            ? result.error
+            : typeof result?.error?.message === 'string'
+              ? result.error.message
+              : 'No error message returned';
+        console.error('❌ Resend Admin Email Error:', { status: response.status, message: errorMessage });
+      }
+    } catch {
+      console.error('❌ Resend Admin Email Request Failed before receiving a response');
     }
 
     // 🔥 إشعار صوتي للأدمن — مستقل تماماً عن الإيميل، فشله ما يأثرش على أي حاجة
@@ -265,7 +284,7 @@ export async function POST(req) {
 
     if (customerEmail || formData.email) {
       try {
-        await fetch('https://api.resend.com/emails', {
+        const response = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
@@ -278,9 +297,28 @@ export async function POST(req) {
             html: customerHtmlContent,
           })
         });
-        console.log('✅ Customer email sent successfully via Resend REST API');
-      } catch (emailError) {
-        console.error('❌ Resend Customer Email Error:', emailError.message);
+        let result;
+        try {
+          result = await response.json();
+        } catch {
+          result = null;
+        }
+
+        if (response.ok) {
+          const messageId = typeof result?.id === 'string' ? result.id : null;
+          console.log('✅ Customer email sent successfully via Resend REST API', messageId ? { messageId } : '');
+        } else {
+          const errorMessage = typeof result?.message === 'string'
+            ? result.message
+            : typeof result?.error === 'string'
+              ? result.error
+              : typeof result?.error?.message === 'string'
+                ? result.error.message
+                : 'No error message returned';
+          console.error('❌ Resend Customer Email Error:', { status: response.status, message: errorMessage });
+        }
+      } catch {
+        console.error('❌ Resend Customer Email Request Failed before receiving a response');
       }
     }
 
