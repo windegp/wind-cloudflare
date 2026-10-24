@@ -28,6 +28,26 @@ function readCookie(cookieHeader, name) {
   return match ? decodeURIComponent(match[1]) : undefined;
 }
 
+// التحقق من أن قيمة fbc سليمة ولم يتجاوز عمرها 90 يوماً
+function isValidMetaFbc(value) {
+  if (typeof value !== "string") return false;
+
+  const match = /^fb\.\d+\.(\d+)\.(.+)$/.exec(value);
+  if (!match) return false;
+
+  const createdAt = Number(match[1]);
+  const now = Date.now();
+  const maxAgeMs = 90 * 24 * 60 * 60 * 1000;
+  const futureToleranceMs = 5 * 60 * 1000;
+
+  return (
+    Number.isSafeInteger(createdAt) &&
+    createdAt >= 1_000_000_000_000 &&
+    createdAt <= now + futureToleranceMs &&
+    now - createdAt <= maxAgeMs
+  );
+}
+
 export async function POST(request) {
   try {
     const body = await request.json();
@@ -61,10 +81,17 @@ export async function POST(request) {
     }
 
     const cookieHeader = request.headers.get("cookie") || "";
-    // 🔥 نعطي الأولوية لقيم fbp/fbc القادمة من العميل مباشرة (أحدث وأدق)
-    // لأن قراءتها من الكوكي على السيرفر قد تكون متأخرة عن لحظة الحدث الفعلية
-    const fbp = fbpFromClient || readCookie(cookieHeader, "_fbp");
-    const fbc = fbcFromClient || readCookie(cookieHeader, "_fbc");
+
+// الحفاظ على سلوك fbp الحالي دون تغيير
+const fbp = fbpFromClient || readCookie(cookieHeader, "_fbp");
+
+// قبول fbc من المتصفح أو الكوكي بشرط صلاحية القيمة
+const fbcCandidates = [
+  fbcFromClient,
+  readCookie(cookieHeader, "_fbc"),
+];
+
+const fbc = fbcCandidates.find(isValidMetaFbc);
 
     const clientIp =
       request.headers.get("cf-connecting-ip") ||
