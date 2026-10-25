@@ -64,39 +64,167 @@ function generateEventId(eventName) {
   return `${eventName}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-// 🔥 نفس منطق waitForFbp أعلاه، لكن لـ _fbc تحديدًا — وشرطي فقط عند وجود
-// fbclid في الرابط الحالي (أي: زائر قادم لتوّه من نقرة إعلان Meta). فبدون
-// fbclid لا داعي للانتظار إطلاقًا (لا يوجد شيء تتوقع الكوكي أن تحمله).
-// بهذا الشرط، لا يتأخر أي حدث لزائر لا يحمل fbclid أصلاً — فقط الحالة
-// التي قد تفقد fbc فعليًا بسبب التوقيت (fbevents.js لم يُثبّت الكوكي بعد).
+// Meta Conversions API Parameter Builder.
+// نجمع القيم مرة لكل دورة جمع، ونعيد الجمع عند ظهور fbclid مختلف.
+let metaParamBuilderLoadPromise = null;
+let metaParamBuilderCollectionKey = null;
+let metaParamBuilderCollectionPromise = null;
+
+function loadMetaParamBuilder() {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return Promise.resolve(null);
+  }
+
+  if (
+    window.clientParamBuilder &&
+    typeof window.clientParamBuilder.processAndCollectAllParams === "function"
+  ) {
+    return Promise.resolve(window.clientParamBuilder);
+  }
+
+  if (metaParamBuilderLoadPromise) {
+    return metaParamBuilderLoadPromise;
+  }
+
+  metaParamBuilderLoadPromise = new Promise((resolve) => {
+    let finished = false;
+    let timeoutId = null;
+
+    const finish = (builder) => {
+      if (finished) return;
+      finished = true;
+
+      if (timeoutId) clearTimeout(timeoutId);
+
+      resolve(
+        builder &&
+          typeof builder.processAndCollectAllParams === "function"
+          ? builder
+          : null
+      );
+    };
+
+    const fallbackUrl =
+      "https://unpkg.com/meta-capi-param-builder-clientjs@1.3.3/dist/clientParamBuilder.bundle.js";
+
+    const loadScript = (url, isFallback = false) => {
+      const script = document.createElement("script");
+      script.src = url;
+      script.async = true;
+
+      script.onload = () => {
+        const builder = window.clientParamBuilder;
+
+        if (
+          builder &&
+          typeof builder.processAndCollectAllParams === "function"
+        ) {
+          finish(builder);
+        } else if (!isFallback) {
+          loadScript(fallbackUrl, true);
+        } else {
+          finish(null);
+        }
+      };
+
+      script.onerror = () => {
+        if (!isFallback) {
+          loadScript(fallbackUrl, true);
+        } else {
+          finish(null);
+        }
+      };
+
+      document.head.appendChild(script);
+    };
+
+    timeoutId = setTimeout(
+      () => finish(window.clientParamBuilder || null),
+      4000
+    );
+
+    loadScript(
+      "https://cdn.jsdelivr.net/npm/meta-capi-param-builder-clientjs@1.3.3/dist/clientParamBuilder.bundle.js"
+    );
+  });
+
+  return metaParamBuilderLoadPromise;
+}
+
+async function collectMetaParams() {
+  const builder = await loadMetaParamBuilder();
+
+  if (!builder) return null;
+
+  const currentUrl = window.location.href;
+  let collectionKey = "__initial__";
+
+  try {
+    collectionKey =
+      new URL(currentUrl).searchParams.get("fbclid") || "__initial__";
+  } catch {
+    collectionKey = "__initial__";
+  }
+
+  if (
+    !metaParamBuilderCollectionPromise ||
+    collectionKey !== metaParamBuilderCollectionKey
+  ) {
+    metaParamBuilderCollectionKey = collectionKey;
+
+    metaParamBuilderCollectionPromise = Promise.resolve()
+      .then(() => builder.processAndCollectAllParams(currentUrl))
+      .catch((error) => {
+        console.warn(
+          "[fbTrack] Meta parameter builder failed:",
+          error
+        );
+
+        metaParamBuilderCollectionPromise = null;
+        metaParamBuilderCollectionKey = null;
+
+        return null;
+      });
+  }
+
+  return metaParamBuilderCollectionPromise;
+}
+
+// الرجوع إلى قراءة الكوكي القديمة إذا تعذّر تحميل المكتبة أو جمع القيم.
 const FBC_POLL_INTERVAL_MS = 50;
 const FBC_MAX_WAIT_MS = 500;
 
 function waitForFbc() {
   return new Promise((resolve) => {
     const existing = readCookie("_fbc");
+
     if (existing) {
       resolve(existing);
       return;
     }
+
     let hasFbclid = false;
+
     try {
       hasFbclid = new URLSearchParams(window.location.search).has("fbclid");
     } catch {
       hasFbclid = false;
     }
+
     if (!hasFbclid) {
-      // لا fbclid في الرابط الحالي → لا سبب لانتظار كوكي لن تُنشأ أصلاً
       resolve(undefined);
       return;
     }
+
     let elapsed = 0;
+
     const interval = setInterval(() => {
       const fbc = readCookie("_fbc");
       elapsed += FBC_POLL_INTERVAL_MS;
+
       if (fbc || elapsed >= FBC_MAX_WAIT_MS) {
         clearInterval(interval);
-        resolve(fbc); // قد تكون undefined لو انتهى الوقت بدون نجاح، وهذا مقبول
+        resolve(fbc);
       }
     }, FBC_POLL_INTERVAL_MS);
   });
@@ -131,10 +259,15 @@ function pickBrowserParams(data) {
 export async function fbTrack(eventName, data = {}) {
   if (typeof window === "undefined") return;
 
-  const eventId = data.event_id || generateEventId(eventName);
+    const eventId = data.event_id || generateEventId(eventName);
   const externalId = getOrCreateExternalId();
-  const fbp = await waitForFbp();
-  const fbc = await waitForFbc();
+
+  // جمع قيم Meta الحديثة قبل إرسال الحدث إلى المتصفح والسيرفر.
+  // عند تعذّر المكتبة، نحتفظ بطريقة القراءة الحالية كخطة بديلة.
+  const collectedParams = await collectMetaParams();
+
+  const fbp = collectedParams?._fbp || await waitForFbp();
+  const fbc = collectedParams?._fbc || await waitForFbc();
 
   // ── 1) Browser Pixel — نفس event_id بالضبط، حقول قياسية فقط (Whitelist) ──
   if (typeof window.fbq === "function") {
