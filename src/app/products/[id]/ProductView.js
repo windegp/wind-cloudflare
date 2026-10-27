@@ -194,7 +194,23 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
   useEffect(() => { if (swrRelated) setRelatedProducts(swrRelated); }, [swrRelated]);
   useEffect(() => {
-  if (!loading && product) {
+    if (!loading && product) {
+    const productHasColorOptions =
+      (Array.isArray(product.options) &&
+        product.options.some((opt) => {
+          const name = (opt.name || "").toLowerCase();
+          return (
+            (name.includes("color") || name.includes("لون")) &&
+            String(opt.values || "").trim() !== ""
+          );
+        })) ||
+      (Array.isArray(product.options?.colors) &&
+        product.options.colors.length > 0) ||
+      (Array.isArray(product.colors) && product.colors.length > 0);
+
+    // انتظر تهيئة اللون قبل إرسال ViewContent لمنتج متعدد الألوان.
+    if (productHasColorOptions && !selectedColor) return;
+
     signalPageReady();
     const productHandle = String(product.handle || id || product.id || "");
     // 🔥 لا نرسل ViewContent إلا لو تغيّرت هوية المنتج فعلياً، لا مجرد
@@ -228,7 +244,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
       });
     }
   }
-}, [loading, product, pathname, signalPageReady]);
+}, [loading, product, pathname, signalPageReady, selectedColor]);
   useEffect(() => { setQuantity(1); }, [id, selectedSize, selectedColor]);
 
   useEffect(() => {
