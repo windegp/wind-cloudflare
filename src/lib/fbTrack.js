@@ -1,4 +1,5 @@
 // lib/fbTrack.js
+import { getRememberedMetaUserData, clearRememberedMetaUserData } from "@/lib/metaEventData";
 //
 // دالة موحّدة واحدة لإرسال كل حدث Meta Pixel من نقطة واحدة فقط:
 // Dual Fire — تُطلق نفس الحدث عبر Browser Pixel (fbq) و Conversions API
@@ -259,7 +260,12 @@ function pickBrowserParams(data) {
 export async function fbTrack(eventName, data = {}) {
   if (typeof window === "undefined") return;
 
-    const eventId = data.event_id || generateEventId(eventName);
+  // Snapshot identity before async work. Identity goes to CAPI only; the
+  // browser whitelist below continues to exclude all personal information.
+  const serverData = { ...getRememberedMetaUserData(), ...data };
+  if (eventName === "Purchase") clearRememberedMetaUserData();
+
+  const eventId = serverData.event_id || generateEventId(eventName);
   const externalId = getOrCreateExternalId();
 
   // جمع قيم Meta الحديثة قبل إرسال الحدث إلى المتصفح والسيرفر.
@@ -288,7 +294,7 @@ export async function fbTrack(eventName, data = {}) {
     external_id:      externalId,
     fbp,
     fbc,
-    ...data,
+    ...serverData,
   });
 
   const endpoint = "/api/fb-track";
