@@ -17,7 +17,7 @@ import { fbTrack } from "@/lib/fbTrack";
 import { ttTrack, buildTtUserData } from "@/lib/ttTrack";
 import { getCatalogId } from "@/lib/catalogId";
 import { gaBeginCheckout, gaPurchase } from "@/lib/gaTrack";
-import { buildCheckoutMetaUserData } from "@/lib/metaEventData";
+import { buildCheckoutMetaUserData, rememberMetaUserData } from "@/lib/metaEventData";
 import { getCairoTimestamp } from '@/lib/analytics-helpers';
 
 // Helper function to handle Firebase errors
@@ -396,7 +396,11 @@ export default function CheckoutPage() {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+    const nextFormData = { ...formData, [name]: value };
+    setFormData(nextFormData);
+    // Keep valid identity in memory for subsequent CAPI events only.
+    // Never persist it to browser storage or send it to the browser Pixel.
+    rememberMetaUserData(nextFormData);
     if (errors[name]) setErrors({ ...errors, [name]: false });
     // 🔥 تحديث فوري لسعر الشحن حسب المحافظة — نفس event handler، React بيعمل batch للـ state updates مع بعض
     if (name === 'governorate') setSelectedGovernorate(value);
