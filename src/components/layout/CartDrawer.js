@@ -35,6 +35,17 @@ export default function CartDrawer() {
       }
     };
   }, []);
+    // إلغاء التحويل الاحتياطي إذا أغلق العميل السلة قبل اكتمال التنقل.
+  useEffect(() => {
+    if (isCartOpen) return;
+
+    if (checkoutNavigationTimerRef.current) {
+      clearTimeout(checkoutNavigationTimerRef.current);
+      checkoutNavigationTimerRef.current = null;
+    }
+
+    setIsNavigatingToCheckout(false);
+  }, [isCartOpen]);
   // جلب المنتجات المقترحة (المنطق الأصلي مع تحسين الأداء)
   useEffect(() => {
     const fetchSuggestions = async () => {
@@ -291,7 +302,7 @@ export default function CartDrawer() {
                   {isNavigatingToCheckout ? (
                     <span className="inline-flex items-center justify-center gap-2">
                       <Loader2 size={17} className="animate-spin" />
-                      جاري الإنتقال إلى صفحة الدفع...
+                     جارٍ فتح صفحة إتمام الطلب…
                     </span>
                   ) : (
                     `إتمام الطلب — ${subtotal} ج.م`
