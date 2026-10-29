@@ -269,10 +269,19 @@ export default function CartDrawer() {
                       clearTimeout(checkoutNavigationTimerRef.current);
                     }
 
-                    // إن لم يتغير المسار خلال 8 ثوانٍ، أعد إتاحة المحاولة.
+                                        // إذا لم يصل التنقل الداخلي إلى Checkout خلال 8 ثوانٍ،
+                    // استخدم تنقلًا كاملًا للصفحة كمسار احتياطي.
                     checkoutNavigationTimerRef.current = window.setTimeout(() => {
                       checkoutNavigationTimerRef.current = null;
-                      setIsNavigatingToCheckout(false);
+
+                      const currentPath = window.location.pathname;
+                      const alreadyOnCheckout =
+                        currentPath === "/checkout" ||
+                        currentPath.startsWith("/checkout/");
+
+                      if (!alreadyOnCheckout) {
+                        window.location.assign("/checkout");
+                      }
                     }, 8000);
                   }}
                   aria-busy={isNavigatingToCheckout}
