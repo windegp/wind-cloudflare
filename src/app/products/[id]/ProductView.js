@@ -62,9 +62,13 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   const likeTimeoutRef   = useRef(null);
   const pendingActionRef = useRef(0);
   const [thumbScrollTop, setThumbScrollTop] = useState(0);
- const [isStickyVisible, setIsStickyVisible] = useState(true);
+   const [isStickyVisible, setIsStickyVisible] = useState(true);
   const [isStickyOptionsOpen, setIsStickyOptionsOpen] = useState(false);
   const [isAddingToCart, setIsAddingToCart] = useState(false);
+
+  // يمنع تنفيذ إضافة مكررة قبل أن تتحدث واجهة الزر.
+  const desktopAddToCartLockRef = useRef(false);
+
   const addToCartBtnRef = useRef(null);
   const VISIBLE_THUMBS = 6;
   // 🔥 Phase 8: lowStockThreshold من إعدادات الموقع — يُستخدَم في getInventoryPresentation
@@ -1058,40 +1062,85 @@ export default function ProductView({ initialProduct, sourceCategory }) {
 
             {/* Add to Cart Desktop */}
             <div className="flex gap-3 mb-6">
-              <button
+                            <button
                 onClick={() => {
-  if (!canPurchase) return;
-  addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity});
-  fbTrack("AddToCart", {
-    value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
-    currency: "EGP",
-    content_ids: [getCatalogId(product.handle || id || product.id, selectedColor)],
-    content_name: product.title || "",
-    content_type: "product",
-    num_items: quantity,
-  });
-  ttTrack("AddToCart", {
-    value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
-    currency: "EGP",
-    content_ids: [getCatalogId(product.handle || id || product.id, selectedColor)],
-    content_name: product.title || "",
-    content_type: "product",
-    num_items: quantity,
-  }); // TikTok — مستقل تمامًا عن fbTrack أعلاه
-  gaAddToCart({
-    id: product.handle || id || product.id,
-    title: product.title || "",
-    price: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
-  }, quantity);
-  setQuantity(1);
-}}
-                disabled={!canPurchase}
+                  if (!canPurchase || desktopAddToCartLockRef.current) return;
+
+                  // قفل فوري يمنع الضغطة الثانية قبل إعادة رسم React.
+                  desktopAddToCartLockRef.current = true;
+                  setIsAddingToCart(true);
+
+                  try {
+                    addToCart({
+                      ...product,
+                      selectedSize,
+                      selectedColor,
+                      image: getImageUrl(activeImage),
+                      qty: quantity,
+                    });
+
+                    fbTrack("AddToCart", {
+                      value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
+                      currency: "EGP",
+                      content_ids: [getCatalogId(product.handle || id || product.id, selectedColor)],
+                      content_name: product.title || "",
+                      content_type: "product",
+                      num_items: quantity,
+                    });
+
+                    ttTrack("AddToCart", {
+                      value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
+                      currency: "EGP",
+                      content_ids: [getCatalogId(product.handle || id || product.id, selectedColor)],
+                      content_name: product.title || "",
+                      content_type: "product",
+                      num_items: quantity,
+                    });
+
+                    gaAddToCart({
+                      id: product.handle || id || product.id,
+                      title: product.title || "",
+                      price: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
+                    }, quantity);
+
+                    setQuantity(1);
+                  } finally {
+                    // فترة قصيرة لعرض الاستجابة ومنع الضغطة المكررة.
+                    window.setTimeout(() => {
+                      desktopAddToCartLockRef.current = false;
+                      setIsAddingToCart(false);
+                    }, 700);
+                  }
+                }}
+                disabled={!canPurchase || isAddingToCart}
                 className="flex-1 text-[14px] font-medium py-5 flex items-center justify-center transition-opacity btn-breathe tracking-[0.05em] disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{background:'#111', color:'#fff'}}
-                onMouseEnter={e => { if (canPurchase) e.currentTarget.style.opacity='0.88'; }}
-                onMouseLeave={e => { if (canPurchase) e.currentTarget.style.opacity='1'; }}
+                onMouseEnter={e => {
+                  if (canPurchase) e.currentTarget.style.opacity = '0.88';
+                }}
+                onMouseLeave={e => {
+                  if (canPurchase) e.currentTarget.style.opacity = '1';
+                }}
               >
-                {presentation.buttonText}
+                {isAddingToCart ? (
+                  <span className="inline-flex items-center justify-center gap-2">
+                    <svg
+                      className="animate-spin"
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="white"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                    >
+                      <path d="M12 2a10 10 0 0 1 10 10" />
+                    </svg>
+                    جاري الإضافة...
+                  </span>
+                ) : (
+                  presentation.buttonText
+                )}
               </button>
               <div className="flex items-center justify-between bg-white border border-[#E0E0E0] px-1 w-[84px] shrink-0">
                 <button onClick={() => setQuantity(q => q+1)} className="text-[#888] hover:text-black p-2"><Plus size={14} /></button>

@@ -2,6 +2,7 @@
 
 import React, { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
+import { useCart } from "../../context/CartContext";
 import Navbar from "./Navbar";
 import Footer from "./Footer";
 import CartDrawer from "./CartDrawer";
@@ -13,6 +14,7 @@ export default function StoreLayout({ children }) {
   const pathname = usePathname();
   const isAdmin = pathname?.startsWith('/admin');
   const isCheckout = pathname === '/checkout' || pathname?.startsWith('/checkout/');
+  const { closeCart } = useCart();
 
   // 🔥 PageView يُطلق من هنا فقط (نقطة استدعاء واحدة، لا يوجد fbq('track','PageView')
   // منفصل في layout.js بعد الآن) — كل تغيير مسار حقيقي يستدعي fbTrack()
@@ -23,6 +25,12 @@ export default function StoreLayout({ children }) {
       ttTrack("PageView", {}); // TikTok — مستقل تمامًا عن fbTrack أعلاه
     }
   }, [pathname, isAdmin]);
+    // أغلق حالة السلة بعد تأكيد الوصول إلى مسار Checkout.
+  useEffect(() => {
+    if (isCheckout) {
+      closeCart();
+    }
+  }, [isCheckout, closeCart]);
 
   return (
     <>

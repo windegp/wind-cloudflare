@@ -10,9 +10,12 @@ import QuickViewModal from "@/components/QuickViewModal";
 export default function CartDrawer() {
   const { cartItems, isCartOpen, toggleCart, removeFromCart, updateQty, subtotal } = useCart();
   
-  const [suggestedProducts, setSuggestedProducts] = useState([]);
+    const [suggestedProducts, setSuggestedProducts] = useState([]);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [quickViewProduct, setQuickViewProduct] = useState(null);
+
+  const [isNavigatingToCheckout, setIsNavigatingToCheckout] = useState(false);
+  const checkoutNavigationTimerRef = useRef(null);
 
   // منع السكرول عند فتح السلة أو المودال
   useEffect(() => {
@@ -23,7 +26,15 @@ export default function CartDrawer() {
     }
     return () => { document.body.style.overflow = ""; };
   }, [isCartOpen, quickViewProduct]);
-
+  // تنظيف مؤقت التنقل عند إزالة السلة من الصفحة.
+  useEffect(() => {
+    return () => {
+      if (checkoutNavigationTimerRef.current) {
+        clearTimeout(checkoutNavigationTimerRef.current);
+        checkoutNavigationTimerRef.current = null;
+      }
+    };
+  }, []);
   // جلب المنتجات المقترحة (المنطق الأصلي مع تحسين الأداء)
   useEffect(() => {
     const fetchSuggestions = async () => {
@@ -244,7 +255,39 @@ export default function CartDrawer() {
                   <span className="font-normal text-[#1A1A1A] text-lg whitespace-nowrap">{subtotal} <span className="text-sm font-light">ج.م</span></span>
                 </div>
                 <p className="text-[12px] text-gray-400 mb-5 font-medium">مصاريف الشحن تُحسب عند الدفع</p>
-                <Link href="/checkout" onClick={toggleCart} className="checkout-btn block w-full text-center font-medium py-4 rounded-xl text-[15px] shadow-md tracking-wider whitespace-nowrap overflow-hidden text-ellipsis">إتمام الطلب — {subtotal} ج.م</Link>
+                <Link
+                  href="/checkout"
+                  onClick={(event) => {
+                    if (isNavigatingToCheckout) {
+                      event.preventDefault();
+                      return;
+                    }
+
+                    setIsNavigatingToCheckout(true);
+
+                    if (checkoutNavigationTimerRef.current) {
+                      clearTimeout(checkoutNavigationTimerRef.current);
+                    }
+
+                    // إن لم يتغير المسار خلال 8 ثوانٍ، أعد إتاحة المحاولة.
+                    checkoutNavigationTimerRef.current = window.setTimeout(() => {
+                      checkoutNavigationTimerRef.current = null;
+                      setIsNavigatingToCheckout(false);
+                    }, 8000);
+                  }}
+                  aria-busy={isNavigatingToCheckout}
+                  aria-disabled={isNavigatingToCheckout}
+                  className="checkout-btn block w-full text-center font-medium py-4 rounded-xl text-[15px] shadow-md tracking-wider whitespace-nowrap overflow-hidden text-ellipsis"
+                >
+                  {isNavigatingToCheckout ? (
+                    <span className="inline-flex items-center justify-center gap-2">
+                      <Loader2 size={17} className="animate-spin" />
+                      جاري الانتقال إلى إتمام الطلب...
+                    </span>
+                  ) : (
+                    `إتمام الطلب — ${subtotal} ج.م`
+                  )}
+                </Link>
                 <button onClick={toggleCart} className="block w-full text-center text-[13px] font-normal text-[#555] hover:text-[#1A1A1A] mt-4">متابعة التسوق</button>
                 <div className="flex items-center justify-center gap-3 mt-4 pt-4 border-t border-gray-100">
                   {[
