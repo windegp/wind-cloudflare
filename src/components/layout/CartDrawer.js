@@ -291,7 +291,7 @@ export default function CartDrawer() {
                   {isNavigatingToCheckout ? (
                     <span className="inline-flex items-center justify-center gap-2">
                       <Loader2 size={17} className="animate-spin" />
-                      جاري الانتقال إلى إتمام الطلب...
+                      جاري الإنتقال إلى صفحة الدفع...
                     </span>
                   ) : (
                     `إتمام الطلب — ${subtotal} ج.م`
