@@ -454,7 +454,7 @@ export default function OrdersListPage() {
                       </th>
                       <th className="px-6 py-5">الطلب والتاريخ</th>
                       <th className="px-6 py-5">العميل</th>
-                      <th className="px-6 py-5">المنتجات والقطع</th>
+                     <th className="px-6 py-5">المنتجات والقطع</th>
                       <th className="px-6 py-5 text-center">حالة الدفع</th>
                       <th className="px-6 py-5">الإجمالي</th>
                       <th className="px-6 py-5 text-center">تفاصيل</th>
@@ -481,10 +481,13 @@ const orderLink = isWind ? order.Name : order.Name.replace('#', '');
 const orderItems = Array.isArray(order.lineItems) ? order.lineItems : [];
 
 const firstProductName =
+  orderItems[0]?.productTitle ||
+  orderItems[0]?.title ||
   orderItems[0]?.name ||
   order['Lineitem name'] ||
   'تفاصيل المنتجات داخل الطلب';
 
+// إجمالي القطع
 const totalPieces = orderItems.length
   ? orderItems.reduce((sum, item) => {
       const qty = Number(item.quantity ?? item.qty);
@@ -492,8 +495,76 @@ const totalPieces = orderItems.length
     }, 0)
   : (Number(order['Lineitem quantity']) || 1);
 
-const productLinesCount =
-  orderItems.length || (order['Lineitem name'] ? 1 : 0);
+// عدد المنتجات المختلفة، وليس عدد سطور الطلب
+const uniqueProductKeys = orderItems.map(item => (
+  item.productHandle ||
+  item.handle ||
+  item.productId ||
+  item.product_id ||
+  item.productTitle ||
+  item.title ||
+  item.name
+)).filter(Boolean);
+
+const uniqueProductsCount = new Set(
+  uniqueProductKeys.map(key =>
+    String(key).trim().toLowerCase()
+  )
+).size;
+
+// الألوان المختارة والمحفوظة داخل الطلب
+const selectedColors = [
+  ...new Set(
+    orderItems
+      .map(item =>
+        String(item.selectedColor || item.color || '').trim()
+      )
+      .filter(Boolean)
+  )
+];
+
+// قراءة المبالغ بأمان
+const toOrderAmount = (value) => {
+  const parsed = Number(
+    String(value ?? 0)
+      .replace(/,/g, '')
+      .replace(/[^\d.-]/g, '')
+  );
+
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const orderSubtotalValue = toOrderAmount(order.Subtotal);
+const orderShippingValue = toOrderAmount(order.Shipping);
+const orderTotalValue = toOrderAmount(order.Total);
+
+// حساب الخصم للطلبات القديمة التي لم تحفظ مبلغ الخصم
+const canDeriveDiscount =
+  order.Subtotal != null &&
+  order.Shipping != null &&
+  order.Total != null;
+
+const derivedDiscount = canDeriveDiscount
+  ? Math.max(
+      0,
+      orderSubtotalValue + orderShippingValue - orderTotalValue
+    )
+  : 0;
+
+const orderDiscountValue =
+  order['Discount Amount'] != null
+    ? Math.max(0, toOrderAmount(order['Discount Amount']))
+    : derivedDiscount;
+
+const orderDiscountLabel =
+  order['Discount Label'] ||
+  (
+    order['Discount Code']
+      ? `كود الخصم ${order['Discount Code']}`
+      : order['Discount Type'] === 'first_order'
+        ? 'خصم الطلب الأول'
+        : 'خصم الطلب'
+  );
 
 return (
                           <tr key={order.id} className="hover:bg-gray-50/80 transition-all cursor-pointer group" onClick={() => router.push(`/admin/orders/${encodeURIComponent(orderLink)}`)}>
@@ -524,14 +595,19 @@ return (
 
     <p className="text-[10px] text-gray-500 font-bold mt-1">
       {totalPieces} قطعة
-      {productLinesCount > 0 && (
-        <span> · {productLinesCount} منتجات</span>
+      {uniqueProductsCount > 0 && (
+        <span>
+          {' · '}
+          {uniqueProductsCount === 1
+            ? 'منتج واحد'
+            : `${uniqueProductsCount} منتجات`}
+        </span>
       )}
     </p>
 
-    {productLinesCount > 1 && (
-      <p className="text-[10px] text-gray-400 mt-1">
-        مع منتجات أخرى
+    {selectedColors.length > 0 && (
+      <p className="text-[10px] text-gray-500 mt-1">
+        الألوان: {selectedColors.join('، ')}
       </p>
     )}
   </div>
@@ -543,27 +619,34 @@ return (
                             </td>
                             <td className="px-6 py-4">
   <div className="space-y-1">
+
     <p className="text-sm font-black text-gray-900">
-      {Number(order.Total || 0).toLocaleString('en-EG')} EGP
+      {orderTotalValue.toLocaleString('en-EG')} EGP
     </p>
 
-    {order.Subtotal != null && (
-      <p className="text-[10px] text-gray-500">
-        المنتجات: {Number(order.Subtotal).toLocaleString('en-EG')} EGP
+    <p className="text-[10px] text-gray-500">
+      المنتجات:
+      {' '}
+      {orderSubtotalValue.toLocaleString('en-EG')} EGP
+    </p>
+
+    {orderDiscountValue > 0 && (
+      <p className="text-[10px] text-red-600 font-bold">
+        {orderDiscountLabel}:
+        {' -'}
+        {orderDiscountValue.toLocaleString('en-EG')} EGP
       </p>
     )}
 
     {order.Shipping != null && (
       <p className="text-[10px] text-gray-500">
-        الشحن: {Number(order.Shipping).toLocaleString('en-EG')} EGP
+        الشحن:
+        {' '}
+        {orderShippingValue.toLocaleString('en-EG')} EGP
+        {orderShippingValue === 0 && ' (مجاني)'}
       </p>
     )}
 
-    {order['Discount Code'] && (
-      <p className="text-[10px] text-red-600 font-bold">
-        كود الخصم: {order['Discount Code']}
-      </p>
-    )}
   </div>
 </td>
                             <td className="px-6 py-4 text-center">

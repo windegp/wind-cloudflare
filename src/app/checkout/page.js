@@ -166,8 +166,63 @@ export default function CheckoutPage() {
   const { signalPageReady } = usePageReady();
   const { isVisible: loaderActive } = useGlobalLoader();
 
-  const SHIPPING_COST = shipping;
+    const SHIPPING_COST = shipping;
   const finalTotal    = total;
+
+  // بيانات المنتجات التي تُحفظ داخل الطلب دون أي استعلامات إضافية
+  const orderLineItems = cartItems.map(item => {
+    const currentPrice = Number.parseFloat(item.price) || 0;
+    const rawCompareAtPrice = Number.parseFloat(item.compareAtPrice);
+    const compareAtPrice =
+      Number.isFinite(rawCompareAtPrice) && rawCompareAtPrice > currentPrice
+        ? rawCompareAtPrice
+        : null;
+
+    return {
+      productId: String(item.id ?? item.productId ?? item.handle ?? ''),
+      productHandle: String(item.handle ?? item.productId ?? item.id ?? ''),
+      productTitle: item.title || item.name || '',
+      name: `${item.title || item.name || 'منتج'}${item.selectedSize ? ' - ' + item.selectedSize : ''}`,
+      price: currentPrice,
+      compareAtPrice,
+      quantity: Number(item.qty) || 1,
+      selectedSize: item.selectedSize || '',
+      selectedColor: item.selectedColor || '',
+      image: item.image || item.images?.[0] || item.mainImage || ''
+    };
+  });
+
+  // ملخص مالي محفوظ مع الطلب
+  const originalSubtotal = orderLineItems.reduce(
+    (sum, item) => sum + (item.compareAtPrice ?? item.price) * item.quantity,
+    0
+  );
+
+  const productDiscountTotal = orderLineItems.reduce(
+    (sum, item) =>
+      sum + Math.max(0, (item.compareAtPrice ?? item.price) - item.price) * item.quantity,
+    0
+  );
+
+  const orderFinancialSnapshot = {
+    "Original Subtotal": originalSubtotal,
+    "Product Discount Total": productDiscountTotal,
+    "Discount Amount": Number(discount) || 0,
+    "Discount Type": appliedPromo?.valid
+      ? appliedPromo.type || 'promo'
+      : (discount > 0 && isFirstOrder ? 'first_order' : ''),
+    "Discount Label": appliedPromo?.valid
+      ? (appliedPromo.type === 'free_shipping'
+          ? 'شحن مجاني'
+          : `كود الخصم ${appliedPromo.code || ''}`.trim())
+      : (discount > 0 && isFirstOrder ? 'خصم الطلب الأول' : ''),
+    "Discount Percent": appliedPromo?.valid && appliedPromo.type === 'percent'
+      ? Number(appliedPromo.value) || 0
+      : (discount > 0 && isFirstOrder
+          ? Number(shippingSettings?.firstOrderDiscount) || 0
+          : 0),
+    "Free Shipping Applied": Number(shipping) === 0
+  };
 
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -300,11 +355,32 @@ export default function CheckoutPage() {
         
         if (isOrderSubmittedRef.current) return;
 
-        const currentSnapshot = JSON.stringify({ 
-           email: formData.email, 
-           phone: formData.phone, 
-           items: cartItems.length, 
-           total: finalTotal 
+                const currentSnapshot = JSON.stringify({
+          email: formData.email,
+          phone: formData.phone,
+          items: cartItems.map(item => ({
+            productId: String(item.id ?? item.productId ?? item.handle ?? ''),
+            productHandle: String(item.handle ?? item.productId ?? item.id ?? ''),
+            title: item.title || item.name || '',
+            price: Number(item.price) || 0,
+            compareAtPrice: Number(item.compareAtPrice) || 0,
+            quantity: Number(item.qty) || 1,
+            selectedSize: item.selectedSize || '',
+            selectedColor: item.selectedColor || '',
+            image: item.image || item.images?.[0] || item.mainImage || ''
+          })),
+          subtotal: Number(subtotal) || 0,
+          discount: Number(discount) || 0,
+          shipping: Number(shipping) || 0,
+          total: Number(finalTotal) || 0,
+          promo: appliedPromo ? {
+            code: appliedPromo.code || '',
+            type: appliedPromo.type || '',
+            value: appliedPromo.value || 0,
+            discountAmount: appliedPromo.discountAmount || 0
+          } : null,
+          isFirstOrder: Boolean(isFirstOrder),
+          firstOrderDiscount: Number(shippingSettings?.firstOrderDiscount) || 0
         });
 
         if (lastSavedDraftRef.current === currentSnapshot) return; 
@@ -339,12 +415,8 @@ export default function CheckoutPage() {
             "Created at": getCairoTimestamp(),
             data_source: "WIND_Web",
             AnonymousBrowserId: anonymousBrowserId,
-            lineItems: cartItems.map(item => ({
-              name: `${item.title} ${item.selectedSize ? '- ' + item.selectedSize : ''}`,
-              price: item.price,
-              quantity: item.qty,
-              image: item.image || item.images?.[0] || ''
-            }))
+                        ...orderFinancialSnapshot,
+            lineItems: orderLineItems
           };
 
           if (appliedPromo?.code) draftData['Discount Code'] = appliedPromo.code;
@@ -381,7 +453,7 @@ export default function CheckoutPage() {
 
       return () => clearTimeout(timeoutId); 
     }
-  }, [formData.email, formData.phone, cartItems, finalTotal, subtotal, shipping, appliedPromo, activeOrderId]);
+    }, [formData.email, formData.phone, cartItems, finalTotal, subtotal, discount, shipping, appliedPromo, isFirstOrder, shippingSettings, activeOrderId]);
 
   const validate = () => {
     let tempErrors = {};
@@ -470,12 +542,8 @@ export default function CheckoutPage() {
         "Payment Method": paymentMethod,
         "Created at": getCairoTimestamp(),
         data_source: "WIND_Web",
-        lineItems: cartItems.map(item => ({
-          name: `${item.title} ${item.selectedSize ? '- ' + item.selectedSize : ''}`,
-          price: item.price,
-          quantity: item.qty,
-          image: item.image || item.images?.[0] || ''
-        }))
+                ...orderFinancialSnapshot,
+        lineItems: orderLineItems
       };
 
       if (appliedPromo?.code) orderData['Discount Code'] = appliedPromo.code;
