@@ -506,11 +506,13 @@ const uniqueProductKeys = orderItems.map(item => (
   item.name
 )).filter(Boolean);
 
-const uniqueProductsCount = new Set(
-  uniqueProductKeys.map(key =>
-    String(key).trim().toLowerCase()
-  )
-).size;
+const uniqueProductsCount =
+  new Set(
+    uniqueProductKeys.map(key =>
+      String(key).trim().toLowerCase()
+    )
+  ).size ||
+  (!orderItems.length && order['Lineitem name'] ? 1 : 0);
 
 // الألوان المختارة والمحفوظة داخل الطلب
 const selectedColors = [
@@ -538,7 +540,10 @@ const orderSubtotalValue = toOrderAmount(order.Subtotal);
 const orderShippingValue = toOrderAmount(order.Shipping);
 const orderTotalValue = toOrderAmount(order.Total);
 
-// حساب الخصم للطلبات القديمة التي لم تحفظ مبلغ الخصم
+const originalSubtotalValue = toOrderAmount(order['Original Subtotal']);
+const productDiscountTotalValue = toOrderAmount(order['Product Discount Total']);
+
+// حساب فرق المبالغ للطلبات القديمة فقط عند عدم وجود خصم محفوظ
 const canDeriveDiscount =
   order.Subtotal != null &&
   order.Shipping != null &&
@@ -551,19 +556,25 @@ const derivedDiscount = canDeriveDiscount
     )
   : 0;
 
-const orderDiscountValue =
-  order['Discount Amount'] != null
-    ? Math.max(0, toOrderAmount(order['Discount Amount']))
-    : derivedDiscount;
+const hasSavedDiscount =
+  order['Discount Amount'] !== undefined &&
+  order['Discount Amount'] !== null &&
+  order['Discount Amount'] !== '';
+
+const orderDiscountValue = hasSavedDiscount
+  ? Math.max(0, toOrderAmount(order['Discount Amount']))
+  : derivedDiscount;
 
 const orderDiscountLabel =
   order['Discount Label'] ||
   (
-    order['Discount Code']
-      ? `كود الخصم ${order['Discount Code']}`
-      : order['Discount Type'] === 'first_order'
-        ? 'خصم الطلب الأول'
-        : 'خصم الطلب'
+    hasSavedDiscount
+      ? order['Discount Code']
+        ? `كود الخصم ${order['Discount Code']}`
+        : order['Discount Type'] === 'first_order'
+          ? 'خصم الطلب الأول'
+          : 'الخصم'
+      : 'فرق حسابي تقديري'
   );
 
 return (
@@ -624,17 +635,41 @@ return (
       {orderTotalValue.toLocaleString('en-EG')} EGP
     </p>
 
-    <p className="text-[10px] text-gray-500">
-      المنتجات:
-      {' '}
-      {orderSubtotalValue.toLocaleString('en-EG')} EGP
-    </p>
+    {originalSubtotalValue > orderSubtotalValue && (
+      <p className="text-[10px] text-gray-500">
+        قبل تخفيض المنتجات:
+        {' '}
+        {originalSubtotalValue.toLocaleString('en-EG')} EGP
+      </p>
+    )}
+
+    {order.Subtotal != null && (
+      <p className="text-[10px] text-gray-500">
+        المنتجات:
+        {' '}
+        {orderSubtotalValue.toLocaleString('en-EG')} EGP
+      </p>
+    )}
+
+    {productDiscountTotalValue > 0 && (
+      <p className="text-[10px] text-emerald-600 font-bold">
+        تخفيض المنتجات:
+        {' -'}
+        {productDiscountTotalValue.toLocaleString('en-EG')} EGP
+      </p>
+    )}
 
     {orderDiscountValue > 0 && (
       <p className="text-[10px] text-red-600 font-bold">
         {orderDiscountLabel}:
         {' -'}
         {orderDiscountValue.toLocaleString('en-EG')} EGP
+      </p>
+    )}
+
+    {order['Discount Code'] && (
+      <p className="text-[10px] text-gray-500">
+        كود الخصم: {order['Discount Code']}
       </p>
     )}
 
