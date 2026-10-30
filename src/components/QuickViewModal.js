@@ -168,7 +168,7 @@ export default function QuickViewModal({ product, isOpen, onClose }) {
     return str.charAt(0).toUpperCase() + str.slice(1);
   };
 
-  const getImageUrl = (prod, imgStr) => {
+    const getImageUrl = (prod, imgStr) => {
     let img = imgStr || prod?.mainImage || prod?.image || prod?.images?.[0];
     if (!img) return "https://placehold.co/150x200";
     if (img.startsWith("http")) return img;
@@ -178,6 +178,36 @@ export default function QuickViewModal({ product, isOpen, onClose }) {
     return "https://placehold.co/150x200";
   };
 
+  // صورة السلة مرتبطة باللون المختار، وليس صورة المعرض الأخيرة
+  const getSelectedColorCartImage = () => {
+    const colorSwatch = qvSelectedColor
+      ? product.colorSwatches?.[qvSelectedColor]
+      : null;
+
+    const isColorImage =
+      typeof colorSwatch === "string" &&
+      (
+        colorSwatch.startsWith("http") ||
+        colorSwatch.startsWith("//") ||
+        colorSwatch.startsWith("/") ||
+        colorSwatch.includes("/") ||
+        /\.(avif|webp|png|jpe?g|gif)(\?.*)?$/i.test(colorSwatch)
+      );
+
+    if (isColorImage) {
+      return getImageUrl(product, colorSwatch);
+    }
+
+    return getImageUrl(
+      product,
+      product.mainImage ||
+      product.mainImageUrl ||
+      product.image ||
+      product.images?.[0] ||
+      ""
+    );
+  };
+
   const handleAddToCartFromQuickView = () => {
     if (!canPurchase) return;
     setIsAdding(true);
@@ -185,7 +215,7 @@ export default function QuickViewModal({ product, isOpen, onClose }) {
       ...product,
       selectedSize: qvSelectedSize,
       selectedColor: qvSelectedColor,
-      image: getImageUrl(product, qvActiveImage),
+            image: getSelectedColorCartImage(),
       qty: qvQuantity
     });
 
