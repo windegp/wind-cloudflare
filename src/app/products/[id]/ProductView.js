@@ -370,12 +370,41 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   if (loading && !product) return null; 
   if (!product) return null;
 
-  const getImageUrl = img => {
+    const getImageUrl = img => {
     if (!img) return "/placeholder.png";
     if (img.startsWith("http")) return img;
     if (img.startsWith("//")) return `https:${img}`;
-    if (img.startsWith("/cdn/")) return `https://cdn.shopify.com${img}`; 
+    if (img.startsWith("/cdn/")) return `https://cdn.shopify.com${img}`;
     return `/images/products/${product.folderName || 'default'}/${img}`;
+  };
+
+  // صورة السلة تتبع اللون المختار، وليس آخر صورة شاهدها العميل في المعرض
+  const getSelectedColorCartImage = () => {
+    const colorSwatch = selectedColor
+      ? product.colorSwatches?.[selectedColor]
+      : null;
+
+    const isColorImage =
+      typeof colorSwatch === "string" &&
+      (
+        colorSwatch.startsWith("http") ||
+        colorSwatch.startsWith("//") ||
+        colorSwatch.startsWith("/") ||
+        colorSwatch.includes("/") ||
+        /\.(avif|webp|png|jpe?g|gif)(\?.*)?$/i.test(colorSwatch)
+      );
+
+    if (isColorImage) {
+      return getImageUrl(colorSwatch);
+    }
+
+    // لا نخمن صورة لون غير معروفة
+    return getImageUrl(
+      product.mainImage ||
+      product.images?.[0] ||
+      product.image ||
+      ""
+    );
   };
 
   const getRelatedImageUrl = (rp) => {
@@ -785,7 +814,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
               onClick={async () => {
   if (!canPurchase) return;
   setIsAddingToCart(true);
-  await addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity});
+  await addToCart({...product, selectedSize, selectedColor, image: getSelectedColorCartImage(), qty: quantity});
   fbTrack("AddToCart", {
     value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
     currency: "EGP",
@@ -868,7 +897,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                   onClick={async () => {
   if (!canPurchase) return;
   setIsAddingToCart(true);
-  await addToCart({...product, selectedSize, selectedColor, image: getImageUrl(activeImage), qty: quantity});
+  await addToCart({...product, selectedSize, selectedColor, image: getSelectedColorCartImage(), qty: quantity});
   fbTrack("AddToCart", {
     value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
     currency: "EGP",
@@ -1132,7 +1161,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
                       ...product,
                       selectedSize,
                       selectedColor,
-                      image: getImageUrl(activeImage),
+                      image: getSelectedColorCartImage(),
                       qty: quantity,
                     });
 
