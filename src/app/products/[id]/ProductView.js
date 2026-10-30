@@ -35,7 +35,8 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   // الـ useEffect ويُطلَق ViewContent مرة ثانية لنفس المنتج بالضبط.
   // الحل: تتبّع "هوية" المنتج (handle/id) لا مرجع الكائن — يمنع التكرار
   // لنفس المنتج، ويسمح بالإرسال الصحيح عند تغيّر المنتج فعلياً (SPA nav).
-  const lastViewContentHandleRef = useRef(null);
+    const lastViewContentHandleRef = useRef(null);
+  const lastInitializedProductKeyRef = useRef(null);
   const { addToCart }                       = useCart();
   const [activeImage, setActiveImage]       = useState(initialProduct?.images?.[0] || initialProduct?.mainImage || "");
   const [activeIdx, setActiveIdx]           = useState(0);
@@ -175,25 +176,81 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   const activeProduct = fbProduct || initialProduct;
   const { data: swrRelated, isLoading: relatedLoading } = useRelatedProducts(activeProduct);
 
-  useEffect(() => {
-    if (activeProduct) {
-      setProduct(activeProduct);
-      setRealLikesCount(activeProduct.likesCount || 0);
-      if (!selectedSize || !selectedColor) {
-        setActiveImage(activeProduct.images?.[0] || activeProduct.mainImage || activeProduct.image);
-        let iS = "", iC = "";
-        if (activeProduct.options && Array.isArray(activeProduct.options)) {
-          activeProduct.options.forEach(opt => {
-            const n = (opt.name || "").toLowerCase();
-            if ((n.includes("size") || n.includes("مقاس")) && opt.values) iS = opt.values.split(",")[0].trim();
-            if ((n.includes("color") || n.includes("لون")) && opt.values) iC = opt.values.split(",")[0].trim();
-          });
-        }
-        setSelectedSize(iS || (activeProduct.sizes?.[0]) || "");
-        setSelectedColor(iC || (activeProduct.colors?.[0]?.name || activeProduct.colors?.[0]) || "");
+    useEffect(() => {
+    if (!activeProduct) return;
+
+    setProduct(activeProduct);
+    setRealLikesCount(activeProduct.likesCount || 0);
+
+    // لا نعيد الاختيار عند تحديث SWR لنفس المنتج.
+    // لكن عند الانتقال إلى منتج آخر نبدأ اختياراته من بياناته هو.
+    const currentProductKey = String(
+      activeProduct.handle || activeProduct.id || id || ''
+    );
+
+    if (lastInitializedProductKeyRef.current !== currentProductKey) {
+      lastInitializedProductKeyRef.current = currentProductKey;
+
+      let initialSize = '';
+      let initialColor = '';
+
+      if (Array.isArray(activeProduct.options)) {
+        activeProduct.options.forEach(opt => {
+          const optionName = String(opt.name || '').toLowerCase();
+
+          if (
+            (optionName.includes('size') || optionName.includes('مقاس')) &&
+            typeof opt.values === 'string'
+          ) {
+            initialSize = opt.values.split(',')[0].trim();
+          }
+
+          if (
+            (
+              optionName.includes('color') ||
+              optionName.includes('colour') ||
+              optionName.includes('لون')
+            ) &&
+            typeof opt.values === 'string'
+          ) {
+            initialColor = opt.values.split(',')[0].trim();
+          }
+        });
       }
-      setLoading(false);
+
+      const sizeFallback = Array.isArray(activeProduct.options?.sizes)
+        ? activeProduct.options.sizes[0]
+        : activeProduct.sizes?.[0];
+
+      const colorFallbackList =
+        Array.isArray(activeProduct.options?.colors) &&
+        activeProduct.options.colors.length > 0
+          ? activeProduct.options.colors
+          : activeProduct.colors;
+
+      const firstColor = Array.isArray(colorFallbackList)
+        ? colorFallbackList[0]
+        : '';
+
+      const colorFallback =
+        typeof firstColor === 'object'
+          ? firstColor?.name || ''
+          : firstColor || '';
+
+      setActiveImage(
+        activeProduct.images?.[0] ||
+        activeProduct.mainImage ||
+        activeProduct.image ||
+        ''
+      );
+
+      setActiveIdx(0);
+      setSelectedSize(initialSize || sizeFallback || '');
+      setSelectedColor(initialColor || colorFallback || '');
+      setQuantity(1);
     }
+
+    setLoading(false);
   }, [activeProduct, id]);
 
   useEffect(() => { if (swrRelated) setRelatedProducts(swrRelated); }, [swrRelated]);

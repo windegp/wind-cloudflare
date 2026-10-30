@@ -5,7 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { getDb } from "@/lib/firebase";
 import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore/lite";
-import { ArrowRight, Package, User, MapPin, Printer } from '@/components/icons-extra';
+import { ArrowRight, Package, User, MapPin, Printer, Phone } from '@/components/icons-extra';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,6 +21,77 @@ const toAmount = (value) => {
 
 const money = (value) =>
   `${toAmount(value).toLocaleString('en-EG')} EGP`;
+
+function CopyButton({ value, label }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    const textValue = String(value ?? '').trim();
+    if (!textValue) return;
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(textValue);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = textValue;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+
+        const success = document.execCommand('copy');
+        document.body.removeChild(textarea);
+
+        if (!success) throw new Error('Copy failed');
+      }
+
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1200);
+    } catch (error) {
+      console.error(`Unable to copy ${label}:`, error);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      title={copied ? 'تم النسخ' : `نسخ ${label}`}
+      aria-label={`نسخ ${label}`}
+      className="w-7 h-7 shrink-0 rounded-md flex items-center justify-center text-gray-400 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+    >
+      {copied ? (
+        <svg
+          width="15"
+          height="15"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M20 6L9 17l-5-5" />
+        </svg>
+      ) : (
+        <svg
+          width="15"
+          height="15"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <rect x="8" y="8" width="13" height="13" rx="2" />
+          <path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" />
+        </svg>
+      )}
+    </button>
+  );
+}
 
 const formatDate = (value) => {
   if (!value) return 'غير مسجل';
@@ -655,31 +726,62 @@ export default function OrderDetailsPage() {
                 العميل
               </h2>
 
-              <p className="text-sm font-black text-blue-700 mb-3">
-                {customerName}
-              </p>
+                            <div className="flex items-center justify-between gap-2 mb-3">
+                <p className="text-sm font-black text-blue-700">
+                  {customerName}
+                </p>
+                <CopyButton value={customerName} label="اسم العميل" />
+              </div>
 
               <div className="space-y-3">
-                <div>
+                                <div>
                   <p className="text-[11px] text-gray-500 mb-1">البريد الإلكتروني</p>
-                  <p className="text-xs font-medium text-gray-800 break-all" dir="ltr">
-                    {order.Email || 'غير مسجل'}
-                  </p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-medium text-gray-800 break-all" dir="ltr">
+                      {order.Email || 'غير مسجل'}
+                    </p>
+                    {order.Email && (
+                      <CopyButton value={order.Email} label="البريد الإلكتروني" />
+                    )}
+                  </div>
                 </div>
 
-                <div>
+                                <div>
                   <p className="text-[11px] text-gray-500 mb-1">رقم الهاتف</p>
-                  <p className="text-xs font-medium text-gray-800" dir="ltr">
-                    {customerPhone || 'غير مسجل'}
-                  </p>
+                  <div className="flex items-center justify-between gap-2">
+                    {customerPhone ? (
+                      <a
+                        href={`tel:${String(customerPhone).replace(/[^\d+]/g, '')}`}
+                        className="text-xs font-bold text-blue-700 hover:underline flex items-center gap-1.5"
+                        dir="ltr"
+                      >
+                        <Phone size={13} />
+                        {customerPhone}
+                      </a>
+                    ) : (
+                      <p className="text-xs text-gray-400">غير مسجل</p>
+                    )}
+
+                    {customerPhone && (
+                      <CopyButton value={customerPhone} label="رقم الهاتف" />
+                    )}
+                  </div>
                 </div>
 
-                {alternatePhone && (
+                                {alternatePhone && (
                   <div>
                     <p className="text-[11px] text-gray-500 mb-1">الهاتف البديل</p>
-                    <p className="text-xs font-medium text-gray-800" dir="ltr">
-                      {alternatePhone}
-                    </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <a
+                        href={`tel:${String(alternatePhone).replace(/[^\d+]/g, '')}`}
+                        className="text-xs font-bold text-blue-700 hover:underline flex items-center gap-1.5"
+                        dir="ltr"
+                      >
+                        <Phone size={13} />
+                        {alternatePhone}
+                      </a>
+                      <CopyButton value={alternatePhone} label="الهاتف البديل" />
+                    </div>
                   </div>
                 )}
               </div>
@@ -692,20 +794,32 @@ export default function OrderDetailsPage() {
                 عنوان الشحن
               </h2>
 
-              {shippingAddress.length > 0 ? (
-                <div className="space-y-2 text-xs text-gray-700 leading-relaxed">
-                  {shippingAddress.map((part, index) => (
-                    <p key={index}>{part}</p>
-                  ))}
+                            {shippingAddress.length > 0 ? (
+                <div className="flex items-start justify-between gap-2">
+                  <div className="space-y-2 text-xs text-gray-700 leading-relaxed flex-1 min-w-0">
+                    {shippingAddress.map((part, index) => (
+                      <p key={index}>{part}</p>
+                    ))}
+                  </div>
+
+                  <CopyButton
+                    value={shippingAddress.join('، ')}
+                    label="عنوان الشحن"
+                  />
                 </div>
               ) : (
                 <p className="text-xs text-gray-400">لا يوجد عنوان شحن مسجل.</p>
               )}
 
-              {customerPhone && (
-                <p className="text-xs text-gray-600 mt-4 pt-3 border-t border-gray-100" dir="ltr">
+                            {customerPhone && (
+                <a
+                  href={`tel:${String(customerPhone).replace(/[^\d+]/g, '')}`}
+                  className="text-xs text-blue-700 font-bold mt-4 pt-3 border-t border-gray-100 flex items-center gap-2 hover:underline"
+                  dir="ltr"
+                >
+                  <Phone size={13} />
                   {customerPhone}
-                </p>
+                </a>
               )}
             </section>
 

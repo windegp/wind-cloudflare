@@ -514,13 +514,25 @@ const uniqueProductsCount =
   ).size ||
   (!orderItems.length && order['Lineitem name'] ? 1 : 0);
 
-// الألوان المختارة والمحفوظة داخل الطلب
-const selectedColors = [
+// ربط كل لون باسم المنتج الذي يخصه
+const productColorSummary = [
   ...new Set(
     orderItems
-      .map(item =>
-        String(item.selectedColor || item.color || '').trim()
-      )
+      .map(item => {
+        const color = String(
+          item.selectedColor || item.color || ''
+        ).trim();
+
+        if (!color) return '';
+
+        const productName =
+          item.productTitle ||
+          item.title ||
+          item.name ||
+          'منتج';
+
+        return `${productName}: ${color}`;
+      })
       .filter(Boolean)
   )
 ];
@@ -616,9 +628,9 @@ return (
       )}
     </p>
 
-    {selectedColors.length > 0 && (
-      <p className="text-[10px] text-gray-500 mt-1">
-        الألوان: {selectedColors.join('، ')}
+        {productColorSummary.length > 0 && (
+      <p className="text-[10px] text-gray-500 mt-1 line-clamp-2">
+        ألوان المنتجات: {productColorSummary.join(' • ')}
       </p>
     )}
   </div>
