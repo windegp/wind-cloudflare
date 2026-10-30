@@ -454,7 +454,7 @@ export default function OrdersListPage() {
                       </th>
                       <th className="px-6 py-5">الطلب والتاريخ</th>
                       <th className="px-6 py-5">العميل</th>
-                      <th className="px-6 py-5">المنتج والكمية</th>
+                      <th className="px-6 py-5">المنتجات والقطع</th>
                       <th className="px-6 py-5 text-center">حالة الدفع</th>
                       <th className="px-6 py-5">الإجمالي</th>
                       <th className="px-6 py-5 text-center">تفاصيل</th>
@@ -475,8 +475,27 @@ export default function OrdersListPage() {
                     ) : (
                       currentOrders.map((order) => {
                         const isWind = order.data_source === 'WIND_Web';
-                        const orderLink = isWind ? order.Name : order.Name.replace('#', '');
-                        return (
+const orderLink = isWind ? order.Name : order.Name.replace('#', '');
+
+// بيانات المنتجات الموجودة داخل الطلب بالفعل — دون أي قراءة جديدة
+const orderItems = Array.isArray(order.lineItems) ? order.lineItems : [];
+
+const firstProductName =
+  orderItems[0]?.name ||
+  order['Lineitem name'] ||
+  'تفاصيل المنتجات داخل الطلب';
+
+const totalPieces = orderItems.length
+  ? orderItems.reduce((sum, item) => {
+      const qty = Number(item.quantity ?? item.qty);
+      return sum + (Number.isFinite(qty) && qty > 0 ? qty : 1);
+    }, 0)
+  : (Number(order['Lineitem quantity']) || 1);
+
+const productLinesCount =
+  orderItems.length || (order['Lineitem name'] ? 1 : 0);
+
+return (
                           <tr key={order.id} className="hover:bg-gray-50/80 transition-all cursor-pointer group" onClick={() => router.push(`/admin/orders/${encodeURIComponent(orderLink)}`)}>
                             <td className="px-6 py-4 text-center" onClick={(e) => e.stopPropagation()}>
                               <input 
@@ -498,18 +517,55 @@ export default function OrdersListPage() {
                               <p className="text-[10px] text-gray-500 font-mono mt-0.5" dir="ltr">{order.Phone || order['Shipping Phone'] || order.Email}</p>
                             </td>
                             <td className="px-6 py-4">
-                              <p className="text-xs font-bold text-gray-700 line-clamp-1 max-w-[220px]">
-                                {isWind ? (order.lineItems?.[0]?.name) : order['Lineitem name']}
-                              </p>
-                            </td>
+  <div className="max-w-[220px]">
+    <p className="text-xs font-bold text-gray-800 line-clamp-1">
+      {firstProductName}
+    </p>
+
+    <p className="text-[10px] text-gray-500 font-bold mt-1">
+      {totalPieces} قطعة
+      {productLinesCount > 0 && (
+        <span> · {productLinesCount} منتجات</span>
+      )}
+    </p>
+
+    {productLinesCount > 1 && (
+      <p className="text-[10px] text-gray-400 mt-1">
+        مع منتجات أخرى
+      </p>
+    )}
+  </div>
+</td>
                             <td className="px-6 py-4 text-center">
                               <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${getStatusColor(order['Financial Status'])}`}>
                                 {order['Financial Status']}
                               </span>
                             </td>
                             <td className="px-6 py-4">
-                              <p className="text-sm font-black text-gray-900">{order.Total} EGP</p>
-                            </td>
+  <div className="space-y-1">
+    <p className="text-sm font-black text-gray-900">
+      {Number(order.Total || 0).toLocaleString('en-EG')} EGP
+    </p>
+
+    {order.Subtotal != null && (
+      <p className="text-[10px] text-gray-500">
+        المنتجات: {Number(order.Subtotal).toLocaleString('en-EG')} EGP
+      </p>
+    )}
+
+    {order.Shipping != null && (
+      <p className="text-[10px] text-gray-500">
+        الشحن: {Number(order.Shipping).toLocaleString('en-EG')} EGP
+      </p>
+    )}
+
+    {order['Discount Code'] && (
+      <p className="text-[10px] text-red-600 font-bold">
+        كود الخصم: {order['Discount Code']}
+      </p>
+    )}
+  </div>
+</td>
                             <td className="px-6 py-4 text-center">
                               <div className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center mx-auto group-hover:border-[#008060] group-hover:bg-green-50 transition-colors">
                                 <ChevronLeft size={16} className="text-gray-400 group-hover:text-[#008060]" />
