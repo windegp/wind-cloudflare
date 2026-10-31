@@ -124,7 +124,7 @@ export default function CartDrawer() {
   };
 
   const getImageUrl = (product) => {
-    let img = product?.mainImage || product?.image || product?.images?.[0];
+    let img = product?.image || product?.mainImage || product?.images?.[0];
     if (!img) return "https://placehold.co/150x200";
     if (img.startsWith("http")) return img;
     if (product?.folderName) return `/images/products/${product.folderName}/${img}`;
