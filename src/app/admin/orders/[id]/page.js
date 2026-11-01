@@ -309,8 +309,7 @@ export default function OrderDetailsPage() {
     }
   };
 
-  if (loading) {
-      const handleSaveStatuses = async () => {
+    const handleSaveStatuses = async () => {
     if (!orderDocId || isSavingStatus || !order) return;
 
     const currentFulfillment =
@@ -372,6 +371,8 @@ export default function OrderDetailsPage() {
       setIsSavingStatus(false);
     }
   };
+
+  if (loading) {
     return (
       <div className="min-h-screen bg-[#f6f6f7] flex items-center justify-center" dir="rtl">
         <p className="text-sm font-bold text-gray-500 animate-pulse">
