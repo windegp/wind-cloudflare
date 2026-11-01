@@ -514,8 +514,8 @@ const uniqueProductsCount =
   ).size ||
   (!orderItems.length && order['Lineitem name'] ? 1 : 0);
 
-// ربط كل لون باسم المنتج الذي يخصه
-const productColorSummary = [
+// تجميع الألوان والمقاسات لكل منتج دون تكرار
+const productVariantSummary = [
   ...new Set(
     orderItems
       .map(item => {
@@ -523,7 +523,16 @@ const productColorSummary = [
           item.selectedColor || item.color || ''
         ).trim();
 
-        if (!color) return '';
+        const size = String(
+          item.selectedSize || item.size || ''
+        ).trim();
+
+        const variants = [
+          color ? `اللون: ${color}` : '',
+          size ? `المقاس: ${size}` : ''
+        ].filter(Boolean).join('، ');
+
+        if (!variants) return '';
 
         const productName =
           item.productTitle ||
@@ -531,7 +540,7 @@ const productColorSummary = [
           item.name ||
           'منتج';
 
-        return `${productName}: ${color}`;
+        return `${productName}: ${variants}`;
       })
       .filter(Boolean)
   )
@@ -628,11 +637,11 @@ return (
       )}
     </p>
 
-        {productColorSummary.length > 0 && (
-      <p className="text-[10px] text-gray-500 mt-1 line-clamp-2">
-        ألوان المنتجات: {productColorSummary.join(' • ')}
-      </p>
-    )}
+        {productVariantSummary.length > 0 && (
+  <p className="text-[10px] text-gray-500 mt-1 line-clamp-2">
+    الأصناف: {productVariantSummary.join(' • ')}
+  </p>
+)}
   </div>
 </td>
                             <td className="px-6 py-4 text-center">
@@ -643,58 +652,60 @@ return (
                             <td className="px-6 py-4">
   <div className="space-y-1">
 
-    <p className="text-sm font-black text-gray-900">
-      {orderTotalValue.toLocaleString('en-EG')} EGP
+  {originalSubtotalValue > orderSubtotalValue && (
+    <p className="text-[10px] text-gray-500">
+      القيمة الأصلية للمنتجات:
+      {' '}
+      {originalSubtotalValue.toLocaleString('en-EG')} EGP
     </p>
+  )}
 
-    {originalSubtotalValue > orderSubtotalValue && (
-      <p className="text-[10px] text-gray-500">
-        قبل تخفيض المنتجات:
-        {' '}
-        {originalSubtotalValue.toLocaleString('en-EG')} EGP
-      </p>
-    )}
+  {productDiscountTotalValue > 0 && (
+    <p className="text-[10px] text-emerald-600 font-bold">
+      خصم تخفيضات المنتجات:
+      {' -'}
+      {productDiscountTotalValue.toLocaleString('en-EG')} EGP
+    </p>
+  )}
 
-    {order.Subtotal != null && (
-      <p className="text-[10px] text-gray-500">
-        المنتجات:
-        {' '}
-        {orderSubtotalValue.toLocaleString('en-EG')} EGP
-      </p>
-    )}
+  {order.Subtotal != null && (
+    <p className="text-[10px] text-gray-700">
+      صافي قيمة المنتجات:
+      {' '}
+      {orderSubtotalValue.toLocaleString('en-EG')} EGP
+    </p>
+  )}
 
-    {productDiscountTotalValue > 0 && (
-      <p className="text-[10px] text-emerald-600 font-bold">
-        تخفيض المنتجات:
-        {' -'}
-        {productDiscountTotalValue.toLocaleString('en-EG')} EGP
-      </p>
-    )}
+  {orderDiscountValue > 0 && (
+    <p className="text-[10px] text-red-600 font-bold">
+      {orderDiscountLabel}:
+      {' -'}
+      {orderDiscountValue.toLocaleString('en-EG')} EGP
+    </p>
+  )}
 
-    {orderDiscountValue > 0 && (
-      <p className="text-[10px] text-red-600 font-bold">
-        {orderDiscountLabel}:
-        {' -'}
-        {orderDiscountValue.toLocaleString('en-EG')} EGP
-      </p>
-    )}
+  {order['Discount Code'] && (
+    <p className="text-[10px] text-gray-500">
+      كود الخصم: {order['Discount Code']}
+    </p>
+  )}
 
-    {order['Discount Code'] && (
-      <p className="text-[10px] text-gray-500">
-        كود الخصم: {order['Discount Code']}
-      </p>
-    )}
+  {order.Shipping != null && (
+    <p className="text-[10px] text-gray-500">
+      الشحن:
+      {' '}
+      {orderShippingValue.toLocaleString('en-EG')} EGP
+      {orderShippingValue === 0 && ' (مجاني)'}
+    </p>
+  )}
 
-    {order.Shipping != null && (
-      <p className="text-[10px] text-gray-500">
-        الشحن:
-        {' '}
-        {orderShippingValue.toLocaleString('en-EG')} EGP
-        {orderShippingValue === 0 && ' (مجاني)'}
-      </p>
-    )}
+  <p className="text-sm font-black text-gray-900 border-t border-gray-100 pt-2 mt-2">
+    الإجمالي النهائي:
+    {' '}
+    {orderTotalValue.toLocaleString('en-EG')} EGP
+  </p>
 
-  </div>
+</div>
 </td>
                             <td className="px-6 py-4 text-center">
                               <div className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center mx-auto group-hover:border-[#008060] group-hover:bg-green-50 transition-colors">
