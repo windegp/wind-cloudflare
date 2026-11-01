@@ -939,11 +939,7 @@ return (
                               </span>
                             </td>
 
-                            <td className="px-6 py-4 text-center">
-                              <div className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center mx-auto group-hover:border-[#008060] group-hover:bg-green-50 transition-colors">
-                                <ChevronLeft size={16} className="text-gray-400 group-hover:text-[#008060]" />
-                              </div>
-                            </td>
+                            
                           </tr>
                         );
                       })
