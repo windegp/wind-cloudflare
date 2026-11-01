@@ -46,8 +46,9 @@ export default function OrdersListPage() {
   const [savingOrderStatus, setSavingOrderStatus] = useState({});
 
   // 🔥 In-memory cache للتابات — بيمنع إعادة الجلب لو رجعت لتاب اتجلب قبل كده
-  const tabCacheRef = useRef({});
-  const tabLastVisibleRef = useRef({});
+ const tabCacheRef = useRef({});
+const tabLastVisibleRef = useRef({});
+const tabHasMoreRef = useRef({});
 
   const router = useRouter();
 
@@ -62,11 +63,11 @@ export default function OrdersListPage() {
 
     // ✅ لو مش loadMore وعندنا cache للتاب ده، استخدمه بدون أي read
     if (!loadMore && tabCacheRef.current[activeTab]) {
-      setAllRawOrders(tabCacheRef.current[activeTab]);
-      setLastVisible(tabLastVisibleRef.current[activeTab] || null);
-      setHasMore(false);
-      return;
-    }
+  setAllRawOrders(tabCacheRef.current[activeTab]);
+  setLastVisible(tabLastVisibleRef.current[activeTab] || null);
+  setHasMore(tabHasMoreRef.current[activeTab] ?? false);
+  return;
+}
 
     setIsLoading(true);
     try {
@@ -103,7 +104,9 @@ export default function OrdersListPage() {
 
       setAllRawOrders(updatedDocs);
       setLastVisible(querySnapshot.docs[querySnapshot.docs.length - 1] || null);
-      setHasMore(querySnapshot.docs.length === fetchLimit);
+      const hasMoreOrders = querySnapshot.docs.length === fetchLimit;
+tabHasMoreRef.current[activeTab] = hasMoreOrders;
+setHasMore(hasMoreOrders);
 
     } catch (err) {
       console.error("WIND Error: Fetch failed", err);
@@ -150,10 +153,9 @@ export default function OrdersListPage() {
     let result = allRawOrders.filter(o => o['Financial Status'] !== 'deleted');
     
     const isAbandonedDraft = (o) => {
-      return o['Financial Status'] === 'abandoned' || 
-             o['Financial Status'] === 'pending_payment' || 
-             o.Name?.startsWith('DRAFT-');
-    };
+  return o['Financial Status'] === 'abandoned' ||
+         o.Name?.startsWith('DRAFT-');
+};
 
     if (activeTab === 'abandoned') {
       result = result.filter(isAbandonedDraft);
@@ -199,12 +201,22 @@ export default function OrdersListPage() {
       let totalCountToSubtract = 0;
 
       ordersToProcess.forEach(order => {
-        if (order['Financial Status'] !== 'abandoned') {
-          totalAmountToSubtract += Number(order.Total || 0);
-          totalCountToSubtract += 1;
-        }
-        batch.delete(doc(db, "Orders", order.id));
-      });
+  const financialStatus = String(
+    order['Financial Status'] || ''
+  ).toLowerCase();
+
+  const isUncountedOrder =
+    financialStatus === 'abandoned' ||
+    financialStatus === 'pending_payment' ||
+    order.Name?.startsWith('DRAFT-');
+
+  if (!isUncountedOrder) {
+    totalAmountToSubtract += Number(order.Total || 0);
+    totalCountToSubtract += 1;
+  }
+
+  batch.delete(doc(db, "Orders", order.id));
+});
 
       if (totalCountToSubtract > 0) {
         const settingsRef = doc(db, "settings", "siteSettings");
@@ -281,10 +293,9 @@ export default function OrdersListPage() {
 
       // 2. 🔍 الفلترة النهائية (لضمان استبعاد المحذوف والسلات المتروكة بدقة)
       const isAbandonedDraft = (o) => (
-        o['Financial Status'] === 'abandoned' || 
-        o['Financial Status'] === 'pending_payment' || 
-        o.Name?.startsWith('DRAFT-')
-      );
+  o['Financial Status'] === 'abandoned' ||
+  o.Name?.startsWith('DRAFT-')
+);
 
       let finalFilteredData = allExportData.filter(o => {
         if (o['Financial Status'] === 'deleted') return false;
@@ -585,12 +596,28 @@ export default function OrdersListPage() {
   const totalPages = Math.ceil(filteredOrders.length / itemsPerPage) || 1;
 
   const loadMore = () => {
-    if (!isLoading && hasMore) {
-      fetchOrders(true);
-    }
-  };
+  if (!isLoading && hasMore) {
+    fetchOrders(true);
+  }
+};
 
-  const paginate = (pageNumber) => setCurrentPage(pageNumber);
+const refreshOrders = () => {
+  if (
+    isLoading ||
+    ((activeTab === 'shopify' || activeTab === 'all') && !isArchiveVisible)
+  ) {
+    return;
+  }
+
+  delete tabCacheRef.current[activeTab];
+  delete tabLastVisibleRef.current[activeTab];
+  delete tabHasMoreRef.current[activeTab];
+
+  setHasMore(false);
+  fetchOrders(false);
+};
+
+const paginate = (pageNumber) => setCurrentPage(pageNumber);
 
   return (
     <div className="min-h-screen bg-[#f4f6f8] p-4 sm:p-8 font-sans text-[#202223]" dir="rtl">
@@ -604,6 +631,20 @@ export default function OrdersListPage() {
             <span className="text-xs font-bold text-gray-500 bg-white px-4 py-2 rounded-xl border border-gray-200 shadow-sm hidden sm:block">
               إجمالي المعروض: <span className="text-[#008060] font-black">{filteredOrders.length}</span> طلب
             </span>
+            <button
+  type="button"
+  onClick={refreshOrders}
+  disabled={
+    isLoading ||
+    ((activeTab === 'shopify' || activeTab === 'all') && !isArchiveVisible)
+  }
+  className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-sm hover:bg-gray-50 transition-all disabled:opacity-50"
+>
+  {isLoading
+    ? <span className="animate-spin h-4 w-4 border-2 border-gray-700 border-t-transparent rounded-full"></span>
+    : <span className="text-base leading-none">↻</span>}
+  {isLoading ? 'جاري التحديث...' : 'تحديث الطلبات'}
+</button>
             <button 
               onClick={exportOrdersToExcel} 
               disabled={isExporting}
