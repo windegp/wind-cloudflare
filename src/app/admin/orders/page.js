@@ -2,7 +2,20 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getDb } from "@/lib/firebase";
-import { collection, query, where, getDocs, doc, writeBatch, orderBy, limit, startAfter, increment } from "firebase/firestore/lite";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  doc,
+  writeBatch,
+  orderBy,
+  limit,
+  startAfter,
+  increment,
+  updateDoc,
+  serverTimestamp
+} from "firebase/firestore/lite";
 import { useRouter } from 'next/navigation';
 import { ShoppingBag, Search, Filter, Monitor, Archive, Layers, ChevronLeft, ChevronRight, Trash2, AlertTriangle, X, Download } from '@/components/icons-extra';
 
@@ -27,8 +40,9 @@ export default function OrdersListPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   
-  const [isArchiveVisible, setIsArchiveVisible] = useState(true); // WIND مرئي افتراضياً
+    const [isArchiveVisible, setIsArchiveVisible] = useState(true); // WIND مرئي افتراضياً
   const [isExporting, setIsExporting] = useState(false);
+  const [savingOrderStatus, setSavingOrderStatus] = useState({});
 
   // 🔥 In-memory cache للتابات — بيمنع إعادة الجلب لو رجعت لتاب اتجلب قبل كده
   const tabCacheRef = useRef({});
@@ -328,6 +342,98 @@ export default function OrdersListPage() {
       default: return 'bg-gray-100 text-gray-700 border-gray-200';
     }
   };
+    // تحديد حالة التجهيز والشحن للطلبات الحالية والقديمة
+  const getShippingStatusValue = (order) => {
+    if (order.shippingStatus) return order.shippingStatus;
+
+    const fulfillment = String(
+      order['Fulfillment Status'] ||
+      order.fulfillment_status ||
+      order['Fulfillment'] ||
+      ''
+    ).toLowerCase();
+
+    if (fulfillment === 'fulfilled') return 'shipped';
+    if (fulfillment === 'partial' || fulfillment === 'partially_fulfilled') {
+      return 'processing';
+    }
+
+    return 'unfulfilled';
+  };
+
+  // حفظ تغيير حالة الطلب مباشرة دون قراءة جديدة
+  const handleInlineStatusChange = async (order, field, value) => {
+    if (!order?.id) return;
+
+    const paymentMethod = String(
+      order['Payment Method'] || ''
+    ).toLowerCase();
+
+    const financialStatus = String(
+      order['Financial Status'] || ''
+    ).toLowerCase();
+
+    // لا نسمح بالتعديل اليدوي على الدفع الإلكتروني
+    // لأن Kashier هو مصدر تأكيد الدفع
+    if (
+      field === 'Financial Status' &&
+      (
+        paymentMethod === 'card' ||
+        financialStatus === 'pending_payment' ||
+        financialStatus === 'abandoned'
+      )
+    ) {
+      return;
+    }
+
+    const savingKey = `${order.id}:${field}`;
+
+    if (savingOrderStatus[savingKey]) return;
+
+    setSavingOrderStatus(prev => ({
+      ...prev,
+      [savingKey]: true
+    }));
+
+    try {
+      await updateDoc(
+        doc(getDb(), 'Orders', order.id),
+        {
+          [field]: value,
+          statusUpdatedAt: serverTimestamp()
+        }
+      );
+
+      setAllRawOrders(prev => {
+        const updated = prev.map(item =>
+          item.id === order.id
+            ? { ...item, [field]: value }
+            : item
+        );
+
+        // تحديث الـ cache نفسه حتى لا تظهر الحالة القديمة عند العودة للتاب
+        tabCacheRef.current[activeTab] = updated;
+
+        return updated;
+      });
+
+    } catch (error) {
+      console.error('WIND Inline Order Status Error:', error);
+
+      window.alert(
+        error?.code === 'permission-denied'
+          ? 'قواعد Firebase لا تسمح بتحديث هذا الطلب.'
+          : 'تعذر حفظ الحالة. حاول مرة أخرى.'
+      );
+
+    } finally {
+      setSavingOrderStatus(prev => {
+        const next = { ...prev };
+        delete next[savingKey];
+        return next;
+      });
+    }
+  };
 
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
@@ -438,7 +544,7 @@ export default function OrdersListPage() {
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-right border-collapse min-w-[900px]">
+                <table className="w-full text-right border-collapsemin-w-[1100px]">
                   <thead>
                     <tr className="bg-white border-b border-gray-100 text-[11px] font-bold text-gray-400 uppercase tracking-widest">
                       <th className="px-6 py-5 w-12 text-center">
@@ -455,6 +561,7 @@ export default function OrdersListPage() {
                       <th className="px-6 py-5">الطلب والتاريخ</th>
                       <th className="px-6 py-5">العميل</th>
                      <th className="px-6 py-5">المنتجات والقطع</th>
+                                            <th className="px-6 py-5 text-center">التجهيز والشحن</th>
                       <th className="px-6 py-5 text-center">حالة الدفع</th>
                       <th className="px-6 py-5">الإجمالي</th>
                       <th className="px-6 py-5 text-center">تفاصيل</th>
@@ -463,11 +570,11 @@ export default function OrdersListPage() {
                   <tbody className="divide-y divide-gray-50 font-sans">
                     {isLoading && currentOrders.length === 0 ? (
                       <tr>
-                        <td colSpan="7" className="text-center py-20 text-[#008060] font-black animate-pulse">جاري سحب الداتا...</td>
+                        <td colSpan="8" className="text-center py-20 text-[#008060] font-black animate-pulse">جاري سحب الداتا...</td>
                       </tr>
                     ) : currentOrders.length === 0 ? (
                       <tr>
-                        <td colSpan="7" className="text-center py-24 text-gray-400">
+                        <td colSpan="8" className="text-center py-24 text-gray-400">
                           <Archive size={40} className="mx-auto mb-3 opacity-20"/>
                           <p className="font-bold">لا توجد طلبات في هذا القسم</p>
                         </td>
@@ -643,11 +750,110 @@ return (
   </p>
 )}
   </div>
-</td>
-                            <td className="px-6 py-4 text-center">
-                              <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${getStatusColor(order['Financial Status'])}`}>
-                                {order['Financial Status']}
-                              </span>
+</td>                            {/* حالة التجهيز والشحن */}
+                            <td
+                              className="px-3 py-4 text-center"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <select
+                                value={getShippingStatusValue(order)}
+                                disabled={Boolean(savingOrderStatus[`${order.id}:shippingStatus`])}
+                                onChange={(e) =>
+                                  handleInlineStatusChange(
+                                    order,
+                                    'shippingStatus',
+                                    e.target.value
+                                  )
+                                }
+                                onClick={(e) => e.stopPropagation()}
+                                className="w-full min-w-[155px] max-w-[190px] bg-white border border-gray-200 rounded-lg px-2 py-2 text-xs font-bold text-gray-700 outline-none focus:border-[#008060] disabled:opacity-50"
+                              >
+                                <option value="unfulfilled">لم يتم التجهيز</option>
+                                <option value="processing">قيد التجهيز</option>
+                                <option value="ready_to_ship">جاهز للشحن</option>
+                                <option value="not_shipped">لم يتم الشحن</option>
+                                <option value="shipped">تم الشحن</option>
+                                <option value="handed_to_courier">لدى شركة الشحن</option>
+                                <option value="in_transit">الشحنة في الطريق</option>
+                                <option value="out_for_delivery">خرج للتوصيل</option>
+                                <option value="delivered">تم التسليم</option>
+                                <option value="delivery_failed">تعذر التسليم</option>
+                                <option value="returned">مرتجع</option>
+                                <option value="cancelled">ملغي</option>
+                              </select>
+
+                              {savingOrderStatus[`${order.id}:shippingStatus`] && (
+                                <p className="text-[10px] text-gray-400 mt-1">
+                                  جارٍ الحفظ...
+                                </p>
+                              )}
+                            </td>
+
+                            {/* حالة الدفع */}
+                            <td
+                              className="px-3 py-4 text-center"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {(() => {
+                                const paymentMethod = String(
+                                  order['Payment Method'] || ''
+                                ).toLowerCase();
+
+                                const currentFinancialStatus =
+                                  order['Financial Status'] || 'pending';
+
+                                const isCardPayment =
+                                  paymentMethod === 'card' ||
+                                  currentFinancialStatus === 'pending_payment';
+
+                                const isAbandoned =
+                                  currentFinancialStatus === 'abandoned';
+
+                                return (
+                                  <>
+                                    <select
+                                      value={currentFinancialStatus}
+                                      disabled={
+                                        isCardPayment ||
+                                        isAbandoned ||
+                                        Boolean(savingOrderStatus[`${order.id}:Financial Status`])
+                                      }
+                                      onChange={(e) =>
+                                        handleInlineStatusChange(
+                                          order,
+                                          'Financial Status',
+                                          e.target.value
+                                        )
+                                      }
+                                      onClick={(e) => e.stopPropagation()}
+                                      className={`w-full min-w-[135px] max-w-[165px] bg-white border border-gray-200 rounded-lg px-2 py-2 text-xs font-bold outline-none focus:border-[#008060] disabled:opacity-50 ${
+                                        getStatusColor(currentFinancialStatus)
+                                      }`}
+                                    >
+                                      <option value="pending">بانتظار التحصيل</option>
+                                      <option value="paid">تم التحصيل</option>
+                                      <option value="partially_paid">مدفوع جزئياً</option>
+                                      {currentFinancialStatus === 'pending_payment' && (
+                                        <option value="pending_payment">
+                                          بانتظار الدفع الإلكتروني
+                                        </option>
+                                      )}
+                                    </select>
+
+                                    {isCardPayment && (
+                                      <p className="text-[9px] text-gray-400 mt-1">
+                                        يتحدث تلقائياً من Kashier
+                                      </p>
+                                    )}
+
+                                    {savingOrderStatus[`${order.id}:Financial Status`] && (
+                                      <p className="text-[10px] text-gray-400 mt-1">
+                                        جارٍ الحفظ...
+                                      </p>
+                                    )}
+                                  </>
+                                );
+                              })()}
                             </td>
                             <td className="px-6 py-4">
   <div className="space-y-1">
