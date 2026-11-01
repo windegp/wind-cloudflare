@@ -154,6 +154,7 @@ setHasMore(hasMoreOrders);
     
     const isAbandonedDraft = (o) => {
   return o['Financial Status'] === 'abandoned' ||
+         o['Financial Status'] === 'pending_payment' ||
          o.Name?.startsWith('DRAFT-');
 };
 
@@ -294,6 +295,7 @@ setHasMore(hasMoreOrders);
       // 2. 🔍 الفلترة النهائية (لضمان استبعاد المحذوف والسلات المتروكة بدقة)
       const isAbandonedDraft = (o) => (
   o['Financial Status'] === 'abandoned' ||
+  o['Financial Status'] === 'pending_payment' ||
   o.Name?.startsWith('DRAFT-')
 );
 
