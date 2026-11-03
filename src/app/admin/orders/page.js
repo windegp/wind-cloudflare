@@ -2,21 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getDb } from "@/lib/firebase";
-import { parseDateToMs } from '@/lib/analytics-helpers';
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  doc,
-  writeBatch,
-  orderBy,
-  limit,
-  startAfter,
-  increment,
-  updateDoc,
-  serverTimestamp
-} from "firebase/firestore/lite";
+import { collection, query, where, getDocs, doc, writeBatch, orderBy, limit, startAfter, increment } from "firebase/firestore/lite";
 import { useRouter } from 'next/navigation';
 import { ShoppingBag, Search, Filter, Monitor, Archive, Layers, ChevronLeft, ChevronRight, Trash2, AlertTriangle, X, Download } from '@/components/icons-extra';
 
@@ -41,14 +27,12 @@ export default function OrdersListPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   
-    const [isArchiveVisible, setIsArchiveVisible] = useState(true); // WIND مرئي افتراضياً
+  const [isArchiveVisible, setIsArchiveVisible] = useState(true); // WIND مرئي افتراضياً
   const [isExporting, setIsExporting] = useState(false);
-  const [savingOrderStatus, setSavingOrderStatus] = useState({});
 
   // 🔥 In-memory cache للتابات — بيمنع إعادة الجلب لو رجعت لتاب اتجلب قبل كده
- const tabCacheRef = useRef({});
-const tabLastVisibleRef = useRef({});
-const tabHasMoreRef = useRef({});
+  const tabCacheRef = useRef({});
+  const tabLastVisibleRef = useRef({});
 
   const router = useRouter();
 
@@ -63,11 +47,11 @@ const tabHasMoreRef = useRef({});
 
     // ✅ لو مش loadMore وعندنا cache للتاب ده، استخدمه بدون أي read
     if (!loadMore && tabCacheRef.current[activeTab]) {
-  setAllRawOrders(tabCacheRef.current[activeTab]);
-  setLastVisible(tabLastVisibleRef.current[activeTab] || null);
-  setHasMore(tabHasMoreRef.current[activeTab] ?? false);
-  return;
-}
+      setAllRawOrders(tabCacheRef.current[activeTab]);
+      setLastVisible(tabLastVisibleRef.current[activeTab] || null);
+      setHasMore(false);
+      return;
+    }
 
     setIsLoading(true);
     try {
@@ -104,9 +88,7 @@ const tabHasMoreRef = useRef({});
 
       setAllRawOrders(updatedDocs);
       setLastVisible(querySnapshot.docs[querySnapshot.docs.length - 1] || null);
-      const hasMoreOrders = querySnapshot.docs.length === fetchLimit;
-tabHasMoreRef.current[activeTab] = hasMoreOrders;
-setHasMore(hasMoreOrders);
+      setHasMore(querySnapshot.docs.length === fetchLimit);
 
     } catch (err) {
       console.error("WIND Error: Fetch failed", err);
@@ -153,10 +135,10 @@ setHasMore(hasMoreOrders);
     let result = allRawOrders.filter(o => o['Financial Status'] !== 'deleted');
     
     const isAbandonedDraft = (o) => {
-  return o['Financial Status'] === 'abandoned' ||
-         o['Financial Status'] === 'pending_payment' ||
-         o.Name?.startsWith('DRAFT-');
-};
+      return o['Financial Status'] === 'abandoned' || 
+             o['Financial Status'] === 'pending_payment' || 
+             o.Name?.startsWith('DRAFT-');
+    };
 
     if (activeTab === 'abandoned') {
       result = result.filter(isAbandonedDraft);
@@ -202,22 +184,12 @@ setHasMore(hasMoreOrders);
       let totalCountToSubtract = 0;
 
       ordersToProcess.forEach(order => {
-  const financialStatus = String(
-    order['Financial Status'] || ''
-  ).toLowerCase();
-
-  const isUncountedOrder =
-    financialStatus === 'abandoned' ||
-    financialStatus === 'pending_payment' ||
-    order.Name?.startsWith('DRAFT-');
-
-  if (!isUncountedOrder) {
-    totalAmountToSubtract += Number(order.Total || 0);
-    totalCountToSubtract += 1;
-  }
-
-  batch.delete(doc(db, "Orders", order.id));
-});
+        if (order['Financial Status'] !== 'abandoned') {
+          totalAmountToSubtract += Number(order.Total || 0);
+          totalCountToSubtract += 1;
+        }
+        batch.delete(doc(db, "Orders", order.id));
+      });
 
       if (totalCountToSubtract > 0) {
         const settingsRef = doc(db, "settings", "siteSettings");
@@ -294,10 +266,10 @@ setHasMore(hasMoreOrders);
 
       // 2. 🔍 الفلترة النهائية (لضمان استبعاد المحذوف والسلات المتروكة بدقة)
       const isAbandonedDraft = (o) => (
-  o['Financial Status'] === 'abandoned' ||
-  o['Financial Status'] === 'pending_payment' ||
-  o.Name?.startsWith('DRAFT-')
-);
+        o['Financial Status'] === 'abandoned' || 
+        o['Financial Status'] === 'pending_payment' || 
+        o.Name?.startsWith('DRAFT-')
+      );
 
       let finalFilteredData = allExportData.filter(o => {
         if (o['Financial Status'] === 'deleted') return false;
@@ -346,249 +318,14 @@ setHasMore(hasMoreOrders);
     }
   };
 
-  
-  // ألوان حالة الدفع
   const getStatusColor = (status) => {
-    switch (String(status || '').toLowerCase()) {
-      case 'paid':
-        return 'bg-green-100 text-green-800 border-green-200';
-
-      case 'pending':
-      case 'pending_payment':
-        return 'bg-orange-100 text-orange-800 border-orange-200';
-
-      case 'partially_paid':
-      case 'authorized':
-        return 'bg-blue-100 text-blue-800 border-blue-200';
-
-      case 'refunded':
-      case 'partially_refunded':
-      case 'voided':
-        return 'bg-red-100 text-red-800 border-red-200';
-
-      case 'abandoned':
-        return 'bg-gray-100 text-gray-500 border-gray-200';
-
-      default:
-        return 'bg-gray-100 text-gray-700 border-gray-200';
-    }
-  };
-
-  // ألوان حالة التجهيز والشحن
-  const getShippingStatusColor = (status) => {
-    switch (String(status || '').toLowerCase()) {
-      case 'unfulfilled':
-      case 'not_shipped':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-
-      case 'processing':
-      case 'ready_to_ship':
-        return 'bg-orange-100 text-orange-800 border-orange-200';
-
-      case 'shipped':
-      case 'handed_to_courier':
-      case 'in_transit':
-      case 'out_for_delivery':
-        return 'bg-blue-100 text-blue-800 border-blue-200';
-
-      case 'delivered':
-        return 'bg-green-100 text-green-800 border-green-200';
-
-      case 'delivery_failed':
-      case 'returned':
-      case 'cancelled':
-        return 'bg-red-100 text-red-800 border-red-200';
-
-      default:
-        return 'bg-gray-100 text-gray-700 border-gray-200';
-    }
-  };
-
-  // تنسيق التاريخ وفق توقيت القاهرة دون أي قراءة إضافية
-  const formatRelativeOrderDate = (rawDate) => {
-    const timestamp = parseDateToMs(rawDate);
-
-    if (!Number.isFinite(timestamp)) {
-      return rawDate || 'غير مسجل';
-    }
-
-    const date = new Date(timestamp);
-    const now = new Date();
-
-    const cairoDayNumber = (value) => {
-      const parts = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Africa/Cairo',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      }).formatToParts(value);
-
-      const getPart = (type) =>
-        Number(parts.find(part => part.type === type)?.value);
-
-      return Math.floor(
-        Date.UTC(
-          getPart('year'),
-          getPart('month') - 1,
-          getPart('day')
-        ) / 86400000
-      );
-    };
-
-    const difference = cairoDayNumber(now) - cairoDayNumber(date);
-
-    const time = date.toLocaleTimeString('en-US', {
-      timeZone: 'Africa/Cairo',
-      hour: 'numeric',
-      minute: '2-digit'
-    });
-
-    if (difference <= 0) {
-      return `اليوم في ${time}`;
-    }
-
-    if (difference === 1) {
-      return `أمس في ${time}`;
-    }
-
-    if (difference < 7) {
-      const days = difference === 2
-        ? 'يومين'
-        : `${difference} أيام`;
-
-      return `منذ ${days} • ${time}`;
-    }
-
-    if (difference < 30) {
-      const weeks = Math.floor(difference / 7);
-
-      const label = weeks === 1
-        ? 'أسبوع'
-        : weeks === 2
-          ? 'أسبوعين'
-          : `${weeks} أسابيع`;
-
-      return `منذ ${label} • ${time}`;
-    }
-
-    if (difference < 365) {
-      const months = Math.floor(difference / 30);
-
-      const label = months === 1
-        ? 'شهر'
-        : months === 2
-          ? 'شهرين'
-          : `${months} شهور`;
-
-      return `منذ ${label} • ${time}`;
-    }
-
-    const years = Math.floor(difference / 365);
-
-    const label = years === 1
-      ? 'سنة'
-      : years === 2
-        ? 'سنتين'
-        : `${years} سنوات`;
-
-    return `منذ ${label} • ${time}`;
-  };
-
-  // قراءة حالة الشحن من الحقل الجديد أو الحقل القديم
-  const getShippingStatusValue = (order) => {
-    if (order.shippingStatus) return order.shippingStatus;
-
-    const fulfillment = String(
-      order['Fulfillment Status'] ||
-      order.fulfillment_status ||
-      order['Fulfillment'] ||
-      ''
-    ).toLowerCase();
-
-    if (fulfillment === 'fulfilled') return 'shipped';
-
-    if (
-      fulfillment === 'partial' ||
-      fulfillment === 'partially_fulfilled'
-    ) {
-      return 'processing';
-    }
-
-    return 'unfulfilled';
-  };
-
-
-  // حفظ تغيير حالة الطلب مباشرة دون قراءة جديدة
-  const handleInlineStatusChange = async (order, field, value) => {
-    if (!order?.id) return;
-
-    const paymentMethod = String(
-      order['Payment Method'] || ''
-    ).toLowerCase();
-
-    const financialStatus = String(
-      order['Financial Status'] || ''
-    ).toLowerCase();
-
-    // لا نسمح بالتعديل اليدوي على الدفع الإلكتروني
-    // لأن Kashier هو مصدر تأكيد الدفع
-    if (
-      field === 'Financial Status' &&
-      (
-        paymentMethod === 'card' ||
-        financialStatus === 'pending_payment' ||
-        financialStatus === 'abandoned'
-      )
-    ) {
-      return;
-    }
-
-    const savingKey = `${order.id}:${field}`;
-
-    if (savingOrderStatus[savingKey]) return;
-
-    setSavingOrderStatus(prev => ({
-      ...prev,
-      [savingKey]: true
-    }));
-
-    try {
-      await updateDoc(
-        doc(getDb(), 'Orders', order.id),
-        {
-          [field]: value,
-          statusUpdatedAt: serverTimestamp()
-        }
-      );
-
-      setAllRawOrders(prev => {
-        const updated = prev.map(item =>
-          item.id === order.id
-            ? { ...item, [field]: value }
-            : item
-        );
-
-        // تحديث الـ cache نفسه حتى لا تظهر الحالة القديمة عند العودة للتاب
-        tabCacheRef.current[activeTab] = updated;
-
-        return updated;
-      });
-
-    } catch (error) {
-      console.error('WIND Inline Order Status Error:', error);
-
-      window.alert(
-        error?.code === 'permission-denied'
-          ? 'قواعد Firebase لا تسمح بتحديث هذا الطلب.'
-          : 'تعذر حفظ الحالة. حاول مرة أخرى.'
-      );
-
-    } finally {
-      setSavingOrderStatus(prev => {
-        const next = { ...prev };
-        delete next[savingKey];
-        return next;
-      });
+    switch (status?.toLowerCase()) {
+      case 'paid': return 'bg-green-100 text-green-700 border-green-200';
+      case 'pending': return 'bg-orange-100 text-orange-700 border-orange-200';
+      case 'pending_payment': return 'bg-blue-100 text-blue-700 border-blue-200';
+      case 'refunded': return 'bg-red-100 text-red-700 border-red-200';
+      case 'abandoned': return 'bg-gray-100 text-gray-500 border-gray-200'; 
+      default: return 'bg-gray-100 text-gray-700 border-gray-200';
     }
   };
 
@@ -598,28 +335,12 @@ setHasMore(hasMoreOrders);
   const totalPages = Math.ceil(filteredOrders.length / itemsPerPage) || 1;
 
   const loadMore = () => {
-  if (!isLoading && hasMore) {
-    fetchOrders(true);
-  }
-};
+    if (!isLoading && hasMore) {
+      fetchOrders(true);
+    }
+  };
 
-const refreshOrders = () => {
-  if (
-    isLoading ||
-    ((activeTab === 'shopify' || activeTab === 'all') && !isArchiveVisible)
-  ) {
-    return;
-  }
-
-  delete tabCacheRef.current[activeTab];
-  delete tabLastVisibleRef.current[activeTab];
-  delete tabHasMoreRef.current[activeTab];
-
-  setHasMore(false);
-  fetchOrders(false);
-};
-
-const paginate = (pageNumber) => setCurrentPage(pageNumber);
+  const paginate = (pageNumber) => setCurrentPage(pageNumber);
 
   return (
     <div className="min-h-screen bg-[#f4f6f8] p-4 sm:p-8 font-sans text-[#202223]" dir="rtl">
@@ -633,20 +354,6 @@ const paginate = (pageNumber) => setCurrentPage(pageNumber);
             <span className="text-xs font-bold text-gray-500 bg-white px-4 py-2 rounded-xl border border-gray-200 shadow-sm hidden sm:block">
               إجمالي المعروض: <span className="text-[#008060] font-black">{filteredOrders.length}</span> طلب
             </span>
-            <button
-  type="button"
-  onClick={refreshOrders}
-  disabled={
-    isLoading ||
-    ((activeTab === 'shopify' || activeTab === 'all') && !isArchiveVisible)
-  }
-  className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-sm hover:bg-gray-50 transition-all disabled:opacity-50"
->
-  {isLoading
-    ? <span className="animate-spin h-4 w-4 border-2 border-gray-700 border-t-transparent rounded-full"></span>
-    : <span className="text-base leading-none">↻</span>}
-  {isLoading ? 'جاري التحديث...' : 'تحديث الطلبات'}
-</button>
             <button 
               onClick={exportOrdersToExcel} 
               disabled={isExporting}
@@ -731,7 +438,7 @@ const paginate = (pageNumber) => setCurrentPage(pageNumber);
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-right border-collapse min-w-[1150px]">
+                <table className="w-full text-right border-collapse min-w-[900px]">
                   <thead>
                     <tr className="bg-white border-b border-gray-100 text-[11px] font-bold text-gray-400 uppercase tracking-widest">
                       <th className="px-6 py-5 w-12 text-center">
@@ -745,23 +452,22 @@ const paginate = (pageNumber) => setCurrentPage(pageNumber);
                           }}
                         />
                       </th>
-                                            <th className="px-5 py-5">رقم الطلب</th>
-                      <th className="px-5 py-5">التاريخ</th>
-                      <th className="px-5 py-5">العميل</th>
-                      <th className="px-5 py-5 text-center">الإجمالي</th>
-                      <th className="px-5 py-5 text-center">حالة الدفع</th>
-                      <th className="px-5 py-5 text-center">حالة الشحن</th>
-                      <th className="px-5 py-5 text-center">القطع</th>
+                      <th className="px-6 py-5">الطلب والتاريخ</th>
+                      <th className="px-6 py-5">العميل</th>
+                     <th className="px-6 py-5">المنتجات والقطع</th>
+                      <th className="px-6 py-5 text-center">حالة الدفع</th>
+                      <th className="px-6 py-5">الإجمالي</th>
+                      <th className="px-6 py-5 text-center">تفاصيل</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50 font-sans">
                     {isLoading && currentOrders.length === 0 ? (
                       <tr>
-                        <td colSpan="8" className="text-center py-20 text-[#008060] font-black animate-pulse">جاري سحب الداتا...</td>
+                        <td colSpan="7" className="text-center py-20 text-[#008060] font-black animate-pulse">جاري سحب الداتا...</td>
                       </tr>
                     ) : currentOrders.length === 0 ? (
                       <tr>
-                        <td colSpan="8" className="text-center py-24 text-gray-400">
+                        <td colSpan="7" className="text-center py-24 text-gray-400">
                           <Archive size={40} className="mx-auto mb-3 opacity-20"/>
                           <p className="font-bold">لا توجد طلبات في هذا القسم</p>
                         </td>
@@ -774,17 +480,64 @@ const orderLink = isWind ? order.Name : order.Name.replace('#', '');
 // بيانات المنتجات الموجودة داخل الطلب بالفعل — دون أي قراءة جديدة
 const orderItems = Array.isArray(order.lineItems) ? order.lineItems : [];
 
-// إجمالي القطع فقط دون أسماء أو تفاصيل المنتجات
+const firstProductName =
+  orderItems[0]?.productTitle ||
+  orderItems[0]?.title ||
+  orderItems[0]?.name ||
+  order['Lineitem name'] ||
+  'تفاصيل المنتجات داخل الطلب';
+
+// إجمالي القطع
 const totalPieces = orderItems.length
   ? orderItems.reduce((sum, item) => {
-      const qty = Number(item.quantity ?? item.qty ?? 1);
-      return sum + (
-        Number.isFinite(qty) && qty > 0 ? qty : 1
-      );
+      const qty = Number(item.quantity ?? item.qty);
+      return sum + (Number.isFinite(qty) && qty > 0 ? qty : 1);
     }, 0)
-  : Math.max(0, Number(order['Lineitem quantity']) || 0);
+  : (Number(order['Lineitem quantity']) || 1);
 
-// قراءة المبلغ النهائي الذي سيدفعه العميل
+// عدد المنتجات المختلفة، وليس عدد سطور الطلب
+const uniqueProductKeys = orderItems.map(item => (
+  item.productHandle ||
+  item.handle ||
+  item.productId ||
+  item.product_id ||
+  item.productTitle ||
+  item.title ||
+  item.name
+)).filter(Boolean);
+
+const uniqueProductsCount =
+  new Set(
+    uniqueProductKeys.map(key =>
+      String(key).trim().toLowerCase()
+    )
+  ).size ||
+  (!orderItems.length && order['Lineitem name'] ? 1 : 0);
+
+// ربط كل لون باسم المنتج الذي يخصه
+const productColorSummary = [
+  ...new Set(
+    orderItems
+      .map(item => {
+        const color = String(
+          item.selectedColor || item.color || ''
+        ).trim();
+
+        if (!color) return '';
+
+        const productName =
+          item.productTitle ||
+          item.title ||
+          item.name ||
+          'منتج';
+
+        return `${productName}: ${color}`;
+      })
+      .filter(Boolean)
+  )
+];
+
+// قراءة المبالغ بأمان
 const toOrderAmount = (value) => {
   const parsed = Number(
     String(value ?? 0)
@@ -795,7 +548,46 @@ const toOrderAmount = (value) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const orderSubtotalValue = toOrderAmount(order.Subtotal);
+const orderShippingValue = toOrderAmount(order.Shipping);
 const orderTotalValue = toOrderAmount(order.Total);
+
+const originalSubtotalValue = toOrderAmount(order['Original Subtotal']);
+const productDiscountTotalValue = toOrderAmount(order['Product Discount Total']);
+
+// حساب فرق المبالغ للطلبات القديمة فقط عند عدم وجود خصم محفوظ
+const canDeriveDiscount =
+  order.Subtotal != null &&
+  order.Shipping != null &&
+  order.Total != null;
+
+const derivedDiscount = canDeriveDiscount
+  ? Math.max(
+      0,
+      orderSubtotalValue + orderShippingValue - orderTotalValue
+    )
+  : 0;
+
+const hasSavedDiscount =
+  order['Discount Amount'] !== undefined &&
+  order['Discount Amount'] !== null &&
+  order['Discount Amount'] !== '';
+
+const orderDiscountValue = hasSavedDiscount
+  ? Math.max(0, toOrderAmount(order['Discount Amount']))
+  : derivedDiscount;
+
+const orderDiscountLabel =
+  order['Discount Label'] ||
+  (
+    hasSavedDiscount
+      ? order['Discount Code']
+        ? `كود الخصم ${order['Discount Code']}`
+        : order['Discount Type'] === 'first_order'
+          ? 'خصم الطلب الأول'
+          : 'الخصم'
+      : 'فرق حسابي تقديري'
+  );
 
 return (
                           <tr key={order.id} className="hover:bg-gray-50/80 transition-all cursor-pointer group" onClick={() => router.push(`/admin/orders/${encodeURIComponent(orderLink)}`)}>
@@ -810,179 +602,105 @@ return (
                                 }}
                               />
                             </td>
-                            
-                            {/* رقم الطلب */}
-                            <td className="px-5 py-4">
-                              <p className="text-sm font-black text-[#005bd3] group-hover:underline whitespace-nowrap">
-                                {order.displayOrderNumber || order.Name || order.id}
-                              </p>
+                            <td className="px-6 py-4">
+                              <p className="text-sm font-black text-[#005bd3] group-hover:underline">{order.Name}</p>
+                              <p className="text-[10px] text-gray-400 font-bold mt-1">{order['Created at']?.split(' ')[0]}</p>
                             </td>
-
-                            {/* التاريخ والوقت */}
-                            <td className="px-5 py-4">
-                              <p className="text-xs text-gray-600 font-medium whitespace-nowrap" dir="auto">
-                                {formatRelativeOrderDate(order['Created at'])}
-                              </p>
+                            <td className="px-6 py-4">
+                              <p className="text-sm font-bold text-gray-900">{order['Billing Name'] || 'عميل مجهول'}</p>
+                              <p className="text-[10px] text-gray-500 font-mono mt-0.5" dir="ltr">{order.Phone || order['Shipping Phone'] || order.Email}</p>
                             </td>
+                            <td className="px-6 py-4">
+  <div className="max-w-[220px]">
+    <p className="text-xs font-bold text-gray-800 line-clamp-1">
+      {firstProductName}
+    </p>
 
-                            {/* اسم العميل فقط */}
-                            <td className="px-5 py-4">
-                              <p className="text-sm font-bold text-gray-900 whitespace-nowrap">
-                                {order['Billing Name'] || 'عميل مجهول'}
-                              </p>
-                            </td>
+    <p className="text-[10px] text-gray-500 font-bold mt-1">
+      {totalPieces} قطعة
+      {uniqueProductsCount > 0 && (
+        <span>
+          {' · '}
+          {uniqueProductsCount === 1
+            ? 'منتج واحد'
+            : `${uniqueProductsCount} منتجات`}
+        </span>
+      )}
+    </p>
 
-                            {/* الإجمالي النهائي فقط */}
-                            <td className="px-5 py-4 text-center">
-  <p className="text-sm font-black text-gray-900 whitespace-nowrap" dir="ltr">
-    {orderTotalValue.toLocaleString('en-EG')} {order.Currency || 'EGP'}
-  </p>
+        {productColorSummary.length > 0 && (
+      <p className="text-[10px] text-gray-500 mt-1 line-clamp-2">
+        ألوان المنتجات: {productColorSummary.join(' • ')}
+      </p>
+    )}
+  </div>
 </td>
-
-                            {/* حالة الدفع */}
-                            <td
-                              className="px-3 py-4 text-center"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              {(() => {
-                                const paymentMethod = String(
-                                  order['Payment Method'] || ''
-                                ).toLowerCase();
-
-                                const currentFinancialStatus =
-                                  String(order['Financial Status'] || 'pending').toLowerCase();
-
-                                const isCardPayment =
-                                  paymentMethod === 'card' ||
-                                  currentFinancialStatus === 'pending_payment';
-
-                                const isAbandoned =
-                                  currentFinancialStatus === 'abandoned';
-
-                                const isFinancialReadOnly = [
-                                  'refunded',
-                                  'partially_refunded',
-                                  'voided',
-                                  'authorized'
-                                ].includes(currentFinancialStatus);
-
-                                const specialPaymentLabels = {
-                                  pending_payment: 'بانتظار الدفع الإلكتروني',
-                                  abandoned: 'سلة متروكة',
-                                  refunded: 'مسترد',
-                                  partially_refunded: 'مسترد جزئياً',
-                                  voided: 'ملغي مالياً',
-                                  authorized: 'تم اعتماد الدفع'
-                                };
-
-                                return (
-                                  <div className="flex flex-col items-center gap-1">
-                                    <select
-                                      value={currentFinancialStatus}
-                                      disabled={
-                                        isCardPayment ||
-                                        isAbandoned ||
-                                        isFinancialReadOnly ||
-                                        Boolean(savingOrderStatus[`${order.id}:Financial Status`])
-                                      }
-                                      onChange={(e) =>
-                                        handleInlineStatusChange(
-                                          order,
-                                          'Financial Status',
-                                          e.target.value
-                                        )
-                                      }
-                                      onClick={(e) => e.stopPropagation()}
-                                      className={`w-full min-w-[135px] max-w-[165px] border rounded-lg px-2 py-2 text-xs font-bold outline-none focus:border-[#008060] disabled:opacity-70 disabled:cursor-not-allowed ${
-                                        getStatusColor(currentFinancialStatus)
-                                      }`}
-                                    >
-                                      <option value="pending">بانتظار الدفع</option>
-                                      <option value="paid">مدفوع</option>
-                                      <option value="partially_paid">مدفوع جزئياً</option>
-
-                                      {![
-                                        'pending',
-                                        'paid',
-                                        'partially_paid'
-                                      ].includes(currentFinancialStatus) && (
-                                        <option value={currentFinancialStatus}>
-                                          {specialPaymentLabels[currentFinancialStatus] || currentFinancialStatus}
-                                        </option>
-                                      )}
-                                    </select>
-
-                                    {isCardPayment && (
-                                      <span className="text-[9px] text-gray-400">
-                                        من Kashier
-                                      </span>
-                                    )}
-
-                                    {savingOrderStatus[`${order.id}:Financial Status`] && (
-                                      <span className="text-[10px] text-gray-400">
-                                        جارٍ الحفظ...
-                                      </span>
-                                    )}
-                                  </div>
-                                );
-                              })()}
-                            </td>
-
-                            {/* حالة التجهيز والشحن */}
-                            <td
-                              className="px-3 py-4 text-center"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              {(() => {
-                                const shippingStatus = getShippingStatusValue(order);
-
-                                return (
-                                  <div className="flex flex-col items-center gap-1">
-                                    <select
-                                      value={shippingStatus}
-                                      disabled={Boolean(savingOrderStatus[`${order.id}:shippingStatus`])}
-                                      onChange={(e) =>
-                                        handleInlineStatusChange(
-                                          order,
-                                          'shippingStatus',
-                                          e.target.value
-                                        )
-                                      }
-                                      onClick={(e) => e.stopPropagation()}
-                                      className={`w-full min-w-[155px] max-w-[185px] border rounded-lg px-2 py-2 text-xs font-bold outline-none focus:border-[#008060] disabled:opacity-60 disabled:cursor-not-allowed ${getShippingStatusColor(shippingStatus)}`}
-                                    >
-                                      <option value="unfulfilled">لم يتم التجهيز</option>
-                                      <option value="processing">قيد التجهيز</option>
-                                      <option value="ready_to_ship">جاهز للشحن</option>
-                                      <option value="not_shipped">لم يتم الشحن</option>
-                                      <option value="shipped">تم الشحن</option>
-                                      <option value="handed_to_courier">لدى شركة الشحن</option>
-                                      <option value="in_transit">الشحنة في الطريق</option>
-                                      <option value="out_for_delivery">خرج للتوصيل</option>
-                                      <option value="delivered">تم التسليم</option>
-                                      <option value="delivery_failed">تعذر التسليم</option>
-                                      <option value="returned">مرتجع</option>
-                                      <option value="cancelled">ملغي</option>
-                                    </select>
-
-                                    {savingOrderStatus[`${order.id}:shippingStatus`] && (
-                                      <span className="text-[10px] text-gray-400">
-                                        جارٍ الحفظ...
-                                      </span>
-                                    )}
-                                  </div>
-                                );
-                              })()}
-                            </td>
-
-                            {/* عدد القطع فقط */}
-                            <td className="px-5 py-4 text-center">
-                              <span className="text-sm font-bold text-gray-800 whitespace-nowrap">
-                                {totalPieces} {totalPieces === 1 ? 'قطعة' : 'قطع'}
+                            <td className="px-6 py-4 text-center">
+                              <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${getStatusColor(order['Financial Status'])}`}>
+                                {order['Financial Status']}
                               </span>
                             </td>
+                            <td className="px-6 py-4">
+  <div className="space-y-1">
 
-                            
+    <p className="text-sm font-black text-gray-900">
+      {orderTotalValue.toLocaleString('en-EG')} EGP
+    </p>
+
+    {originalSubtotalValue > orderSubtotalValue && (
+      <p className="text-[10px] text-gray-500">
+        قبل تخفيض المنتجات:
+        {' '}
+        {originalSubtotalValue.toLocaleString('en-EG')} EGP
+      </p>
+    )}
+
+    {order.Subtotal != null && (
+      <p className="text-[10px] text-gray-500">
+        المنتجات:
+        {' '}
+        {orderSubtotalValue.toLocaleString('en-EG')} EGP
+      </p>
+    )}
+
+    {productDiscountTotalValue > 0 && (
+      <p className="text-[10px] text-emerald-600 font-bold">
+        تخفيض المنتجات:
+        {' -'}
+        {productDiscountTotalValue.toLocaleString('en-EG')} EGP
+      </p>
+    )}
+
+    {orderDiscountValue > 0 && (
+      <p className="text-[10px] text-red-600 font-bold">
+        {orderDiscountLabel}:
+        {' -'}
+        {orderDiscountValue.toLocaleString('en-EG')} EGP
+      </p>
+    )}
+
+    {order['Discount Code'] && (
+      <p className="text-[10px] text-gray-500">
+        كود الخصم: {order['Discount Code']}
+      </p>
+    )}
+
+    {order.Shipping != null && (
+      <p className="text-[10px] text-gray-500">
+        الشحن:
+        {' '}
+        {orderShippingValue.toLocaleString('en-EG')} EGP
+        {orderShippingValue === 0 && ' (مجاني)'}
+      </p>
+    )}
+
+  </div>
+</td>
+                            <td className="px-6 py-4 text-center">
+                              <div className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center mx-auto group-hover:border-[#008060] group-hover:bg-green-50 transition-colors">
+                                <ChevronLeft size={16} className="text-gray-400 group-hover:text-[#008060]" />
+                              </div>
+                            </td>
                           </tr>
                         );
                       })

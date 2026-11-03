@@ -4,16 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { getDb } from "@/lib/firebase";
-import {
-  doc,
-  getDoc,
-  collection,
-  query,
-  where,
-  getDocs,
-  updateDoc,
-  serverTimestamp
-} from "firebase/firestore/lite";
+import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore/lite";
 import { ArrowRight, Package, User, MapPin, Printer, Phone } from '@/components/icons-extra';
 
 export const dynamic = 'force-dynamic';
@@ -168,21 +159,9 @@ export default function OrderDetailsPage() {
   const { id } = useParams();
   const router = useRouter();
 
-    const [order, setOrder] = useState(null);
+  const [order, setOrder] = useState(null);
   const [productsList, setProductsList] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  // حالات الإدارة — تُحمّل من مستند الطلب نفسه
-  const [orderDocId, setOrderDocId] = useState(null);
-
-  const [statusDraft, setStatusDraft] = useState({
-    orderStatus: '',
-    fulfillmentStatus: '',
-    shippingStatus: ''
-  });
-
-  const [isSavingStatus, setIsSavingStatus] = useState(false);
-  const [statusSaveMessage, setStatusSaveMessage] = useState('');
 
   useEffect(() => {
     if (id) fetchOrderDetails();
@@ -209,38 +188,14 @@ export default function OrderDetailsPage() {
       // قراءة مستند الطلب مرة واحدة
       const docSnap = await getDoc(doc(db, "Orders", orderIdToFetch));
 
-            if (!docSnap.exists()) {
+      if (!docSnap.exists()) {
         setOrder(null);
         setProductsList([]);
-        setOrderDocId(null);
-
-        setStatusDraft({
-          orderStatus: '',
-          fulfillmentStatus: '',
-          shippingStatus: ''
-        });
-
         return;
       }
 
-            const orderData = docSnap.data();
-
+      const orderData = docSnap.data();
       setOrder(orderData);
-      setOrderDocId(docSnap.id);
-
-      setStatusDraft({
-        orderStatus: orderData.orderStatus || '',
-
-        fulfillmentStatus:
-          orderData['Fulfillment Status'] ||
-          orderData.fulfillment_status ||
-          orderData['Fulfillment'] ||
-          '',
-
-        shippingStatus: orderData.shippingStatus || ''
-      });
-
-      setStatusSaveMessage('');
 
       const isWind = orderData.data_source === 'WIND_Web';
       const items = Array.isArray(orderData.lineItems)
@@ -306,69 +261,6 @@ export default function OrderDetailsPage() {
       setOrder(null);
     } finally {
       setLoading(false);
-    }
-  };
-
-    const handleSaveStatuses = async () => {
-    if (!orderDocId || isSavingStatus || !order) return;
-
-    const currentFulfillment =
-      order['Fulfillment Status'] ||
-      order.fulfillment_status ||
-      order['Fulfillment'] ||
-      '';
-
-    // لا نكتب إلا الحقول التي تغيرت فعلياً
-    const updates = {};
-
-    if (statusDraft.orderStatus !== (order.orderStatus || '')) {
-      updates.orderStatus = statusDraft.orderStatus;
-    }
-
-    if (statusDraft.fulfillmentStatus !== currentFulfillment) {
-      updates['Fulfillment Status'] = statusDraft.fulfillmentStatus;
-    }
-
-    if (statusDraft.shippingStatus !== (order.shippingStatus || '')) {
-      updates.shippingStatus = statusDraft.shippingStatus;
-    }
-
-    if (Object.keys(updates).length === 0) {
-      setStatusSaveMessage('لا توجد تغييرات جديدة للحفظ.');
-      return;
-    }
-
-    setIsSavingStatus(true);
-    setStatusSaveMessage('');
-
-    try {
-      await updateDoc(
-        doc(getDb(), 'Orders', orderDocId),
-        {
-          ...updates,
-          statusUpdatedAt: serverTimestamp()
-        }
-      );
-
-      setOrder(prev => ({
-        ...prev,
-        ...updates,
-        statusUpdatedAt: new Date()
-      }));
-
-      setStatusSaveMessage('تم حفظ الحالات بنجاح.');
-
-    } catch (error) {
-      console.error('WIND Order Status Update Error:', error);
-
-      setStatusSaveMessage(
-        error?.code === 'permission-denied'
-          ? 'رفضت قواعد Firebase تحديث الطلب. لم يتم حفظ التغييرات.'
-          : 'تعذر حفظ الحالات. حاول مرة أخرى.'
-      );
-
-    } finally {
-      setIsSavingStatus(false);
     }
   };
 
@@ -573,133 +465,6 @@ export default function OrderDetailsPage() {
 
           {/* العمود الرئيسي */}
           <main className="space-y-5 min-w-0">
-                        {/* إدارة حالات الطلب */}
-            <section className="bg-white border border-[#e1e3e5] rounded-xl shadow-sm overflow-hidden print:hidden">
-
-              <div className="px-5 py-4 border-b border-gray-100">
-                <h2 className="font-black text-sm text-gray-900">
-                  إدارة حالات الطلب
-                </h2>
-
-                <p className="text-[11px] text-gray-500 mt-1">
-                  تحديث حالة الطلب والتجهيز والشحن
-                </p>
-              </div>
-
-              <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-2">
-                    الحالة العامة للطلب
-                  </label>
-
-                  <select
-                    value={statusDraft.orderStatus}
-                    onChange={(e) => {
-                      setStatusDraft(prev => ({
-                        ...prev,
-                        orderStatus: e.target.value
-                      }));
-                      setStatusSaveMessage('');
-                    }}
-                    className="w-full bg-white border border-gray-200 rounded-lg px-3 py-3 text-sm outline-none focus:border-[#008060]"
-                  >
-                    <option value="">غير مسجل</option>
-                    <option value="pending">طلب جديد</option>
-                    <option value="processing">قيد المعالجة</option>
-                    <option value="completed">مكتمل</option>
-                    <option value="cancelled">ملغي</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-2">
-                    حالة التجهيز
-                  </label>
-
-                  <select
-                    value={statusDraft.fulfillmentStatus}
-                    onChange={(e) => {
-                      setStatusDraft(prev => ({
-                        ...prev,
-                        fulfillmentStatus: e.target.value
-                      }));
-                      setStatusSaveMessage('');
-                    }}
-                    className="w-full bg-white border border-gray-200 rounded-lg px-3 py-3 text-sm outline-none focus:border-[#008060]"
-                  >
-                    <option value="">غير مسجل</option>
-                    <option value="unfulfilled">لم يتم التجهيز</option>
-                    <option value="partial">تجهيز جزئي</option>
-                    <option value="fulfilled">تم التجهيز والشحن</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-2">
-                    حالة الشحن
-                  </label>
-
-                  <select
-                    value={statusDraft.shippingStatus}
-                    onChange={(e) => {
-                      setStatusDraft(prev => ({
-                        ...prev,
-                        shippingStatus: e.target.value
-                      }));
-                      setStatusSaveMessage('');
-                    }}
-                    className="w-full bg-white border border-gray-200 rounded-lg px-3 py-3 text-sm outline-none focus:border-[#008060]"
-                  >
-                    <option value="">غير مسجل</option>
-                    <option value="not_shipped">لم يتم الشحن</option>
-                    <option value="handed_to_courier">تم التسليم لشركة الشحن</option>
-                    <option value="in_transit">الشحنة في الطريق</option>
-                    <option value="out_for_delivery">مع مندوب التوصيل</option>
-                    <option value="delivered">تم التسليم للعميل</option>
-                    <option value="delivery_failed">تعذر التسليم</option>
-                    <option value="returned">مرتجع</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-2">
-                    حالة الدفع
-                  </label>
-
-                  <div className="min-h-[46px] flex items-center">
-                    <span className={`text-xs font-bold px-3 py-2 rounded-md border ${paymentStatus[1]}`}>
-                      {paymentStatus[0]}
-                    </span>
-                  </div>
-
-                  <p className="text-[10px] text-gray-400 mt-1">
-                    تُحدّث حالة الدفع من مصدر الدفع المعتمد، ولا نغيّرها من هذه اللوحة.
-                  </p>
-                </div>
-
-              </div>
-
-              <div className="px-5 pb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-
-                {statusSaveMessage && (
-                  <p className="text-xs font-bold text-gray-600">
-                    {statusSaveMessage}
-                  </p>
-                )}
-
-                <button
-                  type="button"
-                  onClick={handleSaveStatuses}
-                  disabled={isSavingStatus || !orderDocId}
-                  className="bg-[#008060] text-white px-6 py-3 rounded-lg text-sm font-bold hover:bg-[#006e52] transition-all disabled:opacity-50 disabled:cursor-not-allowed sm:mr-auto"
-                >
-                  {isSavingStatus ? 'جارٍ الحفظ...' : 'حفظ الحالات'}
-                </button>
-
-              </div>
-
-            </section>
 
             {/* التجهيز والمنتجات */}
             <section className="bg-white border border-[#e1e3e5] rounded-xl shadow-sm overflow-hidden">
