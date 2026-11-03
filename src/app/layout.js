@@ -117,7 +117,12 @@ export default async function RootLayout({ children }) {
             s.parentNode.insertBefore(t,s)}(window, document,'script',
             'https://connect.facebook.net/en_US/fbevents.js');
             fbq('set', 'autoConfig', false, '880930164288645');
-            fbq('init', '880930164288645');
+            var __windAM = { country: 'eg' };
+            try {
+              var __ext = localStorage.getItem('wind_external_id');
+              if (__ext) __windAM.external_id = __ext;
+            } catch (e) {}
+            fbq('init', '880930164288645', __windAM);
           `}
         </Script>
 
