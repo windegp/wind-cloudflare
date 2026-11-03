@@ -169,7 +169,23 @@ ttq.page() عند استقبال PageView، بينما باقي الأحداث �
             `,
           }}
         />
+
+        {/*
+          Microsoft Clarity — Session Recordings & Heatmaps.
+          Separate from Meta Pixel, TikTok Pixel and GA4.
+          Project ID: z80t21i0px
+        */}
+        <Script id="microsoft-clarity" strategy="afterInteractive">
+          {`
+            (function(c,l,a,r,i,t,y){
+                c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+                t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+                y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+            })(window, document, "clarity", "script", "z80t21i0px");
+          `}
+        </Script>
       </head>
+
       <body className={`${cairo.className} bg-white text-[#1A1A1A] antialiased overflow-x-hidden`}>
         {/* ✅ تغليف الموقع بالكامل بـ SWRProvider لضمان حماية الكوتا عالمياً */}
         <SWRProvider>
