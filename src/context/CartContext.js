@@ -58,6 +58,20 @@ export function CartProvider({ children }) {
   const [discountError, setDiscountError] = useState("");
   const [promoLoading,  setPromoLoading]  = useState(false);
 
+  // العروض النشطة (من /api/offers) — لو فشل التحميل بنكمل بدون عروض والسلة تشتغل زي ما هي
+  const [offers, setOffers] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res  = await fetch('/api/offers');
+        const data = await res.json();
+        if (!cancelled && data?.success && Array.isArray(data.offers)) setOffers(data.offers);
+      } catch { /* بدون عروض */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   // ── Cart ops ───────────────────────────────────────────────────
   const toggleCart = useCallback(() => setIsCartOpen(p => !p), []);
   const openCart   = useCallback(() => setIsCartOpen(true),    []);
@@ -110,10 +124,19 @@ export function CartProvider({ children }) {
   }, []);
 
   // ── Calculations ───────────────────────────────────────────────
-  const { subtotal, discount, shipping, total } = useMemo(
-    () => calculateAllTotals(cartItems, appliedPromo, shippingSettings, isFirstOrder),
-    [cartItems, appliedPromo, shippingSettings, isFirstOrder]
+  const { subtotal, discount, shipping, total, discountSource, appliedOffer } = useMemo(
+    () => calculateAllTotals(cartItems, appliedPromo, shippingSettings, isFirstOrder, offers),
+    [cartItems, appliedPromo, shippingSettings, isFirstOrder, offers]
   );
+
+  // لو عرض تلقائي كسب على كود الخصم: نوضح للعميل إن الكود ما اتطبقش
+  // (الحساب نفسه بيستخدم appliedPromo الأصلي — ده للعرض فقط)
+  const appliedPromoView = useMemo(() => {
+    if (discountSource === 'offer' && appliedPromo?.valid && appliedPromo.type !== 'free_shipping') {
+      return { ...appliedPromo, message: `تم تطبيق عرض "${appliedOffer?.name || ''}" لأنه الأفضل لك — ولن يُحتسب استخدام الكود` };
+    }
+    return appliedPromo;
+  }, [appliedPromo, discountSource, appliedOffer]);
 
   // ── Promo code — server-side validation ───────────────────────
   const applyPromoCode = useCallback(async (code, customerEmail = "", customerPhone = "") => {
@@ -177,7 +200,8 @@ export function CartProvider({ children }) {
     addToCart, removeFromCart, updateQty, clearCart,
     isCartOpen, toggleCart, openCart, closeCart,
     subtotal, discount, shipping, total,
-    appliedPromo,
+    discountSource, appliedOffer, offers,
+    appliedPromo: appliedPromoView,
     applyPromoCode, removePromoCode,
     discountError, setDiscountError, promoLoading,
     shippingSettings,
@@ -187,7 +211,8 @@ export function CartProvider({ children }) {
     cartItems, addToCart, removeFromCart, updateQty, clearCart,
     isCartOpen, toggleCart, openCart, closeCart,
     subtotal, discount, shipping, total,
-    appliedPromo, applyPromoCode, removePromoCode,
+    discountSource, appliedOffer, offers,
+    appliedPromoView, applyPromoCode, removePromoCode,
     discountError, setDiscountError, promoLoading, shippingSettings,
     isFirstOrder, setIsFirstOrder,
     setSelectedGovernorate,

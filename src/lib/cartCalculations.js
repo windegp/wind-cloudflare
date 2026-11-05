@@ -5,6 +5,7 @@
 // ============================================
 
 import { SHIPPING_COST, FREE_SHIPPING_THRESHOLD, CURRENCY } from '@/lib/constants';
+import { computeBestOffer } from '@/lib/offerEngine';
 
 /**
  * Calculate subtotal from cart items
@@ -57,14 +58,32 @@ export function calculateTotal(subtotal, shipping, discount = 0) {
   return Math.max(0, subtotal - discount + shipping);
 }
 
-export function calculateAllTotals(cartItems, promoResult = null, shippingSettings = null, isFirstOrder = false) {
+// مصدر الخصم الأساسي (بدون العروض) — نفس شروط calculateDiscount بالظبط
+function getBaseDiscountSource(promoResult = null, isFirstOrder = false, shippingSettings = null) {
+  if (promoResult?.valid && promoResult.type !== 'free_shipping') return 'promo';
+  if (isFirstOrder && shippingSettings?.firstOrderEnabled && shippingSettings?.firstOrderDiscount > 0) return 'first_order';
+  return 'none';
+}
+
+/**
+ * offers: العروض النشطة من /api/offers (اختياري — لو مفيش، النتيجة نفس القديمة بالظبط)
+ * بترجع كمان: discountSource ('promo' | 'first_order' | 'offer' | 'none') و appliedOffer
+ * القاعدة: أفضل خصم واحد للعميل بين (الكود / خصم الطلب الأول) و(العروض).
+ * العرض لازم يكون أعلى فعلاً عشان يكسب، وعند التعادل الخصم القديم هو اللي بيتطبق.
+ */
+export function calculateAllTotals(cartItems, promoResult = null, shippingSettings = null, isFirstOrder = false, offers = null) {
   const subtotal = calculateSubtotal(cartItems);
-  const discount = calculateDiscount(promoResult, subtotal, isFirstOrder, shippingSettings);
+  const baseDiscount = calculateDiscount(promoResult, subtotal, isFirstOrder, shippingSettings);
+  const offerResult = computeBestOffer(cartItems, offers);
+  const offerWins = offerResult.discount > baseDiscount;
+  const discount = offerWins ? offerResult.discount : baseDiscount;
+  const discountSource = offerWins ? 'offer' : getBaseDiscountSource(promoResult, isFirstOrder, shippingSettings);
+  const appliedOffer = offerWins ? offerResult.offer : null;
   // الشحن يُحسب على الـ subtotal الكامل (قبل الخصم)
   // خصم المنتجات لا يلغي شحن مجاني حققه العميل بإجمالي طلبه
   const shipping  = calculateShipping(promoResult, subtotal, cartItems, shippingSettings);
   const total     = calculateTotal(subtotal, shipping, discount);
-  return { subtotal, discount, shipping, total };
+  return { subtotal, discount, shipping, total, discountSource, appliedOffer };
 }
 
 /** Format currency for display */

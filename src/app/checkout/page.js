@@ -161,6 +161,8 @@ export default function CheckoutPage() {
     setIsFirstOrder,
     shippingSettings,
     setSelectedGovernorate,
+    discountSource,
+    appliedOffer,
   } = useCart();
   
   const { signalPageReady } = usePageReady();
@@ -168,6 +170,11 @@ export default function CheckoutPage() {
 
     const SHIPPING_COST = shipping;
   const finalTotal    = total;
+
+  // اسم سطر الخصم في ملخص الطلب
+  const discountLabel = discountSource === 'offer'
+    ? `عرض: ${appliedOffer?.name || 'خصم'}`
+    : (appliedPromo?.type && appliedPromo.type !== 'free_shipping' ? 'خصم الكود' : 'خصم الطلب الأول 🎉');
 
   // بيانات المنتجات التي تُحفظ داخل الطلب دون أي استعلامات إضافية
   const orderLineItems = cartItems.map(item => {
@@ -205,16 +212,23 @@ export default function CheckoutPage() {
   );
 
     // تحديد نوع الخصم النقدي الفعلي، بشكل مستقل عن الشحن المجاني
+  const hasOfferDiscount = Boolean(
+    discountSource === 'offer' &&
+    Number(discount) > 0
+  );
+
   const hasPromoDiscount = Boolean(
     appliedPromo?.valid &&
     appliedPromo.type !== 'free_shipping' &&
-    Number(discount) > 0
+    Number(discount) > 0 &&
+    discountSource === 'promo'
   );
 
   const hasFirstOrderDiscount = Boolean(
     Number(discount) > 0 &&
     isFirstOrder &&
-    !hasPromoDiscount
+    !hasPromoDiscount &&
+    discountSource === 'first_order'
   );
 
   const isFreeShippingPromo = Boolean(
@@ -227,7 +241,9 @@ export default function CheckoutPage() {
     "Product Discount Total": productDiscountTotal,
     "Discount Amount": Math.max(0, Number(discount) || 0),
 
-    "Discount Type": hasPromoDiscount
+    "Discount Type": hasOfferDiscount
+      ? 'offer'
+      : hasPromoDiscount
       ? appliedPromo.type || 'promo'
       : hasFirstOrderDiscount
         ? 'first_order'
@@ -235,7 +251,9 @@ export default function CheckoutPage() {
           ? 'free_shipping'
           : '',
 
-    "Discount Label": hasPromoDiscount
+    "Discount Label": hasOfferDiscount
+      ? `عرض: ${appliedOffer?.name || ''}`.trim()
+      : hasPromoDiscount
       ? `كود الخصم ${appliedPromo.code || ''}`.trim()
       : hasFirstOrderDiscount
         ? 'خصم الطلب الأول'
@@ -252,7 +270,11 @@ export default function CheckoutPage() {
     "Free Shipping Applied": Number(shipping) === 0,
 
     // كتابة قيمة فارغة عند إزالة الكود لمسح القيمة القديمة مع merge
-    "Discount Code": appliedPromo?.code || ''
+    "Discount Code": (hasOfferDiscount && appliedPromo?.type !== 'free_shipping') ? '' : (appliedPromo?.code || ''),
+
+    // العرض التلقائي المطبّق (فارغ لو الخصم من كود أو طلب أول)
+    "Offer Id": hasOfferDiscount ? (appliedOffer?.id || '') : '',
+    "Offer Name": hasOfferDiscount ? (appliedOffer?.name || '') : ''
   };
 
   const router = useRouter();
@@ -772,7 +794,7 @@ export default function CheckoutPage() {
         localStorage.removeItem('pendingOrder');
 
         // ── تسجيل استخدام الكود في Firestore ──
-        if (appliedPromo?.valid && appliedPromo.code) {
+        if (appliedPromo?.valid && appliedPromo.code && (discountSource !== 'offer' || appliedPromo.type === 'free_shipping')) {
           const identifier = formData.email?.toLowerCase().trim() || formData.phone?.replace(/\D/g, '');
           try {
             const { doc: fsDoc, updateDoc: fsUpdateDoc, arrayUnion, increment: fsIncrement } = await import('firebase/firestore/lite');
@@ -983,7 +1005,7 @@ router.push(`/thank-you?orderId=${orderId}`);
               <div className="flex justify-between text-gray-500"><span>سعر المنتج</span><span className="text-gray-800 font-medium">ج.م {subtotal}.00</span></div>
               {discount > 0 && (
                 <div className="flex justify-between text-emerald-600">
-                  <span>{appliedPromo?.type && appliedPromo.type !== 'free_shipping' ? 'خصم الكود' : 'خصم الطلب الأول 🎉'}</span>
+                  <span>{discountLabel}</span>
                   <span className="font-bold">- ج.م {discount}.00</span>
                 </div>
               )}
@@ -1139,7 +1161,7 @@ router.push(`/thank-you?orderId=${orderId}`);
                 </div>
 
                 {/* بادج خصم الطلب الأول — يظهر بمجرد التحقق */}
-                {isFirstOrder && shippingSettings?.firstOrderEnabled && !appliedPromo && (
+                {isFirstOrder && shippingSettings?.firstOrderEnabled && !appliedPromo && discountSource !== 'offer' && (
                   <div className="mt-2 flex items-center gap-2.5 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 animate-in fade-in slide-in-from-top-1 duration-300">
                     <span className="text-lg">🎉</span>
                     <div>
@@ -1400,7 +1422,7 @@ router.push(`/thank-you?orderId=${orderId}`);
                     <div className="flex justify-between text-gray-500"><span>سعر المنتج</span><span className="text-gray-800 font-medium">ج.م {subtotal}.00</span></div>
                     {discount > 0 && (
                       <div className="flex justify-between text-emerald-600">
-                        <span>{appliedPromo?.type && appliedPromo.type !== 'free_shipping' ? 'خصم الكود' : 'خصم الطلب الأول 🎉'}</span>
+                        <span>{discountLabel}</span>
                         <span className="font-bold">- ج.م {discount}.00</span>
                       </div>
                     )}
@@ -1505,7 +1527,7 @@ router.push(`/thank-you?orderId=${orderId}`);
               </div>
               {discount > 0 && (
                 <div className="flex justify-between items-center text-base text-emerald-600">
-                  <span>{appliedPromo?.type && appliedPromo.type !== 'free_shipping' ? 'خصم الكود' : 'خصم الطلب الأول 🎉'}</span>
+                  <span>{discountLabel}</span>
                   <span className="font-semibold">- ج.م {discount}.00</span>
                 </div>
               )}

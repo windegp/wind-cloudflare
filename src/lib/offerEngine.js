@@ -1,0 +1,220 @@
+// ============================================
+// 🎁 OFFER ENGINE
+// دالة نقية (بدون React ولا Firebase ولا أي side effects)
+// بتاخد السلة + العروض النشطة وترجع أفضل عرض واحد للعميل.
+//
+// القواعد:
+//  - عرض واحد فقط بيتطبق (الأعلى خصماً للعميل) — العروض ما بتتجمعش.
+//  - الخصم دايماً على القطع الأرخص في كل مجموعة.
+//  - الخصم الناتج رقم صحيح (الواجهة بتعرضه بـ ".00").
+//  - عند التعادل: priority الأقل أولاً، ثم id أبجدياً (نتيجة ثابتة).
+// ============================================
+
+export const OFFER_TYPES = {
+  BUY_X_GET_Y: 'buy_x_get_y',     // اشتري X وخد Y مجاناً (الأرخص في كل مجموعة)
+  NTH_PERCENT: 'nth_percent',     // خصم % على القطعة رقم N (الأرخص في كل مجموعة)
+  CART_PERCENT: 'cart_percent',   // خصم % على إجمالي المنتجات المؤهلة
+  CART_FIXED: 'cart_fixed',       // خصم مبلغ ثابت على إجمالي المنتجات المؤهلة
+};
+
+const DEFAULT_PRIORITY = 100;
+const MAX_UNITS_PER_ITEM = 1000; // حماية من سلة معدّلة يدوياً
+
+/** تاريخ اليوم بتوقيت القاهرة بصيغة YYYY-MM-DD */
+export function cairoDateString(now = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Africa/Cairo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+}
+
+/** YYYY-MM-DD من نص التاريخ، أو null لو مفيش حد، أو undefined لو القيمة غير صالحة */
+function dayOf(value) {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
+  return undefined;
+}
+
+/** هل العرض نشط الآن؟ (active=true + داخل فترته بتوقيت القاهرة، شامل أول وآخر يوم) */
+export function isOfferLive(offer, now = new Date()) {
+  if (!offer || offer.active !== true) return false;
+  const start = dayOf(offer.startsAt);
+  const end = dayOf(offer.endsAt);
+  if (start === undefined || end === undefined) return false; // تاريخ غير مفهوم → العرض متوقف للأمان
+  const today = cairoDateString(now);
+  if (start && today < start) return false;
+  if (end && today > end) return false;
+  return true;
+}
+
+function toList(value) {
+  return Array.isArray(value) ? value.map(String) : [];
+}
+
+function isDiscountedItem(item) {
+  const price = parseFloat(item.price) || 0;
+  const compareAt = parseFloat(item.compareAtPrice);
+  return Number.isFinite(compareAt) && compareAt > price;
+}
+
+/** هل القطعة مؤهلة للعرض؟ */
+function isItemEligible(item, offer) {
+  const price = parseFloat(item.price) || 0;
+  const qty = parseInt(item.qty) || 0;
+  if (price <= 0 || qty <= 0) return false;
+
+  const keys = [item.id, item.handle]
+    .filter((v) => v !== undefined && v !== null && v !== '')
+    .map(String);
+
+  const excluded = toList(offer.excludedProductIds);
+  if (excluded.length > 0 && keys.some((k) => excluded.includes(k))) return false;
+
+  if (offer.productScope === 'selected') {
+    const selected = toList(offer.productIds);
+    if (!keys.some((k) => selected.includes(k))) return false;
+  }
+
+  if (offer.excludeDiscounted === true && isDiscountedItem(item)) return false;
+
+  return true;
+}
+
+/** وحدات القطع المؤهلة مرتبة من الأغلى للأرخص */
+function expandUnits(items) {
+  const units = [];
+  for (const item of items) {
+    const price = parseFloat(item.price) || 0;
+    const qty = Math.min(parseInt(item.qty) || 0, MAX_UNITS_PER_ITEM);
+    for (let i = 0; i < qty; i++) units.push(price);
+  }
+  return units.sort((a, b) => b - a);
+}
+
+/**
+ * مجموعات متتالية من الأغلى للأرخص، بحجم groupSize.
+ * في كل مجموعة كاملة، آخر benefitCount قطع (الأرخص) هي اللي بتاخد الميزة.
+ * بترجع مجموع الميزة: factor = 1 (مجاناً) أو percent/100.
+ */
+function sumTieredBenefit(units, groupSize, benefitCount, factor) {
+  const groups = Math.floor(units.length / groupSize);
+  let total = 0;
+  for (let g = 0; g < groups; g++) {
+    const start = g * groupSize;
+    for (let k = groupSize - benefitCount; k < groupSize; k++) {
+      total += units[start + k] * factor;
+    }
+  }
+  return total;
+}
+
+function toInt(value) {
+  const n = Number(value);
+  return Number.isInteger(n) ? n : NaN;
+}
+
+function toPercent(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 && n <= 100 ? n : NaN;
+}
+
+/** خصم عرض واحد على السلة (رقم صحيح >= 0) */
+export function computeOfferDiscount(cartItems, offer) {
+  if (!Array.isArray(cartItems) || !offer) return 0;
+
+  const eligible = cartItems.filter((item) => isItemEligible(item, offer));
+  if (eligible.length === 0) return 0;
+
+  const eligibleSubtotal = eligible.reduce(
+    (sum, item) => sum + (parseFloat(item.price) || 0) * (parseInt(item.qty) || 0),
+    0
+  );
+
+  const minCart = Number(offer.minCart) || 0;
+  if (minCart > 0 && eligibleSubtotal < minCart) return 0;
+
+  const cfg = offer.config || {};
+  let raw = 0;
+
+  switch (offer.type) {
+    case OFFER_TYPES.BUY_X_GET_Y: {
+      const buy = toInt(cfg.buyQty);
+      const get = toInt(cfg.getQty);
+      if (!(buy >= 1) || !(get >= 1)) return 0;
+      raw = sumTieredBenefit(expandUnits(eligible), buy + get, get, 1);
+      break;
+    }
+    case OFFER_TYPES.NTH_PERCENT: {
+      const nth = toInt(cfg.nth);
+      const pct = toPercent(cfg.percent);
+      if (!(nth >= 2) || Number.isNaN(pct)) return 0;
+      raw = sumTieredBenefit(expandUnits(eligible), nth, 1, pct / 100);
+      break;
+    }
+    case OFFER_TYPES.CART_PERCENT: {
+      const pct = toPercent(cfg.percent);
+      if (Number.isNaN(pct)) return 0;
+      raw = (eligibleSubtotal * pct) / 100;
+      break;
+    }
+    case OFFER_TYPES.CART_FIXED: {
+      const amount = Number(cfg.amount);
+      if (!Number.isFinite(amount) || amount <= 0) return 0;
+      raw = amount;
+      break;
+    }
+    default:
+      return 0;
+  }
+
+  const maxDiscount = Number(offer.maxDiscount) || 0;
+  if (maxDiscount > 0) raw = Math.min(raw, maxDiscount);
+  raw = Math.min(raw, eligibleSubtotal);
+
+  let rounded = Math.round(raw);
+  if (rounded > eligibleSubtotal) rounded = Math.floor(eligibleSubtotal);
+  return Math.max(0, rounded);
+}
+
+/**
+ * أفضل عرض واحد للعميل.
+ * @returns {{ discount: number, offer: {id,name,type}|null, candidates: Array }}
+ */
+export function computeBestOffer(cartItems, offers, now = new Date()) {
+  const none = { discount: 0, offer: null, candidates: [] };
+  if (!Array.isArray(cartItems) || cartItems.length === 0) return none;
+  if (!Array.isArray(offers) || offers.length === 0) return none;
+
+  const candidates = [];
+  for (const offer of offers) {
+    if (!isOfferLive(offer, now)) continue;
+    const discount = computeOfferDiscount(cartItems, offer);
+    if (discount > 0) {
+      candidates.push({
+        id: String(offer.id ?? ''),
+        name: offer.name || '',
+        type: offer.type,
+        discount,
+        priority: Number.isFinite(Number(offer.priority)) ? Number(offer.priority) : DEFAULT_PRIORITY,
+      });
+    }
+  }
+
+  if (candidates.length === 0) return none;
+
+  candidates.sort(
+    (a, b) =>
+      b.discount - a.discount ||
+      a.priority - b.priority ||
+      (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+  );
+
+  const best = candidates[0];
+  return {
+    discount: best.discount,
+    offer: { id: best.id, name: best.name, type: best.type },
+    candidates,
+  };
+}
