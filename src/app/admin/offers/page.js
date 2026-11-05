@@ -32,7 +32,6 @@ import {
 export const dynamic = "force-dynamic";
 
 const TYPE_OPTIONS = [
-  { value: "free_shipping", label: "شحن مجاني فقط" },
   { value: "buy_x_get_y", label: "اشترِ X واحصل على Y مجانًا" },
   { value: "nth_percent", label: "خصم على القطعة رقم N" },
   { value: "cart_percent", label: "خصم نسبة على المنتجات المؤهلة" },
@@ -54,6 +53,16 @@ const emptyForm = () => ({
   excludedProductIds: [],
   excludeDiscounted: false,
   freeShipping: false,
+  stackWithOfferIds: [],
+});
+
+const emptyShippingRule = () => ({
+  enabled: false,
+  scope: "store",
+  productIds: [],
+  condition: "quantity",
+  minQuantity: "2",
+  minSubtotal: "500",
 });
 
 // Production hosts manage live offers. Any other host (Cloudflare branch preview / localhost)
