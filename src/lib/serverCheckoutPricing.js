@@ -8,7 +8,7 @@ import {
   query,
   where,
 } from "firebase/firestore/lite";
-import { computeBestOffer, computeOfferBenefits } from "@/lib/offerEngine";
+import { computeBestOffer, computeStackedOfferBenefits, isFreeShippingRuleEligible } from "@/lib/offerEngine";
 import { FREE_SHIPPING_THRESHOLD, SHIPPING_COST } from "@/lib/constants";
 
 const MAX_CART_LINES = 50;
@@ -365,13 +365,15 @@ export async function createServerCheckoutQuote(input = {}) {
   const items = await resolveCartItems(db, input.cartItems);
   const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
   const offersEnvironment = input.offersEnvironment === "preview" ? "preview" : "production";
-  const [settingsSnap, offersSnap] = await Promise.all([
+  const [settingsSnap, offersSnap, shippingRulesSnap] = await Promise.all([
     getDoc(doc(db, "settings", "siteSettings")),
     getDocs(collection(db, "offers")),
+    getDoc(doc(db, "settings", `offerShippingRules_${offersEnvironment}`)),
   ]);
 
   const settings = settingsSnap.exists() ? settingsSnap.data() : {};
   const promotions = settings.promotions || {};
+  const freeShippingRule = shippingRulesSnap.exists() ? shippingRulesSnap.data() : null;
   // Avoid customer-document reads when the first-order discount is disabled
   // and no promo code was entered.
   const isFirstOrder =
@@ -418,11 +420,9 @@ export async function createServerCheckoutQuote(input = {}) {
   const freeShippingByThreshold = freeShippingThreshold > 0 && subtotal >= freeShippingThreshold;
   const freeShippingByPromo = Boolean(promo?.freeShipping);
   const freeShippingByBundle = items.some((item) => item.bundleFreeShipping === true);
-  const freeShippingByOffer =
-    Boolean(offerResult.freeShipping) &&
-    (winner.source === "offer" || (offerResult.offer?.type === "free_shipping" && winner.source === "none"));
+  const freeShippingByRule = isFreeShippingRuleEligible(items, freeShippingRule);
   const shipping =
-    freeShippingByThreshold || freeShippingByPromo || freeShippingByBundle || freeShippingByOffer
+    freeShippingByThreshold || freeShippingByPromo || freeShippingByBundle || freeShippingByRule
       ? 0
       : shippingCost;
   const total = Math.max(0, Number((subtotal - discount + shipping).toFixed(2)));
@@ -430,11 +430,9 @@ export async function createServerCheckoutQuote(input = {}) {
   const appliedPromo =
     promo && (promo.freeShipping || winner.source === "promo") ? promo : null;
   const appliedOffer = winner.source === "offer" ? offerResult.offer : null;
-  const winningOfferConfig = appliedOffer
-    ? offers.find((offer) => String(offer.id) === String(appliedOffer.id)) || null
-    : null;
-  const offerBenefits = winningOfferConfig
-    ? computeOfferBenefits(items, winningOfferConfig)
+  const appliedOffers = winner.source === "offer" ? offerResult.appliedOffers : [];
+  const offerBenefits = winner.source === "offer"
+    ? computeStackedOfferBenefits(items, appliedOffers, now)
     : null;
 
   const benefitsByCartIndex = new Map(
@@ -470,7 +468,10 @@ export async function createServerCheckoutQuote(input = {}) {
         isOfferBenefit: true,
         isFree: unit.free,
         offerId: offerBenefits.offerId,
-        offerType: offerBenefits.type,
+        offerIds: offerBenefits.offerIds,
+        offerType: offerBenefits.offers.map((offer) => offer.type).join("+"),
+        offerTypes: offerBenefits.offers.map((offer) => offer.type),
+        offerNames: offerBenefits.offers.map((offer) => offer.name),
       });
     });
     return lines;
@@ -492,6 +493,7 @@ export async function createServerCheckoutQuote(input = {}) {
     total,
     discountSource: winner.source,
     appliedOffer,
+    appliedOffers,
     offerBenefits,
     appliedPromo,
     isFirstOrder,
@@ -503,7 +505,7 @@ export async function createServerCheckoutQuote(input = {}) {
     freeShippingByThreshold,
     freeShippingByPromo,
     freeShippingByBundle,
-    freeShippingByOffer,
+    freeShippingByRule,
     firstOrderDiscount: promotions.firstOrderEnabled ? Number(promotions.firstOrderDiscount) || 0 : 0,
   };
 }
