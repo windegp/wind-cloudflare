@@ -167,7 +167,7 @@ function ProductPicker({ title, hint, products, selected, search, onSearch, onTo
         })}
       </div>
       <div className="px-3 py-2 bg-gray-50 border-t border-gray-200 text-[10px] text-gray-500">
-        {selected.length} معرّف محفوظ
+        {products.filter((product) => hasProduct(product, selected)).length} منتج محدد
       </div>
     </section>
   );
