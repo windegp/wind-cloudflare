@@ -261,25 +261,7 @@ export default function CategoryView({ initialSlug, initialCategoryData }) {
 
         {/* ── PRODUCT GRID ── */}
         <div className="px-4 md:px-8">
-          {loading ? (
-            <div
-              className={`grid grid-cols-2 md:grid-cols-3 ${desktopGridCols} gap-4 md:gap-6 lg:gap-7`}
-              role="status"
-              aria-label="جاري تحميل المنتجات"
-            >
-              {Array.from({ length: PAGE_SIZE }).map((_, index) => (
-                <div key={index} className="animate-pulse">
-                  <div className="aspect-[4/5] bg-[#EFEFEF]" />
-
-                  <div className="flex flex-col text-right px-1 pb-6 mt-4 space-y-3">
-                    <div className="h-3 w-1/3 bg-gray-100 rounded" />
-                    <div className="h-4 w-3/4 bg-gray-100 rounded" />
-                    <div className="h-4 w-1/3 bg-gray-100 rounded" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : products.length > 0 ? (
+          {!loading && products.length > 0 ? (
             <>
               <div className={`grid grid-cols-2 md:grid-cols-3 ${desktopGridCols} gap-4 md:gap-6 lg:gap-7`}>
                 {products.map((product) => (

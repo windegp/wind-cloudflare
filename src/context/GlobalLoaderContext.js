@@ -22,17 +22,11 @@ const MAX_LOADER_TIME = 8000;
 const LOADER_FADE_DURATION = 500;
 
 export function GlobalLoaderProvider({ children }) {
-    const pathname = usePathname();
-
-  const isRouteLoadingPath = Boolean(
-    pathname?.startsWith("/collections/") ||
-    pathname?.startsWith("/products/")
-  );
+  const pathname = usePathname();
 
   const [isVisible, setIsVisible] = useState(true);
   const [isReceding, setIsReceding] = useState(false);
   const [loaderType, setLoaderType] = useState("standard");
-  const [isRouteNavigation, setIsRouteNavigation] = useState(isRouteLoadingPath);
 
   // ربط الجاهزية بالمسار نفسه لمنع استخدام إشارة قديمة.
   const [readyPathname, setReadyPathname] = useState(null);
@@ -62,23 +56,16 @@ export function GlobalLoaderProvider({ children }) {
     [pathname]
   );
 
-    // بدء التحميل فور ضغط العميل على رابط داخلي.
-  const startNavigation = useCallback((destinationPath) => {
+  // بدء التحميل فور ضغط العميل على رابط داخلي،
+  // قبل اكتمال انتقال Next.js وتغيير pathname.
+  const startNavigation = useCallback(() => {
     const isExcludedRoute =
       pathname?.startsWith("/admin") ||
       pathname?.includes("/checkout");
 
     if (isExcludedRoute) return;
 
-    const usesRouteLoadingUI =
-      destinationPath?.startsWith("/collections/") ||
-      destinationPath?.startsWith("/products/");
-
     clearLoaderTimers();
-
-    // الأقسام والمنتجات: مؤشر صغير بشعار WIND.
-    // بقية المسارات: شاشة التحميل الكاملة.
-    setIsRouteNavigation(Boolean(usesRouteLoadingUI));
 
     setIsVisible(true);
     setIsReceding(false);
@@ -97,10 +84,8 @@ export function GlobalLoaderProvider({ children }) {
   }, [pathname, clearLoaderTimers, setPageReady]);
 
   // إعداد اللودر عند كل تغيير حقيقي في المسار.
-    useIsomorphicLayoutEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     clearLoaderTimers();
-
-    setIsRouteNavigation(isRouteLoadingPath);
 
     // بدء الصفحة الجديدة من الأعلى.
     window.scrollTo({
@@ -150,11 +135,11 @@ export function GlobalLoaderProvider({ children }) {
       }, LOADER_FADE_DURATION);
     }, MAX_LOADER_TIME);
 
-        // إلغاء مؤقتات هذه الصفحة عند الانتقال إلى صفحة أخرى.
+    // إلغاء مؤقتات هذه الصفحة عند الانتقال إلى صفحة أخرى.
     return () => {
       clearLoaderTimers();
     };
-  }, [pathname, clearLoaderTimers, setPageReady, isRouteLoadingPath]);
+  }, [pathname, clearLoaderTimers, setPageReady]);
 
   // إخفاء اللودر بمجرد إعلان الصفحة الحالية عن جاهزيتها.
   useEffect(() => {
@@ -190,10 +175,9 @@ export function GlobalLoaderProvider({ children }) {
     }
   }, [pathname]);
 
-    const value = {
+  const value = {
     isVisible,
     isReceding,
-    isRouteNavigation,
     loaderType,
     pageReady,
     setPageReady,

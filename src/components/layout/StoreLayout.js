@@ -91,7 +91,7 @@ export default function StoreLayout({ children }) {
 
       if (isExcludedDestination) return;
 
-    startNavigation(destination.pathname);
+      startNavigation();
     };
 
     document.addEventListener("click", handleInternalNavigation, true);
