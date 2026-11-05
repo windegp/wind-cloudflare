@@ -211,7 +211,7 @@ export function computeBestOffer(cartItems, offers, now = new Date()) {
     const additionalOffers = liveOffers
       .filter((offer) => String(offer.id) !== String(primary.id) && allowedIds.has(String(offer.id)))
       .sort((a, b) =>
-        (Number(a.priority) || DEFAULT_PRIORITY) - (Number(b.priority) || DEFAULT_PRIORITY) ||
+        (Number.isFinite(Number(a.priority)) ? Number(a.priority) : DEFAULT_PRIORITY) - (Number.isFinite(Number(b.priority)) ? Number(b.priority) : DEFAULT_PRIORITY) ||
         String(a.id).localeCompare(String(b.id))
       );
     const benefits = computeStackedOfferBenefits(cartItems, [primary, ...additionalOffers], now);
