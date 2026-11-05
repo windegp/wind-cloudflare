@@ -3,6 +3,8 @@ import {
   computeBestOffer,
   computeOfferDiscount,
   computeOfferBenefits,
+  computeStackedOfferBenefits,
+  isFreeShippingRuleEligible,
   isOfferLive,
   cairoDateString,
 } from '@/lib/offerEngine';
