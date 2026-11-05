@@ -8,7 +8,7 @@ import { doc, getDoc, collection, query, where, getDocs, documentId } from "fire
 import QuickViewModal from "@/components/QuickViewModal"; 
 
 export default function CartDrawer() {
-  const { cartItems, isCartOpen, toggleCart, removeFromCart, updateQty, updateCartItemVariant, subtotal, offerBenefits } = useCart();
+  const { cartItems, isCartOpen, toggleCart, removeFromCart, updateQty, updateCartItemVariant, subtotal, discount, offerBenefits } = useCart();
   
     const [suggestedProducts, setSuggestedProducts] = useState([]);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
@@ -311,7 +311,17 @@ export default function CartDrawer() {
               <div className="bg-white border-t border-gray-100 px-5 pt-4 pb-6 z-10 shadow-lg">
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-sm font-light text-[#1A1A1A] whitespace-nowrap">المجموع الفرعي</span>
-                  <span className="font-normal text-[#1A1A1A] text-lg whitespace-nowrap">{subtotal} <span className="text-sm font-light">ج.م</span></span>
+                  <span className="font-normal text-[#1A1A1A] text-base whitespace-nowrap">{subtotal} <span className="text-sm font-light">ج.م</span></span>
+                </div>
+                {discount > 0 && (
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-sm font-medium text-green-700 whitespace-nowrap">الخصم المطبق</span>
+                    <span className="font-bold text-green-700 text-base whitespace-nowrap">−{discount} <span className="text-sm font-normal">ج.م</span></span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between border-t border-gray-100 pt-2 mt-2 mb-2">
+                  <span className="text-sm font-bold text-[#1A1A1A] whitespace-nowrap">الإجمالي بعد الخصم</span>
+                  <span className="font-bold text-[#1A1A1A] text-xl whitespace-nowrap">{Math.max(0, subtotal - discount)} <span className="text-sm font-normal">ج.م</span></span>
                 </div>
                 <p className="text-[12px] text-gray-400 mb-5 font-medium">مصاريف الشحن تُحسب عند الدفع</p>
                 <Link
@@ -353,7 +363,7 @@ export default function CartDrawer() {
                      جارٍ فتح صفحة إتمام الطلب…
                     </span>
                   ) : (
-                    `إتمام الطلب — ${subtotal} ج.م`
+                    `إتمام الطلب — ${Math.max(0, subtotal - discount)} ج.م`
                   )}
                 </Link>
                 <button onClick={toggleCart} className="block w-full text-center text-[13px] font-normal text-[#555] hover:text-[#1A1A1A] mt-4">متابعة التسوق</button>
