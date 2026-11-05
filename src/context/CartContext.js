@@ -112,6 +112,42 @@ export function CartProvider({ children }) {
 
   const updateCartItemVariant = useCallback((originalItem, selection) => {
     setCartItems((prev) => {
+      // وحدة العرض تُفصل عن باقي الكمية قبل تغيير اللون أو المقاس.
+      if (originalItem.__offerBenefitUnit === true) {
+        const targetIndex = Number(originalItem.__cartIndex);
+        const target = prev[targetIndex];
+        if (!target || target.id !== originalItem.id) return prev;
+
+        const updatedUnit = {
+          ...target,
+          qty: 1,
+          selectedSize: selection.selectedSize,
+          selectedColor: selection.selectedColor,
+          image: selection.image || target.image,
+        };
+        const remainingItems = prev.filter((_, index) => index !== targetIndex);
+        if (target.qty > 1) {
+          remainingItems.splice(targetIndex, 0, { ...target, qty: target.qty - 1 });
+        }
+
+        const duplicateIndex = remainingItems.findIndex((item) =>
+          item.id === updatedUnit.id &&
+          item.selectedSize === updatedUnit.selectedSize &&
+          item.selectedColor === updatedUnit.selectedColor &&
+          (item.bundleGroupId || "") === (updatedUnit.bundleGroupId || "") &&
+          (item.bundleRole || "") === (updatedUnit.bundleRole || "")
+        );
+
+        if (duplicateIndex >= 0) {
+          return remainingItems.map((item, index) =>
+            index === duplicateIndex
+              ? { ...item, qty: item.qty + 1, image: updatedUnit.image }
+              : item
+          );
+        }
+        return [...remainingItems, updatedUnit];
+      }
+
       const targetIndex = prev.findIndex((item) =>
         item.id === originalItem.id &&
         item.selectedSize === originalItem.selectedSize &&

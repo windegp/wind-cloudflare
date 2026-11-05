@@ -137,8 +137,9 @@ export default function CartDrawer() {
     setQuickViewProduct(product);
   };
 
-  const openBenefitEditor = (item) => {
-    setEditingCartItem(item);
+  const openBenefitEditor = (item, cartIndex) => {
+    // نحتفظ بهوية وحدة العرض حتى لا يتغير لون/مقاس باقي الكمية.
+    setEditingCartItem({ ...item, __offerBenefitUnit: true, __cartIndex: cartIndex });
     setQuickViewProduct(item);
   };
 
@@ -150,15 +151,15 @@ export default function CartDrawer() {
   const cartDisplayRows = cartItems.flatMap((item, cartIndex) => {
     const benefitLine = offerBenefits?.lines?.find((line) => line.cartIndex === cartIndex);
     if (!benefitLine) {
-      return [{ key: `regular-${cartIndex}`, item, qty: item.qty, benefit: null }];
+      return [{ key: `regular-${cartIndex}`, item, qty: item.qty, benefit: null, cartIndex }];
     }
 
     const rows = [];
     if (benefitLine.regularQty > 0) {
-      rows.push({ key: `regular-${cartIndex}`, item, qty: benefitLine.regularQty, benefit: null });
+      rows.push({ key: `regular-${cartIndex}`, item, qty: benefitLine.regularQty, benefit: null, cartIndex });
     }
     benefitLine.discountedUnits.forEach((benefit) => {
-      rows.push({ key: `benefit-${cartIndex}-${benefit.unitIndex}`, item, qty: 1, benefit });
+      rows.push({ key: `benefit-${cartIndex}-${benefit.unitIndex}`, item, qty: 1, benefit, cartIndex });
     });
     return rows;
   });
@@ -257,7 +258,7 @@ export default function CartDrawer() {
                               <span className="text-xs font-bold rounded-full px-2 py-0.5 bg-[#F4F1EA] text-[#6B5635]">{benefit.free ? 'هدية مجانية' : 'خصم العرض'}</span>
                               <span className="text-gray-400 line-through text-xs">{benefit.originalPrice} ج.م</span>
                               <span className="font-bold text-[#1A1A1A]">{benefit.finalPrice} ج.م</span>
-                              <button onClick={() => openBenefitEditor(item)} className="text-[11px] font-bold text-[#1A1A1A] underline underline-offset-2 mr-1">تعديل اللون والمقاس</button>
+                              <button onClick={() => openBenefitEditor(item, row.cartIndex)} className="text-[11px] font-bold text-[#1A1A1A] underline underline-offset-2 mr-1">تعديل اللون والمقاس</button>
                             </div>
                           ) : (
                             <div className="flex items-center gap-1 text-gray-500 text-sm mt-1.5 font-medium whitespace-nowrap">
