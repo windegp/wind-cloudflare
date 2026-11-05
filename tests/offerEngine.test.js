@@ -68,6 +68,12 @@ describe('سيناريوهات "أفضل عرض يكسب"', () => {
     expect(result.appliedOffers.map((offer) => offer.id)).toEqual(["nth", "bxgy"]);
     expect(result.discount).toBe(506);
     expect(result.offerBenefits.discount).toBe(506);
+    const allocation = computeStackedOfferBenefits(
+      [item(645), item(590), item(320), item(270)],
+      [primary, BXGY]
+    );
+    expect(allocation.discount).toBe(506);
+    expect(allocation.offers.map((offer) => offer.id)).toEqual(["nth", "bxgy"]);
   });
   it('العرض الإضافي لا يعمل إذا لم يختره العرض الأساسي صراحةً', () => {
     const primary = { ...NTH, stackWithOfferIds: [] };
