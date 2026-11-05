@@ -1,67 +1,24 @@
 import { describe, it, expect } from "vitest";
 import { calculateAllTotals } from "@/lib/cartCalculations";
 
-const CART = [{ id: "p1", handle: "shirt", price: 500, qty: 1 }];
-
-const freeShippingOffer = {
-  id: "ship-only",
-  name: "شحن مجاني",
-  active: true,
-  type: "free_shipping",
-  config: {},
-  productScope: "all",
-  priority: 10,
-  freeShipping: true,
-};
-
-describe("الشحن المجاني من العروض منفعة مستقلة", () => {
-  it("يمنح شحنًا مجانيًا حتى لو لم يكن هناك خصم نقدي قابل للتطبيق", () => {
-    const result = calculateAllTotals(CART, null, { shippingCost: 70, freeShippingThreshold: 0 }, false, [
-      freeShippingOffer,
-    ]);
-    expect(result).toMatchObject({
-      subtotal: 500,
-      discount: 0,
-      shipping: 0,
-      total: 500,
-      discountSource: "none",
-      appliedOffer: null,
-    });
-  });
-
-  it("لا يجمع عرض الشحن المنفصل مع كود خصم فائز", () => {
-    const promo = { valid: true, type: "fixed", discountAmount: 120, code: "BF120" };
-    const result = calculateAllTotals(
-      CART,
-      promo,
-      { shippingCost: 70, freeShippingThreshold: 0 },
-      false,
-      [freeShippingOffer]
-    );
-    expect(result).toMatchObject({
-      discount: 120,
-      discountSource: "promo",
-      shipping: 70,
-      total: 450,
-    });
-  });
-
-  it("يسمح بالشحن المجاني عندما يكون مرفقاً بالعرض النقدي الفائز نفسه", () => {
+describe("قواعد الشحن المجاني المستقلة", () => {
+  it("الشحن المجاني للمتجر كله يعمل مع أي عرض خصم", () => {
+    const cart = [{ id: "p1", handle: "shirt", price: 500, qty: 1 }];
     const offer = {
-      id: "fixed-free-ship",
-      name: "خصم مع شحن مجاني",
+      id: "discount",
+      name: "خصم ثابت",
       active: true,
       type: "cart_fixed",
       config: { amount: 100 },
       productScope: "all",
-      freeShipping: true,
     };
     const result = calculateAllTotals(
-      CART,
+      cart,
       null,
       { shippingCost: 70, freeShippingThreshold: 0 },
       false,
-      [offer]
+      [offer],
+      { enabled: true, scope: "store" }
     );
     expect(result).toMatchObject({
       discount: 100,
@@ -71,14 +28,53 @@ describe("الشحن المجاني من العروض منفعة مستقلة", 
     });
   });
 
-  it("لا يمنح الشحن المجاني إذا لم تنطبق شروط نطاق المنتجات", () => {
-    const result = calculateAllTotals(
-      CART,
+  it("شحن المنتجات المحددة بالكمية لا يحتسب المنتجات الأخرى", () => {
+    const cart = [
+      { id: "A", price: 500, qty: 2 },
+      { id: "B", price: 900, qty: 3 },
+    ];
+    const rule = { enabled: true, scope: "selected", productIds: ["A"], condition: "quantity", minQuantity: 2 };
+    const eligible = calculateAllTotals(cart, null, { shippingCost: 70, freeShippingThreshold: 0 }, false, [], rule);
+    const ineligible = calculateAllTotals(
+      [{ ...cart[0], qty: 1 }, cart[1]],
       null,
       { shippingCost: 70, freeShippingThreshold: 0 },
       false,
-      [{ ...freeShippingOffer, productScope: "selected", productIds: ["different-product"] }]
+      [],
+      rule
     );
-    expect(result).toMatchObject({ discount: 0, shipping: 70, total: 570 });
+    expect(eligible.shipping).toBe(0);
+    expect(ineligible.shipping).toBe(70);
+  });
+
+  it("شحن المنتجات المحددة بالقيمة يحتسب قيمة المنتجات المختارة فقط", () => {
+    const cart = [
+      { id: "A", price: 300, qty: 2 },
+      { id: "B", price: 900, qty: 1 },
+    ];
+    const rule = { enabled: true, scope: "selected", productIds: ["A"], condition: "subtotal", minSubtotal: 600 };
+    const eligible = calculateAllTotals(cart, null, { shippingCost: 70, freeShippingThreshold: 0 }, false, [], rule);
+    const ineligible = calculateAllTotals(
+      [{ ...cart[0], qty: 1 }, cart[1]],
+      null,
+      { shippingCost: 70, freeShippingThreshold: 0 },
+      false,
+      [],
+      rule
+    );
+    expect(eligible.shipping).toBe(0);
+    expect(ineligible.shipping).toBe(70);
+  });
+
+  it("القواعد المعطّلة لا تمنح شحنًا مجانيًا", () => {
+    const result = calculateAllTotals(
+      [{ id: "p1", price: 500, qty: 1 }],
+      null,
+      { shippingCost: 70, freeShippingThreshold: 0 },
+      false,
+      [],
+      { enabled: false, scope: "store" }
+    );
+    expect(result.shipping).toBe(70);
   });
 });
