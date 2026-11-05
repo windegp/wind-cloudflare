@@ -314,7 +314,7 @@ export function CartProvider({ children }) {
     isFirstOrder, setIsFirstOrder,
     setSelectedGovernorate,
   }), [
-    cartItems, addToCart, removeFromCart, updateQty, clearCart,
+    cartItems, addToCart, removeFromCart, updateQty, updateCartItemVariant, clearCart,
     isCartOpen, toggleCart, openCart, closeCart,
     subtotal, discount, shipping, total,
     discountSource, appliedOffer, offers, offerBenefits,

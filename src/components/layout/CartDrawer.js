@@ -8,11 +8,12 @@ import { doc, getDoc, collection, query, where, getDocs, documentId } from "fire
 import QuickViewModal from "@/components/QuickViewModal"; 
 
 export default function CartDrawer() {
-  const { cartItems, isCartOpen, toggleCart, removeFromCart, updateQty, subtotal, offerBenefits } = useCart();
+  const { cartItems, isCartOpen, toggleCart, removeFromCart, updateQty, updateCartItemVariant, subtotal, offerBenefits } = useCart();
   
     const [suggestedProducts, setSuggestedProducts] = useState([]);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [quickViewProduct, setQuickViewProduct] = useState(null);
+  const [editingCartItem, setEditingCartItem] = useState(null);
 
   const [isNavigatingToCheckout, setIsNavigatingToCheckout] = useState(false);
   const checkoutNavigationTimerRef = useRef(null);
@@ -132,7 +133,18 @@ export default function CartDrawer() {
   };
 
   const openQuickView = (product) => {
+    setEditingCartItem(null);
     setQuickViewProduct(product);
+  };
+
+  const openBenefitEditor = (item) => {
+    setEditingCartItem(item);
+    setQuickViewProduct(item);
+  };
+
+  const closeQuickView = () => {
+    setQuickViewProduct(null);
+    setEditingCartItem(null);
   };
 
   const cartDisplayRows = cartItems.flatMap((item, cartIndex) => {
@@ -173,10 +185,17 @@ export default function CartDrawer() {
       `}</style>
 
       {/* المودال الموحد - يقرأ الداتا بذكاء */}
-      <QuickViewModal 
-        product={quickViewProduct} 
-        isOpen={!!quickViewProduct} 
-        onClose={() => setQuickViewProduct(null)} 
+      <QuickViewModal
+        product={quickViewProduct}
+        isOpen={!!quickViewProduct}
+        onClose={closeQuickView}
+        initialSelection={editingCartItem ? {
+          selectedSize: editingCartItem.selectedSize,
+          selectedColor: editingCartItem.selectedColor,
+        } : null}
+        onVariantSelect={editingCartItem
+          ? (selection) => updateCartItemVariant(editingCartItem, selection)
+          : null}
       />
 
       <div className="cart-drawer fixed inset-0 z-[1000] overflow-hidden" dir="rtl">
@@ -238,6 +257,7 @@ export default function CartDrawer() {
                               <span className="text-xs font-bold rounded-full px-2 py-0.5 bg-[#F4F1EA] text-[#6B5635]">{benefit.free ? 'هدية مجانية' : 'خصم العرض'}</span>
                               <span className="text-gray-400 line-through text-xs">{benefit.originalPrice} ج.م</span>
                               <span className="font-bold text-[#1A1A1A]">{benefit.finalPrice} ج.م</span>
+                              <button onClick={() => openBenefitEditor(item)} className="text-[11px] font-bold text-[#1A1A1A] underline underline-offset-2 mr-1">تعديل اللون والمقاس</button>
                             </div>
                           ) : (
                             <div className="flex items-center gap-1 text-gray-500 text-sm mt-1.5 font-medium whitespace-nowrap">
