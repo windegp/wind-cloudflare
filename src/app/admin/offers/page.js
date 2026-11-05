@@ -700,6 +700,41 @@ export default function AdminOffersPage() {
               </div>
 
               <div className="border-t border-gray-100 pt-5 space-y-3">
+                <div>
+                  <div className="font-black text-sm text-gray-800">العروض التي تسمح بدمجها مع هذا العرض (اختياري)</div>
+                  <p className="text-[11px] text-gray-500 mt-1">من دون تحديد أي عرض هنا، سيظل هذا العرض منفردًا تمامًا. اختر عرضًا أو أكثر فقط عندما تريد تطبيقها معًا.</p>
+                </div>
+                {stackableOffers.length === 0 ? (
+                  <p className="text-xs text-gray-400 rounded-lg bg-gray-50 p-3">لا توجد عروض أخرى مفعّلة في هذه البيئة يمكن دمجها حاليًا.</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {stackableOffers.map((otherOffer) => {
+                      const selected = selectedStackIds.includes(String(otherOffer.id));
+                      return (
+                        <label key={otherOffer.id} className="flex items-start gap-2 rounded-lg border border-gray-200 p-3 cursor-pointer hover:bg-gray-50">
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            onChange={(event) => updateField(
+                              "stackWithOfferIds",
+                              event.target.checked
+                                ? [...new Set([...selectedStackIds, String(otherOffer.id)])]
+                                : selectedStackIds.filter((id) => id !== String(otherOffer.id))
+                            )}
+                            className="w-4 h-4 accent-[#008060] mt-0.5"
+                          />
+                          <span className="min-w-0">
+                            <span className="block text-xs font-bold text-gray-800">{otherOffer.name || "عرض بدون اسم"}</span>
+                            <span className="block text-[10px] text-gray-500 mt-1">{offerDescription(otherOffer)}</span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t border-gray-100 pt-5 space-y-3">
                 <div className="font-black text-sm text-gray-800">نطاق المنتجات</div>
                 <div className="flex flex-wrap gap-4 text-sm">
                   <label className="flex items-center gap-2"><input type="radio" name="offer-scope" checked={form.productScope === "all"} onChange={() => updateField("productScope", "all")} className="accent-[#008060]" /> كل المنتجات</label>
