@@ -4,7 +4,6 @@
 // ============================================
 import { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { calculateSubtotal, calculateShipping, calculateDiscount, calculateTotal, calculateAllTotals } from '@/lib/cartCalculations';
-import { computeOfferBenefits } from '@/lib/offerEngine';
 import { useSettings } from '@/context/SettingsContext';
 
 const CartContext = createContext();
@@ -61,13 +60,17 @@ export function CartProvider({ children }) {
 
   // العروض النشطة (من /api/offers) — لو فشل التحميل بنكمل بدون عروض والسلة تشتغل زي ما هي
   const [offers, setOffers] = useState([]);
+  const [freeShippingRule, setFreeShippingRule] = useState(null);
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const res  = await fetch('/api/offers');
         const data = await res.json();
-        if (!cancelled && data?.success && Array.isArray(data.offers)) setOffers(data.offers);
+        if (!cancelled && data?.success && Array.isArray(data.offers)) {
+          setOffers(data.offers);
+          setFreeShippingRule(data.shippingRules || null);
+        }
       } catch { /* بدون عروض */ }
     })();
     return () => { cancelled = true; };
@@ -280,17 +283,12 @@ export function CartProvider({ children }) {
   }, []);
 
   // ── Calculations ───────────────────────────────────────────────
-  const { subtotal, discount, shipping, total, discountSource, appliedOffer } = useMemo(
-    () => calculateAllTotals(cartItems, appliedPromo, shippingSettings, isFirstOrder, offers),
-    [cartItems, appliedPromo, shippingSettings, isFirstOrder, offers]
+  const {
+    subtotal, discount, shipping, total, discountSource, appliedOffer, appliedOffers, offerBenefits,
+  } = useMemo(
+    () => calculateAllTotals(cartItems, appliedPromo, shippingSettings, isFirstOrder, offers, freeShippingRule),
+    [cartItems, appliedPromo, shippingSettings, isFirstOrder, offers, freeShippingRule]
   );
-
-  // تفاصيل القطع المستفيدة من العرض الفائز، محسوبة بنفس محرك العروض النقي.
-  const offerBenefits = useMemo(() => {
-    if (discountSource !== 'offer' || !appliedOffer?.id) return null;
-    const winningOffer = offers.find((offer) => String(offer.id) === String(appliedOffer.id));
-    return winningOffer ? computeOfferBenefits(cartItems, winningOffer) : null;
-  }, [cartItems, offers, discountSource, appliedOffer]);
 
   // لو عرض تلقائي كسب على كود الخصم: نوضح للعميل إن الكود ما اتطبقش
   // (الحساب نفسه بيستخدم appliedPromo الأصلي — ده للعرض فقط)
@@ -373,7 +371,7 @@ export function CartProvider({ children }) {
     addToCart, removeFromCart, updateQty, updateCartItemVariant, clearCart,
     isCartOpen, toggleCart, openCart, closeCart,
     subtotal, discount, shipping, total,
-    discountSource, appliedOffer, offers, offerBenefits,
+    discountSource, appliedOffer, appliedOffers, offers, offerBenefits, freeShippingRule,
     appliedPromo: appliedPromoView,
     applyPromoCode, removePromoCode,
     discountError, setDiscountError, promoLoading,
