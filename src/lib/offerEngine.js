@@ -197,70 +197,46 @@ export function computeOfferDiscount(cartItems, offer) {
 }
 
 /**
- * أفضل عرض واحد للعميل.
- * @returns {{ discount: number, offer: {id,name,type}|null, candidates: Array }}
+ * يختار أفضل مجموعة عروض: عرض أساسي + العروض التي اختار الأدمن دمجها معه.
+ * كل عرض إضافي يُحسب على السعر المتبقي للوحدة بعد العروض السابقة.
  */
 export function computeBestOffer(cartItems, offers, now = new Date()) {
-  const none = { discount: 0, offer: null, candidates: [], freeShipping: false };
-  if (!Array.isArray(cartItems) || cartItems.length === 0) return none;
-  if (!Array.isArray(offers) || offers.length === 0) return none;
-
+  const none = { discount: 0, offer: null, appliedOffers: [], offerBenefits: null, candidates: [], freeShipping: false };
+  if (!Array.isArray(cartItems) || cartItems.length === 0 || !Array.isArray(offers) || offers.length === 0) return none;
+  const liveOffers = offers.filter((offer) => offer && offer.type !== OFFER_TYPES.FREE_SHIPPING && isOfferLive(offer, now));
   const candidates = [];
-  const shippingCandidates = [];
-
-  for (const offer of offers) {
-    if (!isOfferLive(offer, now) || !isOfferApplicable(cartItems, offer)) continue;
-
-    // عرض الشحن المجاني المنفصل لا يُضاف فوق خصم عرض آخر.
-    if (offer.type === OFFER_TYPES.FREE_SHIPPING) {
-      shippingCandidates.push({
-        id: String(offer.id ?? ''),
-        name: offer.name || '',
-        type: offer.type,
-        priority: Number.isFinite(Number(offer.priority)) ? Number(offer.priority) : DEFAULT_PRIORITY,
-      });
-      continue;
-    }
-
-    const discount = computeOfferDiscount(cartItems, offer);
-    if (discount > 0) {
-      candidates.push({
-        id: String(offer.id ?? ''),
-        name: offer.name || '',
-        type: offer.type,
-        discount,
-        freeShipping: offer.freeShipping === true,
-        priority: Number.isFinite(Number(offer.priority)) ? Number(offer.priority) : DEFAULT_PRIORITY,
-      });
-    }
+  for (const primary of liveOffers) {
+    if (computeOfferBenefits(cartItems, primary, now).discount <= 0) continue;
+    const allowedIds = new Set(Array.isArray(primary.stackWithOfferIds) ? primary.stackWithOfferIds.map(String) : []);
+    const additionalOffers = liveOffers
+      .filter((offer) => String(offer.id) !== String(primary.id) && allowedIds.has(String(offer.id)))
+      .sort((a, b) =>
+        (Number(a.priority) || DEFAULT_PRIORITY) - (Number(b.priority) || DEFAULT_PRIORITY) ||
+        String(a.id).localeCompare(String(b.id))
+      );
+    const benefits = computeStackedOfferBenefits(cartItems, [primary, ...additionalOffers], now);
+    if (benefits.discount <= 0 || !benefits.offers.some((offer) => String(offer.id) === String(primary.id))) continue;
+    candidates.push({
+      id: String(primary.id ?? ''), name: primary.name || '', type: primary.type,
+      discount: benefits.discount,
+      priority: Number.isFinite(Number(primary.priority)) ? Number(primary.priority) : DEFAULT_PRIORITY,
+      appliedOffers: benefits.offers, offerBenefits: benefits,
+    });
   }
-
-  candidates.sort(
-    (a, b) =>
-      b.discount - a.discount ||
-      a.priority - b.priority ||
-      (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+  candidates.sort((a, b) =>
+    b.discount - a.discount || a.priority - b.priority ||
+    (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
   );
-
-  // لا يُمنح الشحن المجاني إلا مع العرض النقدي الفائز نفسه.
-  if (candidates.length > 0) {
-    const best = candidates[0];
-    return {
-      discount: best.discount,
-      offer: { id: best.id, name: best.name, type: best.type },
-      candidates,
-      freeShipping: best.freeShipping === true,
-    };
-  }
-
-  // عرض الشحن المجاني يعمل وحده فقط عندما لا يوجد عرض خصم نقدي مؤهل.
-  shippingCandidates.sort(
-    (a, b) => a.priority - b.priority || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
-  );
-  const shippingOffer = shippingCandidates[0];
-  return shippingOffer
-    ? { ...none, offer: { id: shippingOffer.id, name: shippingOffer.name, type: shippingOffer.type }, freeShipping: true }
-    : none;
+  const best = candidates[0];
+  if (!best) return none;
+  return {
+    discount: best.discount,
+    offer: { id: best.id, name: best.name, type: best.type },
+    appliedOffers: best.appliedOffers,
+    offerBenefits: best.offerBenefits,
+    candidates: candidates.map(({ id, name, type, discount, priority }) => ({ id, name, type, discount, priority })),
+    freeShipping: false,
+  };
 }
 
 /**
@@ -407,3 +383,103 @@ export function computeOfferBenefits(cartItems, offer, now = new Date()) {
   };
 }
 
+
+
+/** تحقق قاعدة الشحن المجاني المستقلة عن العروض النقدية. */
+export function isFreeShippingRuleEligible(cartItems, rule) {
+  if (!rule || rule.enabled !== true || !Array.isArray(cartItems) || cartItems.length === 0) return false;
+  if (rule.scope === "store") return true;
+  if (rule.scope !== "selected") return false;
+  const selectedIds = new Set(Array.isArray(rule.productIds) ? rule.productIds.map(String) : []);
+  if (!selectedIds.size) return false;
+  const eligibleItems = cartItems.filter((item) => {
+    const identifiers = [item.id, item.productId, item.handle, item.productHandle]
+      .filter((value) => value !== undefined && value !== null && String(value) !== "")
+      .map(String);
+    return identifiers.some((identifier) => selectedIds.has(identifier));
+  });
+  if (!eligibleItems.length) return false;
+  if (rule.condition === "quantity") {
+    const quantity = eligibleItems.reduce((sum, item) => sum + Math.max(0, Number(item.qty) || 0), 0);
+    return quantity >= Math.max(1, Math.floor(Number(rule.minQuantity) || 1));
+  }
+  if (rule.condition === "subtotal") {
+    const subtotal = eligibleItems.reduce(
+      (sum, item) => sum + Math.max(0, Number(item.price) || 0) * Math.max(0, Number(item.qty) || 0), 0
+    );
+    const minimum = Math.max(0, Number(rule.minSubtotal) || 0);
+    return minimum > 0 && subtotal >= minimum;
+  }
+  return false;
+}
+
+/** يحسب العروض المسموح بدمجها بالتتابع على السعر المتبقي لكل وحدة. */
+export function computeStackedOfferBenefits(cartItems, offers, now = new Date()) {
+  const selectedOffers = Array.isArray(offers)
+    ? offers.filter((offer) => offer && offer.type !== OFFER_TYPES.FREE_SHIPPING && isOfferLive(offer, now))
+    : [];
+  const units = [];
+  (Array.isArray(cartItems) ? cartItems : []).forEach((item, cartIndex) => {
+    const quantity = Math.min(Math.max(0, parseInt(item.qty) || 0), MAX_UNITS_PER_ITEM);
+    const originalPrice = Math.max(0, parseFloat(item.price) || 0);
+    for (let unitIndex = 0; unitIndex < quantity; unitIndex += 1) {
+      units.push({ item, cartIndex, unitIndex, originalPrice, currentPrice: originalPrice, totalDiscount: 0, benefits: [] });
+    }
+  });
+  const appliedOffers = [];
+  for (const offer of selectedOffers) {
+    if (!units.length) break;
+    const workingCart = units.map((unit) => ({ ...unit.item, price: unit.currentPrice, qty: 1 }));
+    const step = computeOfferBenefits(workingCart, offer, now);
+    if (step.discount <= 0) continue;
+    let appliedThisOffer = 0;
+    for (const line of step.lines) {
+      for (const benefit of line.discountedUnits) {
+        const unit = units[line.cartIndex];
+        if (!unit) continue;
+        const beforeCents = Math.max(0, Math.round(unit.currentPrice * 100));
+        const discountCents = Math.min(beforeCents, Math.max(0, Math.round(benefit.discount * 100)));
+        if (discountCents <= 0) continue;
+        const discount = discountCents / 100;
+        const finalPrice = Math.max(0, (beforeCents - discountCents) / 100);
+        unit.currentPrice = finalPrice;
+        unit.totalDiscount = Math.round((unit.totalDiscount + discount) * 100) / 100;
+        unit.benefits.push({
+          offerId: String(offer.id ?? ''), offerName: offer.name || '', offerType: offer.type,
+          config: offer.config || {}, originalPrice: beforeCents / 100, discount, finalPrice, free: finalPrice <= 0,
+        });
+        appliedThisOffer += discount;
+      }
+    }
+    if (appliedThisOffer > 0) {
+      appliedOffers.push({
+        id: String(offer.id ?? ''), name: offer.name || '', type: offer.type,
+        config: offer.config || {}, discount: Math.round(appliedThisOffer * 100) / 100,
+      });
+    }
+  }
+  const grouped = new Map();
+  units.forEach((unit) => {
+    if (unit.totalDiscount <= 0) return;
+    if (!grouped.has(unit.cartIndex)) grouped.set(unit.cartIndex, []);
+    grouped.get(unit.cartIndex).push({
+      unitIndex: unit.unitIndex, originalPrice: unit.originalPrice, discount: unit.totalDiscount,
+      finalPrice: unit.currentPrice, free: unit.currentPrice <= 0, benefits: unit.benefits,
+    });
+  });
+  const lines = [];
+  for (const [cartIndex, discountedUnits] of grouped.entries()) {
+    const item = cartItems[cartIndex];
+    lines.push({
+      cartIndex, itemId: String(item.id ?? item.productId ?? item.handle ?? ''),
+      regularQty: Math.max(0, (parseInt(item.qty) || 0) - discountedUnits.length), discountedUnits,
+    });
+  }
+  const discount = Math.round(units.reduce((sum, unit) => sum + unit.totalDiscount, 0) * 100) / 100;
+  return {
+    offerId: appliedOffers[0]?.id || null, offerIds: appliedOffers.map((offer) => offer.id),
+    name: appliedOffers.map((offer) => offer.name).filter(Boolean).join(" + "),
+    type: appliedOffers[0]?.type || null, config: appliedOffers[0]?.config || {},
+    offers: appliedOffers, discount, lines,
+  };
+}
