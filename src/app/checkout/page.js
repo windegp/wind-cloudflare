@@ -163,6 +163,7 @@ export default function CheckoutPage() {
     setSelectedGovernorate,
     discountSource,
     appliedOffer,
+    offerBenefits,
   } = useCart();
   
   const { signalPageReady } = usePageReady();
@@ -170,6 +171,25 @@ export default function CheckoutPage() {
 
     const SHIPPING_COST = shipping;
   const finalTotal    = total;
+
+  // عرض كل قطعة مستفيدة كسطر مستقل في ملخص الدفع.
+  const checkoutDisplayRows = cartItems.flatMap((item, cartIndex) => {
+    const benefitLine = (offerBenefits?.lines || []).find((line) => line.cartIndex === cartIndex);
+    if (!benefitLine) return [{ ...item, displayKey: `${cartIndex}-regular` }];
+    const rows = [];
+    if (benefitLine.regularQty > 0) {
+      rows.push({ ...item, qty: benefitLine.regularQty, displayKey: `${cartIndex}-regular` });
+    }
+    benefitLine.discountedUnits.forEach((unit, unitIndex) => {
+      rows.push({
+        ...item, qty: 1, price: unit.finalPrice,
+        originalOfferPrice: unit.originalPrice,
+        isOfferBenefit: true, isFreeOfferBenefit: unit.free,
+        displayKey: `${cartIndex}-benefit-${unitIndex}`,
+      });
+    });
+    return rows;
+  });
 
   // اسم سطر الخصم في ملخص الطلب
   const discountLabel = discountSource === 'offer'
@@ -1029,7 +1049,7 @@ router.push(`/thank-you?orderId=${orderId}`);
 
         {summaryOpen && (
           <div className="mt-4 pb-2 slide-down space-y-3" onClick={e => e.stopPropagation()}>
-            {cartItems.map((item, idx) => (
+            {checkoutDisplayRows.map((item, idx) => (
               <div key={idx} className="flex items-center gap-3">
                 <div className="relative w-12 h-12 bg-gray-100 rounded-lg overflow-visible shrink-0">
                   <img src={item.image || item.images?.[0] || 'https://placehold.co/100'} alt={item.title} className="w-full h-full object-cover rounded-lg border border-gray-200" />
@@ -1037,11 +1057,12 @@ router.push(`/thank-you?orderId=${orderId}`);
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-semibold text-gray-800 leading-tight">{item.title}</p>
+                  {item.isOfferBenefit && <p className="text-[11px] font-semibold text-emerald-700 mt-1">{item.isFreeOfferBenefit ? "هدية مجانية من العرض" : "خصم العرض"}</p>}
                   <p className="text-xs text-gray-400">
                     {[item.selectedSize, item.selectedColor].filter(Boolean).join(' / ')}
                   </p>
                 </div>
-                <span className="text-sm font-bold text-gray-800">ج.م {item.price * item.qty}.00</span>
+                <span className="text-sm font-bold text-gray-800">{item.isOfferBenefit && <span className="text-xs text-gray-400 line-through ml-1">ج.م {item.originalOfferPrice}.00</span>}ج.م {item.price * item.qty}.00</span>
               </div>
             ))}
 
@@ -1445,7 +1466,7 @@ router.push(`/thank-you?orderId=${orderId}`);
 
               {payAreaSummaryOpen && (
                 <div className="mt-3 slide-down bg-white border border-gray-200 rounded-xl p-4 space-y-3">
-                  {cartItems.map((item, idx) => (
+                  {checkoutDisplayRows.map((item, idx) => (
                     <div key={idx} className="flex items-center gap-3">
                       <div className="relative w-10 h-10 bg-gray-100 rounded-lg overflow-visible shrink-0">
                         <img src={item.image || item.images?.[0] || 'https://placehold.co/100'} alt={item.title} className="w-full h-full object-cover rounded-lg border border-gray-200" />
@@ -1453,13 +1474,14 @@ router.push(`/thank-you?orderId=${orderId}`);
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-gray-800 leading-tight truncate">{item.title}</p>
+                        {item.isOfferBenefit && <p className="text-[11px] font-semibold text-emerald-700 mt-1">{item.isFreeOfferBenefit ? "هدية مجانية من العرض" : "خصم العرض"}</p>}
                         {(item.selectedSize || item.selectedColor) && (
                           <p className="text-xs text-gray-400">
                             {[item.selectedSize, item.selectedColor].filter(Boolean).join(' / ')}
                           </p>
                         )}
                       </div>
-                      <span className="text-sm font-bold text-gray-800 shrink-0">ج.م {item.price * item.qty}.00</span>
+                      <span className="text-sm font-bold text-gray-800 shrink-0">{item.isOfferBenefit && <span className="text-xs text-gray-400 line-through ml-1">ج.م {item.originalOfferPrice}.00</span>}ج.م {item.price * item.qty}.00</span>
                     </div>
                   ))}
 
@@ -1539,7 +1561,7 @@ router.push(`/thank-you?orderId=${orderId}`);
           <div className="sticky top-[65px] px-8 py-12">
 
             <div className="space-y-5 mb-6 max-h-[320px] overflow-y-auto">
-              {cartItems.map((item, idx) => (
+              {checkoutDisplayRows.map((item, idx) => (
                 <div key={idx} className="flex items-center gap-4">
                   <div className="relative w-14 h-14 bg-gray-200 rounded-xl overflow-visible shrink-0">
                     <img src={item.image || item.images?.[0] || 'https://placehold.co/100'} alt={item.title} className="w-full h-full object-cover rounded-xl border border-gray-300" />
@@ -1548,6 +1570,7 @@ router.push(`/thank-you?orderId=${orderId}`);
                   <div className="flex-1 min-w-0">
 
                     <h4 className="font-semibold text-gray-800 text-sm leading-tight truncate">{item.title}</h4>
+                    {item.isOfferBenefit && <p className="text-[11px] font-semibold text-emerald-700 mt-1">{item.isFreeOfferBenefit ? "هدية مجانية من العرض" : "خصم العرض"}</p>}
 
                     {(item.selectedSize || item.selectedColor) && (
 
@@ -1560,7 +1583,7 @@ router.push(`/thank-you?orderId=${orderId}`);
                     )}
 
                   </div>
-                  <span className="text-sm font-bold text-gray-800 shrink-0">ج.م {item.price * item.qty}.00</span>
+                  <span className="text-sm font-bold text-gray-800 shrink-0">{item.isOfferBenefit && <span className="text-xs text-gray-400 line-through ml-1">ج.م {item.originalOfferPrice}.00</span>}ج.م {item.price * item.qty}.00</span>
                 </div>
               ))}
             </div>
