@@ -110,6 +110,49 @@ export function CartProvider({ children }) {
     openCart();
   }, [openCart]);
 
+  const updateCartItemVariant = useCallback((originalItem, selection) => {
+    setCartItems((prev) => {
+      const targetIndex = prev.findIndex((item) =>
+        item.id === originalItem.id &&
+        item.selectedSize === originalItem.selectedSize &&
+        item.selectedColor === originalItem.selectedColor &&
+        (item.bundleGroupId || "") === (originalItem.bundleGroupId || "") &&
+        (item.bundleRole || "") === (originalItem.bundleRole || "")
+      );
+      if (targetIndex < 0) return prev;
+
+      const target = prev[targetIndex];
+      const updated = {
+        ...target,
+        selectedSize: selection.selectedSize,
+        selectedColor: selection.selectedColor,
+        image: selection.image || target.image,
+      };
+      const duplicateIndex = prev.findIndex((item, index) =>
+        index !== targetIndex &&
+        item.id === updated.id &&
+        item.selectedSize === updated.selectedSize &&
+        item.selectedColor === updated.selectedColor &&
+        (item.bundleGroupId || "") === (updated.bundleGroupId || "") &&
+        (item.bundleRole || "") === (updated.bundleRole || "")
+      );
+
+      if (duplicateIndex >= 0) {
+        return prev.reduce((next, item, index) => {
+          if (index === targetIndex) return next;
+          if (index === duplicateIndex) {
+            next.push({ ...item, qty: item.qty + target.qty });
+          } else {
+            next.push(item);
+          }
+          return next;
+        }, []);
+      }
+
+      return prev.map((item, index) => index === targetIndex ? updated : item);
+    });
+  }, []);
+
   const updateQty = useCallback((id, selectedSize, delta, selectedColor, bundleGroupId) => {
     setCartItems(prev => prev.map(item => {
       const matchColor = selectedColor !== undefined ? item.selectedColor === selectedColor : true;
@@ -260,7 +303,7 @@ export function CartProvider({ children }) {
 
   const contextValue = useMemo(() => ({
     cartItems,
-    addToCart, removeFromCart, updateQty, clearCart,
+    addToCart, removeFromCart, updateQty, updateCartItemVariant, clearCart,
     isCartOpen, toggleCart, openCart, closeCart,
     subtotal, discount, shipping, total,
     discountSource, appliedOffer, offers, offerBenefits,
