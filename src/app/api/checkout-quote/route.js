@@ -7,6 +7,12 @@ import { signCheckoutQuote } from "@/lib/checkoutQuoteToken";
 
 export const dynamic = "force-dynamic";
 
+function getOfferEnvironment(request) {
+  const host = new URL(request.url).hostname.toLowerCase();
+  const productionHosts = ["windeg.com", "www.windeg.com", "windeg.pages.dev"];
+  return productionHosts.includes(host) ? "production" : "preview";
+}
+
 export async function POST(request) {
   try {
     const body = await request.json();
@@ -17,7 +23,10 @@ export async function POST(request) {
       );
     }
 
-    const quote = await createServerCheckoutQuote(body);
+    const quote = await createServerCheckoutQuote({
+      ...body,
+      offersEnvironment: getOfferEnvironment(request),
+    });
     const quoteToken = await signCheckoutQuote(quote, body.orderId);
 
     return NextResponse.json(

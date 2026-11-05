@@ -55,6 +55,15 @@ const emptyForm = () => ({
   freeShipping: false,
 });
 
+// Production hosts manage live offers. Any other host (Cloudflare branch preview / localhost)
+// is isolated using the preview environment tag.
+function getCurrentOfferEnvironment() {
+  if (typeof window === "undefined") return "preview";
+  const host = window.location.hostname.toLowerCase();
+  const productionHosts = ["windeg.com", "www.windeg.com", "windeg.pages.dev"];
+  return productionHosts.includes(host) ? "production" : "preview";
+}
+
 function dateInputValue(value) {
   if (!value) return "";
   const date = typeof value?.toDate === "function" ? value.toDate() : new Date(value);
@@ -187,6 +196,7 @@ export default function AdminOffersPage() {
   const [formError, setFormError] = useState("");
   const [includeSearch, setIncludeSearch] = useState("");
   const [excludeSearch, setExcludeSearch] = useState("");
+  const [environment, setEnvironment] = useState("preview");
 
   const notify = (message, ok = true) => {
     setToast({ message, ok });
@@ -198,11 +208,17 @@ export default function AdminOffersPage() {
     setPageError("");
     try {
       const db = getDb();
+      const currentEnvironment = getCurrentOfferEnvironment();
+      setEnvironment(currentEnvironment);
       const [offersSnap, productsSnap] = await Promise.all([
         getDocs(collection(db, "offers")),
         getDocs(query(collection(db, "products"), limit(1000))),
       ]);
-      const loadedOffers = offersSnap.docs.map((item) => ({ id: item.id, ...item.data() }));
+      const loadedOffers = offersSnap.docs
+        .map((item) => ({ id: item.id, ...item.data() }))
+        .filter((offer) => currentEnvironment === "preview"
+          ? offer.environment === "preview"
+          : offer.environment !== "preview");
       loadedOffers.sort((a, b) =>
         (Number(a.priority) || 100) - (Number(b.priority) || 100) ||
         String(a.name || "").localeCompare(String(b.name || ""), "ar")
@@ -351,6 +367,7 @@ export default function AdminOffersPage() {
         excludedProductIds: form.excludedProductIds,
         excludeDiscounted: Boolean(form.excludeDiscounted),
         freeShipping: form.type === "free_shipping" || Boolean(form.freeShipping),
+        environment: getCurrentOfferEnvironment(),
         updatedAt: now,
       };
 
@@ -449,6 +466,14 @@ export default function AdminOffersPage() {
           </button>
         </div>
       </header>
+
+      <div className={`rounded-xl border p-4 text-xs ${environment === "preview" ? "bg-sky-50 border-sky-200 text-sky-800" : "bg-amber-50 border-amber-200 text-amber-800"}`}>
+        {environment === "preview" ? (
+          <><strong>بيئة معاينة معزولة:</strong> العروض التي تنشئها هنا تُحفظ كعروض Preview ولا تظهر لعملاء windeg.com.</>
+        ) : (
+          <><strong>تنبيه — بيئة الإنتاج:</strong> أي عرض تحفظه أو تفعّله هنا يؤثر على متجر windeg.com مباشرة.</>
+        )}
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="bg-white border border-gray-200 rounded-xl p-4">

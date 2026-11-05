@@ -364,6 +364,7 @@ export async function createServerCheckoutQuote(input = {}) {
 
   const items = await resolveCartItems(db, input.cartItems);
   const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
+  const offersEnvironment = input.offersEnvironment === "preview" ? "preview" : "production";
   const [settingsSnap, offersSnap] = await Promise.all([
     getDoc(doc(db, "settings", "siteSettings")),
     getDocs(collection(db, "offers")),
@@ -379,7 +380,9 @@ export async function createServerCheckoutQuote(input = {}) {
       : false;
   const offers = offersSnap.docs
     .map((offerDoc) => ({ id: offerDoc.id, ...offerDoc.data() }))
-    .filter((offer) => offer.active === true);
+    .filter((offer) => offer.active === true && (offersEnvironment === "preview"
+      ? offer.environment === "preview"
+      : offer.environment !== "preview"));
 
   const promo = await validatePromo(
     db,
