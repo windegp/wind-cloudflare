@@ -284,6 +284,10 @@ export default function AdminOffersPage() {
   };
 
   const openEdit = (offer) => {
+    if (offer.type === "free_shipping") {
+      notify("هذا عرض شحن قديم. أدر الشحن المجاني من قسم «قواعد الشحن المجاني» بدلًا منه.", false);
+      return;
+    }
     setEditingId(offer.id);
     setForm({
       ...emptyForm(),
