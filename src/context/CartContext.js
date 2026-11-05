@@ -4,6 +4,7 @@
 // ============================================
 import { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { calculateSubtotal, calculateShipping, calculateDiscount, calculateTotal, calculateAllTotals } from '@/lib/cartCalculations';
+import { computeOfferBenefits } from '@/lib/offerEngine';
 import { useSettings } from '@/context/SettingsContext';
 
 const CartContext = createContext();
@@ -173,6 +174,13 @@ export function CartProvider({ children }) {
     () => calculateAllTotals(cartItems, appliedPromo, shippingSettings, isFirstOrder, offers),
     [cartItems, appliedPromo, shippingSettings, isFirstOrder, offers]
   );
+
+  // تفاصيل القطع المستفيدة من العرض الفائز، محسوبة بنفس محرك العروض النقي.
+  const offerBenefits = useMemo(() => {
+    if (discountSource !== 'offer' || !appliedOffer?.id) return null;
+    const winningOffer = offers.find((offer) => String(offer.id) === String(appliedOffer.id));
+    return winningOffer ? computeOfferBenefits(cartItems, winningOffer) : null;
+  }, [cartItems, offers, discountSource, appliedOffer]);
 
   // لو عرض تلقائي كسب على كود الخصم: نوضح للعميل إن الكود ما اتطبقش
   // (الحساب نفسه بيستخدم appliedPromo الأصلي — ده للعرض فقط)
