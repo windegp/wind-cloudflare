@@ -20,7 +20,7 @@ export async function GET() {
 
     return NextResponse.json(
       { success: true, offers },
-      { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' } }
+      { headers: { 'Cache-Control': 'public, s-maxage=10, stale-while-revalidate=20' } }
     );
   } catch (err) {
     console.error('offers GET error:', err);

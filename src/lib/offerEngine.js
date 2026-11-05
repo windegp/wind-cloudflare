@@ -82,6 +82,19 @@ function isItemEligible(item, offer) {
   return true;
 }
 
+/** هل يوجد منتج مؤهل، وهل مجموع المنتجات المؤهلة يحقق الحد الأدنى؟ */
+function isOfferApplicable(cartItems, offer) {
+  const eligible = cartItems.filter((item) => isItemEligible(item, offer));
+  if (eligible.length === 0) return false;
+
+  const eligibleSubtotal = eligible.reduce(
+    (sum, item) => sum + (parseFloat(item.price) || 0) * (parseInt(item.qty) || 0),
+    0
+  );
+  const minCart = Number(offer.minCart) || 0;
+  return minCart <= 0 || eligibleSubtotal >= minCart;
+}
+
 /** وحدات القطع المؤهلة مرتبة من الأغلى للأرخص */
 function expandUnits(items) {
   const units = [];
@@ -183,13 +196,19 @@ export function computeOfferDiscount(cartItems, offer) {
  * @returns {{ discount: number, offer: {id,name,type}|null, candidates: Array }}
  */
 export function computeBestOffer(cartItems, offers, now = new Date()) {
-  const none = { discount: 0, offer: null, candidates: [] };
+  const none = { discount: 0, offer: null, candidates: [], freeShipping: false };
   if (!Array.isArray(cartItems) || cartItems.length === 0) return none;
   if (!Array.isArray(offers) || offers.length === 0) return none;
 
   const candidates = [];
+  let freeShipping = false;
+
   for (const offer of offers) {
-    if (!isOfferLive(offer, now)) continue;
+    if (!isOfferLive(offer, now) || !isOfferApplicable(cartItems, offer)) continue;
+
+    // الشحن المجاني منفعة مستقلة: لا تدخل في مقارنة الخصومات النقدية.
+    if (offer.freeShipping === true) freeShipping = true;
+
     const discount = computeOfferDiscount(cartItems, offer);
     if (discount > 0) {
       candidates.push({
@@ -202,7 +221,7 @@ export function computeBestOffer(cartItems, offers, now = new Date()) {
     }
   }
 
-  if (candidates.length === 0) return none;
+  if (candidates.length === 0) return { ...none, freeShipping };
 
   candidates.sort(
     (a, b) =>
@@ -216,5 +235,6 @@ export function computeBestOffer(cartItems, offers, now = new Date()) {
     discount: best.discount,
     offer: { id: best.id, name: best.name, type: best.type },
     candidates,
+    freeShipping,
   };
 }

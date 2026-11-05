@@ -415,8 +415,9 @@ export async function createServerCheckoutQuote(input = {}) {
   const freeShippingByThreshold = freeShippingThreshold > 0 && subtotal >= freeShippingThreshold;
   const freeShippingByPromo = Boolean(promo?.freeShipping);
   const freeShippingByBundle = items.some((item) => item.bundleFreeShipping === true);
+  const freeShippingByOffer = Boolean(offerResult.freeShipping);
   const shipping =
-    freeShippingByThreshold || freeShippingByPromo || freeShippingByBundle
+    freeShippingByThreshold || freeShippingByPromo || freeShippingByBundle || freeShippingByOffer
       ? 0
       : shippingCost;
   const total = Math.max(0, Number((subtotal - discount + shipping).toFixed(2)));
@@ -464,6 +465,7 @@ export async function createServerCheckoutQuote(input = {}) {
     freeShippingByThreshold,
     freeShippingByPromo,
     freeShippingByBundle,
+    freeShippingByOffer,
     firstOrderDiscount: promotions.firstOrderEnabled ? Number(promotions.firstOrderDiscount) || 0 : 0,
   };
 }

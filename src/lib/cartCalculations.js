@@ -99,7 +99,7 @@ export function calculateAllTotals(cartItems, promoResult = null, shippingSettin
   const appliedOffer = discountSource === 'offer' ? offerResult.offer : null;
 
   // الشحن منفعة مستقلة: يحتفظ بالشحن المجاني المؤهل ولا يضيف خصماً نقدياً ثانياً.
-  const shipping = calculateShipping(promoResult, subtotal, cartItems, shippingSettings);
+  const shipping = offerResult.freeShipping ? 0 : calculateShipping(promoResult, subtotal, cartItems, shippingSettings);
   const total = calculateTotal(subtotal, shipping, discount);
   return { subtotal, discount, shipping, total, discountSource, appliedOffer };
 }
