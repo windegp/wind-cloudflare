@@ -8,7 +8,7 @@ import { doc, getDoc, collection, query, where, getDocs, documentId } from "fire
 import QuickViewModal from "@/components/QuickViewModal"; 
 
 export default function CartDrawer() {
-  const { cartItems, isCartOpen, toggleCart, removeFromCart, updateQty, subtotal } = useCart();
+  const { cartItems, isCartOpen, toggleCart, removeFromCart, updateQty, subtotal, offerBenefits } = useCart();
   
     const [suggestedProducts, setSuggestedProducts] = useState([]);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
@@ -135,6 +135,23 @@ export default function CartDrawer() {
     setQuickViewProduct(product);
   };
 
+  const cartDisplayRows = cartItems.flatMap((item, cartIndex) => {
+    const benefitLine = offerBenefits?.lines?.find((line) => line.cartIndex === cartIndex);
+    if (!benefitLine) {
+      return [{ key: `regular-${cartIndex}`, item, qty: item.qty, benefit: null }];
+    }
+
+    const rows = [];
+    if (benefitLine.regularQty > 0) {
+      rows.push({ key: `regular-${cartIndex}`, item, qty: benefitLine.regularQty, benefit: null });
+    }
+    benefitLine.discountedUnits.forEach((benefit) => {
+      rows.push({ key: `benefit-${cartIndex}-${benefit.unitIndex}`, item, qty: 1, benefit });
+    });
+    return rows;
+  });
+
+
   if (!isCartOpen) return null;
 
   return (
@@ -198,8 +215,10 @@ export default function CartDrawer() {
                     <button onClick={toggleCart} className="bg-[#1A1A1A] text-white px-8 py-3 rounded-full font-bold text-sm mt-6">مواصلة التسوق</button>
                   </div>
                 ) : (
-                  cartItems.map((item) => (
-                    <div key={`${item.id}-${item.selectedSize}-${item.selectedColor || ''}`} className="flex gap-4 py-5 border-b border-gray-100 last:border-0">
+                  cartDisplayRows.map((row) => {
+                    const { item, benefit } = row;
+                    return (
+                    <div key={row.key} className="flex gap-4 py-5 border-b border-gray-100 last:border-0">
                       <div className="relative w-20 h-28 bg-gray-50 rounded-xl overflow-hidden shrink-0 cursor-pointer" onClick={() => openQuickView(item)}>
                         <img src={getImageUrl(item)} alt={item.title} className="w-full h-full object-cover" />
                         <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"><ZoomIn className="text-white" size={24} /></div>
@@ -214,25 +233,34 @@ export default function CartDrawer() {
                               {formatVariable(item.selectedColor)}{item.selectedColor && item.selectedSize ? ' / ' : ''}{formatVariable(item.selectedSize)}
                             </p>
                           )}
-                          <div className="flex items-center gap-1 text-gray-500 text-sm mt-1.5 font-medium whitespace-nowrap">
-                            <span className="font-bold text-[#1A1A1A]">{item.price}</span><span className="text-[#1A1A1A] font-light">ج.م</span>
-                            <span className="mx-1 text-xs text-[#555]">×</span><span>{item.qty}</span>
-                          </div>
+                          {benefit ? (
+                            <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-sm">
+                              <span className="text-xs font-bold rounded-full px-2 py-0.5 bg-[#F4F1EA] text-[#6B5635]">{benefit.free ? 'هدية مجانية' : 'خصم العرض'}</span>
+                              <span className="text-gray-400 line-through text-xs">{benefit.originalPrice} ج.م</span>
+                              <span className="font-bold text-[#1A1A1A]">{benefit.finalPrice} ج.م</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1 text-gray-500 text-sm mt-1.5 font-medium whitespace-nowrap">
+                              <span className="font-bold text-[#1A1A1A]">{item.price}</span><span className="text-[#1A1A1A] font-light">ج.م</span>
+                              <span className="mx-1 text-xs text-[#555]">×</span><span>{row.qty}</span>
+                            </div>
+                          )}
                         </div>
                         <div className="flex items-center justify-between mt-3">
                           <div className="flex items-center border border-gray-200 rounded-md bg-white h-8">
                             <button onClick={() => updateQty(item.id, item.selectedSize, 1, item.selectedColor, item.bundleGroupId || "")} className="w-8 h-full flex items-center justify-center text-gray-500 hover:text-black">+</button>
-                            <span className="w-8 text-center text-sm font-bold text-[#1A1A1A]">{item.qty}</span>
+                            <span className="w-8 text-center text-sm font-bold text-[#1A1A1A]">{row.qty}</span>
                             <button onClick={() => updateQty(item.id, item.selectedSize, -1, item.selectedColor, item.bundleGroupId || "")} className="w-8 h-full flex items-center justify-center text-gray-500 hover:text-black">−</button>
                           </div>
-                          <button onClick={() => removeFromCart(item.id, item.selectedSize, item.selectedColor, item.bundleGroupId || "")} className="text-gray-400 hover:text-red-500 flex items-center gap-1.5 group">
+                          <button onClick={() => benefit ? updateQty(item.id, item.selectedSize, -1, item.selectedColor, item.bundleGroupId || "") : removeFromCart(item.id, item.selectedSize, item.selectedColor, item.bundleGroupId || "")} className="text-gray-400 hover:text-red-500 flex items-center gap-1.5 group">
                             <span className="text-sm font-medium underline decoration-gray-300 group-hover:decoration-red-500 underline-offset-4">إزالة</span>
                             <Trash2 size={15} />
                           </button>
                         </div>
                       </div>
                     </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
 
