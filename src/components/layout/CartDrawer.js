@@ -8,7 +8,7 @@ import { doc, getDoc, collection, query, where, getDocs, documentId } from "fire
 import QuickViewModal from "@/components/QuickViewModal"; 
 
 export default function CartDrawer() {
-  const { cartItems, isCartOpen, toggleCart, removeFromCart, updateQty, updateCartItemVariant, subtotal, discount, offerBenefits } = useCart();
+  const { cartItems, isCartOpen, toggleCart, removeFromCart, updateQty, updateCartItemVariant, subtotal, discount, shipping, offerBenefits } = useCart();
   
     const [suggestedProducts, setSuggestedProducts] = useState([]);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
@@ -394,7 +394,9 @@ export default function CartDrawer() {
                   <span className="text-sm font-bold text-[#1A1A1A] whitespace-nowrap">الإجمالي بعد الخصم</span>
                   <span className="font-bold text-[#1A1A1A] text-xl whitespace-nowrap">{Math.max(0, subtotal - discount)} <span className="text-sm font-normal">ج.م</span></span>
                 </div>
-                <p className="text-[12px] text-gray-400 mb-5 font-medium">مصاريف الشحن تُحسب عند الدفع</p>
+                <p className={`text-[12px] mb-5 font-medium ${shipping === 0 ? "text-emerald-700" : "text-gray-400"}`}>
+                  {shipping === 0 ? "تم تفعيل الشحن المجاني لهذا الطلب" : "مصاريف الشحن تُحسب عند الدفع"}
+                </p>
                 <Link
                   href="/checkout"
                   onClick={(event) => {
