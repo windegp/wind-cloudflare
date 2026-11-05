@@ -420,6 +420,47 @@ export default function AdminOffersPage() {
     }
   };
 
+  const saveShippingRule = async () => {
+    setShippingRuleError("");
+    if (shippingRule.enabled && shippingRule.scope === "selected") {
+      if (!Array.isArray(shippingRule.productIds) || shippingRule.productIds.length === 0) {
+        setShippingRuleError("اختر منتجًا واحدًا على الأقل لتطبيق الشحن المجاني عليه.");
+        return;
+      }
+      if (shippingRule.condition === "quantity" &&
+        (!Number.isInteger(Number(shippingRule.minQuantity)) || Number(shippingRule.minQuantity) < 1)) {
+        setShippingRuleError("أدخل عدد قطع صحيحًا لا يقل عن 1.");
+        return;
+      }
+      if (shippingRule.condition === "subtotal" &&
+        (!(Number(shippingRule.minSubtotal) > 0) || !Number.isFinite(Number(shippingRule.minSubtotal)))) {
+        setShippingRuleError("أدخل إجماليًا صحيحًا أكبر من صفر.");
+        return;
+      }
+    }
+
+    setSaving(true);
+    try {
+      const data = {
+        enabled: Boolean(shippingRule.enabled),
+        scope: shippingRule.scope === "selected" ? "selected" : "store",
+        productIds: shippingRule.scope === "selected" ? (shippingRule.productIds || []).map(String) : [],
+        condition: shippingRule.condition === "subtotal" ? "subtotal" : "quantity",
+        minQuantity: Math.max(1, Math.floor(Number(shippingRule.minQuantity) || 1)),
+        minSubtotal: Math.max(0, Number(shippingRule.minSubtotal) || 0),
+        environment,
+        updatedAt: new Date().toISOString(),
+      };
+      await setDoc(doc(getDb(), "settings", `offerShippingRules_${environment}`), data, { merge: true });
+      await revalidateOffers();
+      notify("تم حفظ إعدادات الشحن المجاني.");
+    } catch (error) {
+      setShippingRuleError(error?.message || "تعذر حفظ إعدادات الشحن المجاني.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const toggleActive = async (offer) => {
     setSaving(true);
     try {
