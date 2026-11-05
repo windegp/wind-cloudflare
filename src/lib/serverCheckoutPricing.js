@@ -417,7 +417,10 @@ export async function createServerCheckoutQuote(input = {}) {
     0,
     Number(promotions.freeShippingThreshold ?? FREE_SHIPPING_THRESHOLD) || 0
   );
-  const freeShippingByThreshold = freeShippingThreshold > 0 && subtotal >= freeShippingThreshold;
+  const freeShippingByThreshold =
+    !(freeShippingRule?.enabled === true && freeShippingRule.scope === "selected") &&
+    freeShippingThreshold > 0 &&
+    subtotal >= freeShippingThreshold;
   const freeShippingByPromo = Boolean(promo?.freeShipping);
   const freeShippingByBundle = items.some((item) => item.bundleFreeShipping === true);
   const freeShippingByRule = isFreeShippingRuleEligible(items, freeShippingRule);
