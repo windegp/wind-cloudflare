@@ -8,7 +8,7 @@ import {
   query,
   where,
 } from "firebase/firestore/lite";
-import { computeBestOffer } from "@/lib/offerEngine";
+import { computeBestOffer, computeOfferBenefits } from "@/lib/offerEngine";
 import { FREE_SHIPPING_THRESHOLD, SHIPPING_COST } from "@/lib/constants";
 
 const MAX_CART_LINES = 50;
@@ -428,6 +428,12 @@ export async function createServerCheckoutQuote(input = {}) {
   const appliedPromo =
     promo && (promo.freeShipping || winner.source === "promo") ? promo : null;
   const appliedOffer = winner.source === "offer" ? offerResult.offer : null;
+  const winningOfferConfig = appliedOffer
+    ? offers.find((offer) => String(offer.id) === String(appliedOffer.id)) || null
+    : null;
+  const offerBenefits = winningOfferConfig
+    ? computeOfferBenefits(items, winningOfferConfig)
+    : null;
 
   const lineItems = items.map((item) => ({
     productId: item.productId,
@@ -458,6 +464,7 @@ export async function createServerCheckoutQuote(input = {}) {
     total,
     discountSource: winner.source,
     appliedOffer,
+    offerBenefits,
     appliedPromo,
     isFirstOrder,
     lineItems,
