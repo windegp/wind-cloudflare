@@ -168,17 +168,18 @@ export default function CartDrawer() {
 
   const getBenefitLabel = (benefit) => {
     if (benefit.free) return "هدية مجانية";
-    if (offerBenefits?.type === "nth_percent" || offerBenefits?.type === "cart_percent") {
-      return `خصم ${offerBenefits.config?.percent || Math.round((benefit.discount / benefit.originalPrice) * 100)}%`;
-    }
-    if (offerBenefits?.type === "cart_fixed") {
-      return `خصم ${Number(benefit.discount.toFixed(2))} ج.م`;
-    }
-    if (offerBenefits?.type === "buy_x_get_y") {
-      const percent = Math.round((benefit.discount / benefit.originalPrice) * 100);
-      return percent >= 100 ? "هدية مجانية" : `خصم ${percent}%`;
-    }
-    return "خصم العرض";
+    const labels = (benefit.benefits || []).map((entry) => {
+      if (entry.offerType === "nth_percent" || entry.offerType === "cart_percent") {
+        return `خصم ${entry.config?.percent || Math.round((entry.discount / entry.originalPrice) * 100)}%`;
+      }
+      if (entry.offerType === "cart_fixed") return `خصم ${Number(entry.discount.toFixed(2))} ج.م`;
+      if (entry.offerType === "buy_x_get_y") {
+        const percent = entry.originalPrice > 0 ? Math.round((entry.discount / entry.originalPrice) * 100) : 0;
+        return percent >= 100 ? "هدية مجانية" : `خصم ${percent}%`;
+      }
+      return "خصم العرض";
+    });
+    return labels.length ? labels.join(" + ") : "خصم العرض";
   };
 
   const cartDisplayRows = cartItems.flatMap((item, cartIndex) => {
