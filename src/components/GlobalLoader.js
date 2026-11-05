@@ -4,11 +4,21 @@ import { usePathname } from "next/navigation";
 import logo from '@/../public/logo.png';
 
 export default function GlobalLoader() {
-  const { isVisible, isReceding, loaderType } = useGlobalLoader();
+  const { isVisible, isReceding } = useGlobalLoader();
   const pathname = usePathname();
 
-  // 🔥 الضربة القاضية: لو إنت في مسار الدفع أو الأدمن، متعملش ريندر لأي حاجة نهائياً!
-  if (pathname?.startsWith("/admin") || pathname?.includes("checkout")) {
+  // هذه المسارات لها واجهات تحميل خاصة بها داخل loading.js.
+  // لا نعرض فوقها شاشة Global Loader حتى لا نحجب الـ Skeleton.
+  const hasRouteLoadingUI =
+    pathname?.startsWith("/collections/") ||
+    pathname?.startsWith("/products/");
+
+  // استثناء صفحات الإدارة والدفع والمسارات ذات التحميل المخصص.
+  if (
+    pathname?.startsWith("/admin") ||
+    pathname?.includes("checkout") ||
+    hasRouteLoadingUI
+  ) {
     return null;
   }
 

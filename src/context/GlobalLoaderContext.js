@@ -58,20 +58,31 @@ export function GlobalLoaderProvider({ children }) {
 
   // بدء التحميل فور ضغط العميل على رابط داخلي،
   // قبل اكتمال انتقال Next.js وتغيير pathname.
-  const startNavigation = useCallback(() => {
-    const isExcludedRoute =
+      const startNavigation = useCallback((destinationPath) => {
+      const isExcludedRoute =
       pathname?.startsWith("/admin") ||
       pathname?.includes("/checkout");
 
     if (isExcludedRoute) return;
 
+    const usesRouteLoadingUI =
+      destinationPath?.startsWith("/collections/") ||
+      destinationPath?.startsWith("/products/");
+
     clearLoaderTimers();
+
+    // هذه الصفحات لها Skeleton خاص؛ لا تعرض Global Loader قبلها.
+    if (usesRouteLoadingUI) {
+      setIsVisible(false);
+      setIsReceding(false);
+      setPageReady(false);
+      return;
+    }
 
     setIsVisible(true);
     setIsReceding(false);
     setPageReady(false);
 
-    // مهلة أمان إذا لم يكتمل الانتقال.
     fallbackTimerRef.current = window.setTimeout(() => {
       fallbackTimerRef.current = null;
       setIsReceding(true);
