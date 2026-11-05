@@ -5,7 +5,7 @@
 // ============================================
 
 import { SHIPPING_COST, FREE_SHIPPING_THRESHOLD, CURRENCY } from '@/lib/constants';
-import { computeBestOffer } from '@/lib/offerEngine';
+import { computeBestOffer, isFreeShippingRuleEligible } from '@/lib/offerEngine';
 
 /**
  * Calculate subtotal from cart items
@@ -64,7 +64,7 @@ export function calculateTotal(subtotal, shipping, discount = 0) {
  * القاعدة: أفضل خصم واحد للعميل بين (الكود / خصم الطلب الأول) و(العروض).
  * العرض لازم يكون أعلى فعلاً عشان يكسب، وعند التعادل الخصم القديم هو اللي بيتطبق.
  */
-export function calculateAllTotals(cartItems, promoResult = null, shippingSettings = null, isFirstOrder = false, offers = null) {
+export function calculateAllTotals(cartItems, promoResult = null, shippingSettings = null, isFirstOrder = false, offers = null, freeShippingRule = null) {
   const subtotal = calculateSubtotal(cartItems);
 
   // قارن كل الخصومات النقدية فعلياً؛ لا تمنح الكود أولوية على خصم أكبر.
@@ -98,14 +98,21 @@ export function calculateAllTotals(cartItems, promoResult = null, shippingSettin
   const discountSource = winner.source;
   const appliedOffer = discountSource === 'offer' ? offerResult.offer : null;
 
-  // الشحن المجاني المرفق بعرض لا ينتقل إلى كود أو خصم طلب أول فائز.
-  // عرض الشحن المجاني المنفصل يعمل فقط عندما لا يوجد خصم آخر فائز.
-  const offerFreeShippingApplies =
-    offerResult.freeShipping &&
-    (discountSource === 'offer' || (offerResult.offer?.type === 'free_shipping' && discountSource === 'none'));
-  const shipping = offerFreeShippingApplies ? 0 : calculateShipping(promoResult, subtotal, cartItems, shippingSettings);
+  // قاعدة الشحن المجاني مستقلة عن العروض النقدية ويمكنها العمل مع أي عرض.
+  const freeShippingByRule = isFreeShippingRuleEligible(cartItems, freeShippingRule);
+  const shipping = freeShippingByRule ? 0 : calculateShipping(promoResult, subtotal, cartItems, shippingSettings);
   const total = calculateTotal(subtotal, shipping, discount);
-  return { subtotal, discount, shipping, total, discountSource, appliedOffer };
+  return {
+    subtotal,
+    discount,
+    shipping,
+    total,
+    discountSource,
+    appliedOffer,
+    appliedOffers: discountSource === 'offer' ? offerResult.appliedOffers : [],
+    offerBenefits: discountSource === 'offer' ? offerResult.offerBenefits : null,
+    freeShippingByRule,
+  };
 }
 
 /** Format currency for display */
