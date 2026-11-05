@@ -323,10 +323,9 @@ export function computeOfferBenefits(cartItems, offer, now = new Date()) {
   const rawTotal = eligibleUnits.reduce((sum, unit) => sum + unit.rawDiscount, 0);
   const maxDiscount = Number(offer.maxDiscount) || 0;
   const cappedTotal = maxDiscount > 0 ? Math.min(rawTotal, maxDiscount) : rawTotal;
-  const targetDiscount = Math.max(0, Math.min(
-    eligibleSubtotal,
-    Math.round(Math.min(cappedTotal, eligibleSubtotal))
-  ));
+  let roundedTargetDiscount = Math.round(Math.min(cappedTotal, eligibleSubtotal));
+  if (roundedTargetDiscount > eligibleSubtotal) roundedTargetDiscount = Math.floor(eligibleSubtotal);
+  const targetDiscount = Math.max(0, roundedTargetDiscount);
   const rawSum = eligibleUnits.reduce((sum, unit) => sum + unit.rawDiscount, 0);
 
   // Allocate integer-piaster totals deterministically, preserving the exact
