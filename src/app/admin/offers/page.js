@@ -26,7 +26,6 @@ import {
   CheckCircle2,
   Calendar,
   Package,
-  Truck,
 } from "@/components/icons-extra";
 
 export const dynamic = "force-dynamic";
