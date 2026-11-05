@@ -301,6 +301,15 @@ describe('تفصيل القطع المستفيدة من العرض', () => {
     expect(unit).toMatchObject({ originalPrice: 645, discount: 300, finalPrice: 345, free: false });
   });
 
+  it('توزيع الخصم يطابق إجمالي العرض عند أسعار بها كسور', () => {
+    const offer = { id: 'fractional', active: true, type: 'cart_percent', config: { percent: 100 }, productScope: 'all' };
+    const cart = [item(99.5)];
+    const result = computeOfferBenefits(cart, offer);
+    expect(result.discount).toBe(computeOfferDiscount(cart, offer));
+    expect(result.discount).toBe(99);
+    expect(result.lines[0].discountedUnits[0].finalPrice).toBe(0.5);
+  });
+
   it('تقريب خصم النسبة يظل مطابقاً للخصم النهائي بالجنيه', () => {
     const offer = { id: 'percent-round', active: true, type: 'cart_percent', config: { percent: 15 }, productScope: 'all' };
     const cart = [item(645), item(320, 2)];
