@@ -95,13 +95,13 @@ function offerDescription(offer) {
   const cfg = offer.config || {};
   let description = "";
   if (offer.type === "buy_x_get_y") {
-    description = \`اشترِ \${cfg.buyQty} واحصل على \${cfg.getQty} مجانًا\`;
+    description = `اشترِ ${cfg.buyQty} واحصل على ${cfg.getQty} مجانًا`;
   } else if (offer.type === "nth_percent") {
-    description = \`خصم \${cfg.percent}% على القطعة رقم \${cfg.nth}\`;
+    description = `خصم ${cfg.percent}% على القطعة رقم ${cfg.nth}`;
   } else if (offer.type === "cart_percent") {
-    description = \`خصم \${cfg.percent}% على المنتجات المؤهلة\`;
+    description = `خصم ${cfg.percent}% على المنتجات المؤهلة`;
   } else if (offer.type === "cart_fixed") {
-    description = \`خصم \${cfg.amount} ج.م على المنتجات المؤهلة\`;
+    description = `خصم ${cfg.amount} ج.م على المنتجات المؤهلة`;
   }
   if (offer.freeShipping) description += " + شحن مجاني";
   return description || "إعداد عرض";
@@ -356,8 +356,8 @@ export default function AdminOffersPage() {
       } else {
         const randomId = typeof crypto !== "undefined" && crypto.randomUUID
           ? crypto.randomUUID()
-          : \`\${Date.now()}-\${Math.random().toString(36).slice(2, 10)}\`;
-        const id = \`offer_\${randomId.replace(/[^a-zA-Z0-9_-]/g, "_")}\`;
+          : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        const id = `offer_${randomId.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
         await setDoc(doc(db, "offers", id), { ...data, createdAt: now });
       }
 
@@ -392,7 +392,7 @@ export default function AdminOffersPage() {
   };
 
   const removeOffer = async (offer) => {
-    const confirmed = window.confirm(\`هل تريد حذف العرض "\${offer.name}"؟ لا يمكن التراجع عن الحذف.\`);
+    const confirmed = window.confirm(`هل تريد حذف العرض "${offer.name}"؟ لا يمكن التراجع عن الحذف.`);
     if (!confirmed) return;
     setSaving(true);
     try {
@@ -421,7 +421,7 @@ export default function AdminOffersPage() {
   return (
     <div className="max-w-6xl mx-auto space-y-6" dir="rtl">
       {toast && (
-        <div className={\`fixed top-5 left-1/2 -translate-x-1/2 z-[70] rounded-xl px-5 py-3 shadow-lg text-sm font-bold flex items-center gap-2 \${toast.ok ? "bg-emerald-600 text-white" : "bg-red-600 text-white"}\`}>
+        <div className={`fixed top-5 left-1/2 -translate-x-1/2 z-[70] rounded-xl px-5 py-3 shadow-lg text-sm font-bold flex items-center gap-2 ${toast.ok ? "bg-emerald-600 text-white" : "bg-red-600 text-white"}`}>
           {toast.ok ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
           {toast.message}
         </div>
@@ -499,15 +499,15 @@ export default function AdminOffersPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="font-black text-gray-900">{offer.name || "عرض بدون اسم"}</h3>
-                      <span className={\`px-2 py-1 rounded-full text-[10px] font-bold \${status.className}\`}>{status.label}</span>
+                      <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${status.className}`}>{status.label}</span>
                       {offer.freeShipping && <span className="px-2 py-1 rounded-full text-[10px] font-bold bg-sky-50 text-sky-700">شحن مجاني</span>}
                     </div>
                     <p className="text-sm text-gray-700 mt-1">{offerDescription(offer)}</p>
                     <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-gray-500 mt-2">
                       <span>الأولوية: {Number(offer.priority) || 100}</span>
                       <span>الحد الأدنى: {Number(offer.minCart) || 0} ج.م</span>
-                      <span>سقف الخصم: {Number(offer.maxDiscount) > 0 ? \`\${offer.maxDiscount} ج.م\` : "بدون سقف"}</span>
-                      <span>{offer.productScope === "selected" ? \`\${new Set(offer.productIds || []).size} معرّف منتج مستهدف\` : "كل المنتجات"}</span>
+                      <span>سقف الخصم: {Number(offer.maxDiscount) > 0 ? `${offer.maxDiscount} ج.م` : "بدون سقف"}</span>
+                      <span>{offer.productScope === "selected" ? `${new Set(offer.productIds || []).size} معرّف منتج مستهدف` : "كل المنتجات"}</span>
                       {(offer.excludedProductIds || []).length > 0 && <span>مستثنى: {new Set(offer.excludedProductIds).size}</span>}
                       {offer.excludeDiscounted && <span>يستثني المنتجات المخفّضة</span>}
                       {offer.startsAt && <span>من: {String(offer.startsAt).slice(0, 10)}</span>}
@@ -515,7 +515,7 @@ export default function AdminOffersPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <button onClick={() => toggleActive(offer)} disabled={saving} className={\`px-3 py-2 rounded-lg text-xs font-bold border disabled:opacity-50 \${offer.active ? "border-amber-200 text-amber-700 hover:bg-amber-50" : "border-emerald-200 text-emerald-700 hover:bg-emerald-50"}\`}>
+                    <button onClick={() => toggleActive(offer)} disabled={saving} className={`px-3 py-2 rounded-lg text-xs font-bold border disabled:opacity-50 ${offer.active ? "border-amber-200 text-amber-700 hover:bg-amber-50" : "border-emerald-200 text-emerald-700 hover:bg-emerald-50"}`}>
                       {offer.active ? "إيقاف" : "تفعيل"}
                     </button>
                     <button onClick={() => openEdit(offer)} disabled={saving} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-50" title="تعديل">
