@@ -98,8 +98,12 @@ export function calculateAllTotals(cartItems, promoResult = null, shippingSettin
   const discountSource = winner.source;
   const appliedOffer = discountSource === 'offer' ? offerResult.offer : null;
 
-  // الشحن منفعة مستقلة: يحتفظ بالشحن المجاني المؤهل ولا يضيف خصماً نقدياً ثانياً.
-  const shipping = offerResult.freeShipping ? 0 : calculateShipping(promoResult, subtotal, cartItems, shippingSettings);
+  // الشحن المجاني المرفق بعرض لا ينتقل إلى كود أو خصم طلب أول فائز.
+  // عرض الشحن المجاني المنفصل يعمل فقط عندما لا يوجد خصم آخر فائز.
+  const offerFreeShippingApplies =
+    offerResult.freeShipping &&
+    (discountSource === 'offer' || (offerResult.offer?.type === 'free_shipping' && discountSource === 'none'));
+  const shipping = offerFreeShippingApplies ? 0 : calculateShipping(promoResult, subtotal, cartItems, shippingSettings);
   const total = calculateTotal(subtotal, shipping, discount);
   return { subtotal, discount, shipping, total, discountSource, appliedOffer };
 }

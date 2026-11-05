@@ -29,7 +29,7 @@ describe("الشحن المجاني من العروض منفعة مستقلة", 
     });
   });
 
-  it("يحتفظ بالشحن المجاني حتى عندما يفوز كود خصم نقدي أكبر", () => {
+  it("لا يجمع عرض الشحن المنفصل مع كود خصم فائز", () => {
     const promo = { valid: true, type: "fixed", discountAmount: 120, code: "BF120" };
     const result = calculateAllTotals(
       CART,
@@ -41,8 +41,33 @@ describe("الشحن المجاني من العروض منفعة مستقلة", 
     expect(result).toMatchObject({
       discount: 120,
       discountSource: "promo",
+      shipping: 70,
+      total: 450,
+    });
+  });
+
+  it("يسمح بالشحن المجاني عندما يكون مرفقاً بالعرض النقدي الفائز نفسه", () => {
+    const offer = {
+      id: "fixed-free-ship",
+      name: "خصم مع شحن مجاني",
+      active: true,
+      type: "cart_fixed",
+      config: { amount: 100 },
+      productScope: "all",
+      freeShipping: true,
+    };
+    const result = calculateAllTotals(
+      CART,
+      null,
+      { shippingCost: 70, freeShippingThreshold: 0 },
+      false,
+      [offer]
+    );
+    expect(result).toMatchObject({
+      discount: 100,
+      discountSource: "offer",
       shipping: 0,
-      total: 380,
+      total: 400,
     });
   });
 

@@ -293,7 +293,7 @@ export function computeOfferBenefits(cartItems, offer) {
   const eligibleSubtotal = eligibleUnits.reduce((sum, unit) => sum + unit.price, 0);
   const minCart = Number(offer.minCart) || 0;
   if (minCart > 0 && eligibleSubtotal < minCart) {
-    return { offerId: String(offer.id ?? ''), type: offer.type, discount: 0, lines: [] };
+    return { offerId: String(offer.id ?? ''), name: offer.name || '', type: offer.type, config: offer.config || {}, discount: 0, lines: [] };
   }
 
   const cfg = offer.config || {};
