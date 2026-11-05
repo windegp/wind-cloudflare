@@ -668,6 +668,7 @@ export default function CheckoutPage() {
         Currency: "EGP",
         "Financial Status": paymentMethod === 'card' ? "pending_payment" : "pending",
         "Payment Method": paymentMethod,
+        "Checkout Quote Token": quoteToken,
         "Created at": getCairoTimestamp(),
         data_source: "WIND_Web",
                 ...trustedFinancialSnapshot,

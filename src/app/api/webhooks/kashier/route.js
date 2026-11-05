@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getCairoTimestamp } from '@/lib/analytics-helpers';
 import { verifyWebhookSignature } from '@/lib/kashier';
+import { verifyCheckoutQuote } from '@/lib/checkoutQuoteToken';
 import { successResponse, errorResponse, unauthorizedError } from '@/lib/apiResponse';
 import { getDb } from "@/lib/firebase";
 import { doc, getDoc, setDoc, updateDoc, increment } from "firebase/firestore/lite";
@@ -73,11 +74,27 @@ export async function POST(request) {
                 const expectedCurrency = String(orderData.Currency || "EGP").toUpperCase();
                 const receivedCurrency = String(data.currency || "EGP").toUpperCase();
 
+                // New checkout records carry a signed quote token. Verify it here
+                // so a client-edited Firestore Total cannot become the payment source.
+                let signedQuote = null;
+                if (orderData["Checkout Quote Token"]) {
+                    try {
+                        signedQuote = await verifyCheckoutQuote(
+                            orderData["Checkout Quote Token"],
+                            orderId
+                        );
+                    } catch (quoteError) {
+                        console.error("[Kashier webhook] Checkout quote verification failed:", quoteError);
+                    }
+                }
+
                 if (
+                    (orderData["Checkout Quote Token"] && !signedQuote) ||
                     !Number.isFinite(expectedAmount) ||
                     !Number.isFinite(receivedAmount) ||
                     Math.abs(expectedAmount - receivedAmount) > 0.01 ||
-                    receivedCurrency !== expectedCurrency
+                    receivedCurrency !== expectedCurrency ||
+                    (signedQuote && Math.abs(Number(signedQuote.total) - expectedAmount) > 0.01)
                 ) {
                     console.error("[Kashier webhook] Payment amount/currency mismatch; order remains unpaid.", {
                         orderId,
