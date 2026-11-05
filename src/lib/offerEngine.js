@@ -243,3 +243,146 @@ export function computeBestOffer(cartItems, offers, now = new Date()) {
     freeShipping,
   };
 }
+
+/**
+ * Build a deterministic, per-unit explanation of the winning offer.
+ * This is presentation data only; computeOfferDiscount remains the source
+ * for the authoritative total discount.
+ *
+ * Each returned line maps back to one original cart line. Units receiving
+ * a benefit are listed separately so the cart can render gifts/discounted
+ * pieces without mutating the customer's persisted cart.
+ */
+export function computeOfferBenefits(cartItems, offer) {
+  if (!Array.isArray(cartItems) || !offer || !isOfferLive(offer)) {
+    return { offerId: offer?.id ? String(offer.id) : null, type: offer?.type || null, discount: 0, lines: [] };
+  }
+
+  const eligibleUnits = [];
+  cartItems.forEach((item, cartIndex) => {
+    if (!isItemEligible(item, offer)) return;
+    const qty = Math.min(parseInt(item.qty) || 0, MAX_UNITS_PER_ITEM);
+    const price = parseFloat(item.price) || 0;
+    for (let unitIndex = 0; unitIndex < qty; unitIndex += 1) {
+      eligibleUnits.push({ cartIndex, unitIndex, price, rawDiscount: 0 });
+    }
+  });
+  if (!eligibleUnits.length) {
+    return { offerId: String(offer.id ?? ''), type: offer.type, discount: 0, lines: [] };
+  }
+
+  const eligibleSubtotal = eligibleUnits.reduce((sum, unit) => sum + unit.price, 0);
+  const minCart = Number(offer.minCart) || 0;
+  if (minCart > 0 && eligibleSubtotal < minCart) {
+    return { offerId: String(offer.id ?? ''), type: offer.type, discount: 0, lines: [] };
+  }
+
+  const cfg = offer.config || {};
+  const ordered = [...eligibleUnits].sort(
+    (a, b) => b.price - a.price || a.cartIndex - b.cartIndex || a.unitIndex - b.unitIndex
+  );
+
+  switch (offer.type) {
+    case OFFER_TYPES.BUY_X_GET_Y: {
+      const buy = toInt(cfg.buyQty);
+      const get = toInt(cfg.getQty);
+      if (!(buy >= 1) || !(get >= 1)) break;
+      const groupSize = buy + get;
+      const groups = Math.floor(ordered.length / groupSize);
+      for (let group = 0; group < groups; group += 1) {
+        const start = group * groupSize;
+        for (let offset = groupSize - get; offset < groupSize; offset += 1) {
+          const unit = ordered[start + offset];
+          unit.rawDiscount = unit.price;
+        }
+      }
+      break;
+    }
+    case OFFER_TYPES.NTH_PERCENT: {
+      const nth = toInt(cfg.nth);
+      const percent = toPercent(cfg.percent);
+      if (!(nth >= 2) || Number.isNaN(percent)) break;
+      const groups = Math.floor(ordered.length / nth);
+      for (let group = 0; group < groups; group += 1) {
+        const unit = ordered[(group * nth) + nth - 1];
+        unit.rawDiscount = unit.price * percent / 100;
+      }
+      break;
+    }
+    case OFFER_TYPES.CART_PERCENT: {
+      const percent = toPercent(cfg.percent);
+      if (Number.isNaN(percent)) break;
+      eligibleUnits.forEach((unit) => { unit.rawDiscount = unit.price * percent / 100; });
+      break;
+    }
+    case OFFER_TYPES.CART_FIXED: {
+      const amount = Number(cfg.amount);
+      if (!Number.isFinite(amount) || amount <= 0) break;
+      eligibleUnits.forEach((unit) => { unit.rawDiscount = amount * unit.price / eligibleSubtotal; });
+      break;
+    }
+    default:
+      break;
+  }
+
+  const rawTotal = eligibleUnits.reduce((sum, unit) => sum + unit.rawDiscount, 0);
+  const maxDiscount = Number(offer.maxDiscount) || 0;
+  const cappedTotal = maxDiscount > 0 ? Math.min(rawTotal, maxDiscount) : rawTotal;
+  const targetDiscount = Math.max(0, Math.min(
+    eligibleSubtotal,
+    Math.round(Math.min(cappedTotal, eligibleSubtotal))
+  ));
+  const rawSum = eligibleUnits.reduce((sum, unit) => sum + unit.rawDiscount, 0);
+
+  // Allocate integer-piaster totals deterministically, preserving the exact
+  // discount returned by computeOfferDiscount even after maxDiscount caps.
+  const centsTarget = targetDiscount * 100;
+  const allocations = eligibleUnits.map((unit, index) => {
+    const exact = rawSum > 0 ? (unit.rawDiscount / rawSum) * centsTarget : 0;
+    const floor = Math.floor(exact);
+    return { index, cents: floor, remainder: exact - floor };
+  });
+  let remainingCents = centsTarget - allocations.reduce((sum, entry) => sum + entry.cents, 0);
+  allocations.sort((a, b) => b.remainder - a.remainder || a.index - b.index);
+  for (let i = 0; i < allocations.length && remainingCents > 0; i += 1, remainingCents -= 1) {
+    allocations[i].cents += 1;
+  }
+  const centsByUnit = new Map(allocations.map((entry) => [entry.index, entry.cents]));
+
+  const byCartLine = new Map();
+  eligibleUnits.forEach((unit, index) => {
+    const cents = centsByUnit.get(index) || 0;
+    if (cents <= 0) return;
+    if (!byCartLine.has(unit.cartIndex)) byCartLine.set(unit.cartIndex, []);
+    byCartLine.get(unit.cartIndex).push({
+      unitIndex: unit.unitIndex,
+      originalPrice: unit.price,
+      discount: cents / 100,
+      finalPrice: Math.max(0, Math.round((unit.price * 100 - cents)) / 100),
+      free: cents >= Math.round(unit.price * 100),
+    });
+  });
+
+  const lines = [];
+  for (const [cartIndex, discountedUnits] of byCartLine.entries()) {
+    const item = cartItems[cartIndex];
+    lines.push({
+      cartIndex,
+      itemId: String(item.id ?? item.productId ?? item.handle ?? ''),
+      regularQty: Math.max(0, (parseInt(item.qty) || 0) - discountedUnits.length),
+      discountedUnits,
+    });
+  }
+
+  const allocatedDiscount = lines.reduce(
+    (sum, line) => sum + line.discountedUnits.reduce((lineSum, unit) => lineSum + unit.discount, 0),
+    0
+  );
+  return {
+    offerId: String(offer.id ?? ''),
+    type: offer.type,
+    discount: Math.round(allocatedDiscount * 100) / 100,
+    lines,
+  };
+}
+

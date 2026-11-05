@@ -202,3 +202,49 @@ describe('التواريخ (بتوقيت القاهرة)', () => {
     expect(computeBestOffer([item(645), item(320)], [expired, { ...BXGY }], NOW).discount).toBe(0);
   });
 });
+
+describe('تفصيل القطع المستفيدة من العرض', () => {
+  it('يفصل القطعة المجانية عن الثلاث قطع المدفوعة في نفس السطر', async () => {
+    const { computeOfferBenefits } = await import('@/lib/offerEngine');
+    const result = computeOfferBenefits([item(645, 4)], BXGY);
+    expect(result.discount).toBe(645);
+    expect(result.lines).toHaveLength(1);
+    expect(result.lines[0].regularQty).toBe(3);
+    expect(result.lines[0].discountedUnits).toMatchObject([
+      { unitIndex: 3, originalPrice: 645, discount: 645, finalPrice: 0, free: true },
+    ]);
+  });
+
+  it('يحدد القطعة الثانية بخصم 40% ويترك الأولى بسعرها', async () => {
+    const { computeOfferBenefits } = await import('@/lib/offerEngine');
+    const result = computeOfferBenefits([item(645), item(320)], NTH);
+    expect(result.discount).toBe(128);
+    expect(result.lines).toMatchObject([
+      { cartIndex: 1, regularQty: 0, discountedUnits: [{ originalPrice: 320, discount: 128, finalPrice: 192, free: false }] },
+    ]);
+  });
+
+  it('يوزع خصم السلة النسبي على كل القطع المؤهلة', async () => {
+    const { computeOfferBenefits } = await import('@/lib/offerEngine');
+    const cartOffer = { id: 'cp', active: true, type: 'cart_percent', config: { percent: 10 }, productScope: 'all' };
+    const result = computeOfferBenefits([item(100), item(200)], cartOffer);
+    expect(result.discount).toBe(30);
+    expect(result.lines.flatMap((line) => line.discountedUnits).reduce((sum, unit) => sum + unit.discount, 0)).toBe(30);
+    expect(result.lines).toHaveLength(2);
+  });
+
+  it('يحافظ على حد الخصم الأقصى عند توزيع الميزة', async () => {
+    const { computeOfferBenefits } = await import('@/lib/offerEngine');
+    const result = computeOfferBenefits([item(645, 4)], { ...BXGY, maxDiscount: 300 });
+    expect(result.discount).toBe(300);
+    expect(result.lines.flatMap((line) => line.discountedUnits).reduce((sum, unit) => sum + unit.discount, 0)).toBe(300);
+  });
+
+  it('لا يغيّر عناصر السلة الأصلية', async () => {
+    const { computeOfferBenefits } = await import('@/lib/offerEngine');
+    const cart = Object.freeze([Object.freeze(item(645, 4))]);
+    expect(() => computeOfferBenefits(cart, BXGY)).not.toThrow();
+    expect(cart[0].qty).toBe(4);
+  });
+});
+
