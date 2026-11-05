@@ -435,18 +435,44 @@ export async function createServerCheckoutQuote(input = {}) {
     ? computeOfferBenefits(items, winningOfferConfig)
     : null;
 
-  const lineItems = items.map((item) => ({
-    productId: item.productId,
-    productHandle: item.productHandle,
-    productTitle: item.title,
-    name: `${item.title}${item.selectedSize ? " - " + item.selectedSize : ""}`,
-    price: item.price,
-    compareAtPrice: item.compareAtPrice,
-    quantity: item.qty,
-    selectedSize: item.selectedSize,
-    selectedColor: item.selectedColor,
-    image: item.image,
-  }));
+  const benefitsByCartIndex = new Map(
+    (offerBenefits?.lines || []).map((line) => [line.cartIndex, line])
+  );
+  const lineItems = items.flatMap((item, cartIndex) => {
+    const baseLine = {
+      productId: item.productId,
+      productHandle: item.productHandle,
+      productTitle: item.title,
+      name: `${item.title}${item.selectedSize ? " - " + item.selectedSize : ""}`,
+      compareAtPrice: item.compareAtPrice,
+      selectedSize: item.selectedSize,
+      selectedColor: item.selectedColor,
+      image: item.image,
+    };
+    const benefitLine = benefitsByCartIndex.get(cartIndex);
+    if (!benefitLine) {
+      return [{ ...baseLine, price: item.price, quantity: item.qty }];
+    }
+
+    const lines = [];
+    if (benefitLine.regularQty > 0) {
+      lines.push({ ...baseLine, price: item.price, quantity: benefitLine.regularQty });
+    }
+    benefitLine.discountedUnits.forEach((unit) => {
+      lines.push({
+        ...baseLine,
+        price: unit.finalPrice,
+        originalPrice: unit.originalPrice,
+        unitDiscount: unit.discount,
+        quantity: 1,
+        isOfferBenefit: true,
+        isFree: unit.free,
+        offerId: offerBenefits.offerId,
+        offerType: offerBenefits.type,
+      });
+    });
+    return lines;
+  });
 
   const originalSubtotal = items.reduce(
     (sum, item) => sum + (item.compareAtPrice ?? item.price) * item.qty,
