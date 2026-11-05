@@ -7,8 +7,8 @@ const freeShippingOffer = {
   id: "ship-only",
   name: "شحن مجاني",
   active: true,
-  type: "cart_percent",
-  config: { percent: 10 },
+  type: "free_shipping",
+  config: {},
   productScope: "all",
   priority: 10,
   freeShipping: true,
@@ -17,7 +17,7 @@ const freeShippingOffer = {
 describe("الشحن المجاني من العروض منفعة مستقلة", () => {
   it("يمنح شحنًا مجانيًا حتى لو لم يكن هناك خصم نقدي قابل للتطبيق", () => {
     const result = calculateAllTotals(CART, null, { shippingCost: 70, freeShippingThreshold: 0 }, false, [
-      { ...freeShippingOffer, config: { percent: 0 } },
+      freeShippingOffer,
     ]);
     expect(result).toMatchObject({
       subtotal: 500,

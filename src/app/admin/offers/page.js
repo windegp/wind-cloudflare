@@ -31,6 +31,7 @@ import {
 export const dynamic = "force-dynamic";
 
 const TYPE_OPTIONS = [
+  { value: "free_shipping", label: "شحن مجاني فقط" },
   { value: "buy_x_get_y", label: "اشترِ X واحصل على Y مجانًا" },
   { value: "nth_percent", label: "خصم على القطعة رقم N" },
   { value: "cart_percent", label: "خصم نسبة على المنتجات المؤهلة" },
@@ -94,7 +95,9 @@ function offerStatus(offer) {
 function offerDescription(offer) {
   const cfg = offer.config || {};
   let description = "";
-  if (offer.type === "buy_x_get_y") {
+  if (offer.type === "free_shipping") {
+    description = "شحن مجاني فقط";
+  } else if (offer.type === "buy_x_get_y") {
     description = `اشترِ ${cfg.buyQty} واحصل على ${cfg.getQty} مجانًا`;
   } else if (offer.type === "nth_percent") {
     description = `خصم ${cfg.percent}% على القطعة رقم ${cfg.nth}`;
@@ -347,7 +350,7 @@ export default function AdminOffersPage() {
         productIds: form.productScope === "selected" ? form.productIds : [],
         excludedProductIds: form.excludedProductIds,
         excludeDiscounted: Boolean(form.excludeDiscounted),
-        freeShipping: Boolean(form.freeShipping),
+        freeShipping: form.type === "free_shipping" || Boolean(form.freeShipping),
         updatedAt: now,
       };
 
@@ -507,8 +510,8 @@ export default function AdminOffersPage() {
                       <span>الأولوية: {Number(offer.priority) || 100}</span>
                       <span>الحد الأدنى: {Number(offer.minCart) || 0} ج.م</span>
                       <span>سقف الخصم: {Number(offer.maxDiscount) > 0 ? `${offer.maxDiscount} ج.م` : "بدون سقف"}</span>
-                      <span>{offer.productScope === "selected" ? `${new Set(offer.productIds || []).size} معرّف منتج مستهدف` : "كل المنتجات"}</span>
-                      {(offer.excludedProductIds || []).length > 0 && <span>مستثنى: {new Set(offer.excludedProductIds).size}</span>}
+                      <span>{offer.productScope === "selected" ? `${products.filter((product) => hasProduct(product, offer.productIds || [])).length} منتج مستهدف` : "كل المنتجات"}</span>
+                      {(offer.excludedProductIds || []).length > 0 && <span>مستثنى: {products.filter((product) => hasProduct(product, offer.excludedProductIds || [])).length} منتج</span>}
                       {offer.excludeDiscounted && <span>يستثني المنتجات المخفّضة</span>}
                       {offer.startsAt && <span>من: {String(offer.startsAt).slice(0, 10)}</span>}
                       {offer.endsAt && <span>إلى: {String(offer.endsAt).slice(0, 10)}</span>}
@@ -627,7 +630,7 @@ export default function AdminOffersPage() {
                 <div><label className={labelClass}>يبدأ من (اختياري)</label><input type="date" value={form.startsAt} onChange={(event) => updateField("startsAt", event.target.value)} className={fieldClass} /></div>
                 <div><label className={labelClass}>ينتهي في (اختياري)</label><input type="date" value={form.endsAt} onChange={(event) => updateField("endsAt", event.target.value)} min={form.startsAt || undefined} className={fieldClass} /></div>
                 <label className="flex items-center gap-3 rounded-xl border border-gray-200 p-3">
-                  <input type="checkbox" checked={form.freeShipping} onChange={(event) => updateField("freeShipping", event.target.checked)} className="w-4 h-4 accent-[#008060]" />
+                  <input type="checkbox" checked={form.freeShipping || form.type === "free_shipping"} disabled={form.type === "free_shipping"} onChange={(event) => updateField("freeShipping", event.target.checked)} className="w-4 h-4 accent-[#008060] disabled:opacity-60" />
                   <span><span className="block text-sm font-bold text-gray-800">شحن مجاني مع العرض</span><span className="block text-[10px] text-gray-500 mt-1">ميزة مستقلة لا تدخل ضمن قيمة الخصم النقدي.</span></span>
                   <Truck size={18} className="mr-auto text-gray-400" />
                 </label>

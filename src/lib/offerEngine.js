@@ -15,6 +15,7 @@ export const OFFER_TYPES = {
   NTH_PERCENT: 'nth_percent',     // خصم % على القطعة رقم N (الأرخص في كل مجموعة)
   CART_PERCENT: 'cart_percent',   // خصم % على إجمالي المنتجات المؤهلة
   CART_FIXED: 'cart_fixed',       // خصم مبلغ ثابت على إجمالي المنتجات المؤهلة
+  FREE_SHIPPING: 'free_shipping', // شحن مجاني فقط (منفعة مستقلة عن الخصم النقدي)
 };
 
 const DEFAULT_PRIORITY = 100;
@@ -178,6 +179,10 @@ export function computeOfferDiscount(cartItems, offer) {
       raw = amount;
       break;
     }
+    case OFFER_TYPES.FREE_SHIPPING: {
+      raw = 0;
+      break;
+    }
     default:
       return 0;
   }
@@ -207,7 +212,7 @@ export function computeBestOffer(cartItems, offers, now = new Date()) {
     if (!isOfferLive(offer, now) || !isOfferApplicable(cartItems, offer)) continue;
 
     // الشحن المجاني منفعة مستقلة: لا تدخل في مقارنة الخصومات النقدية.
-    if (offer.freeShipping === true) freeShipping = true;
+    if (offer.freeShipping === true || offer.type === OFFER_TYPES.FREE_SHIPPING) freeShipping = true;
 
     const discount = computeOfferDiscount(cartItems, offer);
     if (discount > 0) {
