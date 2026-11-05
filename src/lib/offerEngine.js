@@ -272,8 +272,8 @@ export function computeBestOffer(cartItems, offers, now = new Date()) {
  * a benefit are listed separately so the cart can render gifts/discounted
  * pieces without mutating the customer's persisted cart.
  */
-export function computeOfferBenefits(cartItems, offer) {
-  if (!Array.isArray(cartItems) || !offer || !isOfferLive(offer)) {
+export function computeOfferBenefits(cartItems, offer, now = new Date()) {
+  if (!Array.isArray(cartItems) || !offer || !isOfferLive(offer, now)) {
     return { offerId: offer?.id ? String(offer.id) : null, name: offer?.name || '', type: offer?.type || null, config: offer?.config || {}, discount: 0, lines: [] };
   }
 
