@@ -51,7 +51,6 @@ const emptyForm = () => ({
   productIds: [],
   excludedProductIds: [],
   excludeDiscounted: false,
-  freeShipping: false,
   stackWithOfferIds: [],
 });
 
@@ -309,7 +308,6 @@ export default function AdminOffersPage() {
       excludedProductIds: Array.isArray(offer.excludedProductIds) ? offer.excludedProductIds.map(String) : [],
       active: offer.active === true,
       excludeDiscounted: offer.excludeDiscounted === true,
-      freeShipping: offer.freeShipping === true,
       stackWithOfferIds: Array.isArray(offer.stackWithOfferIds) ? offer.stackWithOfferIds.map(String) : [],
     });
     setFormError("");
@@ -320,7 +318,7 @@ export default function AdminOffersPage() {
 
   const validate = () => {
     if (!form.name.trim()) return "اسم العرض مطلوب.";
-    if (!TYPE_OPTIONS.some((item) => item.value === form.type) && !(editingId && form.type === "free_shipping")) return "نوع العرض غير صحيح.";
+    if (!TYPE_OPTIONS.some((item) => item.value === form.type)) return "نوع العرض غير صحيح.";
     const minCart = Number(form.minCart);
     const maxDiscount = Number(form.maxDiscount);
     const priority = Number(form.priority);
@@ -395,7 +393,7 @@ export default function AdminOffersPage() {
         productIds: form.productScope === "selected" ? form.productIds : [],
         excludedProductIds: form.excludedProductIds,
         excludeDiscounted: Boolean(form.excludeDiscounted),
-        stackWithOfferIds: form.type === "free_shipping" ? [] : [...new Set((form.stackWithOfferIds || []).map(String))],
+        stackWithOfferIds: [...new Set((form.stackWithOfferIds || []).map(String))],
         freeShipping: false,
         environment: getCurrentOfferEnvironment(),
         updatedAt: now,
@@ -507,8 +505,7 @@ export default function AdminOffersPage() {
 
   const fieldClass = "w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#008060]";
   const labelClass = "block text-xs font-bold text-gray-600 mb-1.5";
-  const activeType = TYPE_OPTIONS.find((item) => item.value === form.type)?.label ||
-    (form.type === "free_shipping" ? "شحن مجاني فقط (نوع قديم)" : "");
+  const activeType = TYPE_OPTIONS.find((item) => item.value === form.type)?.label || "";
   const selectedStackIds = (form.stackWithOfferIds || []).map(String);
   const stackableOffers = offers.filter((offer) =>
     offer.id !== editingId &&
