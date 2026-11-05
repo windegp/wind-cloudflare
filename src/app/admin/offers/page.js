@@ -274,6 +274,7 @@ export default function AdminOffersPage() {
     ...current,
     config: { ...current.config, [key]: value },
   }));
+  const updateShippingRule = (key, value) => setShippingRule((current) => ({ ...current, [key]: value }));
 
   const openCreate = () => {
     setEditingId(null);
@@ -307,6 +308,7 @@ export default function AdminOffersPage() {
       active: offer.active === true,
       excludeDiscounted: offer.excludeDiscounted === true,
       freeShipping: offer.freeShipping === true,
+      stackWithOfferIds: Array.isArray(offer.stackWithOfferIds) ? offer.stackWithOfferIds.map(String) : [],
     });
     setFormError("");
     setIncludeSearch("");
@@ -316,7 +318,7 @@ export default function AdminOffersPage() {
 
   const validate = () => {
     if (!form.name.trim()) return "اسم العرض مطلوب.";
-    if (!TYPE_OPTIONS.some((item) => item.value === form.type)) return "نوع العرض غير صحيح.";
+    if (!TYPE_OPTIONS.some((item) => item.value === form.type) && !(editingId && form.type === "free_shipping")) return "نوع العرض غير صحيح.";
     const minCart = Number(form.minCart);
     const maxDiscount = Number(form.maxDiscount);
     const priority = Number(form.priority);
