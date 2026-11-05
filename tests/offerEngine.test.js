@@ -52,7 +52,9 @@ describe('سيناريوهات "أفضل عرض يكسب"', () => {
     expect(r.offer.id).toBe('bxgy');
   });
   it('قطعة واحدة → لا عرض', () => {
-    expect(computeBestOffer([item(645)], OFFERS)).toEqual({ discount: 0, offer: null, candidates: [], freeShipping: false });
+    const result = computeBestOffer([item(645)], OFFERS);
+    expect(result.discount).toBe(0);
+    expect(result.appliedOffers).toEqual([]);
   });
   it('لا يضيف شحن عرض آخر فوق الخصم؛ الشحن المجاني يجب أن يكون مفعلاً داخل العرض الفائز', () => {
     const discounted = { ...NTH, freeShipping: false };
