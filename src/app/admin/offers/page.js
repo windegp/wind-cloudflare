@@ -680,7 +680,7 @@ export default function AdminOffersPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="font-black text-gray-900">{offer.name || "عرض بدون اسم"}</h3>
                       <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${status.className}`}>{status.label}</span>
-                      {offer.freeShipping && <span className="px-2 py-1 rounded-full text-[10px] font-bold bg-sky-50 text-sky-700">شحن مجاني</span>}
+                      {offer.type === "free_shipping" && <span className="px-2 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700">قديم — استخدم قواعد الشحن</span>}
                     </div>
                     <p className="text-sm text-gray-700 mt-1">{offerDescription(offer)}</p>
                     <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-gray-500 mt-2">
