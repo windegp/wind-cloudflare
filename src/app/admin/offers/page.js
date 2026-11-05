@@ -393,7 +393,8 @@ export default function AdminOffersPage() {
         productIds: form.productScope === "selected" ? form.productIds : [],
         excludedProductIds: form.excludedProductIds,
         excludeDiscounted: Boolean(form.excludeDiscounted),
-        freeShipping: form.type === "free_shipping" || Boolean(form.freeShipping),
+        stackWithOfferIds: form.type === "free_shipping" ? [] : [...new Set((form.stackWithOfferIds || []).map(String))],
+        freeShipping: false,
         environment: getCurrentOfferEnvironment(),
         updatedAt: now,
       };
