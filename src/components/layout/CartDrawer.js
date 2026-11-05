@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useCart } from "../../context/CartContext";
 import Link from "next/link";
-import { ShoppingBag, Trash2, X, Plus, ZoomIn, Loader2, Minus, Eye } from '@/components/icons-extra';
+import { ShoppingBag, Trash2, X, Plus, ZoomIn, Loader2, Minus, Eye, Edit2 } from '@/components/icons-extra';
 import { getDb } from "../../lib/firebase";
 import { doc, getDoc, collection, query, where, getDocs, documentId } from "firebase/firestore/lite";
 import QuickViewModal from "@/components/QuickViewModal"; 
@@ -14,6 +14,21 @@ export default function CartDrawer() {
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [quickViewProduct, setQuickViewProduct] = useState(null);
   const [editingCartItem, setEditingCartItem] = useState(null);
+  const [offerCelebration, setOfferCelebration] = useState(false);
+  const previousOfferBenefitRef = useRef(false);
+  const hasOfferBenefit = Boolean(offerBenefits?.lines?.some((line) => line.discountedUnits?.length));
+
+  useEffect(() => {
+    if (!isCartOpen) return;
+    if (hasOfferBenefit && !previousOfferBenefitRef.current) setOfferCelebration(true);
+    previousOfferBenefitRef.current = hasOfferBenefit;
+  }, [hasOfferBenefit, isCartOpen]);
+
+  useEffect(() => {
+    if (!offerCelebration) return;
+    const timer = window.setTimeout(() => setOfferCelebration(false), 1800);
+    return () => window.clearTimeout(timer);
+  }, [offerCelebration]);
 
   const [isNavigatingToCheckout, setIsNavigatingToCheckout] = useState(false);
   const checkoutNavigationTimerRef = useRef(null);
@@ -137,15 +152,33 @@ export default function CartDrawer() {
     setQuickViewProduct(product);
   };
 
-  const openBenefitEditor = (item, cartIndex) => {
-    // نحتفظ بهوية وحدة العرض حتى لا يتغير لون/مقاس باقي الكمية.
-    setEditingCartItem({ ...item, __offerBenefitUnit: true, __cartIndex: cartIndex });
+  const openCartItemEditor = (item, cartIndex, isBenefitUnit = false) => {
+    // تعديل وحدة العرض يفصلها عن باقي الكمية؛ وتعديل السطر العادي يحدّث نفس السطر فقط.
+    setEditingCartItem({
+      ...item,
+      ...(isBenefitUnit ? { __offerBenefitUnit: true, __cartIndex: cartIndex } : {}),
+    });
     setQuickViewProduct(item);
   };
 
   const closeQuickView = () => {
     setQuickViewProduct(null);
     setEditingCartItem(null);
+  };
+
+  const getBenefitLabel = (benefit) => {
+    if (benefit.free) return "هدية مجانية";
+    if (offerBenefits?.type === "nth_percent" || offerBenefits?.type === "cart_percent") {
+      return `خصم ${offerBenefits.config?.percent || Math.round((benefit.discount / benefit.originalPrice) * 100)}%`;
+    }
+    if (offerBenefits?.type === "cart_fixed") {
+      return `خصم ${Number(benefit.discount.toFixed(2))} ج.م`;
+    }
+    if (offerBenefits?.type === "buy_x_get_y") {
+      const percent = Math.round((benefit.discount / benefit.originalPrice) * 100);
+      return percent >= 100 ? "هدية مجانية" : `خصم ${percent}%`;
+    }
+    return "خصم العرض";
   };
 
   const cartDisplayRows = cartItems.flatMap((item, cartIndex) => {
@@ -169,7 +202,29 @@ export default function CartDrawer() {
 
   return (
     <>
+      {offerCelebration && (
+        <div className="offer-confetti-layer" aria-hidden="true">
+          {Array.from({ length: 28 }, (_, index) => (
+            <span
+              key={index}
+              className="offer-confetti-piece"
+              style={{
+                left: `${(index * 37) % 100}%`,
+                backgroundColor: ["#E11D48", "#F59E0B", "#10B981", "#3B82F6", "#A855F7"][index % 5],
+                animationDelay: `${(index % 7) * 45}ms`,
+                transform: `rotate(${index * 31}deg)`,
+              }}
+            />
+          ))}
+        </div>
+      )}
       <style>{`
+        @keyframes offerConfettiFall {
+          0% { opacity: 1; translate: 0 -20px; rotate: 0deg; }
+          100% { opacity: 0; translate: 0 105vh; rotate: 720deg; }
+        }
+        .offer-confetti-layer { position: fixed; inset: 0; z-index: 100; overflow: hidden; pointer-events: none; }
+        .offer-confetti-piece { position: absolute; top: -18px; width: 8px; height: 13px; border-radius: 2px; animation: offerConfettiFall 1.55s ease-out forwards; }
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;900&family=Tajawal:wght@400;500;700&display=swap');
         .cart-drawer * { font-family: 'Cairo', sans-serif; }
         @keyframes slideInLeft { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
@@ -255,10 +310,9 @@ export default function CartDrawer() {
                           )}
                           {benefit ? (
                             <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-sm">
-                              <span className="text-xs font-bold rounded-full px-2 py-0.5 bg-[#F4F1EA] text-[#6B5635]">{benefit.free ? 'هدية مجانية' : 'خصم العرض'}</span>
+                              <span className="text-xs font-bold rounded-full px-2 py-0.5 bg-red-50 text-red-700 border border-red-100">{getBenefitLabel(benefit)}</span>
                               <span className="text-gray-400 line-through text-xs">{benefit.originalPrice} ج.م</span>
                               <span className="font-bold text-[#1A1A1A]">{benefit.finalPrice} ج.م</span>
-                              <button onClick={() => openBenefitEditor(item, row.cartIndex)} className="text-[11px] font-bold text-[#1A1A1A] underline underline-offset-2 mr-1">تعديل اللون والمقاس</button>
                             </div>
                           ) : (
                             <div className="flex items-center gap-1 text-gray-500 text-sm mt-1.5 font-medium whitespace-nowrap">
@@ -269,14 +323,29 @@ export default function CartDrawer() {
                         </div>
                         <div className="flex items-center justify-between mt-3">
                           <div className="flex items-center border border-gray-200 rounded-md bg-white h-8">
-                            <button onClick={() => updateQty(item.id, item.selectedSize, 1, item.selectedColor, item.bundleGroupId || "")} className="w-8 h-full flex items-center justify-center text-gray-500 hover:text-black">+</button>
+                            <button onClick={() => updateQty(item.id, item.selectedSize, 1, item.selectedColor, item.bundleGroupId || "", row.cartIndex)} className="w-8 h-full flex items-center justify-center text-gray-500 hover:text-black">+</button>
                             <span className="w-8 text-center text-sm font-bold text-[#1A1A1A]">{row.qty}</span>
-                            <button onClick={() => updateQty(item.id, item.selectedSize, -1, item.selectedColor, item.bundleGroupId || "")} className="w-8 h-full flex items-center justify-center text-gray-500 hover:text-black">−</button>
+                            <button onClick={() => updateQty(item.id, item.selectedSize, -1, item.selectedColor, item.bundleGroupId || "", row.cartIndex)} className="w-8 h-full flex items-center justify-center text-gray-500 hover:text-black">−</button>
                           </div>
-                          <button onClick={() => benefit ? updateQty(item.id, item.selectedSize, -1, item.selectedColor, item.bundleGroupId || "") : removeFromCart(item.id, item.selectedSize, item.selectedColor, item.bundleGroupId || "")} className="text-gray-400 hover:text-red-500 flex items-center gap-1.5 group">
-                            <span className="text-sm font-medium underline decoration-gray-300 group-hover:decoration-red-500 underline-offset-4">إزالة</span>
-                            <Trash2 size={15} />
-                          </button>
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={() => openCartItemEditor(item, row.cartIndex, Boolean(benefit))}
+                              title="تعديل اللون والمقاس"
+                              aria-label="تعديل اللون والمقاس"
+                              className="text-gray-400 hover:text-[#1A1A1A] flex items-center"
+                            >
+                              <Edit2 size={15} />
+                            </button>
+                            <button
+                              onClick={() => benefit
+                                ? updateQty(item.id, item.selectedSize, -1, item.selectedColor, item.bundleGroupId || "", row.cartIndex)
+                                : removeFromCart(item.id, item.selectedSize, item.selectedColor, item.bundleGroupId || "", row.cartIndex)}
+                              className="text-gray-400 hover:text-red-500 flex items-center gap-1.5 group"
+                            >
+                              <span className="text-sm font-medium underline decoration-gray-300 group-hover:decoration-red-500 underline-offset-4">إزالة</span>
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>

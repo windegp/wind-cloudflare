@@ -206,13 +206,21 @@ export function computeBestOffer(cartItems, offers, now = new Date()) {
   if (!Array.isArray(offers) || offers.length === 0) return none;
 
   const candidates = [];
-  let freeShipping = false;
+  const shippingCandidates = [];
 
   for (const offer of offers) {
     if (!isOfferLive(offer, now) || !isOfferApplicable(cartItems, offer)) continue;
 
-    // الشحن المجاني منفعة مستقلة: لا تدخل في مقارنة الخصومات النقدية.
-    if (offer.freeShipping === true || offer.type === OFFER_TYPES.FREE_SHIPPING) freeShipping = true;
+    // عرض الشحن المجاني المنفصل لا يُضاف فوق خصم عرض آخر.
+    if (offer.type === OFFER_TYPES.FREE_SHIPPING) {
+      shippingCandidates.push({
+        id: String(offer.id ?? ''),
+        name: offer.name || '',
+        type: offer.type,
+        priority: Number.isFinite(Number(offer.priority)) ? Number(offer.priority) : DEFAULT_PRIORITY,
+      });
+      continue;
+    }
 
     const discount = computeOfferDiscount(cartItems, offer);
     if (discount > 0) {
@@ -221,12 +229,11 @@ export function computeBestOffer(cartItems, offers, now = new Date()) {
         name: offer.name || '',
         type: offer.type,
         discount,
+        freeShipping: offer.freeShipping === true,
         priority: Number.isFinite(Number(offer.priority)) ? Number(offer.priority) : DEFAULT_PRIORITY,
       });
     }
   }
-
-  if (candidates.length === 0) return { ...none, freeShipping };
 
   candidates.sort(
     (a, b) =>
@@ -235,13 +242,25 @@ export function computeBestOffer(cartItems, offers, now = new Date()) {
       (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
   );
 
-  const best = candidates[0];
-  return {
-    discount: best.discount,
-    offer: { id: best.id, name: best.name, type: best.type },
-    candidates,
-    freeShipping,
-  };
+  // لا يُمنح الشحن المجاني إلا مع العرض النقدي الفائز نفسه.
+  if (candidates.length > 0) {
+    const best = candidates[0];
+    return {
+      discount: best.discount,
+      offer: { id: best.id, name: best.name, type: best.type },
+      candidates,
+      freeShipping: best.freeShipping === true,
+    };
+  }
+
+  // عرض الشحن المجاني يعمل وحده فقط عندما لا يوجد عرض خصم نقدي مؤهل.
+  shippingCandidates.sort(
+    (a, b) => a.priority - b.priority || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+  );
+  const shippingOffer = shippingCandidates[0];
+  return shippingOffer
+    ? { ...none, offer: { id: shippingOffer.id, name: shippingOffer.name, type: shippingOffer.type }, freeShipping: true }
+    : none;
 }
 
 /**
@@ -255,7 +274,7 @@ export function computeBestOffer(cartItems, offers, now = new Date()) {
  */
 export function computeOfferBenefits(cartItems, offer) {
   if (!Array.isArray(cartItems) || !offer || !isOfferLive(offer)) {
-    return { offerId: offer?.id ? String(offer.id) : null, type: offer?.type || null, discount: 0, lines: [] };
+    return { offerId: offer?.id ? String(offer.id) : null, name: offer?.name || '', type: offer?.type || null, config: offer?.config || {}, discount: 0, lines: [] };
   }
 
   const eligibleUnits = [];
@@ -268,7 +287,7 @@ export function computeOfferBenefits(cartItems, offer) {
     }
   });
   if (!eligibleUnits.length) {
-    return { offerId: String(offer.id ?? ''), type: offer.type, discount: 0, lines: [] };
+    return { offerId: String(offer.id ?? ''), name: offer.name || '', type: offer.type, config: offer.config || {}, discount: 0, lines: [] };
   }
 
   const eligibleSubtotal = eligibleUnits.reduce((sum, unit) => sum + unit.price, 0);
@@ -380,7 +399,9 @@ export function computeOfferBenefits(cartItems, offer) {
   );
   return {
     offerId: String(offer.id ?? ''),
+    name: offer.name || '',
     type: offer.type,
+    config: offer.config || {},
     discount: Math.round(allocatedDiscount * 100) / 100,
     lines,
   };

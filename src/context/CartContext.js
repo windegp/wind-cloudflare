@@ -189,26 +189,55 @@ export function CartProvider({ children }) {
     });
   }, []);
 
-  const updateQty = useCallback((id, selectedSize, delta, selectedColor, bundleGroupId) => {
-    setCartItems(prev => prev.map(item => {
-      const matchColor = selectedColor !== undefined ? item.selectedColor === selectedColor : true;
-      const matchBundle = bundleGroupId !== undefined
-        ? (item.bundleGroupId || "") === (bundleGroupId || "")
-        : true;
-      if (item.id === id && item.selectedSize === selectedSize && matchColor && matchBundle) {
-        const newQty = item.qty + delta;
-        return { ...item, qty: newQty > 0 ? newQty : 1 };
+  const updateQty = useCallback((id, selectedSize, delta, selectedColor, bundleGroupId, cartIndex) => {
+    setCartItems((prev) => {
+      const matches = (item, index) =>
+        (Number.isInteger(cartIndex) ? index === cartIndex : true) &&
+        item.id === id &&
+        item.selectedSize === selectedSize &&
+        (selectedColor === undefined || item.selectedColor === selectedColor) &&
+        (bundleGroupId === undefined || (item.bundleGroupId || "") === (bundleGroupId || ""));
+      const targetIndex = prev.findIndex(matches);
+      if (targetIndex < 0) return prev;
+
+      const target = prev[targetIndex];
+      const newQty = (Number(target.qty) || 0) + delta;
+      if (newQty > 0) {
+        return prev.map((item, index) => index === targetIndex ? { ...item, qty: newQty } : item);
       }
-      return item;
-    }));
+
+      // عند وصول الكمية للصفر نحذف السطر فعلياً، مع الحفاظ على سلامة الباقات.
+      if (target.bundleGroupId && target.bundleRole === "parent") {
+        return prev.filter((item) => item.bundleGroupId !== target.bundleGroupId);
+      }
+
+      let next = prev.filter((_, index) => index !== targetIndex);
+      if (target.bundleGroupId) {
+        const remaining = next.filter((item) => item.bundleGroupId === target.bundleGroupId);
+        if (remaining.length === 1 && remaining[0].bundleRole === "parent") {
+          const parent = remaining[0];
+          next = next.map((item) => item === parent ? {
+            ...item,
+            price: item.compareAtPrice || item.price,
+            compareAtPrice: undefined,
+            bundleFreeShipping: undefined,
+            bundleGroupId: "",
+            bundleParentId: "",
+            bundleRole: "",
+          } : item);
+        }
+      }
+      return next;
+    });
   }, []);
 
-  const removeFromCart = useCallback((id, selectedSize, selectedColor, bundleGroupId) => {
+  const removeFromCart = useCallback((id, selectedSize, selectedColor, bundleGroupId, cartIndex) => {
     setCartItems(prev => {
       const matchColor = selectedColor !== undefined
         ? (item) => item.selectedColor === selectedColor
         : () => true;
-      const target = prev.find(item =>
+      const target = prev.find((item, index) =>
+        (Number.isInteger(cartIndex) ? index === cartIndex : true) &&
         item.id === id &&
         item.selectedSize === selectedSize &&
         matchColor(item) &&
@@ -220,11 +249,13 @@ export function CartProvider({ children }) {
         return prev.filter(item => item.bundleGroupId !== target.bundleGroupId);
       }
 
-      let next = prev.filter(item =>
-        !(item.id === id &&
-          item.selectedSize === selectedSize &&
-          matchColor(item) &&
-          (bundleGroupId === undefined || (item.bundleGroupId || "") === (bundleGroupId || "")))
+      let next = prev.filter((item, index) =>
+        Number.isInteger(cartIndex)
+          ? index !== cartIndex
+          : !(item.id === id &&
+            item.selectedSize === selectedSize &&
+            matchColor(item) &&
+            (bundleGroupId === undefined || (item.bundleGroupId || "") === (bundleGroupId || "")))
       );
 
       // لو أزيل آخر منتج إضافي، أعد المنتج الأساسي لسعره الأصلي.

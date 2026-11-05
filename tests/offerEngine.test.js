@@ -52,6 +52,32 @@ describe('سيناريوهات "أفضل عرض يكسب"', () => {
   it('قطعة واحدة → لا عرض', () => {
     expect(computeBestOffer([item(645)], OFFERS)).toEqual({ discount: 0, offer: null, candidates: [], freeShipping: false });
   });
+  it('لا يضيف شحن عرض آخر فوق الخصم؛ الشحن المجاني يجب أن يكون مفعلاً داخل العرض الفائز', () => {
+    const discounted = { ...NTH, freeShipping: false };
+    const shippingOnly = { id: "ship", name: "شحن مجاني", active: true, type: 'free_shipping', productScope: 'all', priority: 1 };
+    const result = computeBestOffer([item(645), item(320)], [discounted, shippingOnly]);
+    expect(result.offer.id).toBe('nth');
+    expect(result.discount).toBe(128);
+    expect(result.freeShipping).toBe(false);
+  });
+  it('يسمح بالشحن المجاني عندما يكون مفعلاً صراحةً داخل العرض الفائز', () => {
+    const result = computeBestOffer([item(645), item(320)], [{ ...NTH, freeShipping: true }]);
+    expect(result.offer.id).toBe('nth');
+    expect(result.freeShipping).toBe(true);
+  });
+  it('لا يرث العرض الفائز الشحن المجاني من عرض خصم آخر غير فائز', () => {
+    const lowerOffer = { ...BXGY, freeShipping: true };
+    const result = computeBestOffer([item(645), item(590), item(320), item(270)], [lowerOffer, NTH]);
+    expect(result.offer.id).toBe('nth');
+    expect(result.freeShipping).toBe(false);
+  });
+  it('يطبق عرض الشحن المجاني وحده إذا لم يوجد عرض خصم نقدي مؤهل', () => {
+    const shippingOnly = { id: "ship", name: "شحن مجاني", active: true, type: 'free_shipping', productScope: 'all', priority: 1 };
+    const result = computeBestOffer([item(645)], [shippingOnly]);
+    expect(result.discount).toBe(0);
+    expect(result.offer.id).toBe('ship');
+    expect(result.freeShipping).toBe(true);
+  });
   it('ترتيب القطع في السلة لا يغيّر النتيجة', () => {
     const a = computeBestOffer([item(320), item(645), item(270), item(590)], OFFERS);
     const b = computeBestOffer([item(645), item(590), item(320), item(270)], OFFERS);
