@@ -382,7 +382,7 @@ export function CartProvider({ children }) {
     cartItems, addToCart, removeFromCart, updateQty, updateCartItemVariant, clearCart,
     isCartOpen, toggleCart, openCart, closeCart,
     subtotal, discount, shipping, total,
-    discountSource, appliedOffer, offers, offerBenefits,
+    discountSource, appliedOffer, appliedOffers, offers, offerBenefits, freeShippingRule,
     appliedPromoView, applyPromoCode, removePromoCode,
     discountError, setDiscountError, promoLoading, shippingSettings,
     isFirstOrder, setIsFirstOrder,
