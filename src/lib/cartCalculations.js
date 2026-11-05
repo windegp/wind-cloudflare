@@ -98,9 +98,13 @@ export function calculateAllTotals(cartItems, promoResult = null, shippingSettin
   const discountSource = winner.source;
   const appliedOffer = discountSource === 'offer' ? offerResult.offer : null;
 
-  // قاعدة الشحن المجاني مستقلة عن العروض النقدية ويمكنها العمل مع أي عرض.
+  // عند تفعيل قاعدة المنتجات المحددة، لا نسمح لحد الشحن العام القديم بتجاوز نطاق المنتجات.
   const freeShippingByRule = isFreeShippingRuleEligible(cartItems, freeShippingRule);
-  const shipping = freeShippingByRule ? 0 : calculateShipping(promoResult, subtotal, cartItems, shippingSettings);
+  const scopedShippingSettings =
+    freeShippingRule?.enabled === true && freeShippingRule.scope === 'selected'
+      ? { ...shippingSettings, freeShippingThreshold: 0 }
+      : shippingSettings;
+  const shipping = freeShippingByRule ? 0 : calculateShipping(promoResult, subtotal, cartItems, scopedShippingSettings);
   const total = calculateTotal(subtotal, shipping, discount);
   return {
     subtotal,
