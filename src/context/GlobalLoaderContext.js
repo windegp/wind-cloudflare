@@ -1,77 +1,152 @@
+
 "use client";
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useLayoutEffect,
+} from "react";
 import { usePathname } from "next/navigation";
 
 const GlobalLoaderContext = createContext();
 
+// تجنب تحذير useLayoutEffect أثناء العرض على السيرفر.
+const useIsomorphicLayoutEffect =
+  typeof window !== "undefined" ? useLayoutEffect : useEffect;
+
+const MAX_LOADER_TIME = 8000;
+const LOADER_FADE_DURATION = 500;
+
 export function GlobalLoaderProvider({ children }) {
+  const pathname = usePathname();
+
   const [isVisible, setIsVisible] = useState(true);
   const [isReceding, setIsReceding] = useState(false);
   const [loaderType, setLoaderType] = useState("standard");
-  const [pageReady, setPageReady] = useState(false); // Data-driven readiness signal
-  const pathname = usePathname();
 
-  // Maximum timeout: 8 seconds fail-safe
-  const MAX_LOADER_TIME = 8000;
+  // ربط الجاهزية بالمسار نفسه لمنع استخدام إشارة قديمة.
+  const [readyPathname, setReadyPathname] = useState(null);
+  const pageReady = Boolean(pathname && readyPathname === pathname);
 
-  // [تعديل جراحي] تم إزالة useEffect الخاص بـ document.readyState بالكامل
-  // لأنه كان يقوم بسحب اللودر فوراً قبل انتظار بيانات Firebase (وهذا هو سبب ظهور النافبار مبكراً)
-  // الاعتماد الآن سيكون 100% على signalPageReady القادم من الصفحة نفسها
+  const fallbackTimerRef = useRef(null);
+  const hideTimerRef = useRef(null);
 
-  // Handle route changes: Reset state and force scroll to top
-  useEffect(() => {
-    // إجبار المتصفح على بدء أي صفحة من الأعلى فوراً وبدون أي تأثيرات تأخير
-    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
-    
-    // 🔥 الحل الجذري للأدمن وصفحة الدفع: اقتل اللودر فوراً ليظهر المحتوى بأقصى سرعة
-    if ((pathname && pathname.startsWith("/admin")) || (pathname && pathname.includes("/checkout"))) {
+  // إلغاء جميع المؤقتات السابقة عند تغيير المسار أو إزالة Provider.
+  const clearLoaderTimers = useCallback(() => {
+    if (fallbackTimerRef.current !== null) {
+      clearTimeout(fallbackTimerRef.current);
+      fallbackTimerRef.current = null;
+    }
+
+    if (hideTimerRef.current !== null) {
+      clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+  }, []);
+
+  // الحفاظ على واجهة setPageReady الحالية.
+  const setPageReady = useCallback(
+    (ready) => {
+      setReadyPathname(ready ? pathname : null);
+    },
+    [pathname]
+  );
+
+  // إعداد اللودر عند كل تغيير حقيقي في المسار.
+  useIsomorphicLayoutEffect(() => {
+    clearLoaderTimers();
+
+    // بدء الصفحة الجديدة من الأعلى.
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: "instant",
+    });
+
+    // استثناء صفحات الإدارة والدفع من Global Loader.
+    const isExcludedRoute =
+    pathname?.startsWith("/admin") ||
+    pathname?.includes("/checkout");
+
+    if (isExcludedRoute) {
       setIsVisible(false);
       setIsReceding(false);
       setPageReady(true);
-      return; // خروج مباشر
+
+      return () => {
+        clearLoaderTimers();
+      };
     }
 
-    // Reset loader state for new route
+    // إعداد دورة تحميل جديدة.
     setIsVisible(true);
     setIsReceding(false);
-    
-    // Use a timeout to reset pageReady AFTER the component tree has time to detect the pathname change
-    // This prevents the race condition where setPageReady(false) overwrites signalPageReady() calls
-    const resetReadyTimer = setTimeout(() => {
-      setPageReady(false);
-    }, 0);
+    setPageReady(false);
 
-    // Detect if navigating to Kashier Payment Gateway
-    const isKashierPayment = (pathname && pathname.includes("kashier")) || (pathname && pathname.includes("checkout"));
-    setLoaderType(isKashierPayment ? "secure-vault" : "standard");
+    // تحديد نوع اللودر مع الحفاظ على السلوك السابق.
+    const isKashierPayment =
+      pathname?.includes("kashier") ||
+      pathname?.includes("checkout");
 
-    // Fail-safe timeout: Force recede after 8 seconds regardless of pageReady
-    const timeoutTimer = setTimeout(() => {
+    setLoaderType(
+      isKashierPayment ? "secure-vault" : "standard"
+    );
+
+    // مهلة أمان: لا نترك اللودر ظاهرًا إلى ما لا نهاية.
+    fallbackTimerRef.current = window.setTimeout(() => {
+      fallbackTimerRef.current = null;
+
       setIsReceding(true);
-      setTimeout(() => setIsVisible(false), 900);
+
+      hideTimerRef.current = window.setTimeout(() => {
+        hideTimerRef.current = null;
+        setIsVisible(false);
+      }, LOADER_FADE_DURATION);
     }, MAX_LOADER_TIME);
 
+    // إلغاء مؤقتات هذه الصفحة عند الانتقال إلى صفحة أخرى.
     return () => {
-      clearTimeout(resetReadyTimer);
-      clearTimeout(timeoutTimer);
+      clearLoaderTimers();
     };
-  }, [pathname]);
+  }, [pathname, clearLoaderTimers, setPageReady]);
 
-  // تم إلغاء حساسات السكرول والروابط للعودة للسرعة القصوى والأداء الصاروخي
-
-  // Handle page readiness: Trigger recede immediately when page is ready
+  // إخفاء اللودر بمجرد إعلان الصفحة الحالية عن جاهزيتها.
   useEffect(() => {
-    if (pageReady && isVisible && !isReceding) {
-      // Page is ready - start receding IMMEDIATELY (no artificial delays)
-      setIsReceding(true);
-      setTimeout(() => setIsVisible(false), 900); // Receding animation duration
+    if (!pageReady || !isVisible || isReceding) {
+      return;
     }
+
+    // لم نعد بحاجة إلى مهلة الأمان بعد جاهزية الصفحة.
+    if (fallbackTimerRef.current !== null) {
+      clearTimeout(fallbackTimerRef.current);
+      fallbackTimerRef.current = null;
+    }
+
+    // إلغاء أي مؤقت إخفاء سابق قبل إنشاء مؤقت جديد.
+    if (hideTimerRef.current !== null) {
+      clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+
+    setIsReceding(true);
+
+    // مدة الإخفاء متطابقة مع حركة CSS الحالية (500ms).
+    hideTimerRef.current = window.setTimeout(() => {
+      hideTimerRef.current = null;
+      setIsVisible(false);
+    }, LOADER_FADE_DURATION);
   }, [pageReady, isVisible, isReceding]);
 
-  // Expose setPageReady for pages to signal data readiness
+  // إرسال إشارة جاهزية مرتبطة بالمسار الذي أرسلها.
   const signalPageReady = useCallback(() => {
-    setPageReady(true);
-  }, []);
+    if (pathname) {
+      setReadyPathname(pathname);
+    }
+  }, [pathname]);
 
   const value = {
     isVisible,
@@ -79,7 +154,7 @@ export function GlobalLoaderProvider({ children }) {
     loaderType,
     pageReady,
     setPageReady,
-    signalPageReady, // Public API for pages to use
+    signalPageReady,
   };
 
   return (
@@ -91,24 +166,22 @@ export function GlobalLoaderProvider({ children }) {
 
 export function useGlobalLoader() {
   const context = useContext(GlobalLoaderContext);
+
   if (!context) {
-    throw new Error("useGlobalLoader must be used within GlobalLoaderProvider");
+    throw new Error(
+      "useGlobalLoader must be used within GlobalLoaderProvider"
+    );
   }
+
   return context;
 }
 
 /**
- * Custom hook for pages to signal they're ready to be displayed.
- * Call this after critical data and initial images are loaded.
- * * @example
- * const { signalPageReady } = usePageReady();
- * * useEffect(() => {
- * if (products.length > 0 && imagesLoaded) {
- * signalPageReady(); // Tell GlobalLoader to start receding
- * }
- * }, [products, imagesLoaded]);
+ * Custom hook for pages to signal they're ready.
+ * Call signalPageReady() after the critical page content is available.
  */
 export function usePageReady() {
   const { signalPageReady } = useGlobalLoader();
+
   return { signalPageReady };
 }
