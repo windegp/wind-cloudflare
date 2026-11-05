@@ -88,6 +88,7 @@ export async function POST(req) {
     const trustedShipping = signedQuote?.shipping ?? (Number(shipping) || 0);
     const trustedTotal = signedQuote?.total ?? (Number(total) || 0);
     const trustedCartItems = signedQuote?.cartItems ?? (Array.isArray(cartItems) ? cartItems : []);
+    const trustedLineItems = signedQuote?.lineItems ?? trustedCartItems;
 
     // ============================================
     // 1. كاشير — إرجاع بيانات الـ iFrame (hash + params)
@@ -167,27 +168,34 @@ export async function POST(req) {
 
    // --- دالة مشتركة لبناء كارت كل منتج (table layout — متوافق مع كل عملاء البريد) ---
     const buildItemCard = (item) => {
-      const hasDiscount = item.compareAtPrice && Number(item.compareAtPrice) > Number(item.price);
+      const title = item.productTitle || item.title || item.name || "منتج";
+      const quantity = Number(item.quantity ?? item.qty) || 1;
+      const originalPrice = Number(item.originalPrice ?? item.compareAtPrice);
+      const hasDiscount = Number.isFinite(originalPrice) && originalPrice > Number(item.price);
+      const isOfferBenefit = item.isOfferBenefit === true;
+      const benefitLabel = isOfferBenefit
+        ? (item.isFree ? "هدية مجانية من العرض" : "خصم العرض")
+        : "";
       const imgUrl = item.image || (Array.isArray(item.images) ? item.images[0] : '') || '';
       return `
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: #fafafa; border-radius: 6px; border: 1px solid #f0f0f0; margin-bottom: 8px;">
         <tr>
           <td width="56" style="padding: 10px;">
-            <img src="${imgUrl}" alt="${item.title}" width="52" height="52" style="width: 52px; height: 52px; object-fit: cover; border-radius: 4px; display: block; background: #efefef;" />
+            <img src="${imgUrl}" alt="${title}" width="52" height="52" style="width: 52px; height: 52px; object-fit: cover; border-radius: 4px; display: block; background: #efefef;" />
           </td>
           <td style="padding: 10px 6px; vertical-align: middle;">
-            <span style="color: #111111; font-size: 12px; font-weight: bold; display: block; margin-bottom: 2px;">${item.title}</span>
-            <span style="color: #888888; font-size: 11px;">المقاس: ${item.selectedSize || '-'} &nbsp;|&nbsp; الكمية: ${item.qty}</span>
+            <span style="color: #111111; font-size: 12px; font-weight: bold; display: block; margin-bottom: 2px;">${title}</span>
+            <span style="color: #888888; font-size: 11px;">المقاس: ${item.selectedSize || '-'} &nbsp;|&nbsp; اللون: ${item.selectedColor || '-'} &nbsp;|&nbsp; الكمية: ${quantity}</span>
+            ${benefitLabel ? `<span style="color: #16835f; font-size: 10px; font-weight: bold; display: block; margin-top: 3px;">${benefitLabel}</span>` : ''}
           </td>
           <td width="65" style="padding: 10px; text-align: left; vertical-align: middle; white-space: nowrap;">
-            ${hasDiscount ? `<span style="color: #bbbbbb; font-size: 10px; text-decoration: line-through; display: block;">${item.compareAtPrice}</span>` : ''}
+            ${hasDiscount ? `<span style="color: #bbbbbb; font-size: 10px; text-decoration: line-through; display: block;">${originalPrice}</span>` : ''}
             <span style="color: #111111; font-size: 12px; font-weight: bold;">${item.price} ${CURRENCY}</span>
           </td>
         </tr>
       </table>
     `;
     };
-
     // --- دالة مشتركة لبناء جسم الإيميل بالكامل (table-based) ---
     const buildEmailHtml = ({ headline, subline, isAdminEmail = false }) => `
       <div dir="rtl" style="background-color: #f0f0f0; padding: 24px 12px; font-family: 'Arial', sans-serif;">
@@ -220,7 +228,7 @@ export async function POST(req) {
           </td></tr>
 
           <tr><td style="padding: 0 20px 4px;">
-            ${trustedCartItems.map(buildItemCard).join('')}
+            ${trustedLineItems.map(buildItemCard).join('')}
           </td></tr>
 
           <tr><td style="padding: 4px 24px 16px;">
