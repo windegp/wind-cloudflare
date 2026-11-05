@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   computeBestOffer,
   computeOfferDiscount,
+  computeOfferBenefits,
   isOfferLive,
   cairoDateString,
 } from '@/lib/offerEngine';
@@ -49,7 +50,7 @@ describe('سيناريوهات "أفضل عرض يكسب"', () => {
     expect(r.offer.id).toBe('bxgy');
   });
   it('قطعة واحدة → لا عرض', () => {
-    expect(computeBestOffer([item(645)], OFFERS)).toEqual({ discount: 0, offer: null, candidates: [] });
+    expect(computeBestOffer([item(645)], OFFERS)).toEqual({ discount: 0, offer: null, candidates: [], freeShipping: false });
   });
   it('ترتيب القطع في السلة لا يغيّر النتيجة', () => {
     const a = computeBestOffer([item(320), item(645), item(270), item(590)], OFFERS);
@@ -240,8 +241,33 @@ describe('تفصيل القطع المستفيدة من العرض', () => {
     expect(result.lines.flatMap((line) => line.discountedUnits).reduce((sum, unit) => sum + unit.discount, 0)).toBe(300);
   });
 
-  it('لا يغيّر عناصر السلة الأصلية', async () => {
-    const { computeOfferBenefits } = await import('@/lib/offerEngine');
+  it('يوزع الخصم الثابت على الوحدات ويطابق إجمالي الخصم', () => {
+    const offer = { id: 'fixed-split', active: true, type: 'cart_fixed', config: { amount: 100 }, productScope: 'all' };
+    const cart = [item(100), item(200)];
+    const result = computeOfferBenefits(cart, offer);
+    expect(result.discount).toBe(computeOfferDiscount(cart, offer));
+    expect(result.discount).toBe(100);
+    expect(result.lines.flatMap((line) => line.discountedUnits).reduce((sum, unit) => sum + unit.discount, 0)).toBe(100);
+  });
+
+  it('يحافظ على سقف الخصم حتى لو حوّل الهدية إلى وحدة مخفّضة جزئياً', () => {
+    const result = computeOfferBenefits([item(645, 4)], { ...BXGY, maxDiscount: 300 });
+    const unit = result.lines[0].discountedUnits[0];
+    expect(result.discount).toBe(300);
+    expect(unit).toMatchObject({ originalPrice: 645, discount: 300, finalPrice: 345, free: false });
+  });
+
+  it('تقريب خصم النسبة يظل مطابقاً للخصم النهائي بالجنيه', () => {
+    const offer = { id: 'percent-round', active: true, type: 'cart_percent', config: { percent: 15 }, productScope: 'all' };
+    const cart = [item(645), item(320, 2)];
+    const result = computeOfferBenefits(cart, offer);
+    const allocated = result.lines.flatMap((line) => line.discountedUnits).reduce((sum, unit) => sum + unit.discount, 0);
+    expect(result.discount).toBe(computeOfferDiscount(cart, offer));
+    expect(allocated).toBe(193);
+    expect(allocated).toBe(result.discount);
+  });
+
+  it('لا يغيّر عناصر السلة الأصلية', () => {
     const cart = Object.freeze([Object.freeze(item(645, 4))]);
     expect(() => computeOfferBenefits(cart, BXGY)).not.toThrow();
     expect(cart[0].qty).toBe(4);
