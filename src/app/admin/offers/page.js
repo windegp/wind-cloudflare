@@ -124,7 +124,6 @@ function offerDescription(offer) {
   } else if (offer.type === "cart_fixed") {
     description = `خصم ${cfg.amount} ج.م على المنتجات المؤهلة`;
   }
-  if (offer.freeShipping) description += " + شحن مجاني";
   return description || "إعداد عرض";
 }
 
