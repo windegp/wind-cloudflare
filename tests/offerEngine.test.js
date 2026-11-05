@@ -56,31 +56,39 @@ describe('سيناريوهات "أفضل عرض يكسب"', () => {
     expect(result.discount).toBe(0);
     expect(result.appliedOffers).toEqual([]);
   });
-  it('لا يضيف شحن عرض آخر فوق الخصم؛ الشحن المجاني يجب أن يكون مفعلاً داخل العرض الفائز', () => {
-    const discounted = { ...NTH, freeShipping: false };
-    const shippingOnly = { id: "ship", name: "شحن مجاني", active: true, type: 'free_shipping', productScope: 'all', priority: 1 };
-    const result = computeBestOffer([item(645), item(320)], [discounted, shippingOnly]);
-    expect(result.offer.id).toBe('nth');
-    expect(result.discount).toBe(128);
-    expect(result.freeShipping).toBe(false);
+  it('لا يدمج عرضين افتراضيًا حتى لو كانا مؤهلين معًا', () => {
+    const result = computeBestOffer([item(645), item(590), item(320), item(270)], OFFERS);
+    expect(result.appliedOffers).toHaveLength(1);
+    expect(result.discount).toBe(344);
   });
-  it('يسمح بالشحن المجاني عندما يكون مفعلاً صراحةً داخل العرض الفائز', () => {
-    const result = computeBestOffer([item(645), item(320)], [{ ...NTH, freeShipping: true }]);
-    expect(result.offer.id).toBe('nth');
-    expect(result.freeShipping).toBe(true);
+  it('يدمج العروض المحددة فقط ويحسب العرض الثاني على السعر المتبقي', () => {
+    const primary = { ...NTH, stackWithOfferIds: ["bxgy"] };
+    const result = computeBestOffer([item(645), item(590), item(320), item(270)], [primary, BXGY]);
+    expect(result.offer.id).toBe("nth");
+    expect(result.appliedOffers.map((offer) => offer.id)).toEqual(["nth", "bxgy"]);
+    expect(result.discount).toBe(506);
+    expect(result.offerBenefits.discount).toBe(506);
   });
-  it('لا يرث العرض الفائز الشحن المجاني من عرض خصم آخر غير فائز', () => {
-    const lowerOffer = { ...BXGY, freeShipping: true };
-    const result = computeBestOffer([item(645), item(590), item(320), item(270)], [lowerOffer, NTH]);
-    expect(result.offer.id).toBe('nth');
-    expect(result.freeShipping).toBe(false);
+  it('العرض الإضافي لا يعمل إذا لم يختره العرض الأساسي صراحةً', () => {
+    const primary = { ...NTH, stackWithOfferIds: [] };
+    const result = computeBestOffer([item(645), item(590), item(320), item(270)], [primary, BXGY]);
+    expect(result.appliedOffers.map((offer) => offer.id)).toEqual(["nth"]);
+    expect(result.discount).toBe(344);
   });
-  it('يطبق عرض الشحن المجاني وحده إذا لم يوجد عرض خصم نقدي مؤهل', () => {
-    const shippingOnly = { id: "ship", name: "شحن مجاني", active: true, type: 'free_shipping', productScope: 'all', priority: 1 };
-    const result = computeBestOffer([item(645)], [shippingOnly]);
-    expect(result.discount).toBe(0);
-    expect(result.offer.id).toBe('ship');
-    expect(result.freeShipping).toBe(true);
+  it('قاعدة الشحن المجاني للمتجر تعمل بشكل مستقل', () => {
+    expect(isFreeShippingRuleEligible([item(645)], { enabled: true, scope: "store" })).toBe(true);
+  });
+  it('شحن المنتجات المحددة يُحسب بعدد القطع المستهدفة فقط', () => {
+    const cart = [item(500, 2, { id: "A" }), item(900, 3, { id: "B" })];
+    const rule = { enabled: true, scope: "selected", productIds: ["A"], condition: "quantity", minQuantity: 2 };
+    expect(isFreeShippingRuleEligible(cart, rule)).toBe(true);
+    expect(isFreeShippingRuleEligible([{ ...cart[0], qty: 1 }, cart[1]], rule)).toBe(false);
+  });
+  it('شحن المنتجات المحددة يُحسب بقيمة المنتجات المستهدفة فقط', () => {
+    const cart = [item(300, 2, { id: "A" }), item(900, 1, { id: "B" })];
+    const rule = { enabled: true, scope: "selected", productIds: ["A"], condition: "subtotal", minSubtotal: 600 };
+    expect(isFreeShippingRuleEligible(cart, rule)).toBe(true);
+    expect(isFreeShippingRuleEligible([{ ...cart[0], qty: 1 }, cart[1]], rule)).toBe(false);
   });
   it('ترتيب القطع في السلة لا يغيّر النتيجة', () => {
     const a = computeBestOffer([item(320), item(645), item(270), item(590)], OFFERS);
