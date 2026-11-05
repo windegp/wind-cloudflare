@@ -207,6 +207,9 @@ export default function AdminOffersPage() {
   const [includeSearch, setIncludeSearch] = useState("");
   const [excludeSearch, setExcludeSearch] = useState("");
   const [environment, setEnvironment] = useState("preview");
+  const [shippingRule, setShippingRule] = useState(emptyShippingRule);
+  const [shippingRuleError, setShippingRuleError] = useState("");
+  const [shippingProductSearch, setShippingProductSearch] = useState("");
 
   const notify = (message, ok = true) => {
     setToast({ message, ok });
@@ -220,9 +223,10 @@ export default function AdminOffersPage() {
       const db = getDb();
       const currentEnvironment = getCurrentOfferEnvironment();
       setEnvironment(currentEnvironment);
-      const [offersSnap, productsSnap] = await Promise.all([
+      const [offersSnap, productsSnap, shippingRuleSnap] = await Promise.all([
         getDocs(collection(db, "offers")),
         getDocs(query(collection(db, "products"), limit(1000))),
+        getDoc(doc(db, "settings", `offerShippingRules_${currentEnvironment}`)),
       ]);
       const loadedOffers = offersSnap.docs
         .map((item) => ({ id: item.id, ...item.data() }))
@@ -235,6 +239,17 @@ export default function AdminOffersPage() {
       );
       setOffers(loadedOffers);
       setProducts(productsSnap.docs.map((item) => ({ id: item.id, ...item.data() })));
+      const savedShippingRule = shippingRuleSnap.exists() ? shippingRuleSnap.data() : {};
+      setShippingRule({
+        ...emptyShippingRule(),
+        ...savedShippingRule,
+        enabled: savedShippingRule.enabled === true,
+        scope: savedShippingRule.scope === "selected" ? "selected" : "store",
+        productIds: Array.isArray(savedShippingRule.productIds) ? savedShippingRule.productIds.map(String) : [],
+        condition: savedShippingRule.condition === "subtotal" ? "subtotal" : "quantity",
+        minQuantity: String(savedShippingRule.minQuantity ?? 2),
+        minSubtotal: String(savedShippingRule.minSubtotal ?? 500),
+      });
     } catch (error) {
       setPageError(error?.message || "تعذر تحميل العروض والمنتجات.");
     } finally {
