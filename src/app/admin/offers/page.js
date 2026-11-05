@@ -441,6 +441,7 @@ export default function AdminOffersPage() {
 
     setSaving(true);
     try {
+      const ruleEnvironment = getCurrentOfferEnvironment();
       const data = {
         enabled: Boolean(shippingRule.enabled),
         scope: shippingRule.scope === "selected" ? "selected" : "store",
@@ -448,10 +449,10 @@ export default function AdminOffersPage() {
         condition: shippingRule.condition === "subtotal" ? "subtotal" : "quantity",
         minQuantity: Math.max(1, Math.floor(Number(shippingRule.minQuantity) || 1)),
         minSubtotal: Math.max(0, Number(shippingRule.minSubtotal) || 0),
-        environment,
+        environment: ruleEnvironment,
         updatedAt: new Date().toISOString(),
       };
-      await setDoc(doc(getDb(), "settings", `offerShippingRules_${environment}`), data, { merge: true });
+      await setDoc(doc(getDb(), "settings", `offerShippingRules_${ruleEnvironment}`), data, { merge: true });
       await revalidateOffers();
       notify("تم حفظ إعدادات الشحن المجاني.");
     } catch (error) {
@@ -621,7 +622,7 @@ export default function AdminOffersPage() {
           )}
           {shippingRuleError && <p className="text-xs text-red-700 bg-red-50 border border-red-100 rounded-lg p-3">{shippingRuleError}</p>}
           <div className="flex justify-end">
-            <button onClick={saveShippingRule} disabled={saving} className="px-5 py-2.5 rounded-lg bg-[#1a1a1a] text-white text-sm font-bold flex items-center gap-2 disabled:opacity-50">
+            <button onClick={saveShippingRule} disabled={saving || loading} className="px-5 py-2.5 rounded-lg bg-[#1a1a1a] text-white text-sm font-bold flex items-center gap-2 disabled:opacity-50">
               <Save size={15} /> حفظ إعدادات الشحن المجاني
             </button>
           </div>
