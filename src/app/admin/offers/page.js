@@ -845,11 +845,6 @@ export default function AdminOffersPage() {
                 <div><label className={labelClass}>يبدأ من (اختياري)</label><input type="date" value={form.startsAt} onChange={(event) => updateField("startsAt", event.target.value)} className={fieldClass} /></div>
                 <div><label className={labelClass}>ينتهي في (اختياري)</label><input type="date" value={form.endsAt} onChange={(event) => updateField("endsAt", event.target.value)} min={form.startsAt || undefined} className={fieldClass} /></div>
                 <label className="flex items-center gap-3 rounded-xl border border-gray-200 p-3">
-                  <input type="checkbox" checked={form.freeShipping || form.type === "free_shipping"} disabled={form.type === "free_shipping"} onChange={(event) => updateField("freeShipping", event.target.checked)} className="w-4 h-4 accent-[#008060] disabled:opacity-60" />
-                  <span><span className="block text-sm font-bold text-gray-800">شحن مجاني مع العرض</span><span className="block text-[10px] text-gray-500 mt-1">تُطبق فقط مع هذا العرض إذا كان هو العرض الفائز، ولا تُجمع تلقائيًا مع عرض شحن آخر.</span></span>
-                  <Truck size={18} className="mr-auto text-gray-400" />
-                </label>
-                <label className="flex items-center gap-3 rounded-xl border border-gray-200 p-3">
                   <input type="checkbox" checked={form.active} onChange={(event) => updateField("active", event.target.checked)} className="w-4 h-4 accent-[#008060]" />
                   <span><span className="block text-sm font-bold text-gray-800">العرض مفعّل</span><span className="block text-[10px] text-gray-500 mt-1">يمكن حفظ العرض معطّلًا لتجهيزه لاحقًا.</span></span>
                 </label>
