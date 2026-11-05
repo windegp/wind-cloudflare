@@ -56,6 +56,33 @@ export function GlobalLoaderProvider({ children }) {
     [pathname]
   );
 
+  // بدء التحميل فور ضغط العميل على رابط داخلي،
+  // قبل اكتمال انتقال Next.js وتغيير pathname.
+  const startNavigation = useCallback(() => {
+    const isExcludedRoute =
+      pathname?.startsWith("/admin") ||
+      pathname?.includes("/checkout");
+
+    if (isExcludedRoute) return;
+
+    clearLoaderTimers();
+
+    setIsVisible(true);
+    setIsReceding(false);
+    setPageReady(false);
+
+    // مهلة أمان إذا لم يكتمل الانتقال.
+    fallbackTimerRef.current = window.setTimeout(() => {
+      fallbackTimerRef.current = null;
+      setIsReceding(true);
+
+      hideTimerRef.current = window.setTimeout(() => {
+        hideTimerRef.current = null;
+        setIsVisible(false);
+      }, LOADER_FADE_DURATION);
+    }, MAX_LOADER_TIME);
+  }, [pathname, clearLoaderTimers, setPageReady]);
+
   // إعداد اللودر عند كل تغيير حقيقي في المسار.
   useIsomorphicLayoutEffect(() => {
     clearLoaderTimers();
@@ -155,6 +182,7 @@ export function GlobalLoaderProvider({ children }) {
     pageReady,
     setPageReady,
     signalPageReady,
+    startNavigation,
   };
 
   return (
