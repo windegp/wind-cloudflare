@@ -221,11 +221,11 @@ export default function CartDrawer() {
                         </div>
                         <div className="flex items-center justify-between mt-3">
                           <div className="flex items-center border border-gray-200 rounded-md bg-white h-8">
-                            <button onClick={() => updateQty(item.id, item.selectedSize, 1, item.selectedColor)} className="w-8 h-full flex items-center justify-center text-gray-500 hover:text-black">+</button>
+                            <button onClick={() => updateQty(item.id, item.selectedSize, 1, item.selectedColor, item.bundleGroupId || "")} className="w-8 h-full flex items-center justify-center text-gray-500 hover:text-black">+</button>
                             <span className="w-8 text-center text-sm font-bold text-[#1A1A1A]">{item.qty}</span>
-                            <button onClick={() => updateQty(item.id, item.selectedSize, -1, item.selectedColor)} className="w-8 h-full flex items-center justify-center text-gray-500 hover:text-black">−</button>
+                            <button onClick={() => updateQty(item.id, item.selectedSize, -1, item.selectedColor, item.bundleGroupId || "")} className="w-8 h-full flex items-center justify-center text-gray-500 hover:text-black">−</button>
                           </div>
-                          <button onClick={() => removeFromCart(item.id, item.selectedSize, item.selectedColor)} className="text-gray-400 hover:text-red-500 flex items-center gap-1.5 group">
+                          <button onClick={() => removeFromCart(item.id, item.selectedSize, item.selectedColor, item.bundleGroupId || "")} className="text-gray-400 hover:text-red-500 flex items-center gap-1.5 group">
                             <span className="text-sm font-medium underline decoration-gray-300 group-hover:decoration-red-500 underline-offset-4">إزالة</span>
                             <Trash2 size={15} />
                           </button>

@@ -41,7 +41,7 @@ export async function POST(request) {
         }
 
         // التحقق من صحة التوقيع
-        const isValid = verifyWebhookSignature(data, kashierSignature);
+        const isValid = await verifyWebhookSignature(data, kashierSignature);
 
         if (!isValid) {
             console.error("Invalid Webhook Signature!");
@@ -65,6 +65,32 @@ export async function POST(request) {
 
             if (orderSnap.exists()) {
                 const orderData = orderSnap.data();
+
+                // Kashier signature validity alone is not enough: the paid amount
+                // and currency must also match the server-quoted order snapshot.
+                const expectedAmount = Number(orderData.Total);
+                const receivedAmount = Number(data.amount);
+                const expectedCurrency = String(orderData.Currency || "EGP").toUpperCase();
+                const receivedCurrency = String(data.currency || "EGP").toUpperCase();
+
+                if (
+                    !Number.isFinite(expectedAmount) ||
+                    !Number.isFinite(receivedAmount) ||
+                    Math.abs(expectedAmount - receivedAmount) > 0.01 ||
+                    receivedCurrency !== expectedCurrency
+                ) {
+                    console.error("[Kashier webhook] Payment amount/currency mismatch; order remains unpaid.", {
+                        orderId,
+                        expectedAmount,
+                        receivedAmount,
+                        expectedCurrency,
+                        receivedCurrency,
+                    });
+                    return NextResponse.json(
+                        { success: true, ignored: true, reason: "PAYMENT_AMOUNT_MISMATCH" },
+                        { status: 200 }
+                    );
+                }
 
                 if (orderData['Financial Status'] !== 'paid') {
                     

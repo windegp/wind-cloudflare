@@ -75,9 +75,14 @@ describe('أفضل خصم واحد: العرض ضد الكود ضد خصم ال�
     const promo = { valid: true, type: 'free_shipping', freeShipping: true, code: 'FS' };
     expect(calculateAllTotals(CART, promo, null, false, [NTH])).toMatchObject({ discount: 128, shipping: 0, total: 837, discountSource: 'offer' });
   });
-  it('عند فوز كود بالخصم، مصدر الخصم promo حتى لو العروض موجودة', () => {
-    const promo = { valid: true, type: 'percent', discountAmount: 500 };
-    expect(calculateAllTotals(CART, promo, null, false, [NTH, BXGY]).discountSource).toBe('promo');
+  it('خصم الطلب الأول يقارن فعلياً مع الكود والعرض', () => {
+    const promo = { valid: true, type: 'fixed', discountAmount: 50 };
+    const result = calculateAllTotals(CART, promo, FIRST, true, []);
+    expect(result).toMatchObject({ discount: 97, discountSource: 'first_order' });
+  });
+  it('الكود النقدي الأكبر يفوز على خصم الطلب الأول والعرض', () => {
+    const promo = { valid: true, type: 'fixed', discountAmount: 500 };
+    expect(calculateAllTotals(CART, promo, FIRST, true, [NTH, BXGY]).discountSource).toBe('promo');
   });
 });
 
