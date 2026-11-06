@@ -277,8 +277,8 @@ export function computeBestOffer(cartItems, offers, now = new Date()) {
 
 /**
  * Build a deterministic, per-unit explanation of the winning offer.
- * This is presentation data only; computeOfferDiscount remains the source
- * for the authoritative total discount.
+ * This is the canonical per-unit allocation for the selected offer.
+ * Its total is used by both the cart and the server checkout quote.
  *
  * Each returned line maps back to one original cart line. Units receiving
  * a benefit are listed separately so the cart can render gifts/discounted
@@ -388,12 +388,25 @@ export function computeOfferBenefits(cartItems, offer, now = new Date()) {
     const cents = centsByUnit.get(index) || 0;
     if (cents <= 0) return;
     if (!byCartLine.has(unit.cartIndex)) byCartLine.set(unit.cartIndex, []);
+    const discount = cents / 100;
+    const finalPrice = Math.max(0, Math.round((unit.price * 100 - cents)) / 100);
+    const free = cents >= Math.round(unit.price * 100);
     byCartLine.get(unit.cartIndex).push({
       unitIndex: unit.unitIndex,
       originalPrice: unit.price,
-      discount: cents / 100,
-      finalPrice: Math.max(0, Math.round((unit.price * 100 - cents)) / 100),
-      free: cents >= Math.round(unit.price * 100),
+      discount,
+      finalPrice,
+      free,
+      benefits: [{
+        offerId: String(offer.id ?? ''),
+        offerName: offer.name || '',
+        offerType: offer.type,
+        config: offer.config || {},
+        originalPrice: unit.price,
+        discount,
+        finalPrice,
+        free,
+      }],
     });
   });
 
