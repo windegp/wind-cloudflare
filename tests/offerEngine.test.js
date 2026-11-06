@@ -57,8 +57,8 @@ describe('سيناريوهات "أفضل عرض يكسب"', () => {
   });
   it('يجمع نفس المنتج عبر أسطر ألوان أو مقاسات مختلفة', () => {
     const cart = [
-      item(645, 2, { id: 'A', selectedColor: 'أسود' }),
-      item(645, 2, { id: 'A', selectedColor: 'أبيض' }),
+      item(645, 2, { id: 'A-black', handle: 'product-a', selectedColor: 'أسود' }),
+      item(645, 2, { id: 'A-white', handle: 'product-a', selectedColor: 'أبيض' }),
     ];
     const result = computeBestOffer(cart, [BXGY]);
     expect(result.discount).toBe(645);
