@@ -81,8 +81,17 @@ describe('سيناريوهات "أفضل عرض يكسب"', () => {
     expect(result.appliedOffers.map((offer) => offer.id)).toEqual(["nth"]);
     expect(result.discount).toBe(344);
   });
-  it('قاعدة الشحن المجاني للمتجر تعمل بشكل مستقل', () => {
-    expect(isFreeShippingRuleEligible([item(645)], { enabled: true, scope: "store" })).toBe(true);
+  it('قاعدة المتجر القديمة لا تفعّل الشحن من قسم المنتجات المحددة', () => {
+    expect(isFreeShippingRuleEligible(
+      [item(645)],
+      { enabled: true, scope: "store", productIds: [] }
+    )).toBe(false);
+  });
+  it('لا يفعّل الشحن المحدد دون اختيار أي منتج', () => {
+    expect(isFreeShippingRuleEligible(
+      [item(645, 3)],
+      { enabled: true, scope: "selected", productIds: [], condition: "quantity", minQuantity: 1 }
+    )).toBe(false);
   });
   it('شحن المنتجات المحددة يُحسب بعدد القطع المستهدفة فقط', () => {
     const cart = [item(500, 2, { id: "A" }), item(900, 3, { id: "B" })];
