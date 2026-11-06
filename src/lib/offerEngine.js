@@ -220,6 +220,7 @@ export function computeBestOffer(cartItems, offers, now = new Date()) {
   const liveOffers = offers.filter((offer) =>
     offer &&
     offer.type !== OFFER_TYPES.FREE_SHIPPING &&
+    offer.type !== "coupon_fixed" &&
     isOfferLive(offer, now)
   );
   const candidates = [];
