@@ -49,7 +49,7 @@ export function computeCustomerChoiceGiftOffer(purchaseItems, giftSelections, of
     discountedUnits: [],
   };
 
-  if (!offer || offer.active !== true || offer.type !== "buy_x_get_y_select_gift") return empty;
+  if (!offer || offer.type !== "buy_x_get_y_select_gift" || !isOfferLive(offer)) return empty;
 
   const config = offer.config || {};
   const buyQty = Number(config.buyQty);
