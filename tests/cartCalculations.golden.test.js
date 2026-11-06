@@ -61,9 +61,13 @@ describe('calculateAllTotals — أكواد الخصم', () => {
     const promo = { valid: true, type: 'free_shipping', freeShipping: true, discountAmount: 70 };
     expect(calculateAllTotals(CART, promo)).toMatchObject({ discount: 0, shipping: 0, total: 1285 });
   });
-  it('الإجمالي لا ينزل عن صفر', () => {
+  it('fixed promo discount is capped at eligible product subtotal', () => {
     const promo = { valid: true, type: 'fixed', discountAmount: 500 };
-    expect(calculateAllTotals([item(100)], promo)).toMatchObject({ discount: 500, total: 0 });
+    expect(calculateAllTotals([item(100)], promo)).toMatchObject({
+      discount: 100,
+      shipping: 70,
+      total: 70,
+    });
   });
 });
 

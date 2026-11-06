@@ -186,10 +186,10 @@ describe('سيناريوهات "أفضل عرض يكسب"', () => {
     const a = computeBestOffer([item(320), item(645), item(270), item(590)], OFFERS);
     const b = computeBestOffer([item(645), item(590), item(320), item(270)], OFFERS);
     expect(a.discount).toBe(b.discount);
-  });
-  it('قطعة بكمية ٢ + قطعة تانية: الزوج الأول من نفس القطعة', () => {
-    // الوحدات: 645, 645, 320 → زوج (645,645) = 258
-    expect(computeBestOffer([item(645, 2), item(320)], [NTH]).discount).toBe(258);
+   });
+  it('NTH_PERCENT discounts only the cheapest eligible unit across the cart', () => {
+    // Units: 645, 645, 320 -> 40% of cheapest (320) = 128
+    expect(computeBestOffer([item(645, 2), item(320)], [NTH]).discount).toBe(128);
   });
 });
 
