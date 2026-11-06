@@ -102,6 +102,8 @@ export function CartProvider({ children }) {
     setCustomerChoiceGiftSelections((prev) => [
       ...prev,
       {
+      {
+        ...product,
         selectionId,
         id: String(product.id || product.productId || product.handle),
         productId: String(product.productId || product.id || product.handle),
