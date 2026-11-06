@@ -53,6 +53,9 @@ export function CartProvider({ children }) {
 
   // ── State ──────────────────────────────────────────────────────
   const [cartItems,     setCartItems]     = useState([]);
+  // Customer-selected gifts are separate from paid cart lines and legacy auto-gift variants.
+  const [customerChoiceGiftSelections, setCustomerChoiceGiftSelections] = useState([]);
+  const [customerChoiceGiftSelectionsLoaded, setCustomerChoiceGiftSelectionsLoaded] = useState(false);
   const [offerGiftSelections, setOfferGiftSelections] = useState({});
   const [offerGiftSelectionsLoaded, setOfferGiftSelectionsLoaded] = useState(false);
   const [isCartOpen,    setIsCartOpen]    = useState(false);
@@ -85,10 +88,37 @@ export function CartProvider({ children }) {
 
   const clearCart = useCallback(() => {
     setCartItems([]);
+    setCustomerChoiceGiftSelections([]);
     setOfferGiftSelections({});
     setAppliedPromo(null);
     localStorage.removeItem('wind_cart');
+    localStorage.removeItem('wind_customer_choice_gifts');
     localStorage.removeItem('wind_offer_gift_variants');
+  }, []);
+
+  const addCustomerChoiceGift = useCallback((product) => {
+    if (!product || !(product.id || product.productId || product.handle)) return;
+    const selectionId = globalThis.crypto?.randomUUID?.() || `gift-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    setCustomerChoiceGiftSelections((prev) => [
+      ...prev,
+      {
+        selectionId,
+        id: String(product.id || product.productId || product.handle),
+        productId: String(product.productId || product.id || product.handle),
+        handle: String(product.handle || product.productHandle || product.id || product.productId),
+        productHandle: String(product.productHandle || product.handle || product.id || product.productId),
+        title: product.title || product.name || "",
+        price: Number(product.price) || 0,
+        image: product.image || product.mainImage || product.images?.[0] || "",
+        selectedColor: product.selectedColor || "",
+        selectedSize: product.selectedSize || "",
+        qty: 1,
+      },
+    ]);
+  }, []);
+
+  const removeCustomerChoiceGift = useCallback((selectionId) => {
+    setCustomerChoiceGiftSelections((prev) => prev.filter((item) => item.selectionId !== selectionId));
   }, []);
 
   const addToCart = useCallback((product) => {
@@ -120,6 +150,21 @@ export function CartProvider({ children }) {
   const updateCartItemVariant = useCallback((originalItem, selection) => {
     // Automatically added gifts are not paid cart units. Save their variant
     // choice separately so editing a gift never removes one of the paid units.
+    if (originalItem?.__customerChoiceGiftSelectionId) {
+      const selectionId = String(originalItem.__customerChoiceGiftSelectionId);
+      setCustomerChoiceGiftSelections((prev) => prev.map((item) =>
+        item.selectionId === selectionId
+          ? {
+              ...item,
+              selectedSize: selection.selectedSize || "",
+              selectedColor: selection.selectedColor || "",
+              image: selection.image || item.image || "",
+            }
+          : item
+      ));
+      return;
+    }
+
     if (originalItem?.__autoOfferGiftKey) {
       const giftKey = String(originalItem.__autoOfferGiftKey);
       setOfferGiftSelections((prev) => ({
@@ -209,6 +254,19 @@ export function CartProvider({ children }) {
 
       return prev.map((item, index) => index === targetIndex ? updated : item);
     });
+  }, []);
+
+  const updateCustomerChoiceGiftVariant = useCallback((selectionId, selection) => {
+    setCustomerChoiceGiftSelections((prev) => prev.map((item) =>
+      item.selectionId === selectionId
+        ? {
+            ...item,
+            selectedSize: selection.selectedSize || "",
+            selectedColor: selection.selectedColor || "",
+            image: selection.image || item.image || "",
+          }
+        : item
+    ));
   }, []);
 
   const updateQty = useCallback((id, selectedSize, delta, selectedColor, bundleGroupId, cartIndex) => {
@@ -390,6 +448,29 @@ export function CartProvider({ children }) {
   }, []);
 
   useEffect(() => {
+    if (!customerChoiceGiftSelectionsLoaded) return;
+    try {
+      localStorage.setItem('wind_customer_choice_gifts', JSON.stringify(customerChoiceGiftSelections));
+    } catch {}
+  }, [customerChoiceGiftSelections, customerChoiceGiftSelectionsLoaded]);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('wind_customer_choice_gifts');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setCustomerChoiceGiftSelections(parsed.filter((item) => item && typeof item === "object" && item.selectionId));
+        }
+      }
+    } catch {
+      localStorage.removeItem('wind_customer_choice_gifts');
+    } finally {
+      setCustomerChoiceGiftSelectionsLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
     if (!offerGiftSelectionsLoaded) return;
     try {
       localStorage.setItem('wind_offer_gift_variants', JSON.stringify(offerGiftSelections));
@@ -411,6 +492,8 @@ export function CartProvider({ children }) {
   const contextValue = useMemo(() => ({
     cartItems,
     offerGiftSelections,
+    customerChoiceGiftSelections,
+    addCustomerChoiceGift, removeCustomerChoiceGift, updateCustomerChoiceGiftVariant,
     addToCart, removeFromCart, updateQty, updateCartItemVariant, clearCart,
     isCartOpen, toggleCart, openCart, closeCart,
     subtotal, discount, shipping, total,
@@ -422,7 +505,9 @@ export function CartProvider({ children }) {
     isFirstOrder, setIsFirstOrder,
     setSelectedGovernorate,
   }), [
-    cartItems, offerGiftSelections, addToCart, removeFromCart, updateQty, updateCartItemVariant, clearCart,
+    cartItems, offerGiftSelections, customerChoiceGiftSelections,
+    addCustomerChoiceGift, removeCustomerChoiceGift, updateCustomerChoiceGiftVariant,
+    addToCart, removeFromCart, updateQty, updateCartItemVariant, clearCart,
     isCartOpen, toggleCart, openCart, closeCart,
     subtotal, discount, shipping, total,
     discountSource, appliedOffer, appliedOffers, offers, offerBenefits, freeShippingRule,
