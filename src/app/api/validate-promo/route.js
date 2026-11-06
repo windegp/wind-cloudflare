@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase';
-import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore/lite';
+import { collection, doc, getDoc, getDocs, limit, query, where } from 'firebase/firestore/lite';
 
 export const dynamic = 'force-dynamic';
 
