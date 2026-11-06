@@ -16,7 +16,7 @@ const BXGY = {
   config: { buyQty: 3, getQty: 1 }, productScope: 'all', priority: 1,
 };
 const NTH = {
-  id: 'nth', name: '٤٠٪ على القطعة التانية', active: true, type: 'nth_percent',
+  id: 'nth', name: '٤٠٪ على أرخص قطعة عند شراء قطعتين', active: true, type: 'nth_percent',
   config: { nth: 2, percent: 40 }, productScope: 'all', priority: 2,
 };
 const OFFERS = [BXGY, NTH];
@@ -25,7 +25,7 @@ describe('سيناريوهات "أفضل عرض يكسب"', () => {
   it('٦٤٥ + ٣٢٠ → ٤٠٪ على التانية = ١٢٨', () => {
     const r = computeBestOffer([item(645), item(320)], OFFERS);
     expect(r.discount).toBe(128);
-    expect(r.offer).toEqual({ id: 'nth', name: '٤٠٪ على القطعة التانية', type: 'nth_percent' });
+    expect(r.offer).toEqual({ id: 'nth', name: '٤٠٪ على أرخص قطعة عند شراء قطعتين', type: 'nth_percent' });
   });
   it('أقل من N قطع مؤهلة → لا خصم', () => {
     expect(computeOfferDiscount([item(645)], NTH)).toBe(0);
@@ -134,7 +134,7 @@ describe('سيناريوهات "أفضل عرض يكسب"', () => {
     expect(result.offerBenefits.lines[0].discountedUnits).toHaveLength(1);
     expect(result.offerBenefits.lines[0].discountedUnits[0].free).toBe(true);
   });
-  it('عرض ٤٠٪ على القطعة الثانية يمنح خصمًا على قطعة واحدة فقط عند أي كمية', () => {
+  it('عرض ٤٠٪ على أرخص قطعة يمنح خصمًا مرة واحدة عند أي كمية مؤهلة', () => {
     const offer = { ...NTH };
     for (const quantity of [2, 3, 4, 8]) {
       const result = computeBestOffer([item(645, quantity)], [offer]);
