@@ -34,7 +34,35 @@ describe('سيناريوهات "أفضل عرض يكسب"', () => {
     const r = computeBestOffer([item(645), item(590), item(320), item(270)], OFFERS);
     expect(r.discount).toBe(344);
     expect(r.offer.id).toBe('nth');
-    expect(r.candidates.map((c) => [c.id, c.discount])).toEqual([['nth', 344], ['bxgy', 270]]);
+    // Each priced line represents a different product, so 3+1 cannot combine them.
+    expect(r.candidates.map((c) => [c.id, c.discount])).toEqual([['nth', 344]]);
+  });
+  it('لا يجمع عرض القطعة المجانية كميات منتجات مختلفة', () => {
+    const cart = [item(645, 3, { id: 'A' }), item(590, 1, { id: 'B' })];
+    expect(computeOfferDiscount(cart, BXGY)).toBe(0);
+    expect(computeBestOffer(cart, [BXGY]).offer).toBeNull();
+  });
+  it('يمنح هدية مستقلة لكل منتج يحقق الشرط، مرة واحدة فقط لكل منتج', () => {
+    const cart = [
+      item(645, 6, { id: 'A' }),
+      item(320, 4, { id: 'B' }),
+      item(270, 3, { id: 'C' }),
+    ];
+    const result = computeBestOffer(cart, [BXGY]);
+    expect(result.discount).toBe(965); // هدية واحدة من A وهدية واحدة من B فقط
+    const gifts = result.offerBenefits.lines.flatMap((line) => line.discountedUnits);
+    expect(gifts).toHaveLength(2);
+    expect(gifts.every((unit) => unit.free)).toBe(true);
+    expect(result.offerBenefits.lines.map((line) => line.cartIndex)).toEqual([0, 1]);
+  });
+  it('يجمع نفس المنتج عبر أسطر ألوان أو مقاسات مختلفة', () => {
+    const cart = [
+      item(645, 2, { id: 'A', selectedColor: 'أسود' }),
+      item(645, 2, { id: 'A', selectedColor: 'أبيض' }),
+    ];
+    const result = computeBestOffer(cart, [BXGY]);
+    expect(result.discount).toBe(645);
+    expect(result.offerBenefits.lines.flatMap((line) => line.discountedUnits)).toHaveLength(1);
   });
   it('٤ × ٦٤٥ → اشتري ٣ وخد ١ (٦٤٥ أحسن من ٥١٦)', () => {
     const r = computeBestOffer([item(645, 4)], OFFERS);
