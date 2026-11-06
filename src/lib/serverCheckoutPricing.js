@@ -8,7 +8,7 @@ import {
   query,
   where,
 } from "firebase/firestore/lite";
-import { computeBestOffer, computeStackedOfferBenefits, isFreeShippingRuleEligible } from "@/lib/offerEngine";
+import { computeBestOffer, isFreeShippingRuleEligible } from "@/lib/offerEngine";
 import { FREE_SHIPPING_THRESHOLD, SHIPPING_COST } from "@/lib/constants";
 
 const MAX_CART_LINES = 50;
@@ -432,9 +432,8 @@ export async function createServerCheckoutQuote(input = {}) {
     promo && (promo.freeShipping || winner.source === "promo") ? promo : null;
   const appliedOffer = winner.source === "offer" ? offerResult.offer : null;
   const appliedOffers = winner.source === "offer" ? offerResult.appliedOffers : [];
-  const offerBenefits = winner.source === "offer"
-    ? computeStackedOfferBenefits(items, appliedOffers, now)
-    : null;
+  // Reuse the exact per-unit allocation selected by the shared offer engine.
+  const offerBenefits = winner.source === "offer" ? offerResult.offerBenefits : null;
 
   const benefitsByCartIndex = new Map(
     (offerBenefits?.lines || []).map((line) => [line.cartIndex, line])
