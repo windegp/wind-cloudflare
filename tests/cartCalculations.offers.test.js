@@ -121,9 +121,9 @@ describe('قسائم الشراء بكود خصم', () => {
 
 describe('سيناريوهات الجمعة البيضاء (سلة فعلية)', () => {
   const offers = [BXGY, NTH];
-  it('٤ قطع بأسعار مختلفة → ٣٤٤', () => {
+  it('٤ منتجات مختلفة → خصم ٤٠٪ مرة واحدة على القطعة الثانية (٢٣٦)', () => {
     const cart = [item(645), item(590), item(320), item(270)];
-    expect(calculateAllTotals(cart, null, null, false, offers)).toMatchObject({ subtotal: 1825, discount: 344, total: 1551 });
+    expect(calculateAllTotals(cart, null, null, false, offers)).toMatchObject({ subtotal: 1825, discount: 236, total: 1659 });
   });
   it('٤ × ٦٤٥ → قطعة مجانية', () => {
     expect(calculateAllTotals([item(645, 4)], null, null, false, offers)).toMatchObject({ subtotal: 2580, discount: 645, shipping: 70, total: 2005 });
@@ -131,14 +131,14 @@ describe('سيناريوهات الجمعة البيضاء (سلة فعلية)',
   it('يمنح قطعة مجانية واحدة لكل منتج مؤهل، ولا يكررها عند زيادة كمية المنتج نفسه', () => {
     const cart = [item(645, 6, { id: 'A' }), item(320, 4, { id: 'B' }), item(270, 3, { id: 'C' })];
     const result = calculateAllTotals(cart, null, null, false, [BXGY]);
-    expect(result).toMatchObject({ subtotal: 6650, discount: 965, discountSource: 'offer', total: 5755 });
+    expect(result).toMatchObject({ subtotal: 5960, discount: 965, discountSource: 'offer', total: 5065 });
     expect(result.offerBenefits.lines).toHaveLength(2);
     expect(result.offerBenefits.lines.flatMap((line) => line.discountedUnits)).toHaveLength(2);
   });
   it('لا يجمع 3 قطع من منتجات مختلفة لتفعيل عرض 3+1', () => {
     const cart = [item(645, 3, { id: 'A' }), item(320, 1, { id: 'B' })];
     const result = calculateAllTotals(cart, null, null, false, [BXGY]);
-    expect(result).toMatchObject({ discount: 0, discountSource: 'none', total: 2150 });
+    expect(result).toMatchObject({ discount: 0, discountSource: 'none', total: 2325 });
   });
   it('من ٤ إلى ٨ قطع: يظل عرض ٣+١ بمنحة مجانية واحدة فقط للمنتج نفسه', () => {
     for (const quantity of [4, 5, 6, 8]) {
