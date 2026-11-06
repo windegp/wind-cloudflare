@@ -1,4 +1,4 @@
-import { cairoDateString, isOfferLive } from "@/lib/offerDates";
+import { isOfferLive } from "@/lib/offerDates";
 import { computeCustomerChoiceGiftOffer } from "@/lib/customerChoiceGiftOffer";
 export { cairoDateString, isOfferLive } from "@/lib/offerDates";
 
