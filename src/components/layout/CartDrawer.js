@@ -301,7 +301,7 @@ export default function CartDrawer() {
                 <div>
                   <h2 className="font-light text-[#1A1A1A] text-base leading-tight">حقيبة التسوق</h2>
                   <p className="text-[11px] text-gray-500 font-normal">
-                    {cartItems.length === 0 ? 'لا توجد منتجات' : `${cartItems.length} منتجات`}
+                    {cartDisplayRows.length === 0 ? 'لا توجد منتجات' : `${cartDisplayRows.length} منتجات`}
                   </p>
                 </div>
               </div>
