@@ -112,8 +112,9 @@ function expandUnits(items) {
  * في كل مجموعة كاملة، آخر benefitCount قطع (الأرخص) هي اللي بتاخد الميزة.
  * بترجع مجموع الميزة: factor = 1 (مجاناً) أو percent/100.
  */
-function sumTieredBenefit(units, groupSize, benefitCount, factor) {
-  const groups = Math.floor(units.length / groupSize);
+function sumTieredBenefit(units, groupSize, benefitCount, factor, maxUsesPerOrder = Infinity) {
+  const availableGroups = Math.floor(units.length / groupSize);
+  const groups = Math.min(availableGroups, maxUsesPerOrder);
   let total = 0;
   for (let g = 0; g < groups; g++) {
     const start = g * groupSize;
@@ -127,6 +128,19 @@ function sumTieredBenefit(units, groupSize, benefitCount, factor) {
 function toInt(value) {
   const n = Number(value);
   return Number.isInteger(n) ? n : NaN;
+}
+
+/**
+ * 0 (or a missing legacy value) means unlimited uses per order.
+ * A positive integer caps complete qualifying groups. Invalid values disable
+ * the tiered benefit instead of silently granting an unlimited discount.
+ */
+function getMaxUsesPerOrder(config) {
+  const value = config?.maxUsesPerOrder;
+  if (value === undefined || value === null || value === "") return Infinity;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0) return null;
+  return parsed === 0 ? Infinity : parsed;
 }
 
 function toPercent(value) {
@@ -156,15 +170,17 @@ export function computeOfferDiscount(cartItems, offer) {
     case OFFER_TYPES.BUY_X_GET_Y: {
       const buy = toInt(cfg.buyQty);
       const get = toInt(cfg.getQty);
-      if (!(buy >= 1) || !(get >= 1)) return 0;
-      raw = sumTieredBenefit(expandUnits(eligible), buy + get, get, 1);
+      const maxUses = getMaxUsesPerOrder(cfg);
+      if (!(buy >= 1) || !(get >= 1) || maxUses === null) return 0;
+      raw = sumTieredBenefit(expandUnits(eligible), buy + get, get, 1, maxUses);
       break;
     }
     case OFFER_TYPES.NTH_PERCENT: {
       const nth = toInt(cfg.nth);
       const pct = toPercent(cfg.percent);
-      if (!(nth >= 2) || Number.isNaN(pct)) return 0;
-      raw = sumTieredBenefit(expandUnits(eligible), nth, 1, pct / 100);
+      const maxUses = getMaxUsesPerOrder(cfg);
+      if (!(nth >= 2) || Number.isNaN(pct) || maxUses === null) return 0;
+      raw = sumTieredBenefit(expandUnits(eligible), nth, 1, pct / 100, maxUses);
       break;
     }
     case OFFER_TYPES.CART_PERCENT: {
@@ -197,38 +213,58 @@ export function computeOfferDiscount(cartItems, offer) {
 }
 
 /**
- * يختار أفضل مجموعة عروض: عرض أساسي + العروض التي اختار الأدمن دمجها معه.
- * كل عرض إضافي يُحسب على السعر المتبقي للوحدة بعد العروض السابقة.
+ * يقيّم كل عرض منفردًا ثم يختار أعلى توفير للعميل.
+ * لا يوجد دمج بين عرضين تلقائيين، حتى لو كانت مستندات قديمة تحتوي
+ * على stackWithOfferIds. عند التعادل: الأولوية الأقل ثم id أبجديًا.
  */
 export function computeBestOffer(cartItems, offers, now = new Date()) {
   const none = { discount: 0, offer: null, appliedOffers: [], offerBenefits: null, candidates: [], freeShipping: false };
   if (!Array.isArray(cartItems) || cartItems.length === 0 || !Array.isArray(offers) || offers.length === 0) return none;
-  const liveOffers = offers.filter((offer) => offer && offer.type !== OFFER_TYPES.FREE_SHIPPING && isOfferLive(offer, now));
+
+  const liveOffers = offers.filter((offer) =>
+    offer &&
+    offer.type !== OFFER_TYPES.FREE_SHIPPING &&
+    isOfferLive(offer, now)
+  );
   const candidates = [];
-  for (const primary of liveOffers) {
-    if (computeOfferBenefits(cartItems, primary, now).discount <= 0) continue;
-    const allowedIds = new Set(Array.isArray(primary.stackWithOfferIds) ? primary.stackWithOfferIds.map(String) : []);
-    const additionalOffers = liveOffers
-      .filter((offer) => String(offer.id) !== String(primary.id) && allowedIds.has(String(offer.id)))
-      .sort((a, b) =>
-        (Number.isFinite(Number(a.priority)) ? Number(a.priority) : DEFAULT_PRIORITY) - (Number.isFinite(Number(b.priority)) ? Number(b.priority) : DEFAULT_PRIORITY) ||
-        String(a.id).localeCompare(String(b.id))
-      );
-    const benefits = computeStackedOfferBenefits(cartItems, [primary, ...additionalOffers], now);
-    if (benefits.discount <= 0 || !benefits.offers.some((offer) => String(offer.id) === String(primary.id))) continue;
-    candidates.push({
-      id: String(primary.id ?? ''), name: primary.name || '', type: primary.type,
+
+  for (const offer of liveOffers) {
+    const benefits = computeOfferBenefits(cartItems, offer, now);
+    if (benefits.discount <= 0) continue;
+
+    const selectedOffer = {
+      id: String(offer.id ?? ''),
+      name: offer.name || '',
+      type: offer.type,
+      config: offer.config || {},
       discount: benefits.discount,
-      priority: Number.isFinite(Number(primary.priority)) ? Number(primary.priority) : DEFAULT_PRIORITY,
-      appliedOffers: benefits.offers, offerBenefits: benefits,
+    };
+    const offerBenefits = {
+      ...benefits,
+      offerIds: [selectedOffer.id],
+      offers: [selectedOffer],
+    };
+
+    candidates.push({
+      id: selectedOffer.id,
+      name: selectedOffer.name,
+      type: selectedOffer.type,
+      discount: benefits.discount,
+      priority: Number.isFinite(Number(offer.priority)) ? Number(offer.priority) : DEFAULT_PRIORITY,
+      appliedOffers: [selectedOffer],
+      offerBenefits,
     });
   }
+
   candidates.sort((a, b) =>
-    b.discount - a.discount || a.priority - b.priority ||
+    b.discount - a.discount ||
+    a.priority - b.priority ||
     (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
   );
+
   const best = candidates[0];
   if (!best) return none;
+
   return {
     discount: best.discount,
     offer: { id: best.id, name: best.name, type: best.type },
@@ -282,8 +318,10 @@ export function computeOfferBenefits(cartItems, offer, now = new Date()) {
       const buy = toInt(cfg.buyQty);
       const get = toInt(cfg.getQty);
       if (!(buy >= 1) || !(get >= 1)) break;
+      const maxUses = getMaxUsesPerOrder(cfg);
+      if (maxUses === null) break;
       const groupSize = buy + get;
-      const groups = Math.floor(ordered.length / groupSize);
+      const groups = Math.min(Math.floor(ordered.length / groupSize), maxUses);
       for (let group = 0; group < groups; group += 1) {
         const start = group * groupSize;
         for (let offset = groupSize - get; offset < groupSize; offset += 1) {
@@ -297,7 +335,9 @@ export function computeOfferBenefits(cartItems, offer, now = new Date()) {
       const nth = toInt(cfg.nth);
       const percent = toPercent(cfg.percent);
       if (!(nth >= 2) || Number.isNaN(percent)) break;
-      const groups = Math.floor(ordered.length / nth);
+      const maxUses = getMaxUsesPerOrder(cfg);
+      if (maxUses === null) break;
+      const groups = Math.min(Math.floor(ordered.length / nth), maxUses);
       for (let group = 0; group < groups; group += 1) {
         const unit = ordered[(group * nth) + nth - 1];
         unit.rawDiscount = unit.price * percent / 100;
@@ -410,73 +450,20 @@ export function isFreeShippingRuleEligible(cartItems, rule) {
   return false;
 }
 
-/** يحسب العروض المسموح بدمجها بالتتابع على السعر المتبقي لكل وحدة. */
+/**
+ * Wrapper للتوافق مع أي استدعاء قديم: يعيد بيانات أفضل عرض منفرد فقط.
+ * الاسم تاريخي؛ الدمج بين عروض التسوق التلقائية متوقف عمدًا.
+ */
 export function computeStackedOfferBenefits(cartItems, offers, now = new Date()) {
-  const selectedOffers = Array.isArray(offers)
-    ? offers.filter((offer) => offer && offer.type !== OFFER_TYPES.FREE_SHIPPING && isOfferLive(offer, now))
-    : [];
-  const units = [];
-  (Array.isArray(cartItems) ? cartItems : []).forEach((item, cartIndex) => {
-    const quantity = Math.min(Math.max(0, parseInt(item.qty) || 0), MAX_UNITS_PER_ITEM);
-    const originalPrice = Math.max(0, parseFloat(item.price) || 0);
-    for (let unitIndex = 0; unitIndex < quantity; unitIndex += 1) {
-      units.push({ item, cartIndex, unitIndex, originalPrice, currentPrice: originalPrice, totalDiscount: 0, benefits: [] });
-    }
-  });
-  const appliedOffers = [];
-  for (const offer of selectedOffers) {
-    if (!units.length) break;
-    const workingCart = units.map((unit) => ({ ...unit.item, price: unit.currentPrice, qty: 1 }));
-    const step = computeOfferBenefits(workingCart, offer, now);
-    if (step.discount <= 0) continue;
-    let appliedThisOffer = 0;
-    for (const line of step.lines) {
-      for (const benefit of line.discountedUnits) {
-        const unit = units[line.cartIndex];
-        if (!unit) continue;
-        const beforeCents = Math.max(0, Math.round(unit.currentPrice * 100));
-        const discountCents = Math.min(beforeCents, Math.max(0, Math.round(benefit.discount * 100)));
-        if (discountCents <= 0) continue;
-        const discount = discountCents / 100;
-        const finalPrice = Math.max(0, (beforeCents - discountCents) / 100);
-        unit.currentPrice = finalPrice;
-        unit.totalDiscount = Math.round((unit.totalDiscount + discount) * 100) / 100;
-        unit.benefits.push({
-          offerId: String(offer.id ?? ''), offerName: offer.name || '', offerType: offer.type,
-          config: offer.config || {}, originalPrice: beforeCents / 100, discount, finalPrice, free: finalPrice <= 0,
-        });
-        appliedThisOffer += discount;
-      }
-    }
-    if (appliedThisOffer > 0) {
-      appliedOffers.push({
-        id: String(offer.id ?? ''), name: offer.name || '', type: offer.type,
-        config: offer.config || {}, discount: Math.round(appliedThisOffer * 100) / 100,
-      });
-    }
-  }
-  const grouped = new Map();
-  units.forEach((unit) => {
-    if (unit.totalDiscount <= 0) return;
-    if (!grouped.has(unit.cartIndex)) grouped.set(unit.cartIndex, []);
-    grouped.get(unit.cartIndex).push({
-      unitIndex: unit.unitIndex, originalPrice: unit.originalPrice, discount: unit.totalDiscount,
-      finalPrice: unit.currentPrice, free: unit.currentPrice <= 0, benefits: unit.benefits,
-    });
-  });
-  const lines = [];
-  for (const [cartIndex, discountedUnits] of grouped.entries()) {
-    const item = cartItems[cartIndex];
-    lines.push({
-      cartIndex, itemId: String(item.id ?? item.productId ?? item.handle ?? ''),
-      regularQty: Math.max(0, (parseInt(item.qty) || 0) - discountedUnits.length), discountedUnits,
-    });
-  }
-  const discount = Math.round(units.reduce((sum, unit) => sum + unit.totalDiscount, 0) * 100) / 100;
-  return {
-    offerId: appliedOffers[0]?.id || null, offerIds: appliedOffers.map((offer) => offer.id),
-    name: appliedOffers.map((offer) => offer.name).filter(Boolean).join(" + "),
-    type: appliedOffers[0]?.type || null, config: appliedOffers[0]?.config || {},
-    offers: appliedOffers, discount, lines,
+  const result = computeBestOffer(cartItems, offers, now);
+  return result.offerBenefits || {
+    offerId: null,
+    offerIds: [],
+    name: "",
+    type: null,
+    config: {},
+    offers: [],
+    discount: 0,
+    lines: [],
   };
 }
