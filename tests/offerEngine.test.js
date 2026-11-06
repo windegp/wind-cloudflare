@@ -119,11 +119,11 @@ describe('سيناريوهات "أفضل عرض يكسب"', () => {
     expect(result.offer.id).toBe("nth");
     expect(result.appliedOffers.map((offer) => offer.id)).toEqual(["nth"]);
     expect(result.offerBenefits.offers.map((offer) => offer.id)).toEqual(["nth"]);
-    expect(result.discount).toBe(236);
+    expect(result.discount).toBe(108);
 
     const legacyHelperResult = computeStackedOfferBenefits(cart, [legacyStackedOffer, BXGY]);
     expect(legacyHelperResult.offers.map((offer) => offer.id)).toEqual(["nth"]);
-    expect(legacyHelperResult.discount).toBe(236);
+    expect(legacyHelperResult.discount).toBe(108);
   });
   it.each([4, 5, 6, 8, 12])('من ٤ إلى %i قطعة: يظل عرض ٣+١ ثابتًا بمنفعة واحدة', (quantity) => {
     const result = computeBestOffer([item(645, quantity)], OFFERS);
@@ -359,7 +359,7 @@ describe('تفصيل القطع المستفيدة من العرض', () => {
     ]);
   });
 
-  it('يحدد القطعة الثانية بخصم 40% ويترك الأولى بسعرها', async () => {
+  it('يحدد أرخص قطعة بخصم 40% ويترك الأغلى بسعره', async () => {
     const { computeOfferBenefits } = await import('@/lib/offerEngine');
     const result = computeOfferBenefits([item(645), item(320)], NTH);
     expect(result.discount).toBe(128);
