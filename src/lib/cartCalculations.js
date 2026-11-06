@@ -126,7 +126,7 @@ function calculateLegacyPromoDiscount(cartItems, promoResult, subtotal) {
  * القاعدة: أفضل خصم واحد للعميل بين (الكود / خصم الطلب الأول) و(العروض).
  * العرض لازم يكون أعلى فعلاً عشان يكسب، وعند التعادل الخصم القديم هو اللي بيتطبق.
  */
-export function calculateAllTotals(cartItems, promoResult = null, shippingSettings = null, isFirstOrder = false, offers = null, freeShippingRule = null) {
+export function calculateAllTotals(cartItems, promoResult = null, shippingSettings = null, isFirstOrder = false, offers = null, freeShippingRule = null, customerChoiceGiftSelections = []) {
   // The purchased-items subtotal excludes any automatically added free gifts.
   const cartSubtotal = calculateSubtotal(cartItems);
 
@@ -163,7 +163,7 @@ export function calculateAllTotals(cartItems, promoResult = null, shippingSettin
       ? Math.round((cartSubtotal * firstOrderPercent) / 100)
       : 0;
 
-  const offerResult = computeBestOffer(cartItems, offers);
+  const offerResult = computeBestOffer(cartItems, offers, new Date(), customerChoiceGiftSelections);
   const candidates = [
     { source: 'promo', discount: promoDiscount, rank: 1 },
     { source: 'first_order', discount: firstOrderDiscount, rank: 2 },
@@ -188,7 +188,14 @@ export function calculateAllTotals(cartItems, promoResult = null, shippingSettin
           0
         )
       : 0;
-  const subtotal = cartSubtotal + autoGiftSubtotal;
+  const customerChoiceGiftSubtotal =
+    discountSource === 'offer' && offerResult.offer?.type === 'buy_x_get_y_select_gift'
+      ? (offerResult.offerBenefits?.giftLines || []).reduce(
+          (sum, line) => sum + (Number(line.item?.price) || 0) * (Math.max(0, Number(line.regularQty) || 0) + (line.discountedUnits?.length || 0)),
+          0
+        )
+      : 0;
+  const subtotal = cartSubtotal + autoGiftSubtotal + customerChoiceGiftSubtotal;
   const discount = Math.min(subtotal, Math.max(0, Math.round(winner.discount)));
 
   // شحن المنتجات المحددة مستقل عن الحد العام الذي يُحسب بعد الخصم النقدي.
@@ -206,6 +213,7 @@ export function calculateAllTotals(cartItems, promoResult = null, shippingSettin
     appliedOffer,
     appliedOffers: discountSource === 'offer' ? offerResult.appliedOffers : [],
     offerBenefits: discountSource === 'offer' ? offerResult.offerBenefits : null,
+    customerChoiceGiftStatus: offerResult.customerChoiceGiftStatus || null,
     freeShippingByRule,
   };
 }
