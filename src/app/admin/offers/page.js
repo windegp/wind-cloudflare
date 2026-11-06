@@ -551,8 +551,8 @@ export default function AdminOffersPage() {
             <Tag size={22} className="text-[#008060]" />
           </span>
           <div>
-            <h1 className="text-2xl font-black text-gray-900">العروض التلقائية</h1>
-            <p className="text-xs text-gray-500 mt-1">العروض التي يحسبها المتجر تلقائيًا عند وجود منتجات مؤهلة في السلة.</p>
+            <h1 className="text-2xl font-black text-gray-900">العروض والقسائم</h1>
+            <p className="text-xs text-gray-500 mt-1">عروض تلقائية وقسائم شراء يفعّلها العميل بكود خصم.</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -659,8 +659,8 @@ export default function AdminOffersPage() {
       <section className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
         <div className="p-4 sm:p-5 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
           <div>
-            <h2 className="font-black text-gray-900">العروض المحفوظة</h2>
-            <p className="text-[11px] text-gray-500 mt-1">يختار المتجر عرضًا تلقائيًا واحدًا فقط من العروض المؤهلة، وهو الذي يحقق أكبر توفير للعميل. لا يتم دمج عرضين تلقائيين في الطلب نفسه.</p>
+            <h2 className="font-black text-gray-900">العروض والقسائم المحفوظة</h2>
+            <p className="text-[11px] text-gray-500 mt-1">يُطبّق خصم نقدي واحد فقط: أكبر خصم بين القسيمة المدخلة والعرض التلقائي وخصم الطلب الأول، دون جمع الخصومات.</p>
           </div>
           <div className="relative w-full sm:w-64">
             <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -724,7 +724,8 @@ export default function AdminOffersPage() {
         <p>• في عرض القطعة رقم N، يُطبّق الخصم على القطعة المستحقة في أول مجموعة مؤهلة فقط داخل الطلب.</p>
         <p>• قيمة «الحد الأدنى» تُقاس على مجموع المنتجات المؤهلة للعرض، وليس إجمالي الطلب.</p>
         <p>• عند تحقق أكثر من عرض، يختار النظام عرضًا تلقائيًا واحدًا فقط: الأعلى توفيرًا بالقيمة الفعلية للعميل.</p>
-        <p>• يمكن تحديد أقصى مرات تكرار عروض المجموعات داخل الطلب؛ الصفر يعني بلا حد، والرقم 1 يعني تطبيق الميزة على مجموعة واحدة فقط.</p>
+        <p>• عروض المجموعات تمنح فائدتها مرة واحدة فقط في الطلب مهما زادت الكمية.</p>
+        <p>• القسيمة لا تعمل تلقائيًا؛ يدخل العميل كودها في السلة، وتنافس العرض التلقائي وخصم الطلب الأول، ويُطبّق الخصم النقدي الأكبر فقط.</p>
         <p>• الشحن المجاني له إعداد مستقل، ويمكنه العمل مع أي عرض دون دمج خصومات إضافية.</p>
       </section>
 
