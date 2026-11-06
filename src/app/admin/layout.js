@@ -48,7 +48,7 @@ export default function AdminLayout({ children }) {
     { name: 'الصفحات', path: '/admin/pages', icon: <FileText size={20}/> },
     { name: 'الإعدادات', path: '/admin/settings', icon: <Settings size={20}/> },
     { name: 'أكواد الخصم والشحن', path: '/admin/promotions', icon: <Tag size={20}/> },
-    { name: 'العروض التلقائية', path: '/admin/offers', icon: <Tag size={20}/> },
+    { name: 'العروض والقسائم', path: '/admin/offers', icon: <Tag size={20}/> },
     { name: 'المخزون', path: '/admin/inventory', icon: <Package size={20}/> },
   ];
 
