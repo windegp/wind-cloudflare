@@ -63,8 +63,7 @@ export function calculateTotal(subtotal, shipping, discount = 0) {
  * The initial validation response is not a permanent discount snapshot:
  * percent and fixed codes must follow cart quantity/product changes.
  *
- * Keep the same calculation semantics as /api/validate-promo in this step.
- * Server checkout pricing alignment is handled separately.
+ * Keep the same calculation semantics as /api/validate-promo and server checkout pricing.
  */
 function calculateLegacyPromoDiscount(cartItems, promoResult, subtotal) {
   const storedDiscount = Math.max(0, Number(promoResult?.discountAmount) || 0);
