@@ -102,7 +102,7 @@ describe("customer-choice multi-product gift offer", () => {
       [product("G", 200), product("B", 300)],
       offer({ maxDiscount: 1 })
     );
-    expect(result.discount).toBe(400);
+    expect(result.discount).toBe(500);
     expect(result.discountedUnits).toHaveLength(2);
     expect(result.discountedUnits.every((unit) => unit.free && unit.finalPrice === 0)).toBe(true);
   });
