@@ -22,10 +22,13 @@ export async function POST(req) {
     const db = getDb();
 
     // ── 1. جلب الكود من Firestore ──────────────────────────────
+    const promoSnap = await getDoc(doc(db, 'promoCodes', normalizedCode));
     const host = new URL(req.url).hostname.toLowerCase();
     const productionHosts = ['windeg.com', 'www.windeg.com', 'windeg.pages.dev'];
     const environment = productionHosts.includes(host) ? 'production' : 'preview';
-    const offersSnap = await getDocs(query(collection(db, 'offers'), where('couponCode', '==', normalizedCode)));
+    const offersSnap = promoSnap.exists()
+      ? { docs: [] }
+      : await getDocs(query(collection(db, 'offers'), where('couponCode', '==', normalizedCode)));
     const coupon = offersSnap.docs
       .map((item) => ({ id: item.id, ...item.data() }))
       .find((offer) =>
@@ -63,8 +66,6 @@ export async function POST(req) {
         message: 'تم تفعيل قسيمة ' + normalizedCode + ' بخصم ' + discountAmount + ' ج.م 🎉',
       });
     }
-
-    const promoSnap = await getDoc(doc(db, 'promoCodes', normalizedCode));
 
     if (!promoSnap.exists()) {
       return NextResponse.json({ valid: false, message: 'عذراً، هذا الكود غير صالح' });
