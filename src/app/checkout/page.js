@@ -194,7 +194,9 @@ export default function CheckoutPage() {
   // اسم سطر الخصم في ملخص الطلب
   const discountLabel = discountSource === 'offer'
     ? `عرض: ${appliedOffer?.name || 'خصم'}`
-    : (appliedPromo?.type && appliedPromo.type !== 'free_shipping' ? 'خصم الكود' : 'خصم الطلب الأول 🎉');
+    : appliedPromo?.type === 'coupon_fixed'
+      ? `قسيمة شراء: ${appliedPromo.code || ''}`
+      : (appliedPromo?.type && appliedPromo.type !== 'free_shipping' ? 'خصم الكود' : 'خصم الطلب الأول 🎉');
 
   // بيانات المنتجات التي تُحفظ داخل الطلب دون أي استعلامات إضافية
   const orderLineItems = cartItems.map(item => {
@@ -653,7 +655,7 @@ export default function CheckoutPage() {
       "Discount Label": quote.discountSource === "offer"
         ? `عرض: ${quote.appliedOffer?.name || ""}`.trim()
         : quote.discountSource === "promo"
-          ? `كود الخصم ${quote.appliedPromo?.code || ""}`.trim()
+          ? (quote.appliedPromo?.type === "coupon_fixed" ? `قسيمة شراء ${quote.appliedPromo?.code || ""}`.trim() : `كود الخصم ${quote.appliedPromo?.code || ""}`.trim())
           : quote.discountSource === "first_order"
             ? "خصم الطلب الأول"
             : quote.appliedPromo?.freeShipping
