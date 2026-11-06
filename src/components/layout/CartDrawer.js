@@ -8,7 +8,7 @@ import { doc, getDoc, collection, query, where, getDocs, documentId } from "fire
 import QuickViewModal from "@/components/QuickViewModal"; 
 
 export default function CartDrawer() {
-  const { cartItems, isCartOpen, toggleCart, removeFromCart, updateQty, updateCartItemVariant, subtotal, discount, shipping, offerBenefits } = useCart();
+  const { cartItems, offerGiftSelections, isCartOpen, toggleCart, removeFromCart, updateQty, updateCartItemVariant, subtotal, discount, shipping, offerBenefits } = useCart();
   
     const [suggestedProducts, setSuggestedProducts] = useState([]);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
@@ -152,11 +152,16 @@ export default function CartDrawer() {
     setQuickViewProduct(product);
   };
 
-  const openCartItemEditor = (item, cartIndex, isBenefitUnit = false) => {
-    // تعديل وحدة العرض يفصلها عن باقي الكمية؛ وتعديل السطر العادي يحدّث نفس السطر فقط.
+  const openCartItemEditor = (item, cartIndex, benefit = null) => {
+    // Editing an automatically added gift only saves its own color/size selection.
+    // Editing a discounted paid unit keeps the existing split-unit behavior.
     setEditingCartItem({
       ...item,
-      ...(isBenefitUnit ? { __offerBenefitUnit: true, __cartIndex: cartIndex } : {}),
+      ...(benefit?.autoAdded
+        ? { __autoOfferGiftKey: benefit.giftKey }
+        : benefit
+          ? { __offerBenefitUnit: true, __cartIndex: cartIndex }
+          : {}),
     });
     setQuickViewProduct(item);
   };
@@ -193,7 +198,28 @@ export default function CartDrawer() {
       rows.push({ key: `regular-${cartIndex}`, item, qty: benefitLine.regularQty, benefit: null, cartIndex });
     }
     benefitLine.discountedUnits.forEach((benefit) => {
-      rows.push({ key: `benefit-${cartIndex}-${benefit.unitIndex}`, item, qty: 1, benefit, cartIndex });
+      const giftSelection = benefit.autoAdded
+        ? (offerGiftSelections?.[benefit.giftKey] || {})
+        : {};
+      const displayItem = benefit.autoAdded
+        ? {
+            ...item,
+            selectedColor: giftSelection.selectedColor ?? item.selectedColor,
+            selectedSize: giftSelection.selectedSize ?? item.selectedSize,
+            image: giftSelection.image || item.image,
+            price: benefit.finalPrice,
+            compareAtPrice: benefit.originalPrice,
+            __autoOfferGiftKey: benefit.giftKey,
+          }
+        : item;
+      rows.push({
+        key: `benefit-${cartIndex}-${benefit.unitIndex}`,
+        item: displayItem,
+        qty: 1,
+        benefit,
+        cartIndex,
+        isAutoAddedGift: benefit.autoAdded === true,
+      });
     });
     return rows;
   });
@@ -268,14 +294,14 @@ export default function CartDrawer() {
                   </div>
                   {cartItems.length > 0 && (
                     <span className="absolute -top-1.5 -right-1.5 bg-[#1A1A1A] text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-sm">
-                      {cartItems.reduce((acc, i) => acc + i.qty, 0)}
+                      {cartDisplayRows.reduce((acc, row) => acc + row.qty, 0)}
                     </span>
                   )}
                 </div>
                 <div>
                   <h2 className="font-light text-[#1A1A1A] text-base leading-tight">حقيبة التسوق</h2>
                   <p className="text-[11px] text-gray-500 font-normal">
-                    {cartItems.length === 0 ? 'لا توجد منتجات' : `${cartItems.length} منتجات`}
+                    {cartDisplayRows.length === 0 ? 'لا توجد منتجات' : `${cartDisplayRows.length} منتجات`}
                   </p>
                 </div>
               </div>
@@ -323,29 +349,35 @@ export default function CartDrawer() {
                           )}
                         </div>
                         <div className="flex items-center justify-between mt-3">
-                          <div className="flex items-center border border-gray-200 rounded-md bg-white h-8">
-                            <button onClick={() => updateQty(item.id, item.selectedSize, 1, item.selectedColor, item.bundleGroupId || "", row.cartIndex)} className="w-8 h-full flex items-center justify-center text-gray-500 hover:text-black">+</button>
-                            <span className="w-8 text-center text-sm font-bold text-[#1A1A1A]">{row.qty}</span>
-                            <button onClick={() => updateQty(item.id, item.selectedSize, -1, item.selectedColor, item.bundleGroupId || "", row.cartIndex)} className="w-8 h-full flex items-center justify-center text-gray-500 hover:text-black">−</button>
-                          </div>
+{row.isAutoAddedGift ? (
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-2 py-1">تُضاف تلقائيًا</span>
+                          ) : (
+                            <div className="flex items-center border border-gray-200 rounded-md bg-white h-8">
+                              <button onClick={() => updateQty(item.id, item.selectedSize, 1, item.selectedColor, item.bundleGroupId || "", row.cartIndex)} className="w-8 h-full flex items-center justify-center text-gray-500 hover:text-black">+</button>
+                              <span className="w-8 text-center text-sm font-bold text-[#1A1A1A]">{row.qty}</span>
+                              <button onClick={() => updateQty(item.id, item.selectedSize, -1, item.selectedColor, item.bundleGroupId || "", row.cartIndex)} className="w-8 h-full flex items-center justify-center text-gray-500 hover:text-black">−</button>
+                            </div>
+                          )}
                           <div className="flex items-center gap-3">
                             <button
-                              onClick={() => openCartItemEditor(item, row.cartIndex, Boolean(benefit))}
+                              onClick={() => openCartItemEditor(item, row.cartIndex, benefit)}
                               title="تعديل اللون والمقاس"
                               aria-label="تعديل اللون والمقاس"
                               className="text-gray-400 hover:text-[#1A1A1A] flex items-center"
                             >
                               <Edit2 size={15} />
                             </button>
-                            <button
-                              onClick={() => benefit
-                                ? updateQty(item.id, item.selectedSize, -1, item.selectedColor, item.bundleGroupId || "", row.cartIndex)
-                                : removeFromCart(item.id, item.selectedSize, item.selectedColor, item.bundleGroupId || "", row.cartIndex)}
-                              className="text-gray-400 hover:text-red-500 flex items-center gap-1.5 group"
-                            >
-                              <span className="text-sm font-medium underline decoration-gray-300 group-hover:decoration-red-500 underline-offset-4">إزالة</span>
-                              <Trash2 size={15} />
-                            </button>
+                            {!row.isAutoAddedGift && (
+                              <button
+                                onClick={() => benefit
+                                  ? updateQty(item.id, item.selectedSize, -1, item.selectedColor, item.bundleGroupId || "", row.cartIndex)
+                                  : removeFromCart(item.id, item.selectedSize, item.selectedColor, item.bundleGroupId || "", row.cartIndex)}
+                                className="text-gray-400 hover:text-red-500 flex items-center gap-1.5 group"
+                              >
+                                <span className="text-sm font-medium underline decoration-gray-300 group-hover:decoration-red-500 underline-offset-4">إزالة</span>
+                                <Trash2 size={15} />
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>

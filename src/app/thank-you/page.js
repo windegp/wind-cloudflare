@@ -57,6 +57,37 @@ function SuccessContent() {
       clearCart();
       localStorage.removeItem('pendingOrder');
 
+      // Include server-quoted automatic gifts as zero-value items in catalog
+      // tracking, while keeping the purchase revenue equal to the amount paid.
+      const autoGiftLineItems = (parsed.lineItems || []).filter(
+        (item) => item.isAutoAddedOfferGift === true
+      );
+      const purchaseContentIds = [
+        ...(parsed.cartItems || [])
+          .filter(it => it.handle || it.id)
+          .map(it => getCatalogId(it.handle || it.id, it.selectedColor)),
+        ...autoGiftLineItems
+          .filter(item => item.productHandle || item.productId)
+          .map(item => getCatalogId(item.productHandle || item.productId, item.selectedColor)),
+      ];
+      const purchaseNumItems =
+        (parsed.cartItems || []).reduce((sum, item) => sum + (Number(item.qty) || 0), 0) +
+        autoGiftLineItems.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
+      const purchaseItems = [
+        ...(parsed.cartItems || []).map((item) => ({
+          id: item.handle || item.id || item.title,
+          title: item.title,
+          price: item.price,
+          qty: item.qty,
+        })),
+        ...autoGiftLineItems.map((item) => ({
+          id: item.productHandle || item.productId || item.productTitle,
+          title: item.productTitle || item.name,
+          price: item.price,
+          qty: Number(item.quantity) || 1,
+        })),
+      ];
+
       // ضع العلامة قبل fbTrack — حتى لو fbTrack فشل لا نُعيد الإرسال
       sessionStorage.setItem(purchaseGuardKey, '1');
 
@@ -64,13 +95,8 @@ function SuccessContent() {
         event_id: `Purchase-${parsed.orderId}`,   // ثابت → Meta تُلغي التكرار
         value: parsed.total || 0,
         currency: "EGP",
-        // 🔥 نفس getCatalogId المستخدَمة في الكتالوج و ProductView.js —
-        // it.selectedColor محفوظ فعلاً في cartItems الخام (من CartContext)،
-        // فنستخدمه لتوليد نفس g:id الخاص بلون هذا العنصر بالضبط.
-        content_ids: (parsed.cartItems || [])
-          .filter(it => it.handle || it.id)
-          .map(it => getCatalogId(it.handle || it.id, it.selectedColor)),
-        num_items: (parsed.cartItems || []).reduce((s, it) => s + it.qty, 0),
+        content_ids: purchaseContentIds,
+        num_items: purchaseNumItems,
         order_id: parsed.orderId || "",
         ...buildCheckoutMetaUserData(parsed.formData, {
           email: parsed.customerEmail,
@@ -82,26 +108,15 @@ function SuccessContent() {
       ttTrack("CompletePayment", {
         value: parsed.total || 0,
         currency: "EGP",
-        content_ids: (parsed.cartItems || [])
-          .filter(it => it.handle || it.id)
-          .map(it => getCatalogId(it.handle || it.id, it.selectedColor)),
-        num_items: (parsed.cartItems || []).reduce((s, it) => s + it.qty, 0),
+        content_ids: purchaseContentIds,
+        num_items: purchaseNumItems,
         order_id: parsed.orderId || "",
         ...buildTtUserData(parsed.formData, {
           email: parsed.customerEmail,
           phone: parsed.phone,
         }),
       });
-      gaPurchase(
-        parsed.orderId || "",
-        (parsed.cartItems || []).map(it => ({
-          id: it.handle || it.id || it.title,
-          title: it.title,
-          price: it.price,
-          qty: it.qty,
-        })),
-        parsed.total || 0
-      );
+      gaPurchase(parsed.orderId || "", purchaseItems, parsed.total || 0);
     })
     .catch(err => console.error("Error:", err));
   }, []);

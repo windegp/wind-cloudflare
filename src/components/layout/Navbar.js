@@ -12,7 +12,12 @@ import logo from '@/../public/logo.png';
 export default function Navbar() {
   const pathname = usePathname();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const { cartItems = [], toggleCart } = useCart() || {};
+  const { cartItems = [], offerBenefits, toggleCart } = useCart() || {};
+  const autoGiftCount = (offerBenefits?.lines || []).reduce(
+    (sum, line) => sum + line.discountedUnits.filter((unit) => unit.autoAdded === true).length,
+    0
+  );
+  const cartDisplayCount = cartItems.length + autoGiftCount;
   
   const { settings: activeSettings } = useSettings();
 
@@ -183,9 +188,9 @@ export default function Navbar() {
           <div className="flex items-center gap-6">
             <button onClick={toggleCart} className="relative group p-2 text-black/70 hover:text-[#1A1A1A] transition-all">
               <ShoppingBag size={24} strokeWidth={1.5} />
-              {cartItems?.length > 0 && (
+              {cartDisplayCount > 0 && (
                 <span className="absolute -top-1 -right-1 bg-[#1A1A1A] text-white text-[9px] font-black w-5 h-5 flex items-center justify-center rounded-full border-2 border-white">
-                  {cartItems.length}
+                  {cartDisplayCount}
                 </span>
               )}
             </button>

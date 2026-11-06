@@ -155,7 +155,7 @@ describe('قسائم الشراء بكود خصم', () => {
   it('العرض التلقائي يفوز إذا كان يوفر خصماً أكبر من القسيمة', () => {
     const largerCoupon = { ...coupon, value: 300, discountAmount: 300 };
     const result = calculateAllTotals([item(645, 4)], largerCoupon, null, false, [BXGY]);
-    expect(result).toMatchObject({ discount: 645, discountSource: 'offer', total: 2005 });
+    expect(result).toMatchObject({ subtotal: 3225, discount: 645, discountSource: 'offer', total: 2650 });
   });
 
   it('القسيمة لا تخصم أكثر من قيمة المنتجات المؤهلة', () => {
@@ -186,33 +186,54 @@ describe('سيناريوهات الجمعة البيضاء (سلة فعلية)',
       discountedUnits: [{ originalPrice: 270, discount: 108, finalPrice: 162 }],
     });
   });
-  it('٤ × ٦٤٥ → قطعة مجانية', () => {
-    expect(calculateAllTotals([item(645, 4)], null, null, false, offers)).toMatchObject({ subtotal: 2580, discount: 645, shipping: 70, total: 2005 });
+  it('٣ × ٦٤٥ → يضيف النظام القطعة الرابعة مجانًا دون أن يضيفها العميل', () => {
+    const result = calculateAllTotals([item(645, 3)], null, null, false, [BXGY]);
+    expect(result).toMatchObject({ subtotal: 2580, discount: 645, shipping: 70, total: 2005, discountSource: 'offer' });
+    expect(result.offerBenefits.lines[0].regularQty).toBe(3);
+    expect(result.offerBenefits.lines[0].discountedUnits).toMatchObject([
+      { originalPrice: 645, discount: 645, finalPrice: 0, free: true, autoAdded: true },
+    ]);
   });
   it('يمنح قطعة مجانية واحدة لكل منتج مؤهل، ولا يكررها عند زيادة كمية المنتج نفسه', () => {
     const cart = [item(645, 6, { id: 'A' }), item(320, 4, { id: 'B' }), item(270, 3, { id: 'C' })];
     const shippingSettings = { shippingCost: 70, freeShippingThreshold: 100000 };
     const result = calculateAllTotals(cart, null, shippingSettings, false, [BXGY]);
-    expect(result).toMatchObject({ subtotal: 5960, discount: 965, shipping: 70, discountSource: 'offer', total: 5065 });
-    expect(result.offerBenefits.lines).toHaveLength(2);
-    expect(result.offerBenefits.lines.flatMap((line) => line.discountedUnits)).toHaveLength(2);
+    expect(result).toMatchObject({ subtotal: 7195, discount: 1235, shipping: 70, discountSource: 'offer', total: 6030 });
+    expect(result.offerBenefits.lines).toHaveLength(3);
+    expect(result.offerBenefits.lines.flatMap((line) => line.discountedUnits)).toHaveLength(3);
+    expect(result.offerBenefits.lines.every((line) => line.regularQty >= 3)).toBe(true);
   });
-  it('لا يجمع 3 قطع من منتجات مختلفة لتفعيل عرض 3+1', () => {
-    const cart = [item(645, 3, { id: 'A' }), item(320, 1, { id: 'B' })];
+  it('لا يجمع ٣ قطع من منتجات مختلفة لتفعيل عرض ٣+١', () => {
+    const cart = [item(645, 2, { id: 'A' }), item(320, 1, { id: 'B' })];
     const shippingSettings = { shippingCost: 70, freeShippingThreshold: 100000 };
     const result = calculateAllTotals(cart, null, shippingSettings, false, [BXGY]);
-    expect(result).toMatchObject({ discount: 0, discountSource: 'none', shipping: 70, total: 2325 });
+    expect(result).toMatchObject({ subtotal: 1610, discount: 0, discountSource: 'none', shipping: 70, total: 1680 });
   });
-  it('من ٤ إلى ٨ قطع: يظل عرض ٣+١ بمنحة مجانية واحدة فقط للمنتج نفسه', () => {
-    for (const quantity of [4, 5, 6, 8]) {
-      const result = calculateAllTotals([item(645, quantity)], null, null, false, offers);
-      expect(result.discount).toBe(645);
+  it('من ٣ إلى ٨ قطع مدفوعة: يظل عرض ٣+١ بمنحة إضافية واحدة فقط للمنتج نفسه', () => {
+    for (const quantity of [3, 4, 5, 6, 8]) {
+      const result = calculateAllTotals([item(645, quantity)], null, null, false, [BXGY]);
+      expect(result).toMatchObject({
+        subtotal: 645 * (quantity + 1),
+        discount: 645,
+        shipping: 70,
+        total: (645 * quantity) + 70,
+      });
       expect(result.appliedOffer.id).toBe('bxgy');
-      expect(result.offerBenefits.lines[0].regularQty).toBe(quantity - 1);
+      expect(result.offerBenefits.lines[0].regularQty).toBe(quantity);
       expect(result.offerBenefits.lines[0].discountedUnits).toHaveLength(1);
-      expect(result.total).toBe((645 * quantity) - 645 + 70);
+      expect(result.offerBenefits.lines[0].discountedUnits[0]).toMatchObject({ free: true, autoAdded: true });
     }
   });
+  it('يحسب حد الشحن على قيمة القطع المدفوعة بعد استبعاد قيمة الهدية المجانية', () => {
+    const belowPaidSubtotal = { shippingCost: 70, freeShippingThreshold: 1936 };
+    const exactPaidSubtotal = { shippingCost: 70, freeShippingThreshold: 1935 };
+
+    expect(calculateAllTotals([item(645, 3)], null, belowPaidSubtotal, false, [BXGY]))
+      .toMatchObject({ subtotal: 2580, discount: 645, shipping: 70, total: 2005 });
+    expect(calculateAllTotals([item(645, 3)], null, exactPaidSubtotal, false, [BXGY]))
+      .toMatchObject({ subtotal: 2580, discount: 645, shipping: 0, total: 1935 });
+  });
+
   it('عند تفعيل خصم ٤٠٪ فقط: يخصم قطعة واحدة مهما زادت الكمية', () => {
     for (const quantity of [2, 3, 4, 8]) {
       const result = calculateAllTotals([item(645, quantity)], null, null, false, [NTH]);
