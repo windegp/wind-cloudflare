@@ -57,6 +57,8 @@ export async function POST(req) {
       return NextResponse.json({
         valid: true, code: normalizedCode, type: 'coupon_fixed', value: amount,
         scope: coupon.productScope === 'selected' ? coupon.productIds || [] : 'all',
+        excludedProductIds: coupon.excludedProductIds || [], excludeDiscounted: coupon.excludeDiscounted === true,
+        minCart: Number(coupon.minCart) || 0,
         freeShipping: false, discountAmount, maxDiscount: Number(coupon.maxDiscount) || 0, couponOfferId: coupon.id,
         message: 'تم تفعيل قسيمة ' + normalizedCode + ' بخصم ' + discountAmount + ' ج.م 🎉',
       });
