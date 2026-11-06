@@ -114,5 +114,6 @@ export function computeCustomerChoiceGiftOffer(purchaseItems, giftSelections, of
     complete: true,
     discount: discountedUnits.reduce((sum, unit) => sum + unit.discount, 0),
     discountedUnits,
+    eligibleGiftUnits: giftUnits,
   };
 }
