@@ -128,6 +128,25 @@ describe('قسائم الشراء بكود خصم', () => {
     maxDiscount: 0, scope: 'all', code: 'WIND200',
   };
 
+  it('المنتجات المخفّضة تدخل القسيمة افتراضيًا ويمكن استثناؤها', () => {
+    const cart = [
+      item(200, 1, { id: 'A', compareAtPrice: 300 }),
+      item(600, 1, { id: 'B' }),
+    ];
+    const eligibleCoupon = {
+      ...coupon,
+      value: 100,
+      discountAmount: 100,
+      minCart: 700,
+    };
+
+    // الإجمالي المؤهل 800 في الحالة الافتراضية، فيتحقق الحد الأدنى.
+    expect(calculateAllTotals(cart, eligibleCoupon).discount).toBe(100);
+
+    // عند استثناء A المخفّض، يتبقى 600 فقط، فلا يتحقق الحد الأدنى 700.
+    expect(calculateAllTotals(cart, { ...eligibleCoupon, excludeDiscounted: true }).discount).toBe(0);
+  });
+
   it('القسيمة تفوز عندما يكون خصمها أكبر من العرض التلقائي', () => {
     const result = calculateAllTotals(CART, coupon, null, false, [NTH]);
     expect(result).toMatchObject({ discount: 200, discountSource: 'promo', appliedOffer: null, total: 835 });
