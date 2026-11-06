@@ -129,8 +129,15 @@ function groupItemsByProduct(items) {
 
 /** Stable key for the editable color/size selection of an automatically added gift. */
 export function getOfferGiftSelectionKey(offerId, item) {
-  const productKey = getProductGroupKey(item) || String(item?.id ?? item?.productId ?? item?.handle ?? "product");
-  return `offer-gift:${String(offerId ?? "")}:${productKey}`;
+  // Prefer the stable product handle so client cart lines and server-resolved
+  // cart lines generate the same key even when their incoming IDs differ.
+  const productKey = [
+    item?.handle,
+    item?.productHandle,
+    item?.id,
+    item?.productId,
+  ].find((value) => value !== undefined && value !== null && String(value).trim() !== "");
+  return `offer-gift:${String(offerId ?? "")}:${String(productKey ?? "product").trim()}`;
 }
 
 /** One automatically added free-gift award per eligible product, regardless of excess quantity. */
