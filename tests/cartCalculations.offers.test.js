@@ -35,6 +35,21 @@ describe('بدون عروض = نفس السلوك القديم', () => {
 });
 
 describe('العرض لوحده', () => {
+  it('المنتجات المخفّضة مؤهلة افتراضيًا ويمكن استثناؤها من الأدمن', () => {
+    const cart = [
+      item(200, 1, { id: 'A', compareAtPrice: 300 }),
+      item(600, 1, { id: 'B' }),
+    ];
+
+    const included = calculateAllTotals(cart, null, null, false, [NTH]);
+    const explicitlyIncluded = calculateAllTotals(cart, null, null, false, [{ ...NTH, excludeDiscounted: false }]);
+    const excluded = calculateAllTotals(cart, null, null, false, [{ ...NTH, excludeDiscounted: true }]);
+
+    expect(included).toMatchObject({ discount: 80, discountSource: 'offer', total: 720 });
+    expect(explicitlyIncluded.discount).toBe(80);
+    expect(excluded).toMatchObject({ discount: 0, discountSource: 'none', total: 870 });
+  });
+
   it('يتطبق ويظهر في الإجمالي', () => {
     expect(calculateAllTotals(CART, null, null, false, [NTH, BXGY])).toMatchObject({
       subtotal: 965, discount: 128, shipping: 70, total: 907,
