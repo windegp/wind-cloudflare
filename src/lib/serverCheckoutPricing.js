@@ -396,8 +396,13 @@ export async function createServerCheckoutQuote(input = {}) {
   const settings = settingsSnap.exists() ? settingsSnap.data() : {};
   const promotions = settings.promotions || {};
   const freeShippingRule = shippingRulesSnap.exists() ? shippingRulesSnap.data() : null;
+  const offers = offersSnap.docs
+    .map((offerDoc) => ({ id: offerDoc.id, ...offerDoc.data() }))
+    .filter((offer) => offer.active === true && (offersEnvironment === "preview"
+      ? offer.environment === "preview"
+      : offer.environment !== "preview"));
   // Avoid customer-document reads when the first-order discount is disabled
-  // and no promo code was entered.
+  // and no promo code was entered. The lookup uses loaded offers for this environment.
   const normalizedInputCode = String(input.promoCode || "").trim().toUpperCase();
   const isCouponCode = normalizedInputCode && offers.some((offer) =>
     offer.type === "coupon_fixed" &&
@@ -407,11 +412,6 @@ export async function createServerCheckoutQuote(input = {}) {
     promotions.firstOrderEnabled === true || (Boolean(input.promoCode) && !isCouponCode)
       ? await checkFirstOrder(db, customer.email, customer.phone)
       : false;
-  const offers = offersSnap.docs
-    .map((offerDoc) => ({ id: offerDoc.id, ...offerDoc.data() }))
-    .filter((offer) => offer.active === true && (offersEnvironment === "preview"
-      ? offer.environment === "preview"
-      : offer.environment !== "preview"));
 
   const promo = await validatePromo(
     db,
