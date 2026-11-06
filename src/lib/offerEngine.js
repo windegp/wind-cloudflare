@@ -131,16 +131,12 @@ function toInt(value) {
 }
 
 /**
- * 0 (or a missing legacy value) means unlimited uses per order.
- * A positive integer caps complete qualifying groups. Invalid values disable
- * the tiered benefit instead of silently granting an unlimited discount.
+ * WIND policy: tiered offers grant their benefit once per order only.
+ * Legacy maxUsesPerOrder values are intentionally ignored so old offers
+ * cannot multiply free or discounted units when quantity increases.
  */
-function getMaxUsesPerOrder(config) {
-  const value = config?.maxUsesPerOrder;
-  if (value === undefined || value === null || value === "") return Infinity;
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 0) return null;
-  return parsed === 0 ? Infinity : parsed;
+function getMaxUsesPerOrder() {
+  return 1;
 }
 
 function toPercent(value) {
