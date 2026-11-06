@@ -71,7 +71,22 @@ export function calculateAllTotals(cartItems, promoResult = null, shippingSettin
   // عند التعادل: promo ثم first_order ثم offer (ترتيب ثابت ومتوافق مع السيرفر).
   const promoDiscount =
     promoResult?.valid && promoResult.type !== 'free_shipping'
-      ? Math.max(0, Number(promoResult.discountAmount) || 0)
+      ? promoResult.type === 'coupon_fixed'
+        ? (() => {
+            const scope = Array.isArray(promoResult.scope) ? promoResult.scope.map(String) : null;
+            const eligibleSubtotal = scope
+              ? cartItems.reduce((sum, item) => {
+                  const keys = [item.id, item.handle].map(String);
+                  return keys.some((key) => scope.includes(key))
+                    ? sum + (Number(item.price) || 0) * (Number(item.qty) || 0)
+                    : sum;
+                }, 0)
+              : subtotal;
+            const amount = Number(promoResult.value) || 0;
+            const cap = Number(promoResult.maxDiscount) > 0 ? Number(promoResult.maxDiscount) : amount;
+            return Math.min(amount, cap, eligibleSubtotal);
+          })()
+        : Math.max(0, Number(promoResult.discountAmount) || 0)
       : 0;
 
   const firstOrderPercent = Number(shippingSettings?.firstOrderDiscount);
