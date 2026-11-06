@@ -783,8 +783,10 @@ export default function AdminOffersPage() {
                 <div><label className={labelClass}>الأولوية عند التعادل</label><input type="number" min="0" step="1" value={form.priority} onChange={(event) => updateField("priority", event.target.value)} className={fieldClass} /><p className="text-[10px] text-gray-400 mt-1">الرقم الأقل يفوز عند تساوي الخصم بين عرضين.</p></div>
                 <div className="flex items-center gap-3">
                   <input id="offer-exclude-discounted" type="checkbox" checked={form.excludeDiscounted} onChange={(event) => updateField("excludeDiscounted", event.target.checked)} className="w-4 h-4 accent-[#008060]" />
-                  <label htmlFor="offer-exclude-discounted" className="text-sm font-bold text-gray-700">استثناء المنتجات المخفّضة بالفعل</label>
-                  <p className="text-[10px] text-gray-500">المنتجات المخفّضة تدخل العرض افتراضيًا؛ فعّل هذا الخيار لاستثنائها.</p>
+                  <label htmlFor="offer-exclude-discounted" className="text-sm font-bold text-gray-700">
+                    <span className="block">استثناء المنتجات المخفّضة بالفعل</span>
+                    <span className="block mt-1 text-[10px] font-normal text-gray-500">المنتجات المخفّضة تدخل العرض افتراضيًا؛ فعّل هذا الخيار لاستثنائها.</span>
+                  </label>
                 </div>
               </div>
 
