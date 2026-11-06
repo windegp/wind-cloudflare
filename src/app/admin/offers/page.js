@@ -35,11 +35,13 @@ const TYPE_OPTIONS = [
   { value: "nth_percent", label: "خصم على القطعة رقم N" },
   { value: "cart_percent", label: "خصم نسبة على المنتجات المؤهلة" },
   { value: "cart_fixed", label: "خصم مبلغ ثابت على المنتجات المؤهلة" },
+  { value: "coupon_fixed", label: "قسيمة شراء بكود — خصم مبلغ ثابت" },
 ];
 
 const emptyForm = () => ({
   name: "",
   type: "buy_x_get_y",
+  couponCode: "",
   config: { buyQty: "2", getQty: "1", nth: "2", percent: "40", amount: "100" },
   minCart: "0",
   maxDiscount: "0",
@@ -121,6 +123,8 @@ function offerDescription(offer) {
     description = `خصم ${cfg.percent}% على المنتجات المؤهلة`;
   } else if (offer.type === "cart_fixed") {
     description = `خصم ${cfg.amount} ج.م على المنتجات المؤهلة`;
+  } else if (offer.type === "coupon_fixed") {
+    description = `قسيمة ${offer.couponCode || ""} — خصم ${cfg.amount} ج.م`;
   }
   return description || "إعداد عرض";
 }
@@ -294,6 +298,7 @@ export default function AdminOffersPage() {
     setForm({
       ...emptyForm(),
       ...offer,
+      couponCode: String(offer.couponCode || ""),
       config: {
         buyQty: String(offer.config?.buyQty ?? 2),
         getQty: String(offer.config?.getQty ?? 1),
@@ -340,7 +345,8 @@ export default function AdminOffersPage() {
     if (form.type === "cart_percent") {
       if (!(Number(form.config.percent) > 0 && Number(form.config.percent) <= 100)) return "نسبة الخصم يجب أن تكون بين 1 و100.";
     }
-    if (form.type === "cart_fixed" && !(Number(form.config.amount) > 0)) return "مبلغ الخصم يجب أن يكون أكبر من صفر.";
+    if ((form.type === "cart_fixed" || form.type === "coupon_fixed") && !(Number(form.config.amount) > 0)) return "مبلغ الخصم يجب أن يكون أكبر من صفر.";
+    if (form.type === "coupon_fixed" && !/^[A-Z0-9_-]{3,40}$/i.test(form.couponCode.trim())) return "أدخل كود قسيمة صحيحًا من 3 إلى 40 حرفًا أو رقمًا.";
     if (form.productScope === "selected" && form.productIds.length === 0) return "اختر منتجًا واحدًا على الأقل أو غيّر النطاق إلى كل المنتجات.";
     return "";
   };
@@ -377,13 +383,14 @@ export default function AdminOffersPage() {
         numericConfig.percent = Number(form.config.percent);
       } else if (form.type === "cart_percent") {
         numericConfig.percent = Number(form.config.percent);
-      } else if (form.type === "cart_fixed") {
+      } else if (form.type === "cart_fixed" || form.type === "coupon_fixed") {
         numericConfig.amount = Number(form.config.amount);
       }
 
       const data = {
         name: form.name.trim(),
         type: form.type,
+        ...(form.type === "coupon_fixed" ? { couponCode: form.couponCode.trim().toUpperCase() } : { couponCode: "" }),
         config: numericConfig,
         minCart: Number(form.minCart) || 0,
         maxDiscount: Number(form.maxDiscount) || 0,
@@ -744,8 +751,11 @@ export default function AdminOffersPage() {
                 {form.type === "cart_percent" && (
                   <div><label className={labelClass}>نسبة الخصم (%)</label><input type="number" min="1" max="100" step="1" value={form.config.percent} onChange={(event) => updateConfig("percent", event.target.value)} className={fieldClass} /></div>
                 )}
-                {form.type === "cart_fixed" && (
-                  <div><label className={labelClass}>مبلغ الخصم (ج.م)</label><input type="number" min="1" step="1" value={form.config.amount} onChange={(event) => updateConfig("amount", event.target.value)} className={fieldClass} /></div>
+                {(form.type === "cart_fixed" || form.type === "coupon_fixed") && (
+                  <>
+                    {form.type === "coupon_fixed" && <div className="sm:col-span-2"><label className={labelClass}>كود القسيمة *</label><input value={form.couponCode} onChange={(event) => updateField("couponCode", event.target.value.toUpperCase())} placeholder="مثال: WIND200" className={fieldClass} dir="ltr" /><p className="text-[10px] text-gray-400 mt-1">يدخل العميل هذا الكود في خانة كود الخصم بالسلة.</p></div>}
+                    <div><label className={labelClass}>مبلغ الخصم (ج.م)</label><input type="number" min="1" step="1" value={form.config.amount} onChange={(event) => updateConfig("amount", event.target.value)} className={fieldClass} /></div>
+                  </>
                 )}
 
                 <div><label className={labelClass}>الحد الأدنى لقيمة المنتجات المؤهلة (ج.م)</label><input type="number" min="0" step="1" value={form.minCart} onChange={(event) => updateField("minCart", event.target.value)} className={fieldClass} /><p className="text-[10px] text-gray-400 mt-1">اكتب 0 لإلغاء الحد الأدنى.</p></div>
