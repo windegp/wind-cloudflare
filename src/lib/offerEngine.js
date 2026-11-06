@@ -1,4 +1,5 @@
 import { cairoDateString, isOfferLive } from "@/lib/offerDates";
+import { computeCustomerChoiceGiftOffer } from "@/lib/customerChoiceGiftOffer";
 export { cairoDateString, isOfferLive } from "@/lib/offerDates";
 
 // ============================================
@@ -16,6 +17,7 @@ export { cairoDateString, isOfferLive } from "@/lib/offerDates";
 
 export const OFFER_TYPES = {
   BUY_X_GET_Y: 'buy_x_get_y',     // اشتري X وخد Y مجاناً (الأرخص في كل مجموعة)
+  BUY_X_GET_Y_SELECT_GIFT: 'buy_x_get_y_select_gift', // العميل يختار الهدايا بنفسه
   NTH_PERCENT: 'nth_percent',     // خصم % مرة واحدة على أرخص وحدة عند بلوغ N قطع مؤهلة
   CART_PERCENT: 'cart_percent',   // خصم % على إجمالي المنتجات المؤهلة
   CART_FIXED: 'cart_fixed',       // خصم مبلغ ثابت على إجمالي المنتجات المؤهلة
@@ -150,8 +152,11 @@ function toPercent(value) {
 }
 
 /** خصم عرض واحد على السلة (رقم صحيح >= 0) */
-export function computeOfferDiscount(cartItems, offer) {
+export function computeOfferDiscount(cartItems, offer, giftSelections = []) {
   if (!Array.isArray(cartItems) || !offer) return 0;
+  if (offer.type === OFFER_TYPES.BUY_X_GET_Y_SELECT_GIFT) {
+    return computeCustomerChoiceGiftOffer(cartItems, giftSelections, offer).discount;
+  }
 
   const eligible = cartItems.filter((item) => isItemEligible(item, offer));
   if (eligible.length === 0) return 0;
@@ -228,8 +233,8 @@ export function computeOfferDiscount(cartItems, offer) {
  * لا يوجد دمج بين عرضين تلقائيين، حتى لو كانت مستندات قديمة تحتوي
  * على stackWithOfferIds. عند التعادل: الأولوية الأقل ثم id أبجديًا.
  */
-export function computeBestOffer(cartItems, offers, now = new Date()) {
-  const none = { discount: 0, offer: null, appliedOffers: [], offerBenefits: null, candidates: [], freeShipping: false };
+export function computeBestOffer(cartItems, offers, now = new Date(), giftSelections = []) {
+  const none = { discount: 0, offer: null, appliedOffers: [], offerBenefits: null, candidates: [], freeShipping: false, customerChoiceGiftStatus: null };
   if (!Array.isArray(cartItems) || cartItems.length === 0 || !Array.isArray(offers) || offers.length === 0) return none;
 
   const liveOffers = offers.filter((offer) =>
@@ -239,9 +244,17 @@ export function computeBestOffer(cartItems, offers, now = new Date()) {
     isOfferLive(offer, now)
   );
   const candidates = [];
+  const giftStatusCandidates = [];
 
   for (const offer of liveOffers) {
-    const benefits = computeOfferBenefits(cartItems, offer, now);
+    const benefits = computeOfferBenefits(cartItems, offer, now, giftSelections);
+    if (benefits.customerChoiceGiftStatus) {
+      giftStatusCandidates.push({
+        status: benefits.customerChoiceGiftStatus,
+        priority: Number.isFinite(Number(offer.priority)) ? Number(offer.priority) : DEFAULT_PRIORITY,
+        id: String(offer.id ?? ""),
+      });
+    }
     if (benefits.discount <= 0) continue;
 
     const selectedOffer = {
@@ -273,9 +286,14 @@ export function computeBestOffer(cartItems, offers, now = new Date()) {
     a.priority - b.priority ||
     (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
   );
+  giftStatusCandidates.sort((a, b) =>
+    a.priority - b.priority ||
+    (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+  );
+  const customerChoiceGiftStatus = giftStatusCandidates[0]?.status || null;
 
   const best = candidates[0];
-  if (!best) return none;
+  if (!best) return { ...none, customerChoiceGiftStatus };
 
   return {
     discount: best.discount,
@@ -284,6 +302,108 @@ export function computeBestOffer(cartItems, offers, now = new Date()) {
     offerBenefits: best.offerBenefits,
     candidates: candidates.map(({ id, name, type, discount, priority }) => ({ id, name, type, discount, priority })),
     freeShipping: false,
+    customerChoiceGiftStatus,
+  };
+}
+
+function buildCustomerChoiceGiftBenefits(cartItems, giftSelections, offer, evaluation) {
+  const offerId = String(offer.id ?? "");
+  const config = offer.config || {};
+  const status = {
+    offerId,
+    offerName: offer.name || "",
+    eligiblePurchaseQty: evaluation.eligiblePurchaseQty,
+    requiredGiftQty: evaluation.requiredGiftQty,
+    selectedGiftQty: evaluation.selectedGiftQty,
+    complete: evaluation.complete,
+  };
+  const base = {
+    offerId,
+    name: offer.name || "",
+    type: offer.type,
+    config,
+    discount: 0,
+    lines: [],
+    giftLines: [],
+    customerChoiceGiftStatus: status,
+  };
+
+  if (!evaluation.complete) return base;
+
+  const toBenefitUnit = (unit) => {
+    const item = unit.source === "gift"
+      ? giftSelections[unit.lineIndex]
+      : cartItems[unit.lineIndex];
+    return {
+      unitIndex: unit.unitIndex,
+      originalPrice: unit.originalPrice,
+      discount: unit.discount,
+      finalPrice: unit.finalPrice,
+      free: unit.free,
+      autoAdded: false,
+      customerChoiceGift: true,
+      source: unit.source,
+      selectionId: unit.source === "gift"
+        ? String(item?.selectionId || "")
+        : undefined,
+      benefits: [{
+        offerId,
+        offerName: offer.name || "",
+        offerType: offer.type,
+        config,
+        originalPrice: unit.originalPrice,
+        discount: unit.discount,
+        finalPrice: unit.finalPrice,
+        free: unit.free,
+      }],
+    };
+  };
+
+  const purchaseDiscounts = new Map();
+  const giftDiscounts = new Map();
+  evaluation.discountedUnits.forEach((unit) => {
+    const target = unit.source === "gift" ? giftDiscounts : purchaseDiscounts;
+    if (!target.has(unit.lineIndex)) target.set(unit.lineIndex, []);
+    target.get(unit.lineIndex).push(toBenefitUnit(unit));
+  });
+
+  const lines = [];
+  for (const [cartIndex, discountedUnits] of purchaseDiscounts.entries()) {
+    const item = cartItems[cartIndex];
+    lines.push({
+      cartIndex,
+      itemId: String(item?.id ?? item?.productId ?? item?.handle ?? ""),
+      regularQty: Math.max(0, (parseInt(item?.qty) || 0) - discountedUnits.length),
+      discountedUnits,
+    });
+  }
+  lines.sort((a, b) => a.cartIndex - b.cartIndex);
+
+  const eligibleGiftLines = new Map();
+  (evaluation.eligibleGiftUnits || []).forEach((unit) => {
+    if (!eligibleGiftLines.has(unit.lineIndex)) eligibleGiftLines.set(unit.lineIndex, 0);
+    eligibleGiftLines.set(unit.lineIndex, eligibleGiftLines.get(unit.lineIndex) + 1);
+  });
+  const giftLines = [];
+  for (const [selectionIndex, eligibleQty] of eligibleGiftLines.entries()) {
+    const item = giftSelections[selectionIndex];
+    const discountedUnits = giftDiscounts.get(selectionIndex) || [];
+    giftLines.push({
+      selectionIndex,
+      selectionId: String(item?.selectionId || ""),
+      itemId: String(item?.id ?? item?.productId ?? item?.handle ?? ""),
+      item,
+      regularQty: Math.max(0, eligibleQty - discountedUnits.length),
+      discountedUnits,
+    });
+  }
+  giftLines.sort((a, b) => a.selectionIndex - b.selectionIndex);
+
+  return {
+    ...base,
+    discount: evaluation.discount,
+    lines,
+    giftLines,
   };
 }
 
@@ -296,9 +416,14 @@ export function computeBestOffer(cartItems, offers, now = new Date()) {
  * a benefit are listed separately so the cart can render gifts/discounted
  * pieces without mutating the customer's persisted cart.
  */
-export function computeOfferBenefits(cartItems, offer, now = new Date()) {
+export function computeOfferBenefits(cartItems, offer, now = new Date(), giftSelections = []) {
   if (!Array.isArray(cartItems) || !offer || !isOfferLive(offer, now)) {
     return { offerId: offer?.id ? String(offer.id) : null, name: offer?.name || '', type: offer?.type || null, config: offer?.config || {}, discount: 0, lines: [] };
+  }
+
+  if (offer.type === OFFER_TYPES.BUY_X_GET_Y_SELECT_GIFT) {
+    const evaluation = computeCustomerChoiceGiftOffer(cartItems, giftSelections, offer);
+    return buildCustomerChoiceGiftBenefits(cartItems, giftSelections, offer, evaluation);
   }
 
   const eligibleUnits = [];
