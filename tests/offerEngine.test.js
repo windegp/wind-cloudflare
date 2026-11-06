@@ -235,6 +235,12 @@ describe('نطاق المنتجات', () => {
     expect(computeOfferDiscount(cart, NTH)).toBe(80);
     expect(computeOfferDiscount(cart, { ...NTH, excludeDiscounted: false })).toBe(80);
 
+    const benefits = computeOfferBenefits(cart, NTH);
+    expect(benefits.discount).toBe(80);
+    expect(benefits.lines).toMatchObject([
+      { cartIndex: 0, discountedUnits: [{ originalPrice: 200, discount: 80, finalPrice: 120 }] },
+    ]);
+
     // true فقط يستبعد المنتج المخفّض؛ يتبقى منتج واحد فلا يتحقق N=2.
     expect(computeOfferDiscount(cart, { ...NTH, excludeDiscounted: true })).toBe(0);
   });
