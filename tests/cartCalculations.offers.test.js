@@ -42,9 +42,17 @@ describe('العرض لوحده', () => {
       appliedOffer: { id: 'nth', name: '٤٠٪ على أرخص قطعة عند شراء قطعتين', type: 'nth_percent' },
     });
   });
-  it('الشحن لسه بيتحسب على الـ subtotal قبل الخصم', () => {
-    const settings = { shippingCost: 70, freeShippingThreshold: 900 };
-    expect(calculateAllTotals(CART, null, settings, false, [NTH])).toMatchObject({ discount: 128, shipping: 0, total: 837 });
+  it('حد الشحن المجاني يعتمد على subtotal بعد خصم العرض', () => {
+    const belowThreshold = { shippingCost: 70, freeShippingThreshold: 900 };
+    const exactThreshold = { shippingCost: 70, freeShippingThreshold: 837 };
+
+    // 965 - 128 = 837، أقل من 900؛ إذن الشحن مدفوع.
+    expect(calculateAllTotals(CART, null, belowThreshold, false, [NTH]))
+      .toMatchObject({ subtotal: 965, discount: 128, shipping: 70, total: 907 });
+
+    // نفس الصافي يساوي حد 837؛ إذن الشحن مجاني.
+    expect(calculateAllTotals(CART, null, exactThreshold, false, [NTH]))
+      .toMatchObject({ subtotal: 965, discount: 128, shipping: 0, total: 837 });
   });
 });
 
