@@ -87,7 +87,7 @@ describe('سيناريوهات "أفضل عرض يكسب"', () => {
     expect(result.offerBenefits.lines).toHaveLength(1);
     expect(result.offerBenefits.lines[0].regularQty).toBe(1);
     expect(result.offerBenefits.lines[0].discountedUnits).toMatchObject([
-      { originalPrice: 645, discount: 645, finalPrice: 0, free: true, autoAdded: true, giftKey: 'offer-gift:bxgy:A' },
+      { originalPrice: 645, discount: 645, finalPrice: 0, free: true, autoAdded: true, giftKey: 'offer-gift:bxgy:product-a' },
     ]);
   });
   it('٤ × ٦٤٥ → اشتري ٣ وخد ١ (٦٤٥ أحسن من ٥١٦)', () => {
