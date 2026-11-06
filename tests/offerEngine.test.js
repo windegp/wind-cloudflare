@@ -46,10 +46,14 @@ describe('سيناريوهات "أفضل عرض يكسب"', () => {
     expect(r.discount).toBe(774);
     expect(r.offer.id).toBe('nth');
   });
-  it('٨ × ٦٤٥ → اشتري ٣ وخد ١ (١٢٩٠ أحسن من ١٠٣٢)', () => {
+  it('٨ × ٦٤٥ → يفوز عرض ٣+١ وحده ويمنح هديتين لمجموعتين مؤهلتين', () => {
     const r = computeBestOffer([item(645, 8)], OFFERS);
     expect(r.discount).toBe(1290);
     expect(r.offer.id).toBe('bxgy');
+    expect(r.appliedOffers).toHaveLength(1);
+    expect(r.offerBenefits.lines[0].regularQty).toBe(6);
+    expect(r.offerBenefits.lines[0].discountedUnits).toHaveLength(2);
+    expect(r.offerBenefits.lines[0].discountedUnits.every((unit) => unit.free)).toBe(true);
   });
   it('قطعة واحدة → لا عرض', () => {
     const result = computeBestOffer([item(645)], OFFERS);
@@ -86,6 +90,11 @@ describe('سيناريوهات "أفضل عرض يكسب"', () => {
     expect(result.offerBenefits.lines[0].regularQty).toBe(3);
     expect(result.offerBenefits.lines[0].discountedUnits).toHaveLength(3);
     expect(result.offerBenefits.lines[0].discountedUnits.every((unit) => unit.discount === 258 && !unit.free)).toBe(true);
+    expect(result.offerBenefits.lines[0].discountedUnits.every((unit) =>
+      unit.benefits.length === 1 &&
+      unit.benefits[0].offerType === "nth_percent" &&
+      unit.benefits[0].config.percent === 40
+    )).toBe(true);
   });
   it('يمكن تحديد أقصى مرة واحدة لعرض ٣+١ حتى لو زادت الكمية إلى ٨', () => {
     const limited = { ...BXGY, config: { ...BXGY.config, maxUsesPerOrder: 1 } };
