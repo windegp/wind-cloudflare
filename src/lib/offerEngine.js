@@ -386,9 +386,7 @@ export function computeOfferBenefits(cartItems, offer, now = new Date()) {
 
 /** تحقق قاعدة الشحن المجاني المستقلة عن العروض النقدية. */
 export function isFreeShippingRuleEligible(cartItems, rule) {
-  if (!rule || rule.enabled !== true || !Array.isArray(cartItems) || cartItems.length === 0) return false;
-  if (rule.scope === "store") return true;
-  if (rule.scope !== "selected") return false;
+  if (!rule || rule.enabled !== true || rule.scope !== "selected" || !Array.isArray(cartItems) || cartItems.length === 0) return false;
   const selectedIds = new Set(Array.isArray(rule.productIds) ? rule.productIds.map(String) : []);
   if (!selectedIds.size) return false;
   const eligibleItems = cartItems.filter((item) => {
