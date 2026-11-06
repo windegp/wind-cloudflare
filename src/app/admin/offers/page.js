@@ -40,7 +40,7 @@ const TYPE_OPTIONS = [
 const emptyForm = () => ({
   name: "",
   type: "buy_x_get_y",
-  config: { buyQty: "2", getQty: "1", nth: "2", percent: "40", amount: "100", maxUsesPerOrder: "0" },
+  config: { buyQty: "2", getQty: "1", nth: "2", percent: "40", amount: "100" },
   minCart: "0",
   maxDiscount: "0",
   priority: "100",
@@ -300,7 +300,6 @@ export default function AdminOffersPage() {
         nth: String(offer.config?.nth ?? 2),
         percent: String(offer.config?.percent ?? 40),
         amount: String(offer.config?.amount ?? 100),
-        maxUsesPerOrder: String(offer.config?.maxUsesPerOrder ?? 0),
       },
       minCart: String(offer.minCart ?? 0),
       maxDiscount: String(offer.maxDiscount ?? 0),
@@ -333,12 +332,10 @@ export default function AdminOffersPage() {
     if (form.type === "buy_x_get_y") {
       if (!Number.isInteger(Number(form.config.buyQty)) || Number(form.config.buyQty) < 1) return "عدد القطع المطلوب شراؤها يجب أن يكون 1 أو أكثر.";
       if (!Number.isInteger(Number(form.config.getQty)) || Number(form.config.getQty) < 1) return "عدد القطع المجانية يجب أن يكون 1 أو أكثر.";
-      if (!Number.isInteger(Number(form.config.maxUsesPerOrder)) || Number(form.config.maxUsesPerOrder) < 0) return "حد مرات تطبيق العرض يجب أن يكون صفرًا أو رقمًا صحيحًا أكبر.";
     }
     if (form.type === "nth_percent") {
       if (!Number.isInteger(Number(form.config.nth)) || Number(form.config.nth) < 2) return "رقم القطعة يجب أن يكون 2 أو أكثر.";
       if (!(Number(form.config.percent) > 0 && Number(form.config.percent) <= 100)) return "نسبة الخصم يجب أن تكون بين 1 و100.";
-      if (!Number.isInteger(Number(form.config.maxUsesPerOrder)) || Number(form.config.maxUsesPerOrder) < 0) return "حد مرات تطبيق العرض يجب أن يكون صفرًا أو رقمًا صحيحًا أكبر.";
     }
     if (form.type === "cart_percent") {
       if (!(Number(form.config.percent) > 0 && Number(form.config.percent) <= 100)) return "نسبة الخصم يجب أن تكون بين 1 و100.";
@@ -375,11 +372,9 @@ export default function AdminOffersPage() {
       if (form.type === "buy_x_get_y") {
         numericConfig.buyQty = Number(form.config.buyQty);
         numericConfig.getQty = Number(form.config.getQty);
-        numericConfig.maxUsesPerOrder = Number(form.config.maxUsesPerOrder);
       } else if (form.type === "nth_percent") {
         numericConfig.nth = Number(form.config.nth);
         numericConfig.percent = Number(form.config.percent);
-        numericConfig.maxUsesPerOrder = Number(form.config.maxUsesPerOrder);
       } else if (form.type === "cart_percent") {
         numericConfig.percent = Number(form.config.percent);
       } else if (form.type === "cart_fixed") {
@@ -736,14 +731,14 @@ export default function AdminOffersPage() {
                   <>
                     <div><label className={labelClass}>عدد القطع المطلوب شراؤها (X)</label><input type="number" min="1" step="1" value={form.config.buyQty} onChange={(event) => updateConfig("buyQty", event.target.value)} className={fieldClass} /></div>
                     <div><label className={labelClass}>عدد القطع المجانية (Y)</label><input type="number" min="1" step="1" value={form.config.getQty} onChange={(event) => updateConfig("getQty", event.target.value)} className={fieldClass} /></div>
-                    <div className="sm:col-span-2"><label className={labelClass}>أقصى مرات تطبيق العرض داخل الطلب</label><input type="number" min="0" step="1" value={form.config.maxUsesPerOrder} onChange={(event) => updateConfig("maxUsesPerOrder", event.target.value)} className={fieldClass} /><p className="text-[10px] text-gray-400 mt-1">اكتب 0 للسماح بتكرار العرض مع كل مجموعة مؤهلة، أو 1 لمنح الميزة مرة واحدة فقط في الطلب.</p></div>
+                    <div className="sm:col-span-2 text-[11px] text-gray-500">تُمنح ميزة هذا العرض مرة واحدة فقط في الطلب، حتى عند زيادة عدد القطع.</div>
                   </>
                 )}
                 {form.type === "nth_percent" && (
                   <>
                     <div><label className={labelClass}>رقم القطعة داخل المجموعة (N)</label><input type="number" min="2" step="1" value={form.config.nth} onChange={(event) => updateConfig("nth", event.target.value)} className={fieldClass} /><p className="text-[10px] text-gray-400 mt-1">مثال: N=2 يعني القطعة الثانية في كل مجموعة.</p></div>
                     <div><label className={labelClass}>نسبة الخصم على القطعة (%)</label><input type="number" min="1" max="100" step="1" value={form.config.percent} onChange={(event) => updateConfig("percent", event.target.value)} className={fieldClass} /></div>
-                    <div className="sm:col-span-2"><label className={labelClass}>أقصى مرات تطبيق العرض داخل الطلب</label><input type="number" min="0" step="1" value={form.config.maxUsesPerOrder} onChange={(event) => updateConfig("maxUsesPerOrder", event.target.value)} className={fieldClass} /><p className="text-[10px] text-gray-400 mt-1">اكتب 0 للسماح بتكرار الخصم مع كل مجموعة مؤهلة، أو 1 لتطبيق الخصم مرة واحدة فقط في الطلب.</p></div>
+                    <div className="sm:col-span-2 text-[11px] text-gray-500">يُطبّق الخصم على قطعة واحدة فقط في الطلب، حتى عند زيادة عدد القطع.</div>
                   </>
                 )}
                 {form.type === "cart_percent" && (
