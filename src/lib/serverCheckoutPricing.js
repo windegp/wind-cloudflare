@@ -386,7 +386,7 @@ export async function createServerCheckoutQuote(input = {}) {
   };
 
   const items = await resolveCartItems(db, input.cartItems);
-  const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
+  const paidSubtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
   const offersEnvironment = input.offersEnvironment === "preview" ? "preview" : "production";
   const [settingsSnap, offersSnap, shippingRulesSnap] = await Promise.all([
     getDoc(doc(db, "settings", "siteSettings")),
@@ -429,11 +429,25 @@ export async function createServerCheckoutQuote(input = {}) {
     promotions.firstOrderEnabled === true &&
     Number(promotions.firstOrderDiscount) > 0 &&
     Number(promotions.firstOrderDiscount) <= 100
-      ? Math.round((subtotal * Number(promotions.firstOrderDiscount)) / 100)
+      ? Math.round((paidSubtotal * Number(promotions.firstOrderDiscount)) / 100)
       : 0;
 
   const offerResult = computeBestOffer(items, offers, now);
   const winner = chooseBestDiscount({ offerResult, promo, firstOrderDiscount });
+
+  // A qualifying buy-X-get-Y gift is an additional line, so its original
+  // value is included in subtotal and offset by the offer discount.
+  const autoGiftSubtotal =
+    winner.source === "offer" && offerResult.offer?.type === "buy_x_get_y"
+      ? (offerResult.offerBenefits?.lines || []).reduce(
+          (sum, line) => sum + line.discountedUnits.reduce(
+            (lineSum, unit) => lineSum + (unit.autoAdded === true ? Math.max(0, Number(unit.originalPrice) || 0) : 0),
+            0
+          ),
+          0
+        )
+      : 0;
+  const subtotal = paidSubtotal + autoGiftSubtotal;
   const discount = Math.min(subtotal, Math.max(0, Math.round(winner.discount)));
 
   const shippingCostByGovernorate = promotions.shippingCostByGovernorate || {};
@@ -488,6 +502,40 @@ export async function createServerCheckoutQuote(input = {}) {
       lines.push({ ...baseLine, price: item.price, quantity: benefitLine.regularQty });
     }
     benefitLine.discountedUnits.forEach((unit) => {
+      if (unit.autoAdded === true) {
+        const giftSelections =
+          input.offerGiftSelections && typeof input.offerGiftSelections === "object" && !Array.isArray(input.offerGiftSelections)
+            ? input.offerGiftSelections
+            : {};
+        const selection = giftSelections[unit.giftKey] || {};
+        const selectedSize = String(selection.selectedSize ?? item.selectedSize ?? "");
+        const selectedColor = String(selection.selectedColor ?? item.selectedColor ?? "");
+        if (!matchesVariant(item._product, { ...item, selectedSize, selectedColor })) {
+          throw new CheckoutQuoteError("لون أو مقاس الهدية المجانية لم يعد متاحاً. اختر خياراً آخر.", 409);
+        }
+
+        lines.push({
+          ...baseLine,
+          name: `${item.title}${selectedSize ? " - " + selectedSize : ""}`,
+          price: unit.finalPrice,
+          originalPrice: unit.originalPrice,
+          unitDiscount: unit.discount,
+          quantity: 1,
+          selectedSize,
+          selectedColor,
+          image: String(selection.image || item.image || ""),
+          isOfferBenefit: true,
+          isFree: unit.free,
+          isAutoAddedOfferGift: true,
+          offerId: offerBenefits.offerId,
+          offerIds: offerBenefits.offerIds,
+          offerType: offerBenefits.offers.map((offer) => offer.type).join("+"),
+          offerTypes: offerBenefits.offers.map((offer) => offer.type),
+          offerNames: offerBenefits.offers.map((offer) => offer.name),
+        });
+        return;
+      }
+
       lines.push({
         ...baseLine,
         price: unit.finalPrice,
@@ -508,7 +556,7 @@ export async function createServerCheckoutQuote(input = {}) {
 
   const originalSubtotal = items.reduce(
     (sum, item) => sum + (item.compareAtPrice ?? item.price) * item.qty,
-    0
+    autoGiftSubtotal
   );
   const productDiscountTotal = items.reduce(
     (sum, item) => sum + Math.max(0, (item.compareAtPrice ?? item.price) - item.price) * item.qty,
