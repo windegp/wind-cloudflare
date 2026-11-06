@@ -79,6 +79,7 @@ function isItemEligible(item, offer) {
     if (!keys.some((k) => selected.includes(k))) return false;
   }
 
+  // Discounted products remain eligible by default; only an explicit true excludes them.
   if (offer.excludeDiscounted === true && isDiscountedItem(item)) return false;
 
   return true;
