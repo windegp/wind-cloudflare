@@ -96,10 +96,24 @@ function calculateLegacyPromoDiscount(cartItems, promoResult, subtotal) {
   }
 
   if (promoResult?.type === 'fixed') {
-    // /api/validate-promo currently applies legacy fixed codes to the cart subtotal.
-    // Keep that behavior here; server/client policy alignment belongs to the next step.
     if (!Number.isFinite(value) || value <= 0) return storedDiscount;
-    return Math.min(subtotal, value);
+
+    let applicableItems = Array.isArray(cartItems) ? cartItems : [];
+    if (Array.isArray(promoResult.scope) && promoResult.scope.length > 0) {
+      const scope = new Set(promoResult.scope.map(String));
+      applicableItems = applicableItems.filter((item) => {
+        const keys = [item?.id, item?.handle]
+          .filter((key) => key !== undefined && key !== null && String(key) !== '')
+          .map(String);
+        return keys.some((key) => scope.has(key));
+      });
+    }
+
+    const applicableSubtotal = applicableItems.reduce(
+      (sum, item) => sum + (parseFloat(item?.price) || 0) * (parseInt(item?.qty) || 1),
+      0
+    );
+    return Math.min(applicableSubtotal, value);
   }
 
   return storedDiscount;
