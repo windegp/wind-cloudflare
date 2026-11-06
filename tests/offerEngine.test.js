@@ -30,12 +30,12 @@ describe('سيناريوهات "أفضل عرض يكسب"', () => {
   it('٦٤٥ + ٥٩٠ + ٣٢٠ → ٢٣٦ (الخصم على الأرخص في الزوج الأول)', () => {
     expect(computeBestOffer([item(645), item(590), item(320)], OFFERS).discount).toBe(236);
   });
-  it('٦٤٥ + ٥٩٠ + ٣٢٠ + ٢٧٠ → ٣٤٤ (٤٠٪ أحسن من القطعة المجانية ٢٧٠)', () => {
+  it('٦٤٥ + ٥٩٠ + ٣٢٠ + ٢٧٠ → ٢٣٦ (خصم واحد على القطعة الثانية)', () => {
     const r = computeBestOffer([item(645), item(590), item(320), item(270)], OFFERS);
-    expect(r.discount).toBe(344);
+    expect(r.discount).toBe(236);
     expect(r.offer.id).toBe('nth');
     // Each priced line represents a different product, so 3+1 cannot combine them.
-    expect(r.candidates.map((c) => [c.id, c.discount])).toEqual([['nth', 344]]);
+    expect(r.candidates.map((c) => [c.id, c.discount])).toEqual([['nth', 236]]);
   });
   it('لا يجمع عرض القطعة المجانية كميات منتجات مختلفة', () => {
     const cart = [item(645, 3, { id: 'A' }), item(590, 1, { id: 'B' })];
