@@ -8,7 +8,7 @@ import {
   query,
   where,
 } from "firebase/firestore/lite";
-import { computeBestOffer, isFreeShippingRuleEligible, isOfferLive } from "@/lib/offerEngine";
+import { computeBestOffer, getOfferGiftSelectionKey, isFreeShippingRuleEligible, isOfferLive } from "@/lib/offerEngine";
 import { FREE_SHIPPING_THRESHOLD, SHIPPING_COST } from "@/lib/constants";
 import { isFreeShippingThresholdMet } from "@/lib/shippingCalculations";
 
@@ -507,7 +507,9 @@ export async function createServerCheckoutQuote(input = {}) {
           input.offerGiftSelections && typeof input.offerGiftSelections === "object" && !Array.isArray(input.offerGiftSelections)
             ? input.offerGiftSelections
             : {};
-        const selection = giftSelections[unit.giftKey] || {};
+        const originalCartItem = Array.isArray(input.cartItems) ? input.cartItems[cartIndex] : null;
+        const originalGiftKey = getOfferGiftSelectionKey(offerBenefits.offerId, originalCartItem || item);
+        const selection = giftSelections[unit.giftKey] || giftSelections[originalGiftKey] || {};
         const selectedSize = String(selection.selectedSize ?? item.selectedSize ?? "");
         const selectedColor = String(selection.selectedColor ?? item.selectedColor ?? "");
         if (!matchesVariant(item._product, { ...item, selectedSize, selectedColor })) {
