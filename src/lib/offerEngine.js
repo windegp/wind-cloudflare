@@ -174,7 +174,7 @@ export function computeOfferDiscount(cartItems, offer) {
     case OFFER_TYPES.NTH_PERCENT: {
       const nth = toInt(cfg.nth);
       const pct = toPercent(cfg.percent);
-      const maxUses = getMaxUsesPerOrder(cfg);
+      const maxUses = getMaxUsesPerOrder();
       if (!(nth >= 2) || Number.isNaN(pct) || maxUses === null) return 0;
       raw = sumTieredBenefit(expandUnits(eligible), nth, 1, pct / 100, maxUses);
       break;
@@ -314,7 +314,7 @@ export function computeOfferBenefits(cartItems, offer, now = new Date()) {
       const buy = toInt(cfg.buyQty);
       const get = toInt(cfg.getQty);
       if (!(buy >= 1) || !(get >= 1)) break;
-      const maxUses = getMaxUsesPerOrder(cfg);
+      const maxUses = getMaxUsesPerOrder();
       if (maxUses === null) break;
       const groupSize = buy + get;
       const groups = Math.min(Math.floor(ordered.length / groupSize), maxUses);
@@ -331,7 +331,7 @@ export function computeOfferBenefits(cartItems, offer, now = new Date()) {
       const nth = toInt(cfg.nth);
       const percent = toPercent(cfg.percent);
       if (!(nth >= 2) || Number.isNaN(percent)) break;
-      const maxUses = getMaxUsesPerOrder(cfg);
+      const maxUses = getMaxUsesPerOrder();
       if (maxUses === null) break;
       const groups = Math.min(Math.floor(ordered.length / nth), maxUses);
       for (let group = 0; group < groups; group += 1) {
