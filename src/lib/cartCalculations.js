@@ -127,7 +127,8 @@ function calculateLegacyPromoDiscount(cartItems, promoResult, subtotal) {
  * العرض لازم يكون أعلى فعلاً عشان يكسب، وعند التعادل الخصم القديم هو اللي بيتطبق.
  */
 export function calculateAllTotals(cartItems, promoResult = null, shippingSettings = null, isFirstOrder = false, offers = null, freeShippingRule = null) {
-  const subtotal = calculateSubtotal(cartItems);
+  // The purchased-items subtotal excludes any automatically added free gifts.
+  const cartSubtotal = calculateSubtotal(cartItems);
 
   // قارن كل الخصومات النقدية فعلياً؛ لا تمنح الكود أولوية على خصم أكبر.
   // عند التعادل: promo ثم first_order ثم offer (ترتيب ثابت ومتوافق مع السيرفر).
@@ -149,7 +150,7 @@ export function calculateAllTotals(cartItems, promoResult = null, shippingSettin
             const cap = Number(promoResult.maxDiscount) > 0 ? Number(promoResult.maxDiscount) : amount;
             return Math.min(amount, cap, eligibleSubtotal);
           })()
-        : calculateLegacyPromoDiscount(cartItems, promoResult, subtotal)
+        : calculateLegacyPromoDiscount(cartItems, promoResult, cartSubtotal)
       : 0;
 
   const firstOrderPercent = Number(shippingSettings?.firstOrderDiscount);
@@ -159,7 +160,7 @@ export function calculateAllTotals(cartItems, promoResult = null, shippingSettin
     Number.isFinite(firstOrderPercent) &&
     firstOrderPercent > 0 &&
     firstOrderPercent <= 100
-      ? Math.round((subtotal * firstOrderPercent) / 100)
+      ? Math.round((cartSubtotal * firstOrderPercent) / 100)
       : 0;
 
   const offerResult = computeBestOffer(cartItems, offers);
@@ -172,9 +173,23 @@ export function calculateAllTotals(cartItems, promoResult = null, shippingSettin
   candidates.sort((a, b) => b.discount - a.discount || a.rank - b.rank);
   const winner = candidates[0] || { source: 'none', discount: 0 };
 
-  const discount = Math.min(subtotal, Math.max(0, Math.round(winner.discount)));
   const discountSource = winner.source;
   const appliedOffer = discountSource === 'offer' ? offerResult.offer : null;
+
+  // A buy-X-get-Y gift is an extra line, not a discounted unit from the paid cart.
+  // Include its original value in the displayed subtotal, then subtract the benefit.
+  const autoGiftSubtotal =
+    discountSource === 'offer' && offerResult.offer?.type === 'buy_x_get_y'
+      ? (offerResult.offerBenefits?.lines || []).reduce(
+          (sum, line) => sum + line.discountedUnits.reduce(
+            (lineSum, unit) => lineSum + (unit.autoAdded === true ? Math.max(0, Number(unit.originalPrice) || 0) : 0),
+            0
+          ),
+          0
+        )
+      : 0;
+  const subtotal = cartSubtotal + autoGiftSubtotal;
+  const discount = Math.min(subtotal, Math.max(0, Math.round(winner.discount)));
 
   // شحن المنتجات المحددة مستقل عن الحد العام الذي يُحسب بعد الخصم النقدي.
   const freeShippingByRule = isFreeShippingRuleEligible(cartItems, freeShippingRule);
