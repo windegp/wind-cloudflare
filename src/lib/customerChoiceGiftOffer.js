@@ -91,46 +91,15 @@ export function computeCustomerChoiceGiftOffer(purchaseItems, giftSelections, of
       a.unitIndex - b.unitIndex
   ).slice(0, freeQty);
 
-  const maxDiscount = Number(offer.maxDiscount);
-  const uncappedDiscount = cheapest.reduce((sum, unit) => sum + unit.price, 0);
-  const targetDiscount = Math.round(
-    Number.isFinite(maxDiscount) && maxDiscount > 0
-      ? Math.min(uncappedDiscount, maxDiscount)
-      : uncappedDiscount
-  );
-
-  // Allocate the capped total in integer piasters without exceeding unit prices.
-  const allocations = cheapest.map((unit, index) => {
-    const exactCents = uncappedDiscount > 0
-      ? (unit.price / uncappedDiscount) * targetDiscount * 100
-      : 0;
-    const cents = Math.floor(exactCents);
-    return { unit, index, cents, remainder: exactCents - cents };
-  });
-  let remainingCents = Math.max(
-    0,
-    Math.round(targetDiscount * 100) - allocations.reduce((sum, entry) => sum + entry.cents, 0)
-  );
-  allocations.sort((a, b) => b.remainder - a.remainder || a.index - b.index);
-  for (let index = 0; index < allocations.length && remainingCents > 0; index += 1) {
-    const entry = allocations[index];
-    const maxCents = Math.round(entry.unit.price * 100);
-    if (entry.cents < maxCents) {
-      entry.cents += 1;
-      remainingCents -= 1;
-    }
-  }
-
-  const discountedUnits = allocations
-    .filter((entry) => entry.cents > 0)
-    .map(({ unit, cents }) => ({
+  const discountedUnits = cheapest
+    .map((unit) => ({
       source: unit.source,
       lineIndex: unit.lineIndex,
       unitIndex: unit.unitIndex,
       originalPrice: unit.price,
-      discount: cents / 100,
-      finalPrice: Math.max(0, Math.round(unit.price * 100 - cents) / 100),
-      free: cents >= Math.round(unit.price * 100),
+      discount: unit.price,
+      finalPrice: 0,
+      free: true,
     }))
     .sort((a, b) =>
       (a.source === b.source ? 0 : a.source === "purchase" ? -1 : 1) ||
