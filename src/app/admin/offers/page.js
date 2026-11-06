@@ -32,6 +32,7 @@ export const dynamic = "force-dynamic";
 
 const TYPE_OPTIONS = [
   { value: "buy_x_get_y", label: "اشترِ X واحصل على Y مجانًا" },
+  { value: "buy_x_get_y_select_gift", label: "اشترِ X واختر Y قطع مجانًا من مجموعة هدايا" },
   { value: "nth_percent", label: "خصم على أرخص قطعة عند بلوغ N قطع" },
   { value: "cart_percent", label: "خصم نسبة على المنتجات المؤهلة" },
   { value: "cart_fixed", label: "خصم مبلغ ثابت على المنتجات المؤهلة" },
@@ -51,6 +52,8 @@ const emptyForm = () => ({
   active: true,
   productScope: "all",
   productIds: [],
+  purchaseProductIds: [],
+  giftProductIds: [],
   excludedProductIds: [],
   excludeDiscounted: false,
 });
@@ -117,6 +120,8 @@ function offerDescription(offer) {
     description = "شحن مجاني فقط";
   } else if (offer.type === "buy_x_get_y") {
     description = `اشترِ ${cfg.buyQty} واحصل على ${cfg.getQty} مجانًا`;
+  } else if (offer.type === "buy_x_get_y_select_gift") {
+    description = `اشترِ ${cfg.buyQty} واختر ${cfg.getQty} قطع مجانًا`;
   } else if (offer.type === "nth_percent") {
     description = `خصم ${cfg.percent}% على أرخص قطعة عند شراء ${cfg.nth} قطع مؤهلة`;
   } else if (offer.type === "cart_percent") {
@@ -206,6 +211,8 @@ export default function AdminOffersPage() {
   const [formError, setFormError] = useState("");
   const [includeSearch, setIncludeSearch] = useState("");
   const [excludeSearch, setExcludeSearch] = useState("");
+  const [purchaseSearch, setPurchaseSearch] = useState("");
+  const [giftSearch, setGiftSearch] = useState("");
   const [environment, setEnvironment] = useState("preview");
   const [shippingRule, setShippingRule] = useState(emptyShippingRule);
   const [shippingRuleError, setShippingRuleError] = useState("");
@@ -286,6 +293,8 @@ export default function AdminOffersPage() {
     setFormError("");
     setIncludeSearch("");
     setExcludeSearch("");
+    setPurchaseSearch("");
+    setGiftSearch("");
     setShowForm(true);
   };
 
@@ -313,6 +322,8 @@ export default function AdminOffersPage() {
       endsAt: dateInputValue(offer.endsAt),
       productScope: offer.productScope === "selected" ? "selected" : "all",
       productIds: Array.isArray(offer.productIds) ? offer.productIds.map(String) : [],
+      purchaseProductIds: Array.isArray(offer.purchaseProductIds) ? offer.purchaseProductIds.map(String) : [],
+      giftProductIds: Array.isArray(offer.giftProductIds) ? offer.giftProductIds.map(String) : [],
       excludedProductIds: Array.isArray(offer.excludedProductIds) ? offer.excludedProductIds.map(String) : [],
       active: offer.active === true,
       excludeDiscounted: offer.excludeDiscounted === true,
@@ -320,6 +331,8 @@ export default function AdminOffersPage() {
     setFormError("");
     setIncludeSearch("");
     setExcludeSearch("");
+    setPurchaseSearch("");
+    setGiftSearch("");
     setShowForm(true);
   };
 
@@ -334,9 +347,13 @@ export default function AdminOffersPage() {
     if (!Number.isInteger(priority) || priority < 0) return "الأولوية يجب أن تكون رقمًا صحيحًا غير سالب.";
     if (form.startsAt && form.endsAt && form.startsAt > form.endsAt) return "تاريخ النهاية يجب ألا يسبق تاريخ البداية.";
 
-    if (form.type === "buy_x_get_y") {
+    if (form.type === "buy_x_get_y" || form.type === "buy_x_get_y_select_gift") {
       if (!Number.isInteger(Number(form.config.buyQty)) || Number(form.config.buyQty) < 1) return "عدد القطع المطلوب شراؤها يجب أن يكون 1 أو أكثر.";
       if (!Number.isInteger(Number(form.config.getQty)) || Number(form.config.getQty) < 1) return "عدد القطع المجانية يجب أن يكون 1 أو أكثر.";
+    }
+    if (form.type === "buy_x_get_y_select_gift") {
+      if (!form.purchaseProductIds.length) return "اختر منتجًا واحدًا على الأقل في مجموعة المنتجات المؤهلة للشراء.";
+      if (!form.giftProductIds.length) return "اختر منتجًا واحدًا على الأقل في مجموعة المنتجات المسموح بها كهدايا.";
     }
     if (form.type === "nth_percent") {
       if (!Number.isInteger(Number(form.config.nth)) || Number(form.config.nth) < 2) return "عدد القطع المؤهلة يجب أن يكون 2 أو أكثر.";
@@ -347,7 +364,7 @@ export default function AdminOffersPage() {
     }
     if ((form.type === "cart_fixed" || form.type === "coupon_fixed") && !(Number(form.config.amount) > 0)) return "مبلغ الخصم يجب أن يكون أكبر من صفر.";
     if (form.type === "coupon_fixed" && !/^[A-Z0-9_-]{3,40}$/i.test(form.couponCode.trim())) return "أدخل كود قسيمة صحيحًا من 3 إلى 40 حرفًا أو رقمًا.";
-    if (form.productScope === "selected" && form.productIds.length === 0) return "اختر منتجًا واحدًا على الأقل أو غيّر النطاق إلى كل المنتجات.";
+    if (form.type !== "buy_x_get_y_select_gift" && form.productScope === "selected" && form.productIds.length === 0) return "اختر منتجًا واحدًا على الأقل أو غيّر النطاق إلى كل المنتجات.";
     return "";
   };
 
@@ -394,7 +411,7 @@ export default function AdminOffersPage() {
         }
       }
       const numericConfig = {};
-      if (form.type === "buy_x_get_y") {
+      if (form.type === "buy_x_get_y" || form.type === "buy_x_get_y_select_gift") {
         numericConfig.buyQty = Number(form.config.buyQty);
         numericConfig.getQty = Number(form.config.getQty);
       } else if (form.type === "nth_percent") {
@@ -411,8 +428,12 @@ export default function AdminOffersPage() {
         type: form.type,
         ...(form.type === "coupon_fixed" ? { couponCode: form.couponCode.trim().toUpperCase() } : { couponCode: "" }),
         config: numericConfig,
-        minCart: Number(form.minCart) || 0,
-        maxDiscount: Number(form.maxDiscount) || 0,
+        minCart: form.type === "buy_x_get_y_select_gift" ? 0 : Number(form.minCart) || 0,
+        maxDiscount: form.type === "buy_x_get_y_select_gift" ? 0 : Number(form.maxDiscount) || 0,
+        ...(form.type === "buy_x_get_y_select_gift" ? {
+          purchaseProductIds: [...new Set(form.purchaseProductIds.map(String))],
+          giftProductIds: [...new Set(form.giftProductIds.map(String))],
+        } : {}),
         priority: Number(form.priority),
         startsAt: form.startsAt || null,
         endsAt: form.endsAt || null,
@@ -693,7 +714,14 @@ export default function AdminOffersPage() {
                       <span>الأولوية: {Number(offer.priority) || 100}</span>
                       <span>الحد الأدنى: {Number(offer.minCart) || 0} ج.م</span>
                       <span>سقف الخصم: {Number(offer.maxDiscount) > 0 ? `${offer.maxDiscount} ج.م` : "بدون سقف"}</span>
-                      <span>{offer.productScope === "selected" ? `${products.filter((product) => hasProduct(product, offer.productIds || [])).length} منتج مستهدف` : "كل المنتجات"}</span>
+                      {offer.type === "buy_x_get_y_select_gift" ? (
+                        <>
+                          <span>{(offer.purchaseProductIds || []).length} منتج مؤهل للشراء</span>
+                          <span>{(offer.giftProductIds || []).length} منتج متاح كهدية</span>
+                        </>
+                      ) : (
+                        <span>{offer.productScope === "selected" ? `${products.filter((product) => hasProduct(product, offer.productIds || [])).length} منتج مستهدف` : "كل المنتجات"}</span>
+                      )}
                       {(offer.excludedProductIds || []).length > 0 && <span>مستثنى: {products.filter((product) => hasProduct(product, offer.excludedProductIds || [])).length} منتج</span>}
                       {offer.excludeDiscounted && <span>يستثني المنتجات المخفّضة</span>}
                       {offer.startsAt && <span>من: {String(offer.startsAt).slice(0, 10)}</span>}
@@ -754,11 +782,15 @@ export default function AdminOffersPage() {
                   </select>
                 </div>
 
-                {form.type === "buy_x_get_y" && (
+                {(form.type === "buy_x_get_y" || form.type === "buy_x_get_y_select_gift") && (
                   <>
                     <div><label className={labelClass}>عدد القطع المطلوب شراؤها (X)</label><input type="number" min="1" step="1" value={form.config.buyQty} onChange={(event) => updateConfig("buyQty", event.target.value)} className={fieldClass} /></div>
                     <div><label className={labelClass}>عدد القطع المجانية (Y)</label><input type="number" min="1" step="1" value={form.config.getQty} onChange={(event) => updateConfig("getQty", event.target.value)} className={fieldClass} /></div>
-                    <div className="sm:col-span-2 text-[11px] text-gray-500">يُحسب العدد لكل منتج على حدة؛ لا تُجمع كميات منتجات مختلفة. كل منتج يحقق الشرط يمنح هديته مرة واحدة فقط مهما زادت كميته.</div>
+                    {form.type === "buy_x_get_y" ? (
+                      <div className="sm:col-span-2 text-[11px] text-gray-500">يُحسب العدد لكل منتج على حدة؛ لا تُجمع كميات منتجات مختلفة. كل منتج يحقق الشرط يمنح هديته مرة واحدة فقط مهما زادت كميته.</div>
+                    ) : (
+                      <div className="sm:col-span-2 text-[11px] text-gray-500">تُجمع القطع من كل المنتجات التي تحددها في مجموعة الشراء، ثم يختار العميل الهدايا بنفسه من مجموعة الهدايا.</div>
+                    )}
                   </>
                 )}
                 {form.type === "nth_percent" && (
@@ -778,8 +810,12 @@ export default function AdminOffersPage() {
                   </>
                 )}
 
-                <div><label className={labelClass}>الحد الأدنى لقيمة المنتجات المؤهلة (ج.م)</label><input type="number" min="0" step="1" value={form.minCart} onChange={(event) => updateField("minCart", event.target.value)} className={fieldClass} /><p className="text-[10px] text-gray-400 mt-1">اكتب 0 لإلغاء الحد الأدنى.</p></div>
-                <div><label className={labelClass}>أقصى مبلغ للخصم (ج.م)</label><input type="number" min="0" step="1" value={form.maxDiscount} onChange={(event) => updateField("maxDiscount", event.target.value)} className={fieldClass} /><p className="text-[10px] text-gray-400 mt-1">اكتب 0 ليكون الخصم بلا سقف.</p></div>
+                {form.type !== "buy_x_get_y_select_gift" && (
+                  <>
+                    <div><label className={labelClass}>الحد الأدنى لقيمة المنتجات المؤهلة (ج.م)</label><input type="number" min="0" step="1" value={form.minCart} onChange={(event) => updateField("minCart", event.target.value)} className={fieldClass} /><p className="text-[10px] text-gray-400 mt-1">اكتب 0 لإلغاء الحد الأدنى.</p></div>
+                    <div><label className={labelClass}>أقصى مبلغ للخصم (ج.م)</label><input type="number" min="0" step="1" value={form.maxDiscount} onChange={(event) => updateField("maxDiscount", event.target.value)} className={fieldClass} /><p className="text-[10px] text-gray-400 mt-1">اكتب 0 ليكون الخصم بلا سقف.</p></div>
+                  </>
+                )}
                 <div><label className={labelClass}>الأولوية عند التعادل</label><input type="number" min="0" step="1" value={form.priority} onChange={(event) => updateField("priority", event.target.value)} className={fieldClass} /><p className="text-[10px] text-gray-400 mt-1">الرقم الأقل يفوز عند تساوي الخصم بين عرضين.</p></div>
                 <div className="flex items-center gap-3">
                   <input id="offer-exclude-discounted" type="checkbox" checked={form.excludeDiscounted} onChange={(event) => updateField("excludeDiscounted", event.target.checked)} className="w-4 h-4 accent-[#008060]" />
@@ -791,6 +827,30 @@ export default function AdminOffersPage() {
               </div>
 
               <div className="border-t border-gray-100 pt-5 space-y-3">
+                {form.type === "buy_x_get_y_select_gift" ? (
+                  <>
+                    <div className="font-black text-sm text-gray-800">مجموعات المنتجات</div>
+                    <ProductPicker
+                      title="المنتجات المؤهلة للشراء *"
+                      hint="تُجمع كميات هذه المنتجات معًا لتحقيق شرط X، ويمكن اختيار أكثر من منتج."
+                      products={products}
+                      selected={form.purchaseProductIds}
+                      search={purchaseSearch}
+                      onSearch={setPurchaseSearch}
+                      onToggle={(product) => chooseProduct("purchaseProductIds", product)}
+                    />
+                    <ProductPicker
+                      title="المنتجات المسموح بها كهدايا *"
+                      hint="العميل سيختار الهدايا بنفسه من هذه المجموعة بعد استيفاء عدد القطع المطلوبة."
+                      products={products}
+                      selected={form.giftProductIds}
+                      search={giftSearch}
+                      onSearch={setGiftSearch}
+                      onToggle={(product) => chooseProduct("giftProductIds", product)}
+                    />
+                  </>
+                ) : (
+                  <>
                 <div className="font-black text-sm text-gray-800">نطاق المنتجات</div>
                 <div className="flex flex-wrap gap-4 text-sm">
                   <label className="flex items-center gap-2"><input type="radio" name="offer-scope" checked={form.productScope === "all"} onChange={() => updateField("productScope", "all")} className="accent-[#008060]" /> كل المنتجات</label>
@@ -817,6 +877,8 @@ export default function AdminOffersPage() {
                   onToggle={(product) => chooseProduct("excludedProductIds", product)}
                 />
                 {products.length === 0 && <p className="text-xs text-amber-700">لم يتم تحميل المنتجات. تحقق من اتصال Firebase ثم أعد المحاولة.</p>}
+                  </>
+                )}
               </div>
 
               <div className="border-t border-gray-100 pt-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
