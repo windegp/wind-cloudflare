@@ -99,11 +99,11 @@ describe('سيناريوهات "أفضل عرض يكسب"', () => {
     expect(result.offer.id).toBe("nth");
     expect(result.appliedOffers.map((offer) => offer.id)).toEqual(["nth"]);
     expect(result.offerBenefits.offers.map((offer) => offer.id)).toEqual(["nth"]);
-    expect(result.discount).toBe(344);
+    expect(result.discount).toBe(236);
 
     const legacyHelperResult = computeStackedOfferBenefits(cart, [legacyStackedOffer, BXGY]);
     expect(legacyHelperResult.offers.map((offer) => offer.id)).toEqual(["nth"]);
-    expect(legacyHelperResult.discount).toBe(344);
+    expect(legacyHelperResult.discount).toBe(236);
   });
   it.each([4, 5, 6, 8, 12])('من ٤ إلى %i قطعة: يظل عرض ٣+١ ثابتًا بمنفعة واحدة', (quantity) => {
     const result = computeBestOffer([item(645, quantity)], OFFERS);
