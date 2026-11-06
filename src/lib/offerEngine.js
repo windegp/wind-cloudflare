@@ -5,7 +5,8 @@
 //
 // القواعد:
 //  - عرض واحد فقط بيتطبق (الأعلى خصماً للعميل) — العروض ما بتتجمعش.
-//  - الخصم دايماً على القطع الأرخص في كل مجموعة.
+//  - الهدية المجانية: مرة واحدة لكل منتج مؤهل، ولا تُجمع كميات منتجات مختلفة.
+//  - خصم القطعة رقم N: مرة واحدة لكل طلب، ويمكن أن يشمل منتجات مختلفة.
 //  - الخصم الناتج رقم صحيح (الواجهة بتعرضه بـ ".00").
 //  - عند التعادل: priority الأقل أولاً، ثم id أبجدياً (نتيجة ثابتة).
 // ============================================
@@ -109,7 +110,7 @@ function expandUnits(items) {
 
 /** Product identity shared by cart lines with different colors/sizes. */
 function getProductGroupKey(item) {
-  const identity = [item?.productId, item?.id, item?.productHandle, item?.handle]
+  const identity = [item?.productId, item?.productHandle, item?.handle, item?.id]
     .find((value) => value !== undefined && value !== null && String(value).trim() !== '');
   return identity === undefined ? null : String(identity).trim();
 }
