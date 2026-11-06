@@ -5,7 +5,7 @@ import { collection, doc, getDoc, getDocs, limit, query, where } from 'firebase/
 export const dynamic = 'force-dynamic';
 
 function normalizePhone(value) {
-  return String(value || '').replace(/\\D/g, '');
+  return String(value || '').replace(/\D/g, '');
 }
 
 async function checkFirstOrder(db, email, phone) {
@@ -161,14 +161,6 @@ export async function POST(req) {
       discountAmount = Math.min(fixed, applicableSubtotal);
     } else {
       return NextResponse.json({ valid: false, message: 'نوع كود الخصم غير مدعوم' });
-    } else if (promo.type === 'percent') {
-      const applicableSubtotal = applicableItems.reduce(
-        (sum, item) => sum + (parseFloat(item.price) || 0) * (parseInt(item.qty) || 1),
-        0
-      );
-      discountAmount = Math.round((applicableSubtotal * Number(promo.value)) / 100);
-    } else if (promo.type === 'fixed') {
-      discountAmount = Math.min(Number(promo.value), subtotal);
     }
 
     return NextResponse.json({
