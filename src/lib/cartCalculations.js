@@ -5,7 +5,7 @@
 // ============================================
 
 import { SHIPPING_COST, FREE_SHIPPING_THRESHOLD, CURRENCY } from '@/lib/constants';
-import { computeBestOffer } from '@/lib/offerEngine';
+import { computeBestOffer, isFreeShippingRuleEligible } from '@/lib/offerEngine';
 
 /**
  * Calculate subtotal from cart items
@@ -58,32 +58,79 @@ export function calculateTotal(subtotal, shipping, discount = 0) {
   return Math.max(0, subtotal - discount + shipping);
 }
 
-// مصدر الخصم الأساسي (بدون العروض) — نفس شروط calculateDiscount بالظبط
-function getBaseDiscountSource(promoResult = null, isFirstOrder = false, shippingSettings = null) {
-  if (promoResult?.valid && promoResult.type !== 'free_shipping') return 'promo';
-  if (isFirstOrder && shippingSettings?.firstOrderEnabled && shippingSettings?.firstOrderDiscount > 0) return 'first_order';
-  return 'none';
-}
-
 /**
  * offers: العروض النشطة من /api/offers (اختياري — لو مفيش، النتيجة نفس القديمة بالظبط)
  * بترجع كمان: discountSource ('promo' | 'first_order' | 'offer' | 'none') و appliedOffer
  * القاعدة: أفضل خصم واحد للعميل بين (الكود / خصم الطلب الأول) و(العروض).
  * العرض لازم يكون أعلى فعلاً عشان يكسب، وعند التعادل الخصم القديم هو اللي بيتطبق.
  */
-export function calculateAllTotals(cartItems, promoResult = null, shippingSettings = null, isFirstOrder = false, offers = null) {
+export function calculateAllTotals(cartItems, promoResult = null, shippingSettings = null, isFirstOrder = false, offers = null, freeShippingRule = null) {
   const subtotal = calculateSubtotal(cartItems);
-  const baseDiscount = calculateDiscount(promoResult, subtotal, isFirstOrder, shippingSettings);
+
+  // قارن كل الخصومات النقدية فعلياً؛ لا تمنح الكود أولوية على خصم أكبر.
+  // عند التعادل: promo ثم first_order ثم offer (ترتيب ثابت ومتوافق مع السيرفر).
+  const promoDiscount =
+    promoResult?.valid && promoResult.type !== 'free_shipping'
+      ? promoResult.type === 'coupon_fixed'
+        ? (() => {
+            const scope = Array.isArray(promoResult.scope) ? promoResult.scope.map(String) : null;
+            const excluded = Array.isArray(promoResult.excludedProductIds) ? promoResult.excludedProductIds.map(String) : [];
+            const eligibleSubtotal = cartItems.reduce((sum, item) => {
+              const keys = [item.id, item.handle].map(String);
+              if (scope && !keys.some((key) => scope.includes(key))) return sum;
+              if (keys.some((key) => excluded.includes(key))) return sum;
+              if (promoResult.excludeDiscounted === true && Number(item.compareAtPrice) > Number(item.price)) return sum;
+              return sum + (Number(item.price) || 0) * (Number(item.qty) || 0);
+            }, 0);
+            if (eligibleSubtotal < (Number(promoResult.minCart) || 0)) return 0;
+            const amount = Number(promoResult.value) || 0;
+            const cap = Number(promoResult.maxDiscount) > 0 ? Number(promoResult.maxDiscount) : amount;
+            return Math.min(amount, cap, eligibleSubtotal);
+          })()
+        : Math.max(0, Number(promoResult.discountAmount) || 0)
+      : 0;
+
+  const firstOrderPercent = Number(shippingSettings?.firstOrderDiscount);
+  const firstOrderDiscount =
+    isFirstOrder &&
+    shippingSettings?.firstOrderEnabled &&
+    Number.isFinite(firstOrderPercent) &&
+    firstOrderPercent > 0 &&
+    firstOrderPercent <= 100
+      ? Math.round((subtotal * firstOrderPercent) / 100)
+      : 0;
+
   const offerResult = computeBestOffer(cartItems, offers);
-  const offerWins = offerResult.discount > baseDiscount;
-  const discount = offerWins ? offerResult.discount : baseDiscount;
-  const discountSource = offerWins ? 'offer' : getBaseDiscountSource(promoResult, isFirstOrder, shippingSettings);
-  const appliedOffer = offerWins ? offerResult.offer : null;
-  // الشحن يُحسب على الـ subtotal الكامل (قبل الخصم)
-  // خصم المنتجات لا يلغي شحن مجاني حققه العميل بإجمالي طلبه
-  const shipping  = calculateShipping(promoResult, subtotal, cartItems, shippingSettings);
-  const total     = calculateTotal(subtotal, shipping, discount);
-  return { subtotal, discount, shipping, total, discountSource, appliedOffer };
+  const candidates = [
+    { source: 'promo', discount: promoDiscount, rank: 1 },
+    { source: 'first_order', discount: firstOrderDiscount, rank: 2 },
+    { source: 'offer', discount: Math.max(0, Number(offerResult.discount) || 0), rank: 3 },
+  ].filter((candidate) => candidate.discount > 0);
+
+  candidates.sort((a, b) => b.discount - a.discount || a.rank - b.rank);
+  const winner = candidates[0] || { source: 'none', discount: 0 };
+
+  const discount = Math.min(subtotal, Math.max(0, Math.round(winner.discount)));
+  const discountSource = winner.source;
+  const appliedOffer = discountSource === 'offer' ? offerResult.offer : null;
+
+  // قاعدة المنتجات المحددة إضافة مستقلة؛ تظل قواعد الشحن العامة والأكواد كما هي.
+  const freeShippingByRule = isFreeShippingRuleEligible(cartItems, freeShippingRule);
+  const shipping = freeShippingByRule
+    ? 0
+    : calculateShipping(promoResult, subtotal, cartItems, shippingSettings);
+  const total = calculateTotal(subtotal, shipping, discount);
+  return {
+    subtotal,
+    discount,
+    shipping,
+    total,
+    discountSource,
+    appliedOffer,
+    appliedOffers: discountSource === 'offer' ? offerResult.appliedOffers : [],
+    offerBenefits: discountSource === 'offer' ? offerResult.offerBenefits : null,
+    freeShippingByRule,
+  };
 }
 
 /** Format currency for display */

@@ -11,6 +11,7 @@ import {
 } from '@/lib/constants';
 import { calculateAllTotals } from '@/lib/cartCalculations';
 import { sendNewOrderNotification } from '@/lib/fcmAdmin';
+import { verifyCheckoutQuote } from '@/lib/checkoutQuoteToken';
 
 // Generate unique order number with format: WND-YYYYMMDD-TTTT
 function generateOrderNumber() {
@@ -37,7 +38,57 @@ export async function POST(req) {
       total,
       promoCode,
       discount,
+      quoteToken,
     } = body;
+
+    // Verify the server-signed quote before creating a payment hash or sending order confirmation.
+    // Legacy card_success callbacks without a token remain supported for already-started orders.
+    let signedQuote = null;
+    if (quoteToken) {
+      try {
+        signedQuote = await verifyCheckoutQuote(quoteToken, orderId);
+      } catch (error) {
+        console.error("[create-order] Checkout quote verification failed:", error);
+      }
+      if (!signedQuote) {
+        return NextResponse.json(
+          { success: false, error: "انتهت صلاحية تسعير الطلب أو تعذر التحقق منه. أعد المحاولة من صفحة الدفع." },
+          { status: 409 }
+        );
+      }
+    } else if (paymentMethod !== "card_success") {
+      return NextResponse.json(
+        { success: false, error: "بيانات التسعير الموثوقة غير موجودة. حدّث صفحة الدفع وحاول مرة أخرى." },
+        { status: 409 }
+      );
+    }
+
+    if (signedQuote) {
+      const matches = (provided, trusted) =>
+        provided !== undefined && provided !== null &&
+        Number.isFinite(Number(provided)) &&
+        Math.abs(Number(provided) - Number(trusted)) <= 0.01;
+
+      if (
+        (paymentMethod === "card" && !matches(amount, signedQuote.total)) ||
+        (paymentMethod !== "card" && (
+          !matches(subtotal, signedQuote.subtotal) ||
+          !matches(shipping, signedQuote.shipping) ||
+          !matches(total, signedQuote.total)
+        ))
+      ) {
+        return NextResponse.json(
+          { success: false, error: "تغيرت أسعار السلة. أعد مراجعة الإجمالي قبل إتمام الطلب." },
+          { status: 409 }
+        );
+      }
+    }
+
+    const trustedSubtotal = signedQuote?.subtotal ?? (Number(subtotal) || 0);
+    const trustedShipping = signedQuote?.shipping ?? (Number(shipping) || 0);
+    const trustedTotal = signedQuote?.total ?? (Number(total) || 0);
+    const trustedCartItems = signedQuote?.cartItems ?? (Array.isArray(cartItems) ? cartItems : []);
+    const trustedLineItems = signedQuote?.lineItems ?? trustedCartItems;
 
     // ============================================
     // 1. كاشير — إرجاع بيانات الـ iFrame (hash + params)
@@ -58,7 +109,7 @@ export async function POST(req) {
         );
       }
 
-      const amountStr = parseFloat(amount).toFixed(2);
+      const amountStr = Number(trustedTotal).toFixed(2);
 
       // Generate payment hash (HMAC SHA256) using Web Crypto API
       const hashPath = `/?payment=${merchantId}.${orderId}.${amountStr}.${CURRENCY}`;
@@ -106,7 +157,7 @@ export async function POST(req) {
     // --- تجهيز بيانات الإيميل ---
     // نستخدم قيمة shipping الفعلية المرسلة من صفحة الدفع مباشرة
     // بدل إعادة حسابها من كود الخصم، عشان تطابق القيمة الحقيقية دايماً
-    const actualShipping = Number(shipping) || 0;
+    const actualShipping = Number(trustedShipping) || 0;
     const isFreeShipping = actualShipping === 0;
     const shippingText = isFreeShipping
       ? `0 ${CURRENCY} (شحن مجاني)`
@@ -117,27 +168,34 @@ export async function POST(req) {
 
    // --- دالة مشتركة لبناء كارت كل منتج (table layout — متوافق مع كل عملاء البريد) ---
     const buildItemCard = (item) => {
-      const hasDiscount = item.compareAtPrice && Number(item.compareAtPrice) > Number(item.price);
+      const title = item.productTitle || item.title || item.name || "منتج";
+      const quantity = Number(item.quantity ?? item.qty) || 1;
+      const originalPrice = Number(item.originalPrice ?? item.compareAtPrice);
+      const hasDiscount = Number.isFinite(originalPrice) && originalPrice > Number(item.price);
+      const isOfferBenefit = item.isOfferBenefit === true;
+      const benefitLabel = isOfferBenefit
+        ? (item.isFree ? "هدية مجانية من العرض" : "خصم العرض")
+        : "";
       const imgUrl = item.image || (Array.isArray(item.images) ? item.images[0] : '') || '';
       return `
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: #fafafa; border-radius: 6px; border: 1px solid #f0f0f0; margin-bottom: 8px;">
         <tr>
           <td width="56" style="padding: 10px;">
-            <img src="${imgUrl}" alt="${item.title}" width="52" height="52" style="width: 52px; height: 52px; object-fit: cover; border-radius: 4px; display: block; background: #efefef;" />
+            <img src="${imgUrl}" alt="${title}" width="52" height="52" style="width: 52px; height: 52px; object-fit: cover; border-radius: 4px; display: block; background: #efefef;" />
           </td>
           <td style="padding: 10px 6px; vertical-align: middle;">
-            <span style="color: #111111; font-size: 12px; font-weight: bold; display: block; margin-bottom: 2px;">${item.title}</span>
-            <span style="color: #888888; font-size: 11px;">المقاس: ${item.selectedSize || '-'} &nbsp;|&nbsp; الكمية: ${item.qty}</span>
+            <span style="color: #111111; font-size: 12px; font-weight: bold; display: block; margin-bottom: 2px;">${title}</span>
+            <span style="color: #888888; font-size: 11px;">المقاس: ${item.selectedSize || '-'} &nbsp;|&nbsp; اللون: ${item.selectedColor || '-'} &nbsp;|&nbsp; الكمية: ${quantity}</span>
+            ${benefitLabel ? `<span style="color: #16835f; font-size: 10px; font-weight: bold; display: block; margin-top: 3px;">${benefitLabel}</span>` : ''}
           </td>
           <td width="65" style="padding: 10px; text-align: left; vertical-align: middle; white-space: nowrap;">
-            ${hasDiscount ? `<span style="color: #bbbbbb; font-size: 10px; text-decoration: line-through; display: block;">${item.compareAtPrice}</span>` : ''}
+            ${hasDiscount ? `<span style="color: #bbbbbb; font-size: 10px; text-decoration: line-through; display: block;">${originalPrice}</span>` : ''}
             <span style="color: #111111; font-size: 12px; font-weight: bold;">${item.price} ${CURRENCY}</span>
           </td>
         </tr>
       </table>
     `;
     };
-
     // --- دالة مشتركة لبناء جسم الإيميل بالكامل (table-based) ---
     const buildEmailHtml = ({ headline, subline, isAdminEmail = false }) => `
       <div dir="rtl" style="background-color: #f0f0f0; padding: 24px 12px; font-family: 'Arial', sans-serif;">
@@ -170,14 +228,14 @@ export async function POST(req) {
           </td></tr>
 
           <tr><td style="padding: 0 20px 4px;">
-            ${cartItems.map(buildItemCard).join('')}
+            ${trustedLineItems.map(buildItemCard).join('')}
           </td></tr>
 
           <tr><td style="padding: 4px 24px 16px;">
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top: 1px solid #ededed; padding-top: 12px;">
               <tr>
                 <td style="padding: 6px 0; font-size: 12px; color: #999999;">سعر المنتج</td>
-                <td style="padding: 6px 0; font-size: 12px; color: #444444; text-align: left;">${Number(subtotal) || cartItems.reduce((sum, item) => sum + (Number(item.price) * Number(item.qty)), 0)} ${CURRENCY}</td>
+                <td style="padding: 6px 0; font-size: 12px; color: #444444; text-align: left;">${trustedSubtotal || trustedCartItems.reduce((sum, item) => sum + (Number(item.price) * Number(item.qty)), 0)} ${CURRENCY}</td>
               </tr>
               <tr>
                 <td style="padding: 6px 0; font-size: 12px; color: #999999;">الشحن</td>
@@ -185,7 +243,7 @@ export async function POST(req) {
               </tr>
               <tr>
                 <td style="padding: 10px 0 0; font-size: 14px; color: #111111; font-weight: bold; border-top: 1px solid #ededed;">الإجمالي</td>
-                <td style="padding: 10px 0 0; font-size: 16px; color: #111111; font-weight: bold; text-align: left; border-top: 1px solid #ededed;">${total} ${CURRENCY}</td>
+                <td style="padding: 10px 0 0; font-size: 16px; color: #111111; font-weight: bold; text-align: left; border-top: 1px solid #ededed;">${trustedTotal} ${CURRENCY}</td>
               </tr>
             </table>
           </td></tr>
@@ -278,7 +336,7 @@ export async function POST(req) {
     // يجي بالصدفة مرة ويختفي مرة، نفس مشكلة عدم الاستقرار القديمة.
     await sendNewOrderNotification({
       title: `طلب جديد من WIND`,
-      body: `${formData.firstName} • ${displayPaymentMethod} • ${total} ${CURRENCY} • #${orderNumber}`,
+      body: `${formData.firstName} • ${displayPaymentMethod} • ${trustedTotal} ${CURRENCY} • #${orderNumber}`,
       orderId: orderNumber,
     });
 

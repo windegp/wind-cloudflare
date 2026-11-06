@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   computeBestOffer,
   computeOfferDiscount,
+  computeOfferBenefits,
+  computeStackedOfferBenefits,
+  isFreeShippingRuleEligible,
   isOfferLive,
   cairoDateString,
 } from '@/lib/offerEngine';
@@ -27,29 +30,137 @@ describe('سيناريوهات "أفضل عرض يكسب"', () => {
   it('٦٤٥ + ٥٩٠ + ٣٢٠ → ٢٣٦ (الخصم على الأرخص في الزوج الأول)', () => {
     expect(computeBestOffer([item(645), item(590), item(320)], OFFERS).discount).toBe(236);
   });
-  it('٦٤٥ + ٥٩٠ + ٣٢٠ + ٢٧٠ → ٣٤٤ (٤٠٪ أحسن من القطعة المجانية ٢٧٠)', () => {
+  it('٦٤٥ + ٥٩٠ + ٣٢٠ + ٢٧٠ → ٢٣٦ (خصم واحد على القطعة الثانية)', () => {
     const r = computeBestOffer([item(645), item(590), item(320), item(270)], OFFERS);
-    expect(r.discount).toBe(344);
+    expect(r.discount).toBe(236);
     expect(r.offer.id).toBe('nth');
-    expect(r.candidates.map((c) => [c.id, c.discount])).toEqual([['nth', 344], ['bxgy', 270]]);
+    // Each priced line represents a different product, so 3+1 cannot combine them.
+    expect(r.candidates.map((c) => [c.id, c.discount])).toEqual([['nth', 236]]);
+  });
+  it('لا يجمع عرض القطعة المجانية كميات منتجات مختلفة', () => {
+    const cart = [item(645, 3, { id: 'A' }), item(590, 1, { id: 'B' })];
+    expect(computeOfferDiscount(cart, BXGY)).toBe(0);
+    expect(computeBestOffer(cart, [BXGY]).offer).toBeNull();
+  });
+  it('يمنح هدية مستقلة لكل منتج يحقق الشرط، مرة واحدة فقط لكل منتج', () => {
+    const cart = [
+      item(645, 6, { id: 'A' }),
+      item(320, 4, { id: 'B' }),
+      item(270, 3, { id: 'C' }),
+    ];
+    const result = computeBestOffer(cart, [BXGY]);
+    expect(result.discount).toBe(965); // هدية واحدة من A وهدية واحدة من B فقط
+    const gifts = result.offerBenefits.lines.flatMap((line) => line.discountedUnits);
+    expect(gifts).toHaveLength(2);
+    expect(gifts.every((unit) => unit.free)).toBe(true);
+    expect(result.offerBenefits.lines.map((line) => line.cartIndex)).toEqual([0, 1]);
+  });
+  it('يجمع نفس المنتج عبر أسطر ألوان أو مقاسات مختلفة', () => {
+    const cart = [
+      item(645, 2, { id: 'A-black', handle: 'product-a', selectedColor: 'أسود' }),
+      item(645, 2, { id: 'A-white', handle: 'product-a', selectedColor: 'أبيض' }),
+    ];
+    const result = computeBestOffer(cart, [BXGY]);
+    expect(result.discount).toBe(645);
+    expect(result.offerBenefits.lines.flatMap((line) => line.discountedUnits)).toHaveLength(1);
   });
   it('٤ × ٦٤٥ → اشتري ٣ وخد ١ (٦٤٥ أحسن من ٥١٦)', () => {
     const r = computeBestOffer([item(645, 4)], OFFERS);
     expect(r.discount).toBe(645);
     expect(r.offer.id).toBe('bxgy');
   });
-  it('٦ × ٦٤٥ → ٤٠٪ على التانية (٧٧٤ أحسن من ٦٤٥)', () => {
+  it('٦ × ٦٤٥ → يظل عرض ٣+١ هو الفائز ويمنح قطعة مجانية واحدة فقط', () => {
     const r = computeBestOffer([item(645, 6)], OFFERS);
-    expect(r.discount).toBe(774);
-    expect(r.offer.id).toBe('nth');
-  });
-  it('٨ × ٦٤٥ → اشتري ٣ وخد ١ (١٢٩٠ أحسن من ١٠٣٢)', () => {
-    const r = computeBestOffer([item(645, 8)], OFFERS);
-    expect(r.discount).toBe(1290);
+    expect(r.discount).toBe(645);
     expect(r.offer.id).toBe('bxgy');
+    expect(r.appliedOffers).toHaveLength(1);
+    expect(r.offerBenefits.lines[0].regularQty).toBe(5);
+    expect(r.offerBenefits.lines[0].discountedUnits).toHaveLength(1);
+    expect(r.offerBenefits.lines[0].discountedUnits[0].free).toBe(true);
+  });
+  it('٨ × ٦٤٥ → يظل عرض ٣+١ قطعة مجانية واحدة فقط مهما زادت الكمية', () => {
+    const r = computeBestOffer([item(645, 8)], OFFERS);
+    expect(r.discount).toBe(645);
+    expect(r.offer.id).toBe('bxgy');
+    expect(r.appliedOffers).toHaveLength(1);
+    expect(r.offerBenefits.lines[0].regularQty).toBe(7);
+    expect(r.offerBenefits.lines[0].discountedUnits).toHaveLength(1);
+    expect(r.offerBenefits.lines[0].discountedUnits[0].free).toBe(true);
   });
   it('قطعة واحدة → لا عرض', () => {
-    expect(computeBestOffer([item(645)], OFFERS)).toEqual({ discount: 0, offer: null, candidates: [] });
+    const result = computeBestOffer([item(645)], OFFERS);
+    expect(result.discount).toBe(0);
+    expect(result.appliedOffers).toEqual([]);
+  });
+  it('لا يدمج عرضين حتى لو كان في مستند العرض القديم stackWithOfferIds', () => {
+    const cart = [item(645), item(590), item(320), item(270)];
+    const legacyStackedOffer = { ...NTH, stackWithOfferIds: ["bxgy"] };
+    const result = computeBestOffer(cart, [legacyStackedOffer, BXGY]);
+    expect(result.offer.id).toBe("nth");
+    expect(result.appliedOffers.map((offer) => offer.id)).toEqual(["nth"]);
+    expect(result.offerBenefits.offers.map((offer) => offer.id)).toEqual(["nth"]);
+    expect(result.discount).toBe(236);
+
+    const legacyHelperResult = computeStackedOfferBenefits(cart, [legacyStackedOffer, BXGY]);
+    expect(legacyHelperResult.offers.map((offer) => offer.id)).toEqual(["nth"]);
+    expect(legacyHelperResult.discount).toBe(236);
+  });
+  it.each([4, 5, 6, 8, 12])('من ٤ إلى %i قطعة: يظل عرض ٣+١ ثابتًا بمنفعة واحدة', (quantity) => {
+    const result = computeBestOffer([item(645, quantity)], OFFERS);
+    expect(result.offer.id).toBe("bxgy");
+    expect(result.appliedOffers).toHaveLength(1);
+    expect(result.discount).toBe(645);
+    expect(result.offerBenefits.lines[0].regularQty).toBe(quantity - 1);
+    expect(result.offerBenefits.lines[0].discountedUnits).toHaveLength(1);
+    expect(result.offerBenefits.lines[0].discountedUnits[0].free).toBe(true);
+  });
+  it('عرض ٤٠٪ على القطعة الثانية يمنح خصمًا على قطعة واحدة فقط عند أي كمية', () => {
+    const offer = { ...NTH };
+    for (const quantity of [2, 3, 4, 8]) {
+      const result = computeBestOffer([item(645, quantity)], [offer]);
+      expect(result.discount).toBe(258);
+      expect(result.offer.id).toBe("nth");
+      expect(result.offerBenefits.lines[0].regularQty).toBe(quantity - 1);
+      expect(result.offerBenefits.lines[0].discountedUnits).toHaveLength(1);
+      expect(result.offerBenefits.lines[0].discountedUnits[0].discount).toBe(258);
+      expect(result.offerBenefits.lines[0].discountedUnits[0].free).toBe(false);
+    }
+  });
+  it('يتجاهل أي إعداد قديم لعدد الاستخدامات ويطبّق المنفعة مرة واحدة فقط', () => {
+    const legacyUnlimited = {
+      ...BXGY,
+      config: { ...BXGY.config, maxUsesPerOrder: 0 },
+    };
+    const cart = [item(645, 8)];
+    expect(computeOfferDiscount(cart, legacyUnlimited)).toBe(645);
+    const result = computeBestOffer(cart, [legacyUnlimited]);
+    expect(result.discount).toBe(645);
+    expect(result.offerBenefits.lines[0].regularQty).toBe(7);
+    expect(result.offerBenefits.lines[0].discountedUnits).toHaveLength(1);
+  });
+  it('قاعدة المتجر القديمة لا تفعّل الشحن من قسم المنتجات المحددة', () => {
+    expect(isFreeShippingRuleEligible(
+      [item(645)],
+      { enabled: true, scope: "store", productIds: [] }
+    )).toBe(false);
+  });
+  it('لا يفعّل الشحن المحدد دون اختيار أي منتج', () => {
+    expect(isFreeShippingRuleEligible(
+      [item(645, 3)],
+      { enabled: true, scope: "selected", productIds: [], condition: "quantity", minQuantity: 1 }
+    )).toBe(false);
+  });
+  it('شحن المنتجات المحددة يُحسب بعدد القطع المستهدفة فقط', () => {
+    const cart = [item(500, 2, { id: "A" }), item(900, 3, { id: "B" })];
+    const rule = { enabled: true, scope: "selected", productIds: ["A"], condition: "quantity", minQuantity: 2 };
+    expect(isFreeShippingRuleEligible(cart, rule)).toBe(true);
+    expect(isFreeShippingRuleEligible([{ ...cart[0], qty: 1 }, cart[1]], rule)).toBe(false);
+  });
+  it('شحن المنتجات المحددة يُحسب بقيمة المنتجات المستهدفة فقط', () => {
+    const cart = [item(300, 2, { id: "A" }), item(900, 1, { id: "B" })];
+    const rule = { enabled: true, scope: "selected", productIds: ["A"], condition: "subtotal", minSubtotal: 600 };
+    expect(isFreeShippingRuleEligible(cart, rule)).toBe(true);
+    expect(isFreeShippingRuleEligible([{ ...cart[0], qty: 1 }, cart[1]], rule)).toBe(false);
   });
   it('ترتيب القطع في السلة لا يغيّر النتيجة', () => {
     const a = computeBestOffer([item(320), item(645), item(270), item(590)], OFFERS);
@@ -202,3 +313,96 @@ describe('التواريخ (بتوقيت القاهرة)', () => {
     expect(computeBestOffer([item(645), item(320)], [expired, { ...BXGY }], NOW).discount).toBe(0);
   });
 });
+
+describe('قسائم الشراء لا تعمل تلقائيًا', () => {
+  it('يتجاهل القسيمة في اختيار العرض التلقائي حتى يدخل العميل كودها', () => {
+    const coupon = {
+      id: 'coupon-200', name: 'قسيمة 200', active: true, type: 'coupon_fixed',
+      couponCode: 'WIND200', config: { amount: 200 }, productScope: 'all',
+    };
+    const result = computeBestOffer([item(645, 2)], [coupon]);
+    expect(result.discount).toBe(0);
+    expect(result.offer).toBeNull();
+    expect(result.appliedOffers).toEqual([]);
+  });
+});
+
+describe('تفصيل القطع المستفيدة من العرض', () => {
+  it('يفصل القطعة المجانية عن الثلاث قطع المدفوعة في نفس السطر', async () => {
+    const { computeOfferBenefits } = await import('@/lib/offerEngine');
+    const result = computeOfferBenefits([item(645, 4)], BXGY);
+    expect(result.discount).toBe(645);
+    expect(result.lines).toHaveLength(1);
+    expect(result.lines[0].regularQty).toBe(3);
+    expect(result.lines[0].discountedUnits).toMatchObject([
+      { unitIndex: 3, originalPrice: 645, discount: 645, finalPrice: 0, free: true },
+    ]);
+  });
+
+  it('يحدد القطعة الثانية بخصم 40% ويترك الأولى بسعرها', async () => {
+    const { computeOfferBenefits } = await import('@/lib/offerEngine');
+    const result = computeOfferBenefits([item(645), item(320)], NTH);
+    expect(result.discount).toBe(128);
+    expect(result.lines).toMatchObject([
+      { cartIndex: 1, regularQty: 0, discountedUnits: [{ originalPrice: 320, discount: 128, finalPrice: 192, free: false }] },
+    ]);
+  });
+
+  it('يوزع خصم السلة النسبي على كل القطع المؤهلة', async () => {
+    const { computeOfferBenefits } = await import('@/lib/offerEngine');
+    const cartOffer = { id: 'cp', active: true, type: 'cart_percent', config: { percent: 10 }, productScope: 'all' };
+    const result = computeOfferBenefits([item(100), item(200)], cartOffer);
+    expect(result.discount).toBe(30);
+    expect(result.lines.flatMap((line) => line.discountedUnits).reduce((sum, unit) => sum + unit.discount, 0)).toBe(30);
+    expect(result.lines).toHaveLength(2);
+  });
+
+  it('يحافظ على حد الخصم الأقصى عند توزيع الميزة', async () => {
+    const { computeOfferBenefits } = await import('@/lib/offerEngine');
+    const result = computeOfferBenefits([item(645, 4)], { ...BXGY, maxDiscount: 300 });
+    expect(result.discount).toBe(300);
+    expect(result.lines.flatMap((line) => line.discountedUnits).reduce((sum, unit) => sum + unit.discount, 0)).toBe(300);
+  });
+
+  it('يوزع الخصم الثابت على الوحدات ويطابق إجمالي الخصم', () => {
+    const offer = { id: 'fixed-split', active: true, type: 'cart_fixed', config: { amount: 100 }, productScope: 'all' };
+    const cart = [item(100), item(200)];
+    const result = computeOfferBenefits(cart, offer);
+    expect(result.discount).toBe(computeOfferDiscount(cart, offer));
+    expect(result.discount).toBe(100);
+    expect(result.lines.flatMap((line) => line.discountedUnits).reduce((sum, unit) => sum + unit.discount, 0)).toBe(100);
+  });
+
+  it('يحافظ على سقف الخصم حتى لو حوّل الهدية إلى وحدة مخفّضة جزئياً', () => {
+    const result = computeOfferBenefits([item(645, 4)], { ...BXGY, maxDiscount: 300 });
+    const unit = result.lines[0].discountedUnits[0];
+    expect(result.discount).toBe(300);
+    expect(unit).toMatchObject({ originalPrice: 645, discount: 300, finalPrice: 345, free: false });
+  });
+
+  it('توزيع الخصم يطابق إجمالي العرض عند أسعار بها كسور', () => {
+    const offer = { id: 'fractional', active: true, type: 'cart_percent', config: { percent: 100 }, productScope: 'all' };
+    const cart = [item(99.5)];
+    const result = computeOfferBenefits(cart, offer);
+    expect(result.discount).toBe(computeOfferDiscount(cart, offer));
+    expect(result.discount).toBe(99);
+    expect(result.lines[0].discountedUnits[0].finalPrice).toBe(0.5);
+  });
+
+  it('تقريب خصم النسبة يظل مطابقاً للخصم النهائي بالجنيه', () => {
+    const offer = { id: 'percent-round', active: true, type: 'cart_percent', config: { percent: 15 }, productScope: 'all' };
+    const cart = [item(645), item(320, 2)];
+    const result = computeOfferBenefits(cart, offer);
+    const allocated = result.lines.flatMap((line) => line.discountedUnits).reduce((sum, unit) => sum + unit.discount, 0);
+    expect(result.discount).toBe(computeOfferDiscount(cart, offer));
+    expect(allocated).toBe(193);
+    expect(allocated).toBe(result.discount);
+  });
+
+  it('لا يغيّر عناصر السلة الأصلية', () => {
+    const cart = Object.freeze([Object.freeze(item(645, 4))]);
+    expect(() => computeOfferBenefits(cart, BXGY)).not.toThrow();
+    expect(cart[0].qty).toBe(4);
+  });
+});
+

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getCairoTimestamp } from '@/lib/analytics-helpers';
 import { verifyWebhookSignature } from '@/lib/kashier';
+import { verifyCheckoutQuote } from '@/lib/checkoutQuoteToken';
 import { successResponse, errorResponse, unauthorizedError } from '@/lib/apiResponse';
 import { getDb } from "@/lib/firebase";
 import { doc, getDoc, setDoc, updateDoc, increment } from "firebase/firestore/lite";
@@ -41,7 +42,7 @@ export async function POST(request) {
         }
 
         // التحقق من صحة التوقيع
-        const isValid = verifyWebhookSignature(data, kashierSignature);
+        const isValid = await verifyWebhookSignature(data, kashierSignature);
 
         if (!isValid) {
             console.error("Invalid Webhook Signature!");
@@ -65,6 +66,48 @@ export async function POST(request) {
 
             if (orderSnap.exists()) {
                 const orderData = orderSnap.data();
+
+                // Kashier signature validity alone is not enough: the paid amount
+                // and currency must also match the server-quoted order snapshot.
+                const expectedAmount = Number(orderData.Total);
+                const receivedAmount = Number(data.amount);
+                const expectedCurrency = String(orderData.Currency || "EGP").toUpperCase();
+                const receivedCurrency = String(data.currency || "EGP").toUpperCase();
+
+                // New checkout records carry a signed quote token. Verify it here
+                // so a client-edited Firestore Total cannot become the payment source.
+                let signedQuote = null;
+                if (orderData["Checkout Quote Token"]) {
+                    try {
+                        signedQuote = await verifyCheckoutQuote(
+                            orderData["Checkout Quote Token"],
+                            orderId
+                        );
+                    } catch (quoteError) {
+                        console.error("[Kashier webhook] Checkout quote verification failed:", quoteError);
+                    }
+                }
+
+                if (
+                    (orderData["Checkout Quote Token"] && !signedQuote) ||
+                    !Number.isFinite(expectedAmount) ||
+                    !Number.isFinite(receivedAmount) ||
+                    Math.abs(expectedAmount - receivedAmount) > 0.01 ||
+                    receivedCurrency !== expectedCurrency ||
+                    (signedQuote && Math.abs(Number(signedQuote.total) - expectedAmount) > 0.01)
+                ) {
+                    console.error("[Kashier webhook] Payment amount/currency mismatch; order remains unpaid.", {
+                        orderId,
+                        expectedAmount,
+                        receivedAmount,
+                        expectedCurrency,
+                        receivedCurrency,
+                    });
+                    return NextResponse.json(
+                        { success: true, ignored: true, reason: "PAYMENT_AMOUNT_MISMATCH" },
+                        { status: 200 }
+                    );
+                }
 
                 if (orderData['Financial Status'] !== 'paid') {
                     

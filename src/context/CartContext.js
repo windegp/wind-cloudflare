@@ -60,13 +60,17 @@ export function CartProvider({ children }) {
 
   // العروض النشطة (من /api/offers) — لو فشل التحميل بنكمل بدون عروض والسلة تشتغل زي ما هي
   const [offers, setOffers] = useState([]);
+  const [freeShippingRule, setFreeShippingRule] = useState(null);
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const res  = await fetch('/api/offers');
         const data = await res.json();
-        if (!cancelled && data?.success && Array.isArray(data.offers)) setOffers(data.offers);
+        if (!cancelled && data?.success && Array.isArray(data.offers)) {
+          setOffers(data.offers);
+          setFreeShippingRule(data.shippingRules || null);
+        }
       } catch { /* بدون عروض */ }
     })();
     return () => { cancelled = true; };
@@ -88,14 +92,18 @@ export function CartProvider({ children }) {
       const exist = prev.find(item =>
         item.id === product.id &&
         item.selectedSize  === product.selectedSize &&
-        item.selectedColor === product.selectedColor
+        item.selectedColor === product.selectedColor &&
+        (item.bundleGroupId || "") === (product.bundleGroupId || "") &&
+        (item.bundleRole || "") === (product.bundleRole || "")
       );
       const qty = product.qty || 1;
       if (exist) {
         return prev.map(item =>
           (item.id === product.id &&
            item.selectedSize  === product.selectedSize &&
-           item.selectedColor === product.selectedColor)
+           item.selectedColor === product.selectedColor &&
+           (item.bundleGroupId || "") === (product.bundleGroupId || "") &&
+           (item.bundleRole || "") === (product.bundleRole || ""))
             ? { ...item, qty: item.qty + qty }
             : item
         );
@@ -105,35 +113,198 @@ export function CartProvider({ children }) {
     openCart();
   }, [openCart]);
 
-  const updateQty = useCallback((id, selectedSize, delta, selectedColor) => {
-    setCartItems(prev => prev.map(item => {
-      const matchColor = selectedColor !== undefined ? item.selectedColor === selectedColor : true;
-      if (item.id === id && item.selectedSize === selectedSize && matchColor) {
-        const newQty = item.qty + delta;
-        return { ...item, qty: newQty > 0 ? newQty : 1 };
+  const updateCartItemVariant = useCallback((originalItem, selection) => {
+    setCartItems((prev) => {
+      // وحدة العرض تُفصل عن باقي الكمية قبل تغيير اللون أو المقاس.
+      if (originalItem.__offerBenefitUnit === true) {
+        const targetIndex = Number(originalItem.__cartIndex);
+        const target = prev[targetIndex];
+        if (!target || target.id !== originalItem.id) return prev;
+
+        const updatedUnit = {
+          ...target,
+          qty: 1,
+          selectedSize: selection.selectedSize,
+          selectedColor: selection.selectedColor,
+          image: selection.image || target.image,
+        };
+        const remainingItems = prev.filter((_, index) => index !== targetIndex);
+        if (target.qty > 1) {
+          remainingItems.splice(targetIndex, 0, { ...target, qty: target.qty - 1 });
+        }
+
+        const duplicateIndex = remainingItems.findIndex((item) =>
+          item.id === updatedUnit.id &&
+          item.selectedSize === updatedUnit.selectedSize &&
+          item.selectedColor === updatedUnit.selectedColor &&
+          (item.bundleGroupId || "") === (updatedUnit.bundleGroupId || "") &&
+          (item.bundleRole || "") === (updatedUnit.bundleRole || "")
+        );
+
+        if (duplicateIndex >= 0) {
+          return remainingItems.map((item, index) =>
+            index === duplicateIndex
+              ? { ...item, qty: item.qty + 1, image: updatedUnit.image }
+              : item
+          );
+        }
+        return [...remainingItems, updatedUnit];
       }
-      return item;
-    }));
+
+      const targetIndex = prev.findIndex((item) =>
+        item.id === originalItem.id &&
+        item.selectedSize === originalItem.selectedSize &&
+        item.selectedColor === originalItem.selectedColor &&
+        (item.bundleGroupId || "") === (originalItem.bundleGroupId || "") &&
+        (item.bundleRole || "") === (originalItem.bundleRole || "")
+      );
+      if (targetIndex < 0) return prev;
+
+      const target = prev[targetIndex];
+      const updated = {
+        ...target,
+        selectedSize: selection.selectedSize,
+        selectedColor: selection.selectedColor,
+        image: selection.image || target.image,
+      };
+      const duplicateIndex = prev.findIndex((item, index) =>
+        index !== targetIndex &&
+        item.id === updated.id &&
+        item.selectedSize === updated.selectedSize &&
+        item.selectedColor === updated.selectedColor &&
+        (item.bundleGroupId || "") === (updated.bundleGroupId || "") &&
+        (item.bundleRole || "") === (updated.bundleRole || "")
+      );
+
+      if (duplicateIndex >= 0) {
+        return prev.reduce((next, item, index) => {
+          if (index === targetIndex) return next;
+          if (index === duplicateIndex) {
+            next.push({ ...item, qty: item.qty + target.qty });
+          } else {
+            next.push(item);
+          }
+          return next;
+        }, []);
+      }
+
+      return prev.map((item, index) => index === targetIndex ? updated : item);
+    });
   }, []);
 
-  const removeFromCart = useCallback((id, selectedSize, selectedColor) => {
-    setCartItems(prev => prev.filter(item => {
-      const matchColor = selectedColor !== undefined ? item.selectedColor === selectedColor : true;
-      return !(item.id === id && item.selectedSize === selectedSize && matchColor);
-    }));
+  const updateQty = useCallback((id, selectedSize, delta, selectedColor, bundleGroupId, cartIndex) => {
+    setCartItems((prev) => {
+      const matches = (item, index) =>
+        (Number.isInteger(cartIndex) ? index === cartIndex : true) &&
+        item.id === id &&
+        item.selectedSize === selectedSize &&
+        (selectedColor === undefined || item.selectedColor === selectedColor) &&
+        (bundleGroupId === undefined || (item.bundleGroupId || "") === (bundleGroupId || ""));
+      const targetIndex = prev.findIndex(matches);
+      if (targetIndex < 0) return prev;
+
+      const target = prev[targetIndex];
+      const newQty = (Number(target.qty) || 0) + delta;
+      if (newQty > 0) {
+        return prev.map((item, index) => index === targetIndex ? { ...item, qty: newQty } : item);
+      }
+
+      // عند وصول الكمية للصفر نحذف السطر فعلياً، مع الحفاظ على سلامة الباقات.
+      if (target.bundleGroupId && target.bundleRole === "parent") {
+        return prev.filter((item) => item.bundleGroupId !== target.bundleGroupId);
+      }
+
+      let next = prev.filter((_, index) => index !== targetIndex);
+      if (target.bundleGroupId) {
+        const remaining = next.filter((item) => item.bundleGroupId === target.bundleGroupId);
+        if (remaining.length === 1 && remaining[0].bundleRole === "parent") {
+          const parent = remaining[0];
+          next = next.map((item) => item === parent ? {
+            ...item,
+            price: item.compareAtPrice || item.price,
+            compareAtPrice: undefined,
+            bundleFreeShipping: undefined,
+            bundleGroupId: "",
+            bundleParentId: "",
+            bundleRole: "",
+          } : item);
+        }
+      }
+      return next;
+    });
+  }, []);
+
+  const removeFromCart = useCallback((id, selectedSize, selectedColor, bundleGroupId, cartIndex) => {
+    setCartItems(prev => {
+      const matchColor = selectedColor !== undefined
+        ? (item) => item.selectedColor === selectedColor
+        : () => true;
+      const target = prev.find((item, index) =>
+        (Number.isInteger(cartIndex) ? index === cartIndex : true) &&
+        item.id === id &&
+        item.selectedSize === selectedSize &&
+        matchColor(item) &&
+        (bundleGroupId === undefined || (item.bundleGroupId || "") === (bundleGroupId || ""))
+      );
+
+      // إزالة المنتج الأساسي تزيل كل عناصر نفس الباقة حتى لا تبقى باقة يتيمة.
+      if (target?.bundleGroupId && target.bundleRole === "parent") {
+        return prev.filter(item => item.bundleGroupId !== target.bundleGroupId);
+      }
+
+      let next = prev.filter((item, index) =>
+        Number.isInteger(cartIndex)
+          ? index !== cartIndex
+          : !(item.id === id &&
+            item.selectedSize === selectedSize &&
+            matchColor(item) &&
+            (bundleGroupId === undefined || (item.bundleGroupId || "") === (bundleGroupId || "")))
+      );
+
+      // لو أزيل آخر منتج إضافي، أعد المنتج الأساسي لسعره الأصلي.
+      if (target?.bundleGroupId) {
+        const remaining = next.filter(item => item.bundleGroupId === target.bundleGroupId);
+        if (remaining.length === 1 && remaining[0].bundleRole === "parent") {
+          const parent = remaining[0];
+          next = next.map(item => item === parent ? {
+            ...item,
+            price: item.compareAtPrice || item.price,
+            compareAtPrice: undefined,
+            bundleFreeShipping: undefined,
+            bundleGroupId: "",
+            bundleParentId: "",
+            bundleRole: "",
+          } : item);
+        }
+      }
+
+      return next;
+    });
   }, []);
 
   // ── Calculations ───────────────────────────────────────────────
-  const { subtotal, discount, shipping, total, discountSource, appliedOffer } = useMemo(
-    () => calculateAllTotals(cartItems, appliedPromo, shippingSettings, isFirstOrder, offers),
-    [cartItems, appliedPromo, shippingSettings, isFirstOrder, offers]
+  const {
+    subtotal, discount, shipping, total, discountSource, appliedOffer, appliedOffers, offerBenefits,
+  } = useMemo(
+    () => calculateAllTotals(cartItems, appliedPromo, shippingSettings, isFirstOrder, offers, freeShippingRule),
+    [cartItems, appliedPromo, shippingSettings, isFirstOrder, offers, freeShippingRule]
   );
 
   // لو عرض تلقائي كسب على كود الخصم: نوضح للعميل إن الكود ما اتطبقش
   // (الحساب نفسه بيستخدم appliedPromo الأصلي — ده للعرض فقط)
   const appliedPromoView = useMemo(() => {
-    if (discountSource === 'offer' && appliedPromo?.valid && appliedPromo.type !== 'free_shipping') {
-      return { ...appliedPromo, message: `تم تطبيق عرض "${appliedOffer?.name || ''}" لأنه الأفضل لك — ولن يُحتسب استخدام الكود` };
+    if (
+      (discountSource === 'offer' || discountSource === 'first_order') &&
+      appliedPromo?.valid &&
+      appliedPromo.type !== 'free_shipping'
+    ) {
+      const winnerLabel = discountSource === 'offer'
+        ? `عرض "${appliedOffer?.name || ''}"`
+        : "خصم الطلب الأول";
+      return {
+        ...appliedPromo,
+        message: `تم تطبيق ${winnerLabel} لأنه يوفّر لك خصماً أكبر — لم يتم تطبيق كود الخصم.`,
+      };
     }
     return appliedPromo;
   }, [appliedPromo, discountSource, appliedOffer]);
@@ -197,10 +368,10 @@ export function CartProvider({ children }) {
 
   const contextValue = useMemo(() => ({
     cartItems,
-    addToCart, removeFromCart, updateQty, clearCart,
+    addToCart, removeFromCart, updateQty, updateCartItemVariant, clearCart,
     isCartOpen, toggleCart, openCart, closeCart,
     subtotal, discount, shipping, total,
-    discountSource, appliedOffer, offers,
+    discountSource, appliedOffer, appliedOffers, offers, offerBenefits, freeShippingRule,
     appliedPromo: appliedPromoView,
     applyPromoCode, removePromoCode,
     discountError, setDiscountError, promoLoading,
@@ -208,10 +379,10 @@ export function CartProvider({ children }) {
     isFirstOrder, setIsFirstOrder,
     setSelectedGovernorate,
   }), [
-    cartItems, addToCart, removeFromCart, updateQty, clearCart,
+    cartItems, addToCart, removeFromCart, updateQty, updateCartItemVariant, clearCart,
     isCartOpen, toggleCart, openCart, closeCart,
     subtotal, discount, shipping, total,
-    discountSource, appliedOffer, offers,
+    discountSource, appliedOffer, appliedOffers, offers, offerBenefits, freeShippingRule,
     appliedPromoView, applyPromoCode, removePromoCode,
     discountError, setDiscountError, promoLoading, shippingSettings,
     isFirstOrder, setIsFirstOrder,

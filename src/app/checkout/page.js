@@ -163,6 +163,7 @@ export default function CheckoutPage() {
     setSelectedGovernorate,
     discountSource,
     appliedOffer,
+    offerBenefits,
   } = useCart();
   
   const { signalPageReady } = usePageReady();
@@ -171,10 +172,31 @@ export default function CheckoutPage() {
     const SHIPPING_COST = shipping;
   const finalTotal    = total;
 
+  // عرض كل قطعة مستفيدة كسطر مستقل في ملخص الدفع.
+  const checkoutDisplayRows = cartItems.flatMap((item, cartIndex) => {
+    const benefitLine = (offerBenefits?.lines || []).find((line) => line.cartIndex === cartIndex);
+    if (!benefitLine) return [{ ...item, displayKey: `${cartIndex}-regular` }];
+    const rows = [];
+    if (benefitLine.regularQty > 0) {
+      rows.push({ ...item, qty: benefitLine.regularQty, displayKey: `${cartIndex}-regular` });
+    }
+    benefitLine.discountedUnits.forEach((unit, unitIndex) => {
+      rows.push({
+        ...item, qty: 1, price: unit.finalPrice,
+        originalOfferPrice: unit.originalPrice,
+        isOfferBenefit: true, isFreeOfferBenefit: unit.free,
+        displayKey: `${cartIndex}-benefit-${unitIndex}`,
+      });
+    });
+    return rows;
+  });
+
   // اسم سطر الخصم في ملخص الطلب
   const discountLabel = discountSource === 'offer'
     ? `عرض: ${appliedOffer?.name || 'خصم'}`
-    : (appliedPromo?.type && appliedPromo.type !== 'free_shipping' ? 'خصم الكود' : 'خصم الطلب الأول 🎉');
+    : appliedPromo?.type === 'coupon_fixed'
+      ? `قسيمة شراء: ${appliedPromo.code || ''}`
+      : (appliedPromo?.type && appliedPromo.type !== 'free_shipping' ? 'خصم الكود' : 'خصم الطلب الأول 🎉');
 
   // بيانات المنتجات التي تُحفظ داخل الطلب دون أي استعلامات إضافية
   const orderLineItems = cartItems.map(item => {
@@ -554,36 +576,52 @@ export default function CheckoutPage() {
     e.preventDefault();
     if (!validate()) return window.scrollTo(0, 0);
 
-    // ── التحقق النهائي من الكود لما يكون مقيد بعميل معين ──
-    // يحصل هنا لأن الإيميل والتليفون متأكدين منهم دلوقتي
-    if (appliedPromo?.valid && (appliedPromo.usageType === 'once_per_customer' || appliedPromo.firstOrderOnly)) {
-      const identifier = formData.email?.toLowerCase().trim() || formData.phone?.replace(/\D/g, '');
-      if (identifier) {
-        try {
-          const recheck = await fetch("/api/validate-promo", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              code: appliedPromo.code,
-              customerEmail: formData.email,
-              customerPhone: formData.phone,
-              cartItems,
-              subtotal,
-            }),
-          });
-          const recheckResult = await recheck.json();
-          if (!recheckResult.valid) {
-            // الكود مش صالح لهذا العميل — نشيله ونوقف الطلب
-            removePromoCode();
-            setDiscountError(recheckResult.message || 'هذا الكود لا ينطبق على بيانات هذا الحساب');
-            window.scrollTo(0, 0);
-            return;
-          }
-        } catch { /* نكمل في حالة فشل الـ network */ }
-      }
-    }
-
+    // إعادة تسعير السلة من Firestore على السيرفر قبل حفظ أي طلب أو بدء الدفع.
+    // لا نعتمد على السعر أو الخصم أو أهلية الطلب الأول القادمة من المتصفح.
     setLoading(true);
+    let quote;
+    let quoteToken;
+    try {
+      const quoteResponse = await fetch("/api/checkout-quote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId: activeOrderId,
+          cartItems,
+          promoCode: appliedPromo?.code || "",
+          customerEmail: formData.email,
+          customerPhone: formData.phone,
+          governorate: formData.governorate,
+        }),
+      });
+      const quoteData = await quoteResponse.json();
+      if (!quoteResponse.ok || !quoteData?.success || !quoteData?.quote) {
+        throw new Error(quoteData?.message || "تعذر تأكيد أسعار السلة. راجع السلة وحاول مرة أخرى.");
+      }
+      quote = quoteData.quote;
+      quoteToken = quoteData.quoteToken;
+      if (!quoteToken) throw new Error("تعذر تأمين تسعير الطلب. حاول مرة أخرى.");
+
+      // لا نبدأ الدفع إذا كان الإجمالي الموثوق مختلفاً عما راجعه العميل على الشاشة.
+      const quoteChanged =
+        Math.abs(Number(quote.subtotal) - Number(subtotal)) > 0.01 ||
+        Math.abs(Number(quote.discount) - Number(discount)) > 0.01 ||
+        Math.abs(Number(quote.shipping) - Number(shipping)) > 0.01 ||
+        Math.abs(Number(quote.total) - Number(finalTotal)) > 0.01 ||
+        quote.discountSource !== discountSource;
+
+      if (quoteChanged) {
+        setSubmitError("تم تحديث سعر منتج أو عرض في سلتك. لم يتم إنشاء الطلب أو بدء الدفع. راجع السلة والإجمالي الجديد ثم حاول مرة أخرى.");
+        setLoading(false);
+        window.scrollTo(0, 0);
+        return;
+      }
+    } catch (error) {
+      setSubmitError(error.message || "تعذر تأكيد أسعار السلة حالياً.");
+      setLoading(false);
+      window.scrollTo(0, 0);
+      return;
+    }
     
     isOrderSubmittedRef.current = true;
 
@@ -592,11 +630,46 @@ export default function CheckoutPage() {
     const pendingOrder = {
       orderId,
       formData,
-      cartItems,
-      total: finalTotal,
-      amount: finalTotal,
-      appliedPromo,
+      cartItems: quote.cartItems,
+      total: quote.total,
+      amount: quote.total,
+      subtotal: quote.subtotal,
+      discount: quote.discount,
+      shipping: quote.shipping,
+      appliedPromo: quote.appliedPromo,
+      discountSource: quote.discountSource,
+      appliedOffer: quote.appliedOffer,
       customerEmail: formData.email,
+      phone: formData.phone,
+      paymentMethod: "card",
+      quoteToken,
+    };
+
+    const trustedFinancialSnapshot = {
+      "Original Subtotal": quote.originalSubtotal,
+      "Product Discount Total": quote.productDiscountTotal,
+      "Discount Amount": quote.discount,
+      "Discount Type": quote.discount > 0
+        ? (quote.discountSource === "promo" ? (quote.appliedPromo?.type || "promo") : quote.discountSource)
+        : (quote.appliedPromo?.freeShipping ? "free_shipping" : ""),
+      "Discount Label": quote.discountSource === "offer"
+        ? `عرض: ${quote.appliedOffer?.name || ""}`.trim()
+        : quote.discountSource === "promo"
+          ? (quote.appliedPromo?.type === "coupon_fixed" ? `قسيمة شراء ${quote.appliedPromo?.code || ""}`.trim() : `كود الخصم ${quote.appliedPromo?.code || ""}`.trim())
+          : quote.discountSource === "first_order"
+            ? "خصم الطلب الأول"
+            : quote.appliedPromo?.freeShipping
+              ? "شحن مجاني"
+              : "",
+      "Discount Percent": quote.discountSource === "promo" && quote.appliedPromo?.type === "percent"
+        ? Number(quote.appliedPromo.value) || 0
+        : quote.discountSource === "first_order"
+          ? Number(quote.firstOrderDiscount) || 0
+          : 0,
+      "Free Shipping Applied": Boolean(quote.freeShipping),
+      "Discount Code": quote.appliedPromo?.code || "",
+      "Offer Id": quote.appliedOffer?.id || "",
+      "Offer Name": quote.appliedOffer?.name || "",
     };
 
     try {
@@ -611,16 +684,17 @@ export default function CheckoutPage() {
         "Shipping Province": formData.governorate,
         "Shipping Phone": formData.phone,
         "Shipping Zip": formData.postalCode || '',
-        Subtotal: subtotal,
-        Shipping: shipping,
-        Total: finalTotal,
+        Subtotal: quote.subtotal,
+        Shipping: quote.shipping,
+        Total: quote.total,
         Currency: "EGP",
         "Financial Status": paymentMethod === 'card' ? "pending_payment" : "pending",
         "Payment Method": paymentMethod,
+        "Checkout Quote Token": quoteToken,
         "Created at": getCairoTimestamp(),
         data_source: "WIND_Web",
-                ...orderFinancialSnapshot,
-        lineItems: orderLineItems
+                ...trustedFinancialSnapshot,
+        lineItems: quote.lineItems
       };
 
 
@@ -635,7 +709,7 @@ export default function CheckoutPage() {
             const sRef = doc(getDb(), "settings", "siteSettings");
             await updateDoc(sRef, {
               "counters.orders": increment(1),
-              "counters.sales": increment(Number(finalTotal))
+              "counters.sales": increment(Number(quote.total))
             });
             sessionStorage.setItem(orderCountKey, "true");
           }
@@ -672,7 +746,7 @@ export default function CheckoutPage() {
 
               await setDoc(customerRef, {
                 "Total Orders": currentOrders + 1,
-                "Total Spent": currentSpent + Number(finalTotal),
+                "Total Spent": currentSpent + Number(quote.total),
                 Last_Order_Status: "New",
                 data_source: "WIND_Web",
                 Phone: formData.phone,
@@ -707,7 +781,7 @@ export default function CheckoutPage() {
                 "Default Address Province": formData.governorate || "",
                 "Default Address Address1": formData.address || "",
                 "Total Orders": 1,
-                "Total Spent": Number(finalTotal),
+                "Total Spent": Number(quote.total),
                 Last_Order_Status: "New",
                 data_source: "WIND_Web",
                 segments: ["Purchased_Once"],
@@ -730,11 +804,15 @@ export default function CheckoutPage() {
           body: JSON.stringify({
             paymentMethod: 'card',
             orderId,
-            amount: finalTotal.toFixed(2),
+            amount: quote.total.toFixed(2),
+            quoteToken,
+            cartItems: quote.cartItems,
+            promoCode: appliedPromo?.code || "",
+            governorate: formData.governorate,
             customerName: `${formData.firstName} ${formData.lastName}`,
             customerEmail: formData.email,
             phone: formData.phone,
-            appliedPromo,
+            formData,
           }),
         });
 
@@ -743,14 +821,21 @@ export default function CheckoutPage() {
 
         localStorage.setItem('pendingOrder', JSON.stringify({
           orderId,
-          amount: finalTotal.toFixed(2),
+          amount: quote.total.toFixed(2),
           customerName: `${formData.firstName} ${formData.lastName}`,
           customerEmail: formData.email,
           phone: formData.phone,
           formData,
-          cartItems,
-          total: finalTotal,
-          appliedPromo,
+          cartItems: quote.cartItems,
+          subtotal: quote.subtotal,
+          discount: quote.discount,
+          shipping: quote.shipping,
+          total: quote.total,
+          appliedPromo: quote.appliedPromo,
+          discountSource: quote.discountSource,
+          appliedOffer: quote.appliedOffer,
+          paymentMethod: "card",
+          quoteToken,
         }));
 
         setIframeData(data.iframeData);
@@ -764,11 +849,15 @@ export default function CheckoutPage() {
             paymentMethod,
             orderId,
             formData,
-            cartItems,
-            subtotal,
-            shipping: SHIPPING_COST,
-            total: finalTotal,
-            appliedPromo,
+            cartItems: quote.cartItems,
+            subtotal: quote.subtotal,
+            discount: quote.discount,
+            shipping: quote.shipping,
+            total: quote.total,
+            promoCode: appliedPromo?.code || "",
+            quoteToken,
+            appliedPromo: quote.appliedPromo,
+            governorate: formData.governorate,
           }),
         });
 
@@ -780,11 +869,11 @@ export default function CheckoutPage() {
         // Catalog أبداً. ونستخدم getCatalogId (نفس مصدر الكتالوج) بدل
         // الـ handle الخام، لأنه لازم يطابق g:id الخاص باللون الفعلي
         // المشترى، وليس فقط أول لون بالصدفة.
-        const purchaseContentIds = cartItems
+        const purchaseContentIds = quote.cartItems
           .filter(it => it.handle || it.id)
           .map(it => getCatalogId(it.handle || it.id, it.selectedColor));
-        const purchaseNumItems = cartItems.reduce((s, it) => s + it.qty, 0);
-        const purchaseCartSnapshot = cartItems.map(it => ({
+        const purchaseNumItems = quote.cartItems.reduce((sum, item) => sum + item.qty, 0);
+        const purchaseCartSnapshot = quote.cartItems.map(it => ({
           id: it.handle || it.id || it.title,
           title: it.title,
           price: it.price,
@@ -794,13 +883,13 @@ export default function CheckoutPage() {
         localStorage.removeItem('pendingOrder');
 
         // ── تسجيل استخدام الكود في Firestore ──
-        if (appliedPromo?.valid && appliedPromo.code && (discountSource !== 'offer' || appliedPromo.type === 'free_shipping')) {
+        if (quote.appliedPromo?.valid && quote.appliedPromo.code) {
           const identifier = formData.email?.toLowerCase().trim() || formData.phone?.replace(/\D/g, '');
           try {
             const { doc: fsDoc, updateDoc: fsUpdateDoc, arrayUnion, increment: fsIncrement } = await import('firebase/firestore/lite');
-            const promoRef = fsDoc(getDb(), 'promoCodes', appliedPromo.code);
+            const promoRef = fsDoc(getDb(), 'promoCodes', quote.appliedPromo.code);
             const updates = { usedCount: fsIncrement(1) };
-            if (identifier && (appliedPromo.usageType === 'once_per_customer')) {
+            if (identifier && (quote.appliedPromo.usageType === 'once_per_customer')) {
               updates.usedBy = arrayUnion(identifier);
             }
             await fsUpdateDoc(promoRef, updates);
@@ -815,7 +904,7 @@ export default function CheckoutPage() {
           // للخلف، إعادة تحميل)، تُلغي Meta التكرار تلقائياً بدل احتساب
           // Purchase مرتين لنفس الطلب.
           event_id: `Purchase-${orderId}`,
-          value: finalTotal,
+          value: quote.total,
           currency: "EGP",
           content_ids: purchaseContentIds,
           num_items: purchaseNumItems,
@@ -826,14 +915,14 @@ export default function CheckoutPage() {
         // يُبنى داخل ttTrack.js نفسها من order_id (وليس من event_id الممرَّر
         // هنا، الذي يُتجاهَل عمداً لأنه خاص بـ Meta فقط).
         ttTrack("CompletePayment", {
-          value: finalTotal,
+          value: quote.total,
           currency: "EGP",
           content_ids: purchaseContentIds,
           num_items: purchaseNumItems,
           order_id: orderId,
           ...buildTtUserData(formData),
         });
-        gaPurchase(orderId, purchaseCartSnapshot, finalTotal);
+        gaPurchase(orderId, purchaseCartSnapshot, quote.total);
 router.push(`/thank-you?orderId=${orderId}`);
       }
 
@@ -962,7 +1051,7 @@ router.push(`/thank-you?orderId=${orderId}`);
 
         {summaryOpen && (
           <div className="mt-4 pb-2 slide-down space-y-3" onClick={e => e.stopPropagation()}>
-            {cartItems.map((item, idx) => (
+            {checkoutDisplayRows.map((item, idx) => (
               <div key={idx} className="flex items-center gap-3">
                 <div className="relative w-12 h-12 bg-gray-100 rounded-lg overflow-visible shrink-0">
                   <img src={item.image || item.images?.[0] || 'https://placehold.co/100'} alt={item.title} className="w-full h-full object-cover rounded-lg border border-gray-200" />
@@ -970,11 +1059,12 @@ router.push(`/thank-you?orderId=${orderId}`);
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-semibold text-gray-800 leading-tight">{item.title}</p>
+                  {item.isOfferBenefit && <p className="text-[11px] font-semibold text-emerald-700 mt-1">{item.isFreeOfferBenefit ? "هدية مجانية من العرض" : "خصم العرض"}</p>}
                   <p className="text-xs text-gray-400">
                     {[item.selectedSize, item.selectedColor].filter(Boolean).join(' / ')}
                   </p>
                 </div>
-                <span className="text-sm font-bold text-gray-800">ج.م {item.price * item.qty}.00</span>
+                <span className="text-sm font-bold text-gray-800">{item.isOfferBenefit && <span className="text-xs text-gray-400 line-through ml-1">ج.م {item.originalOfferPrice}.00</span>}ج.م {item.price * item.qty}.00</span>
               </div>
             ))}
 
@@ -1378,7 +1468,7 @@ router.push(`/thank-you?orderId=${orderId}`);
 
               {payAreaSummaryOpen && (
                 <div className="mt-3 slide-down bg-white border border-gray-200 rounded-xl p-4 space-y-3">
-                  {cartItems.map((item, idx) => (
+                  {checkoutDisplayRows.map((item, idx) => (
                     <div key={idx} className="flex items-center gap-3">
                       <div className="relative w-10 h-10 bg-gray-100 rounded-lg overflow-visible shrink-0">
                         <img src={item.image || item.images?.[0] || 'https://placehold.co/100'} alt={item.title} className="w-full h-full object-cover rounded-lg border border-gray-200" />
@@ -1386,13 +1476,14 @@ router.push(`/thank-you?orderId=${orderId}`);
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-gray-800 leading-tight truncate">{item.title}</p>
+                        {item.isOfferBenefit && <p className="text-[11px] font-semibold text-emerald-700 mt-1">{item.isFreeOfferBenefit ? "هدية مجانية من العرض" : "خصم العرض"}</p>}
                         {(item.selectedSize || item.selectedColor) && (
                           <p className="text-xs text-gray-400">
                             {[item.selectedSize, item.selectedColor].filter(Boolean).join(' / ')}
                           </p>
                         )}
                       </div>
-                      <span className="text-sm font-bold text-gray-800 shrink-0">ج.م {item.price * item.qty}.00</span>
+                      <span className="text-sm font-bold text-gray-800 shrink-0">{item.isOfferBenefit && <span className="text-xs text-gray-400 line-through ml-1">ج.م {item.originalOfferPrice}.00</span>}ج.م {item.price * item.qty}.00</span>
                     </div>
                   ))}
 
@@ -1472,7 +1563,7 @@ router.push(`/thank-you?orderId=${orderId}`);
           <div className="sticky top-[65px] px-8 py-12">
 
             <div className="space-y-5 mb-6 max-h-[320px] overflow-y-auto">
-              {cartItems.map((item, idx) => (
+              {checkoutDisplayRows.map((item, idx) => (
                 <div key={idx} className="flex items-center gap-4">
                   <div className="relative w-14 h-14 bg-gray-200 rounded-xl overflow-visible shrink-0">
                     <img src={item.image || item.images?.[0] || 'https://placehold.co/100'} alt={item.title} className="w-full h-full object-cover rounded-xl border border-gray-300" />
@@ -1481,6 +1572,7 @@ router.push(`/thank-you?orderId=${orderId}`);
                   <div className="flex-1 min-w-0">
 
                     <h4 className="font-semibold text-gray-800 text-sm leading-tight truncate">{item.title}</h4>
+                    {item.isOfferBenefit && <p className="text-[11px] font-semibold text-emerald-700 mt-1">{item.isFreeOfferBenefit ? "هدية مجانية من العرض" : "خصم العرض"}</p>}
 
                     {(item.selectedSize || item.selectedColor) && (
 
@@ -1493,7 +1585,7 @@ router.push(`/thank-you?orderId=${orderId}`);
                     )}
 
                   </div>
-                  <span className="text-sm font-bold text-gray-800 shrink-0">ج.م {item.price * item.qty}.00</span>
+                  <span className="text-sm font-bold text-gray-800 shrink-0">{item.isOfferBenefit && <span className="text-xs text-gray-400 line-through ml-1">ج.م {item.originalOfferPrice}.00</span>}ج.م {item.price * item.qty}.00</span>
                 </div>
               ))}
             </div>

@@ -126,7 +126,7 @@ export default function CartDrawer() {
                         </div>
                         {/* Remove button */}
                         <button
-                          onClick={() => removeFromCart(item.id, item.selectedSize, item.selectedColor)}
+                          onClick={() => removeFromCart(item.id, item.selectedSize, item.selectedColor, item.bundleGroupId || "")}
                           className="remove-btn text-gray-300 shrink-0 mt-0.5"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -144,7 +144,7 @@ export default function CartDrawer() {
                         {/* Qty control */}
                         <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
                           <button
-                            onClick={() => updateQty(item.id, item.selectedSize, -1, item.selectedColor)}
+                            onClick={() => updateQty(item.id, item.selectedSize, -1, item.selectedColor, item.bundleGroupId || "")}
                             className="qty-btn w-7 h-7 flex items-center justify-center text-gray-500 font-bold text-sm"
                           >
                             −
@@ -153,7 +153,7 @@ export default function CartDrawer() {
                             {item.qty}
                           </span>
                           <button
-                            onClick={() => updateQty(item.id, item.selectedSize, 1, item.selectedColor)}
+                            onClick={() => updateQty(item.id, item.selectedSize, 1, item.selectedColor, item.bundleGroupId || "")}
                             className="qty-btn w-7 h-7 flex items-center justify-center text-gray-500 font-bold text-sm"
                           >
                             +

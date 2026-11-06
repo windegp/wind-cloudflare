@@ -2,17 +2,33 @@
 import { useEffect, useState, useRef } from "react";
 import { useCart } from "../../context/CartContext";
 import Link from "next/link";
-import { ShoppingBag, Trash2, X, Plus, ZoomIn, Loader2, Minus, Eye } from '@/components/icons-extra';
+import { ShoppingBag, Trash2, X, Plus, ZoomIn, Loader2, Minus, Eye, Edit2 } from '@/components/icons-extra';
 import { getDb } from "../../lib/firebase";
 import { doc, getDoc, collection, query, where, getDocs, documentId } from "firebase/firestore/lite";
 import QuickViewModal from "@/components/QuickViewModal"; 
 
 export default function CartDrawer() {
-  const { cartItems, isCartOpen, toggleCart, removeFromCart, updateQty, subtotal } = useCart();
+  const { cartItems, isCartOpen, toggleCart, removeFromCart, updateQty, updateCartItemVariant, subtotal, discount, shipping, offerBenefits } = useCart();
   
     const [suggestedProducts, setSuggestedProducts] = useState([]);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [quickViewProduct, setQuickViewProduct] = useState(null);
+  const [editingCartItem, setEditingCartItem] = useState(null);
+  const [offerCelebration, setOfferCelebration] = useState(false);
+  const previousOfferBenefitRef = useRef(false);
+  const hasOfferBenefit = Boolean(offerBenefits?.lines?.some((line) => line.discountedUnits?.length));
+
+  useEffect(() => {
+    if (!isCartOpen) return;
+    if (hasOfferBenefit && !previousOfferBenefitRef.current) setOfferCelebration(true);
+    previousOfferBenefitRef.current = hasOfferBenefit;
+  }, [hasOfferBenefit, isCartOpen]);
+
+  useEffect(() => {
+    if (!offerCelebration) return;
+    const timer = window.setTimeout(() => setOfferCelebration(false), 1800);
+    return () => window.clearTimeout(timer);
+  }, [offerCelebration]);
 
   const [isNavigatingToCheckout, setIsNavigatingToCheckout] = useState(false);
   const checkoutNavigationTimerRef = useRef(null);
@@ -132,14 +148,84 @@ export default function CartDrawer() {
   };
 
   const openQuickView = (product) => {
+    setEditingCartItem(null);
     setQuickViewProduct(product);
   };
+
+  const openCartItemEditor = (item, cartIndex, isBenefitUnit = false) => {
+    // تعديل وحدة العرض يفصلها عن باقي الكمية؛ وتعديل السطر العادي يحدّث نفس السطر فقط.
+    setEditingCartItem({
+      ...item,
+      ...(isBenefitUnit ? { __offerBenefitUnit: true, __cartIndex: cartIndex } : {}),
+    });
+    setQuickViewProduct(item);
+  };
+
+  const closeQuickView = () => {
+    setQuickViewProduct(null);
+    setEditingCartItem(null);
+  };
+
+  const getBenefitLabel = (benefit) => {
+    if (benefit.free) return "هدية مجانية";
+    const labels = (benefit.benefits || []).map((entry) => {
+      if (entry.offerType === "nth_percent" || entry.offerType === "cart_percent") {
+        return `خصم ${entry.config?.percent || Math.round((entry.discount / entry.originalPrice) * 100)}%`;
+      }
+      if (entry.offerType === "cart_fixed") return `خصم ${Number(entry.discount.toFixed(2))} ج.م`;
+      if (entry.offerType === "buy_x_get_y") {
+        const percent = entry.originalPrice > 0 ? Math.round((entry.discount / entry.originalPrice) * 100) : 0;
+        return percent >= 100 ? "هدية مجانية" : `خصم ${percent}%`;
+      }
+      return "خصم العرض";
+    });
+    return labels.length ? labels.join(" + ") : "خصم العرض";
+  };
+
+  const cartDisplayRows = cartItems.flatMap((item, cartIndex) => {
+    const benefitLine = offerBenefits?.lines?.find((line) => line.cartIndex === cartIndex);
+    if (!benefitLine) {
+      return [{ key: `regular-${cartIndex}`, item, qty: item.qty, benefit: null, cartIndex }];
+    }
+
+    const rows = [];
+    if (benefitLine.regularQty > 0) {
+      rows.push({ key: `regular-${cartIndex}`, item, qty: benefitLine.regularQty, benefit: null, cartIndex });
+    }
+    benefitLine.discountedUnits.forEach((benefit) => {
+      rows.push({ key: `benefit-${cartIndex}-${benefit.unitIndex}`, item, qty: 1, benefit, cartIndex });
+    });
+    return rows;
+  });
+
 
   if (!isCartOpen) return null;
 
   return (
     <>
+      {offerCelebration && (
+        <div className="offer-confetti-layer" aria-hidden="true">
+          {Array.from({ length: 28 }, (_, index) => (
+            <span
+              key={index}
+              className="offer-confetti-piece"
+              style={{
+                left: `${(index * 37) % 100}%`,
+                backgroundColor: ["#E11D48", "#F59E0B", "#10B981", "#3B82F6", "#A855F7"][index % 5],
+                animationDelay: `${(index % 7) * 45}ms`,
+                transform: `rotate(${index * 31}deg)`,
+              }}
+            />
+          ))}
+        </div>
+      )}
       <style>{`
+        @keyframes offerConfettiFall {
+          0% { opacity: 1; translate: 0 -20px; rotate: 0deg; }
+          100% { opacity: 0; translate: 0 105vh; rotate: 720deg; }
+        }
+        .offer-confetti-layer { position: fixed; inset: 0; z-index: 100; overflow: hidden; pointer-events: none; }
+        .offer-confetti-piece { position: absolute; top: -18px; width: 8px; height: 13px; border-radius: 2px; animation: offerConfettiFall 1.55s ease-out forwards; }
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;900&family=Tajawal:wght@400;500;700&display=swap');
         .cart-drawer * { font-family: 'Cairo', sans-serif; }
         @keyframes slideInLeft { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
@@ -156,10 +242,17 @@ export default function CartDrawer() {
       `}</style>
 
       {/* المودال الموحد - يقرأ الداتا بذكاء */}
-      <QuickViewModal 
-        product={quickViewProduct} 
-        isOpen={!!quickViewProduct} 
-        onClose={() => setQuickViewProduct(null)} 
+      <QuickViewModal
+        product={quickViewProduct}
+        isOpen={!!quickViewProduct}
+        onClose={closeQuickView}
+        initialSelection={editingCartItem ? {
+          selectedSize: editingCartItem.selectedSize,
+          selectedColor: editingCartItem.selectedColor,
+        } : null}
+        onVariantSelect={editingCartItem
+          ? (selection) => updateCartItemVariant(editingCartItem, selection)
+          : null}
       />
 
       <div className="cart-drawer fixed inset-0 z-[1000] overflow-hidden" dir="rtl">
@@ -198,8 +291,10 @@ export default function CartDrawer() {
                     <button onClick={toggleCart} className="bg-[#1A1A1A] text-white px-8 py-3 rounded-full font-bold text-sm mt-6">مواصلة التسوق</button>
                   </div>
                 ) : (
-                  cartItems.map((item) => (
-                    <div key={`${item.id}-${item.selectedSize}-${item.selectedColor || ''}`} className="flex gap-4 py-5 border-b border-gray-100 last:border-0">
+                  cartDisplayRows.map((row) => {
+                    const { item, benefit } = row;
+                    return (
+                    <div key={row.key} className="flex gap-4 py-5 border-b border-gray-100 last:border-0">
                       <div className="relative w-20 h-28 bg-gray-50 rounded-xl overflow-hidden shrink-0 cursor-pointer" onClick={() => openQuickView(item)}>
                         <img src={getImageUrl(item)} alt={item.title} className="w-full h-full object-cover" />
                         <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"><ZoomIn className="text-white" size={24} /></div>
@@ -214,25 +309,49 @@ export default function CartDrawer() {
                               {formatVariable(item.selectedColor)}{item.selectedColor && item.selectedSize ? ' / ' : ''}{formatVariable(item.selectedSize)}
                             </p>
                           )}
-                          <div className="flex items-center gap-1 text-gray-500 text-sm mt-1.5 font-medium whitespace-nowrap">
-                            <span className="font-bold text-[#1A1A1A]">{item.price}</span><span className="text-[#1A1A1A] font-light">ج.م</span>
-                            <span className="mx-1 text-xs text-[#555]">×</span><span>{item.qty}</span>
-                          </div>
+                          {benefit ? (
+                            <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-sm">
+                              <span className="text-xs font-bold rounded-full px-2 py-0.5 bg-red-50 text-red-700 border border-red-100">{getBenefitLabel(benefit)}</span>
+                              <span className="text-gray-400 line-through text-xs">{benefit.originalPrice} ج.م</span>
+                              <span className="font-bold text-[#1A1A1A]">{benefit.finalPrice} ج.م</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1 text-gray-500 text-sm mt-1.5 font-medium whitespace-nowrap">
+                              <span className="font-bold text-[#1A1A1A]">{item.price}</span><span className="text-[#1A1A1A] font-light">ج.م</span>
+                              <span className="mx-1 text-xs text-[#555]">×</span><span>{row.qty}</span>
+                            </div>
+                          )}
                         </div>
                         <div className="flex items-center justify-between mt-3">
                           <div className="flex items-center border border-gray-200 rounded-md bg-white h-8">
-                            <button onClick={() => updateQty(item.id, item.selectedSize, 1, item.selectedColor)} className="w-8 h-full flex items-center justify-center text-gray-500 hover:text-black">+</button>
-                            <span className="w-8 text-center text-sm font-bold text-[#1A1A1A]">{item.qty}</span>
-                            <button onClick={() => updateQty(item.id, item.selectedSize, -1, item.selectedColor)} className="w-8 h-full flex items-center justify-center text-gray-500 hover:text-black">−</button>
+                            <button onClick={() => updateQty(item.id, item.selectedSize, 1, item.selectedColor, item.bundleGroupId || "", row.cartIndex)} className="w-8 h-full flex items-center justify-center text-gray-500 hover:text-black">+</button>
+                            <span className="w-8 text-center text-sm font-bold text-[#1A1A1A]">{row.qty}</span>
+                            <button onClick={() => updateQty(item.id, item.selectedSize, -1, item.selectedColor, item.bundleGroupId || "", row.cartIndex)} className="w-8 h-full flex items-center justify-center text-gray-500 hover:text-black">−</button>
                           </div>
-                          <button onClick={() => removeFromCart(item.id, item.selectedSize, item.selectedColor)} className="text-gray-400 hover:text-red-500 flex items-center gap-1.5 group">
-                            <span className="text-sm font-medium underline decoration-gray-300 group-hover:decoration-red-500 underline-offset-4">إزالة</span>
-                            <Trash2 size={15} />
-                          </button>
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={() => openCartItemEditor(item, row.cartIndex, Boolean(benefit))}
+                              title="تعديل اللون والمقاس"
+                              aria-label="تعديل اللون والمقاس"
+                              className="text-gray-400 hover:text-[#1A1A1A] flex items-center"
+                            >
+                              <Edit2 size={15} />
+                            </button>
+                            <button
+                              onClick={() => benefit
+                                ? updateQty(item.id, item.selectedSize, -1, item.selectedColor, item.bundleGroupId || "", row.cartIndex)
+                                : removeFromCart(item.id, item.selectedSize, item.selectedColor, item.bundleGroupId || "", row.cartIndex)}
+                              className="text-gray-400 hover:text-red-500 flex items-center gap-1.5 group"
+                            >
+                              <span className="text-sm font-medium underline decoration-gray-300 group-hover:decoration-red-500 underline-offset-4">إزالة</span>
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
 
@@ -263,9 +382,21 @@ export default function CartDrawer() {
               <div className="bg-white border-t border-gray-100 px-5 pt-4 pb-6 z-10 shadow-lg">
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-sm font-light text-[#1A1A1A] whitespace-nowrap">المجموع الفرعي</span>
-                  <span className="font-normal text-[#1A1A1A] text-lg whitespace-nowrap">{subtotal} <span className="text-sm font-light">ج.م</span></span>
+                  <span className="font-normal text-[#1A1A1A] text-base whitespace-nowrap">{subtotal} <span className="text-sm font-light">ج.م</span></span>
                 </div>
-                <p className="text-[12px] text-gray-400 mb-5 font-medium">مصاريف الشحن تُحسب عند الدفع</p>
+                {discount > 0 && (
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-sm font-medium text-green-700 whitespace-nowrap">الخصم المطبق</span>
+                    <span className="font-bold text-green-700 text-base whitespace-nowrap">−{discount} <span className="text-sm font-normal">ج.م</span></span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between border-t border-gray-100 pt-2 mt-2 mb-2">
+                  <span className="text-sm font-bold text-[#1A1A1A] whitespace-nowrap">الإجمالي بعد الخصم</span>
+                  <span className="font-bold text-[#1A1A1A] text-xl whitespace-nowrap">{Math.max(0, subtotal - discount)} <span className="text-sm font-normal">ج.م</span></span>
+                </div>
+                <p className={`text-[12px] mb-5 font-medium ${shipping === 0 ? "text-emerald-700" : "text-gray-400"}`}>
+                  {shipping === 0 ? "تم تفعيل الشحن المجاني لهذا الطلب" : "مصاريف الشحن تُحسب عند الدفع"}
+                </p>
                 <Link
                   href="/checkout"
                   onClick={(event) => {
@@ -305,7 +436,7 @@ export default function CartDrawer() {
                      جارٍ فتح صفحة إتمام الطلب…
                     </span>
                   ) : (
-                    `إتمام الطلب — ${subtotal} ج.م`
+                    `إتمام الطلب — ${Math.max(0, subtotal - discount)} ج.م`
                   )}
                 </Link>
                 <button onClick={toggleCart} className="block w-full text-center text-[13px] font-normal text-[#555] hover:text-[#1A1A1A] mt-4">متابعة التسوق</button>

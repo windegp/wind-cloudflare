@@ -50,6 +50,10 @@ export async function POST(request) {
     keysToDelete = [`collection_${slug}`, 'homepage_data_v1'];
     revalidatePath('/');
     revalidatePath(`/collections/${slug}`);
+  } else if (type === 'offers') {
+    // The offers endpoint reads Firestore directly; invalidate its route cache after admin edits.
+    revalidatePath('/api/offers');
+    revalidatePath('/', 'layout');
   } else if (type === 'site_settings') {
     keysToDelete = ['site_settings_v1'];
     revalidatePath('/', 'layout');
@@ -69,7 +73,12 @@ export async function POST(request) {
   }
 
   if (keysToDelete.length === 0) {
-    return Response.json({ revalidated: false, note: 'No keys to delete' });
+    return Response.json({
+      revalidated: type === 'offers',
+      keys: [],
+      timestamp: Date.now(),
+      ...(type === 'offers' ? {} : { note: 'No keys to delete' }),
+    });
   }
 
   await kvDeleteMany(keysToDelete);

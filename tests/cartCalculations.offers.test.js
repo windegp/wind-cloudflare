@@ -75,19 +75,89 @@ describe('أفضل خصم واحد: العرض ضد الكود ضد خصم ال�
     const promo = { valid: true, type: 'free_shipping', freeShipping: true, code: 'FS' };
     expect(calculateAllTotals(CART, promo, null, false, [NTH])).toMatchObject({ discount: 128, shipping: 0, total: 837, discountSource: 'offer' });
   });
-  it('عند فوز كود بالخصم، مصدر الخصم promo حتى لو العروض موجودة', () => {
-    const promo = { valid: true, type: 'percent', discountAmount: 500 };
-    expect(calculateAllTotals(CART, promo, null, false, [NTH, BXGY]).discountSource).toBe('promo');
+  it('خصم الطلب الأول يقارن فعلياً مع الكود والعرض', () => {
+    const promo = { valid: true, type: 'fixed', discountAmount: 50 };
+    const result = calculateAllTotals(CART, promo, FIRST, true, []);
+    expect(result).toMatchObject({ discount: 97, discountSource: 'first_order' });
+  });
+  it('الكود النقدي الأكبر يفوز على خصم الطلب الأول والعرض', () => {
+    const promo = { valid: true, type: 'fixed', discountAmount: 500 };
+    expect(calculateAllTotals(CART, promo, FIRST, true, [NTH, BXGY]).discountSource).toBe('promo');
+  });
+});
+
+describe('قسائم الشراء بكود خصم', () => {
+  const coupon = {
+    valid: true, type: 'coupon_fixed', value: 200, discountAmount: 200,
+    maxDiscount: 0, scope: 'all', code: 'WIND200',
+  };
+
+  it('القسيمة تفوز عندما يكون خصمها أكبر من العرض التلقائي', () => {
+    const result = calculateAllTotals(CART, coupon, null, false, [NTH]);
+    expect(result).toMatchObject({ discount: 200, discountSource: 'promo', appliedOffer: null, total: 835 });
+  });
+
+  it('العرض التلقائي يفوز إذا كان يوفر خصماً أكبر من القسيمة', () => {
+    const largerCoupon = { ...coupon, value: 300, discountAmount: 300 };
+    const result = calculateAllTotals([item(645, 4)], largerCoupon, null, false, [BXGY]);
+    expect(result).toMatchObject({ discount: 645, discountSource: 'offer', total: 2005 });
+  });
+
+  it('القسيمة لا تخصم أكثر من قيمة المنتجات المؤهلة', () => {
+    const smallCart = [item(80)];
+    const result = calculateAllTotals(smallCart, { ...coupon, value: 200, scope: 'all' }, null, false, []);
+    expect(result).toMatchObject({ discount: 80, discountSource: 'promo', total: 70 });
+  });
+
+  it('القسيمة تلتزم بنطاق المنتجات والحد الأدنى وسقف الخصم', () => {
+    const scoped = {
+      ...coupon, value: 250, maxDiscount: 120, scope: ['p645'],
+      minCart: 600,
+    };
+    expect(calculateAllTotals(CART, scoped, null, false, [])).toMatchObject({ discount: 120, discountSource: 'promo' });
+    expect(calculateAllTotals([item(320)], scoped, null, false, [])).toMatchObject({ discount: 0, discountSource: 'none' });
   });
 });
 
 describe('سيناريوهات الجمعة البيضاء (سلة فعلية)', () => {
   const offers = [BXGY, NTH];
-  it('٤ قطع بأسعار مختلفة → ٣٤٤', () => {
+  it('٤ منتجات مختلفة → خصم ٤٠٪ مرة واحدة على القطعة الثانية (٢٣٦)', () => {
     const cart = [item(645), item(590), item(320), item(270)];
-    expect(calculateAllTotals(cart, null, null, false, offers)).toMatchObject({ subtotal: 1825, discount: 344, total: 1551 });
+    expect(calculateAllTotals(cart, null, null, false, offers)).toMatchObject({ subtotal: 1825, discount: 236, total: 1659 });
   });
   it('٤ × ٦٤٥ → قطعة مجانية', () => {
     expect(calculateAllTotals([item(645, 4)], null, null, false, offers)).toMatchObject({ subtotal: 2580, discount: 645, shipping: 70, total: 2005 });
+  });
+  it('يمنح قطعة مجانية واحدة لكل منتج مؤهل، ولا يكررها عند زيادة كمية المنتج نفسه', () => {
+    const cart = [item(645, 6, { id: 'A' }), item(320, 4, { id: 'B' }), item(270, 3, { id: 'C' })];
+    const shippingSettings = { shippingCost: 70, freeShippingThreshold: 100000 };
+    const result = calculateAllTotals(cart, null, shippingSettings, false, [BXGY]);
+    expect(result).toMatchObject({ subtotal: 5960, discount: 965, shipping: 70, discountSource: 'offer', total: 5065 });
+    expect(result.offerBenefits.lines).toHaveLength(2);
+    expect(result.offerBenefits.lines.flatMap((line) => line.discountedUnits)).toHaveLength(2);
+  });
+  it('لا يجمع 3 قطع من منتجات مختلفة لتفعيل عرض 3+1', () => {
+    const cart = [item(645, 3, { id: 'A' }), item(320, 1, { id: 'B' })];
+    const shippingSettings = { shippingCost: 70, freeShippingThreshold: 100000 };
+    const result = calculateAllTotals(cart, null, shippingSettings, false, [BXGY]);
+    expect(result).toMatchObject({ discount: 0, discountSource: 'none', shipping: 70, total: 2325 });
+  });
+  it('من ٤ إلى ٨ قطع: يظل عرض ٣+١ بمنحة مجانية واحدة فقط للمنتج نفسه', () => {
+    for (const quantity of [4, 5, 6, 8]) {
+      const result = calculateAllTotals([item(645, quantity)], null, null, false, offers);
+      expect(result.discount).toBe(645);
+      expect(result.appliedOffer.id).toBe('bxgy');
+      expect(result.offerBenefits.lines[0].regularQty).toBe(quantity - 1);
+      expect(result.offerBenefits.lines[0].discountedUnits).toHaveLength(1);
+      expect(result.total).toBe((645 * quantity) - 645 + 70);
+    }
+  });
+  it('عند تفعيل خصم ٤٠٪ فقط: يخصم قطعة واحدة مهما زادت الكمية', () => {
+    for (const quantity of [2, 3, 4, 8]) {
+      const result = calculateAllTotals([item(645, quantity)], null, null, false, [NTH]);
+      expect(result.discount).toBe(258);
+      expect(result.offerBenefits.lines[0].regularQty).toBe(quantity - 1);
+      expect(result.offerBenefits.lines[0].discountedUnits).toHaveLength(1);
+    }
   });
 });

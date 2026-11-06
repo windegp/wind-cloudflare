@@ -225,6 +225,10 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
     if (hasUnavailable || adding) return;
     setAdding(true);
 
+    // معرف مستقل لكل إضافة باقة حتى لا تختلط بمنتجات عادية أو باقة أخرى.
+    const bundleGroupId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const bundleParentId = String(product.id || product.handle || "");
+
     // هل الشحن مجاني في هذه الباقة؟ (limit > 0 والإجمالي وصل للحد)
     const bundleFreeShipping = hasFreeShippingFeature && shippingDone;
 
@@ -235,6 +239,9 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
       selectedSize:        selectedMainVariant?.size  || product.selectedSize  || "",
       selectedColor:       selectedMainVariant?.color || product.selectedColor || "",
       image:               selectedMainVariant?.img   || product.images?.[0]   || product.mainImage || "",
+      bundleGroupId,
+      bundleParentId,
+      bundleRole:           "parent",
       price:               Math.round(applyDiscount(mainPrice, effectiveDiscount)),
       compareAtPrice:      effectiveDiscount > 0 ? Math.round(mainPrice) : undefined,
       qty:                 mainQty,
@@ -258,6 +265,9 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
         image:              variant.img || up.images?.[0] || "",
         selectedSize:       variant.size  || "",
         selectedColor:      variant.color || "",
+        bundleGroupId,
+        bundleParentId,
+        bundleRole:          "child",
         qty:                st.qty || 1,
         bundleFreeShipping: bundleFreeShipping || undefined,
       });

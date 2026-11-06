@@ -13,7 +13,7 @@ import { ttTrack } from "@/lib/ttTrack";
 import { getCatalogId } from "@/lib/catalogId";
 import { gaAddToCart } from "@/lib/gaTrack";
 
-export default function QuickViewModal({ product, isOpen, onClose }) {
+export default function QuickViewModal({ product, isOpen, onClose, initialSelection = null, onVariantSelect = null }) {
   const { addToCart } = useCart();
   
   const [mounted, setMounted] = useState(false);
@@ -82,8 +82,11 @@ export default function QuickViewModal({ product, isOpen, onClose }) {
 
       setQvSizes(s);
       setQvColors(c);
-      setQvSelectedSize(s[0] || "");
-      setQvSelectedColor(typeof c[0] === 'object' ? c[0].name : (c[0] || ""));
+      setQvSelectedSize(initialSelection?.selectedSize || s[0] || "");
+      setQvSelectedColor(
+        initialSelection?.selectedColor ||
+        (typeof c[0] === 'object' ? c[0].name : (c[0] || ""))
+      );
       setQvActiveImage(product.images?.[0] || product.mainImageUrl || product.image || product.mainImage || "");
       setQvQuantity(1);
 
@@ -106,7 +109,7 @@ export default function QuickViewModal({ product, isOpen, onClose }) {
           .catch(() => {}); // خطأ صامت
       }
     }
-  }, [product, isOpen]);
+  }, [product, isOpen, initialSelection?.selectedSize, initialSelection?.selectedColor]);
 
   // 🔥 Phase 9: نفس منطق ProductView بالظبط — مصدر واحد لقرار الشراء وعرضه
   const { data: siteSettings } = useSiteSettings();
@@ -211,6 +214,20 @@ export default function QuickViewModal({ product, isOpen, onClose }) {
   const handleAddToCartFromQuickView = () => {
     if (!canPurchase) return;
     setIsAdding(true);
+
+    if (onVariantSelect) {
+      onVariantSelect({
+        selectedSize: qvSelectedSize,
+        selectedColor: qvSelectedColor,
+        image: getSelectedColorCartImage(),
+      });
+      setTimeout(() => {
+        setIsAdding(false);
+        onClose();
+      }, 250);
+      return;
+    }
+
     addToCart({
       ...product,
       selectedSize: qvSelectedSize,
@@ -450,13 +467,13 @@ export default function QuickViewModal({ product, isOpen, onClose }) {
                   style={{fontFamily:"Cairo,sans-serif"}}
                 >
                   <ShoppingBag size={16} />
-                  {isAdding ? "جاري الإضافة..." : (canPurchase ? `أضف إلي السلة — ${product.price * qvQuantity} ج.م` : presentation.buttonText)}
+                  {isAdding ? (onVariantSelect ? "جاري الحفظ..." : "جاري الإضافة...") : (canPurchase ? (onVariantSelect ? "حفظ التعديل" : `أضف إلي السلة — ${product.price * qvQuantity} ج.م`) : presentation.buttonText)}
                 </button>
-                <div className="flex items-center justify-between bg-white border border-gray-200 rounded-xl px-1 w-[90px] shrink-0 shadow-sm">
+                {!onVariantSelect && <div className="flex items-center justify-between bg-white border border-gray-200 rounded-xl px-1 w-[90px] shrink-0 shadow-sm">
                   <button onClick={() => setQvQuantity(q => q + 1)} className="text-gray-500 hover:text-[#1A1A1A] p-2 transition-colors"><Plus size={16} /></button>
                   <span className="text-[#1A1A1A] font-bold text-sm">{qvQuantity}</span>
                   <button onClick={() => setQvQuantity(q => q > 1 ? q - 1 : 1)} className="text-gray-500 hover:text-[#1A1A1A] p-2 transition-colors"><Minus size={16} /></button>
-                </div>
+                </div>}
               </div>
             </div>
           </div>
