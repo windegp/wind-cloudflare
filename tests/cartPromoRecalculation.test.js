@@ -56,6 +56,25 @@ describe("إعادة حساب كود الخصم مع تغيّر السلة", () 
     expect(smallCart.total).toBe(70);
   });
 
+  it("يحد كود المبلغ الثابت من قيمة المنتجات المؤهلة فقط", () => {
+    const promo = {
+      valid: true,
+      type: "fixed",
+      value: 250,
+      discountAmount: 250,
+      scope: ["A"],
+    };
+
+    const result = calculateAllTotals([
+      item("A", 80, 1),
+      item("B", 500, 1),
+    ], promo);
+
+    expect(result.subtotal).toBe(580);
+    expect(result.discount).toBe(80);
+    expect(result.total).toBe(570);
+  });
+
   it("يحافظ على التوافق مع بيانات الأكواد القديمة التي لا تحتوي value", () => {
     const promo = {
       valid: true,
