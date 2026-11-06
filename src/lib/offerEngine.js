@@ -1,3 +1,6 @@
+import { cairoDateString, isOfferLive } from "@/lib/offerDates";
+export { cairoDateString, isOfferLive } from "@/lib/offerDates";
+
 // ============================================
 // 🎁 OFFER ENGINE
 // دالة نقية (بدون React ولا Firebase ولا أي side effects)
@@ -22,34 +25,6 @@ export const OFFER_TYPES = {
 const DEFAULT_PRIORITY = 100;
 const MAX_UNITS_PER_ITEM = 1000; // حماية من سلة معدّلة يدوياً
 
-/** تاريخ اليوم بتوقيت القاهرة بصيغة YYYY-MM-DD */
-export function cairoDateString(now = new Date()) {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Africa/Cairo',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(now);
-}
-
-/** YYYY-MM-DD من نص التاريخ، أو null لو مفيش حد، أو undefined لو القيمة غير صالحة */
-function dayOf(value) {
-  if (value === null || value === undefined || value === '') return null;
-  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
-  return undefined;
-}
-
-/** هل العرض نشط الآن؟ (active=true + داخل فترته بتوقيت القاهرة، شامل أول وآخر يوم) */
-export function isOfferLive(offer, now = new Date()) {
-  if (!offer || offer.active !== true) return false;
-  const start = dayOf(offer.startsAt);
-  const end = dayOf(offer.endsAt);
-  if (start === undefined || end === undefined) return false; // تاريخ غير مفهوم → العرض متوقف للأمان
-  const today = cairoDateString(now);
-  if (start && today < start) return false;
-  if (end && today > end) return false;
-  return true;
-}
 
 function toList(value) {
   return Array.isArray(value) ? value.map(String) : [];
