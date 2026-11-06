@@ -32,7 +32,7 @@ export const dynamic = "force-dynamic";
 
 const TYPE_OPTIONS = [
   { value: "buy_x_get_y", label: "اشترِ X واحصل على Y مجانًا" },
-  { value: "nth_percent", label: "خصم على القطعة رقم N" },
+  { value: "nth_percent", label: "خصم على أرخص قطعة عند بلوغ N قطع" },
   { value: "cart_percent", label: "خصم نسبة على المنتجات المؤهلة" },
   { value: "cart_fixed", label: "خصم مبلغ ثابت على المنتجات المؤهلة" },
   { value: "coupon_fixed", label: "قسيمة شراء بكود — خصم مبلغ ثابت" },
@@ -118,7 +118,7 @@ function offerDescription(offer) {
   } else if (offer.type === "buy_x_get_y") {
     description = `اشترِ ${cfg.buyQty} واحصل على ${cfg.getQty} مجانًا`;
   } else if (offer.type === "nth_percent") {
-    description = `خصم ${cfg.percent}% على القطعة رقم ${cfg.nth}`;
+    description = `خصم ${cfg.percent}% على أرخص قطعة عند شراء ${cfg.nth} قطع مؤهلة`;
   } else if (offer.type === "cart_percent") {
     description = `خصم ${cfg.percent}% على المنتجات المؤهلة`;
   } else if (offer.type === "cart_fixed") {
@@ -339,7 +339,7 @@ export default function AdminOffersPage() {
       if (!Number.isInteger(Number(form.config.getQty)) || Number(form.config.getQty) < 1) return "عدد القطع المجانية يجب أن يكون 1 أو أكثر.";
     }
     if (form.type === "nth_percent") {
-      if (!Number.isInteger(Number(form.config.nth)) || Number(form.config.nth) < 2) return "رقم القطعة يجب أن يكون 2 أو أكثر.";
+      if (!Number.isInteger(Number(form.config.nth)) || Number(form.config.nth) < 2) return "عدد القطع المؤهلة يجب أن يكون 2 أو أكثر.";
       if (!(Number(form.config.percent) > 0 && Number(form.config.percent) <= 100)) return "نسبة الخصم يجب أن تكون بين 1 و100.";
     }
     if (form.type === "cart_percent") {
@@ -721,10 +721,10 @@ export default function AdminOffersPage() {
       <section className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-xs text-blue-800 space-y-1">
         <p className="font-black">ملاحظات طريقة الحساب</p>
         <p>• في عروض اشترِ X واحصل على Y، يُحسب الشرط لكل منتج مؤهل بشكل مستقل؛ لا تُجمع كميات منتجات مختلفة، وكل منتج يحقق الشرط يمنح هديته مرة واحدة فقط.</p>
-        <p>• في عرض القطعة رقم N، يُطبّق الخصم على القطعة المستحقة في أول مجموعة مؤهلة فقط داخل الطلب.</p>
+        <p>• في عرض N، عند وجود N قطع مؤهلة أو أكثر، يُطبّق الخصم مرة واحدة على أرخص قطعة مؤهلة في الطلب كله.</p>
         <p>• قيمة «الحد الأدنى» تُقاس على مجموع المنتجات المؤهلة للعرض، وليس إجمالي الطلب.</p>
         <p>• عند تحقق أكثر من عرض، يختار النظام عرضًا تلقائيًا واحدًا فقط: الأعلى توفيرًا بالقيمة الفعلية للعميل.</p>
-        <p>• عرض القطعة رقم N يمنح الخصم مرة واحدة فقط في الطلب. أما عرض القطعة المجانية فيُمنح مرة واحدة لكل منتج مؤهل.</p>
+        <p>• عرض N يمنح الخصم على أرخص قطعة مؤهلة مرة واحدة فقط في الطلب مهما زاد عدد القطع. أما الهدية المجانية فتُمنح مرة واحدة لكل منتج مؤهل.</p>
         <p>• القسيمة لا تعمل تلقائيًا؛ يدخل العميل كودها في السلة، وتنافس العرض التلقائي وخصم الطلب الأول، ويُطبّق الخصم النقدي الأكبر فقط.</p>
         <p>• الشحن المجاني له إعداد مستقل، ويمكنه العمل مع أي عرض دون دمج خصومات إضافية.</p>
       </section>
@@ -763,9 +763,9 @@ export default function AdminOffersPage() {
                 )}
                 {form.type === "nth_percent" && (
                   <>
-                    <div><label className={labelClass}>رقم القطعة داخل المجموعة (N)</label><input type="number" min="2" step="1" value={form.config.nth} onChange={(event) => updateConfig("nth", event.target.value)} className={fieldClass} /><p className="text-[10px] text-gray-400 mt-1">مثال: N=2 يعني القطعة الثانية في كل مجموعة.</p></div>
-                    <div><label className={labelClass}>نسبة الخصم على القطعة (%)</label><input type="number" min="1" max="100" step="1" value={form.config.percent} onChange={(event) => updateConfig("percent", event.target.value)} className={fieldClass} /></div>
-                    <div className="sm:col-span-2 text-[11px] text-gray-500">يُطبّق الخصم على قطعة واحدة فقط في الطلب، حتى عند زيادة عدد القطع.</div>
+                    <div><label className={labelClass}>عدد القطع المؤهلة المطلوبة (N)</label><input type="number" min="2" step="1" value={form.config.nth} onChange={(event) => updateConfig("nth", event.target.value)} className={fieldClass} /><p className="text-[10px] text-gray-400 mt-1">مثال: N=2 يعني وجود قطعتين مؤهلتين لتفعيل الخصم على الأرخص.</p></div>
+                    <div><label className={labelClass}>نسبة الخصم على أرخص قطعة (%)</label><input type="number" min="1" max="100" step="1" value={form.config.percent} onChange={(event) => updateConfig("percent", event.target.value)} className={fieldClass} /></div>
+                    <div className="sm:col-span-2 text-[11px] text-gray-500">عند بلوغ N قطع مؤهلة أو أكثر، يُطبّق الخصم مرة واحدة على أرخص قطعة في الطلب كله.</div>
                   </>
                 )}
                 {form.type === "cart_percent" && (
