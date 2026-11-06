@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase';
-import { doc, getDoc } from 'firebase/firestore/lite';
+import { collection, doc, getDoc, getDocs } from 'firebase/firestore/lite';
 import { SHIPPING_COST } from '@/lib/constants';
 
 export const dynamic = 'force-dynamic';
@@ -22,6 +22,45 @@ export async function POST(req) {
     const db = getDb();
 
     // ── 1. جلب الكود من Firestore ──────────────────────────────
+    const host = new URL(req.url).hostname.toLowerCase();
+    const productionHosts = ['windeg.com', 'www.windeg.com', 'windeg.pages.dev'];
+    const environment = productionHosts.includes(host) ? 'production' : 'preview';
+    const offersSnap = await getDocs(collection(db, 'offers'));
+    const coupon = offersSnap.docs
+      .map((item) => ({ id: item.id, ...item.data() }))
+      .find((offer) =>
+        offer.type === 'coupon_fixed' &&
+        offer.active === true &&
+        String(offer.couponCode || '').trim().toUpperCase() === normalizedCode &&
+        (environment === 'preview' ? offer.environment === 'preview' : offer.environment !== 'preview')
+      );
+
+    if (coupon) {
+      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Cairo' }).format(new Date());
+      if ((coupon.startsAt && today < String(coupon.startsAt).slice(0, 10)) ||
+          (coupon.endsAt && today > String(coupon.endsAt).slice(0, 10))) {
+        return NextResponse.json({ valid: false, message: 'قسيمة الشراء غير مفعّلة أو انتهت صلاحيتها' });
+      }
+      const eligibleItems = cartItems.filter((item) => {
+        const keys = [item.id, item.handle].map(String);
+        if (coupon.productScope === 'selected' && !(coupon.productIds || []).map(String).some((key) => keys.includes(key))) return false;
+        if ((coupon.excludedProductIds || []).map(String).some((key) => keys.includes(key))) return false;
+        return true;
+      });
+      const eligibleSubtotal = eligibleItems.reduce((sum, item) => sum + (parseFloat(item.price) || 0) * (parseInt(item.qty) || 1), 0);
+      const amount = Number(coupon.config?.amount);
+      if (!eligibleItems.length || eligibleSubtotal < (Number(coupon.minCart) || 0) || !Number.isFinite(amount) || amount <= 0) {
+        return NextResponse.json({ valid: false, message: 'القسيمة لا تنطبق على المنتجات الحالية أو لم يتحقق الحد الأدنى' });
+      }
+      const discountAmount = Math.min(amount, eligibleSubtotal, Number(coupon.maxDiscount) > 0 ? Number(coupon.maxDiscount) : amount);
+      return NextResponse.json({
+        valid: true, code: normalizedCode, type: 'coupon_fixed', value: amount,
+        scope: coupon.productScope === 'selected' ? coupon.productIds || [] : 'all',
+        freeShipping: false, discountAmount, couponOfferId: coupon.id,
+        message: 'تم تفعيل قسيمة ' + normalizedCode + ' بخصم ' + discountAmount + ' ج.م 🎉',
+      });
+    }
+
     const promoSnap = await getDoc(doc(db, 'promoCodes', normalizedCode));
 
     if (!promoSnap.exists()) {
