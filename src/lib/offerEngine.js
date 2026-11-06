@@ -148,24 +148,6 @@ function sumBuyXGetYBenefit(items, buyQty, getQty) {
   return total;
 }
 
-/**
- * مجموعات متتالية من الأغلى للأرخص، بحجم groupSize.
- * في كل مجموعة كاملة، آخر benefitCount قطع (الأرخص) هي اللي بتاخد الميزة.
- * بترجع مجموع الميزة: factor = 1 (مجاناً) أو percent/100.
- */
-function sumTieredBenefit(units, groupSize, benefitCount, factor, maxUsesPerOrder = 1) {
-  const availableGroups = Math.floor(units.length / groupSize);
-  const groups = Math.min(availableGroups, maxUsesPerOrder);
-  let total = 0;
-  for (let g = 0; g < groups; g++) {
-    const start = g * groupSize;
-    for (let k = groupSize - benefitCount; k < groupSize; k++) {
-      total += units[start + k] * factor;
-    }
-  }
-  return total;
-}
-
 function toInt(value) {
   const n = Number(value);
   return Number.isInteger(n) ? n : NaN;
