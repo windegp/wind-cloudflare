@@ -56,30 +56,45 @@ describe('سيناريوهات "أفضل عرض يكسب"', () => {
     expect(result.discount).toBe(0);
     expect(result.appliedOffers).toEqual([]);
   });
-  it('لا يدمج عرضين افتراضيًا حتى لو كانا مؤهلين معًا', () => {
-    const result = computeBestOffer([item(645), item(590), item(320), item(270)], OFFERS);
-    expect(result.appliedOffers).toHaveLength(1);
-    expect(result.discount).toBe(344);
-  });
-  it('يدمج العروض المحددة فقط ويحسب العرض الثاني على السعر المتبقي', () => {
-    const primary = { ...NTH, stackWithOfferIds: ["bxgy"] };
-    const result = computeBestOffer([item(645), item(590), item(320), item(270)], [primary, BXGY]);
+  it('لا يدمج عرضين حتى لو كان في مستند العرض القديم stackWithOfferIds', () => {
+    const cart = [item(645), item(590), item(320), item(270)];
+    const legacyStackedOffer = { ...NTH, stackWithOfferIds: ["bxgy"] };
+    const result = computeBestOffer(cart, [legacyStackedOffer, BXGY]);
     expect(result.offer.id).toBe("nth");
-    expect(result.appliedOffers.map((offer) => offer.id)).toEqual(["nth", "bxgy"]);
-    expect(result.discount).toBe(506);
-    expect(result.offerBenefits.discount).toBe(506);
-    const allocation = computeStackedOfferBenefits(
-      [item(645), item(590), item(320), item(270)],
-      [primary, BXGY]
-    );
-    expect(allocation.discount).toBe(506);
-    expect(allocation.offers.map((offer) => offer.id)).toEqual(["nth", "bxgy"]);
-  });
-  it('العرض الإضافي لا يعمل إذا لم يختره العرض الأساسي صراحةً', () => {
-    const primary = { ...NTH, stackWithOfferIds: [] };
-    const result = computeBestOffer([item(645), item(590), item(320), item(270)], [primary, BXGY]);
     expect(result.appliedOffers.map((offer) => offer.id)).toEqual(["nth"]);
+    expect(result.offerBenefits.offers.map((offer) => offer.id)).toEqual(["nth"]);
     expect(result.discount).toBe(344);
+
+    const legacyHelperResult = computeStackedOfferBenefits(cart, [legacyStackedOffer, BXGY]);
+    expect(legacyHelperResult.offers.map((offer) => offer.id)).toEqual(["nth"]);
+    expect(legacyHelperResult.discount).toBe(344);
+  });
+  it('عند ٥ قطع: يفوز عرض ٣+١ مرة واحدة ويظل إجمالي الكمية ٥', () => {
+    const result = computeBestOffer([item(645, 5)], OFFERS);
+    expect(result.offer.id).toBe("bxgy");
+    expect(result.appliedOffers).toHaveLength(1);
+    expect(result.discount).toBe(645);
+    expect(result.offerBenefits.lines[0].regularQty).toBe(4);
+    expect(result.offerBenefits.lines[0].discountedUnits).toHaveLength(1);
+    expect(result.offerBenefits.lines[0].discountedUnits[0].free).toBe(true);
+  });
+  it('عند ٦ قطع: يفوز عرض ٤٠٪ وحده ويقسم ٣ قطع مستفيدة و٣ عادية', () => {
+    const result = computeBestOffer([item(645, 6)], OFFERS);
+    expect(result.offer.id).toBe("nth");
+    expect(result.appliedOffers).toHaveLength(1);
+    expect(result.discount).toBe(774);
+    expect(result.offerBenefits.lines[0].regularQty).toBe(3);
+    expect(result.offerBenefits.lines[0].discountedUnits).toHaveLength(3);
+    expect(result.offerBenefits.lines[0].discountedUnits.every((unit) => unit.discount === 258 && !unit.free)).toBe(true);
+  });
+  it('يمكن تحديد أقصى مرة واحدة لعرض ٣+١ حتى لو زادت الكمية إلى ٨', () => {
+    const limited = { ...BXGY, config: { ...BXGY.config, maxUsesPerOrder: 1 } };
+    const cart = [item(645, 8)];
+    expect(computeOfferDiscount(cart, limited)).toBe(645);
+    const result = computeBestOffer(cart, [limited]);
+    expect(result.discount).toBe(645);
+    expect(result.offerBenefits.lines[0].regularQty).toBe(7);
+    expect(result.offerBenefits.lines[0].discountedUnits).toHaveLength(1);
   });
   it('قاعدة المتجر القديمة لا تفعّل الشحن من قسم المنتجات المحددة', () => {
     expect(isFreeShippingRuleEligible(
