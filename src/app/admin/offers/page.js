@@ -744,7 +744,7 @@ export default function AdminOffersPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="sm:col-span-2">
                   <label className={labelClass}>اسم العرض *</label>
-                  <input value={form.name} onChange={(event) => updateField("name", event.target.value)} placeholder="مثال: الجمعة البيضاء - 40% على القطعة الثانية" className={fieldClass} />
+                  <input value={form.name} onChange={(event) => updateField("name", event.target.value)} placeholder="مثال: الجمعة البيضاء - 40% على أرخص قطعة عند شراء قطعتين" className={fieldClass} />
                 </div>
 
                 <div className="sm:col-span-2">
