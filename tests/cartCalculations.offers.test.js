@@ -130,15 +130,17 @@ describe('سيناريوهات الجمعة البيضاء (سلة فعلية)',
   });
   it('يمنح قطعة مجانية واحدة لكل منتج مؤهل، ولا يكررها عند زيادة كمية المنتج نفسه', () => {
     const cart = [item(645, 6, { id: 'A' }), item(320, 4, { id: 'B' }), item(270, 3, { id: 'C' })];
-    const result = calculateAllTotals(cart, null, null, false, [BXGY]);
-    expect(result).toMatchObject({ subtotal: 5960, discount: 965, discountSource: 'offer', total: 5065 });
+    const shippingSettings = { shippingCost: 70, freeShippingThreshold: 100000 };
+    const result = calculateAllTotals(cart, null, shippingSettings, false, [BXGY]);
+    expect(result).toMatchObject({ subtotal: 5960, discount: 965, shipping: 70, discountSource: 'offer', total: 5065 });
     expect(result.offerBenefits.lines).toHaveLength(2);
     expect(result.offerBenefits.lines.flatMap((line) => line.discountedUnits)).toHaveLength(2);
   });
   it('لا يجمع 3 قطع من منتجات مختلفة لتفعيل عرض 3+1', () => {
     const cart = [item(645, 3, { id: 'A' }), item(320, 1, { id: 'B' })];
-    const result = calculateAllTotals(cart, null, null, false, [BXGY]);
-    expect(result).toMatchObject({ discount: 0, discountSource: 'none', total: 2325 });
+    const shippingSettings = { shippingCost: 70, freeShippingThreshold: 100000 };
+    const result = calculateAllTotals(cart, null, shippingSettings, false, [BXGY]);
+    expect(result).toMatchObject({ discount: 0, discountSource: 'none', shipping: 70, total: 2325 });
   });
   it('من ٤ إلى ٨ قطع: يظل عرض ٣+١ بمنحة مجانية واحدة فقط للمنتج نفسه', () => {
     for (const quantity of [4, 5, 6, 8]) {
