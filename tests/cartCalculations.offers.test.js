@@ -86,6 +86,39 @@ describe('أفضل خصم واحد: العرض ضد الكود ضد خصم ال�
   });
 });
 
+describe('قسائم الشراء بكود خصم', () => {
+  const coupon = {
+    valid: true, type: 'coupon_fixed', value: 200, discountAmount: 200,
+    maxDiscount: 0, scope: 'all', code: 'WIND200',
+  };
+
+  it('القسيمة تفوز عندما يكون خصمها أكبر من العرض التلقائي', () => {
+    const result = calculateAllTotals(CART, coupon, null, false, [NTH]);
+    expect(result).toMatchObject({ discount: 200, discountSource: 'promo', appliedOffer: null, total: 835 });
+  });
+
+  it('العرض التلقائي يفوز إذا كان يوفر خصماً أكبر من القسيمة', () => {
+    const largerCoupon = { ...coupon, value: 300, discountAmount: 300 };
+    const result = calculateAllTotals([item(645, 4)], largerCoupon, null, false, [BXGY]);
+    expect(result).toMatchObject({ discount: 645, discountSource: 'offer', total: 2005 });
+  });
+
+  it('القسيمة لا تخصم أكثر من قيمة المنتجات المؤهلة', () => {
+    const smallCart = [item(80)];
+    const result = calculateAllTotals(smallCart, { ...coupon, value: 200, scope: 'all' }, null, false, []);
+    expect(result).toMatchObject({ discount: 80, discountSource: 'promo', total: 70 });
+  });
+
+  it('القسيمة تلتزم بنطاق المنتجات والحد الأدنى وسقف الخصم', () => {
+    const scoped = {
+      ...coupon, value: 250, maxDiscount: 120, scope: ['p645'],
+      minCart: 600,
+    };
+    expect(calculateAllTotals(CART, scoped, null, false, [])).toMatchObject({ discount: 120, discountSource: 'promo' });
+    expect(calculateAllTotals([item(320)], scoped, null, false, [])).toMatchObject({ discount: 0, discountSource: 'none' });
+  });
+});
+
 describe('سيناريوهات الجمعة البيضاء (سلة فعلية)', () => {
   const offers = [BXGY, NTH];
   it('٤ قطع بأسعار مختلفة → ٣٤٤', () => {
