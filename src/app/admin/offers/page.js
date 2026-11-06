@@ -720,11 +720,11 @@ export default function AdminOffersPage() {
 
       <section className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-xs text-blue-800 space-y-1">
         <p className="font-black">ملاحظات طريقة الحساب</p>
-        <p>• في عروض اشترِ X واحصل على Y، تُمنح الميزة للقطع الأرخص في أول مجموعة مكتملة فقط داخل الطلب.</p>
+        <p>• في عروض اشترِ X واحصل على Y، يُحسب الشرط لكل منتج مؤهل بشكل مستقل؛ لا تُجمع كميات منتجات مختلفة، وكل منتج يحقق الشرط يمنح هديته مرة واحدة فقط.</p>
         <p>• في عرض القطعة رقم N، يُطبّق الخصم على القطعة المستحقة في أول مجموعة مؤهلة فقط داخل الطلب.</p>
         <p>• قيمة «الحد الأدنى» تُقاس على مجموع المنتجات المؤهلة للعرض، وليس إجمالي الطلب.</p>
         <p>• عند تحقق أكثر من عرض، يختار النظام عرضًا تلقائيًا واحدًا فقط: الأعلى توفيرًا بالقيمة الفعلية للعميل.</p>
-        <p>• عروض المجموعات تمنح فائدتها مرة واحدة فقط في الطلب مهما زادت الكمية.</p>
+        <p>• عرض القطعة رقم N يمنح الخصم مرة واحدة فقط في الطلب. أما عرض القطعة المجانية فيُمنح مرة واحدة لكل منتج مؤهل.</p>
         <p>• القسيمة لا تعمل تلقائيًا؛ يدخل العميل كودها في السلة، وتنافس العرض التلقائي وخصم الطلب الأول، ويُطبّق الخصم النقدي الأكبر فقط.</p>
         <p>• الشحن المجاني له إعداد مستقل، ويمكنه العمل مع أي عرض دون دمج خصومات إضافية.</p>
       </section>
@@ -758,7 +758,7 @@ export default function AdminOffersPage() {
                   <>
                     <div><label className={labelClass}>عدد القطع المطلوب شراؤها (X)</label><input type="number" min="1" step="1" value={form.config.buyQty} onChange={(event) => updateConfig("buyQty", event.target.value)} className={fieldClass} /></div>
                     <div><label className={labelClass}>عدد القطع المجانية (Y)</label><input type="number" min="1" step="1" value={form.config.getQty} onChange={(event) => updateConfig("getQty", event.target.value)} className={fieldClass} /></div>
-                    <div className="sm:col-span-2 text-[11px] text-gray-500">تُمنح ميزة هذا العرض مرة واحدة فقط في الطلب، حتى عند زيادة عدد القطع.</div>
+                    <div className="sm:col-span-2 text-[11px] text-gray-500">يُحسب العدد لكل منتج على حدة؛ لا تُجمع كميات منتجات مختلفة. كل منتج يحقق الشرط يمنح هديته مرة واحدة فقط مهما زادت كميته.</div>
                   </>
                 )}
                 {form.type === "nth_percent" && (
