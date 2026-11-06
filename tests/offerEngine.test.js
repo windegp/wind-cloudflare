@@ -27,15 +27,35 @@ describe('سيناريوهات "أفضل عرض يكسب"', () => {
     expect(r.discount).toBe(128);
     expect(r.offer).toEqual({ id: 'nth', name: '٤٠٪ على القطعة التانية', type: 'nth_percent' });
   });
-  it('٦٤٥ + ٥٩٠ + ٣٢٠ → ٢٣٦ (الخصم على الأرخص في الزوج الأول)', () => {
-    expect(computeBestOffer([item(645), item(590), item(320)], OFFERS).discount).toBe(236);
+  it('أقل من N قطع مؤهلة → لا خصم', () => {
+    expect(computeOfferDiscount([item(645)], NTH)).toBe(0);
+    expect(computeBestOffer([item(645)], [NTH]).discount).toBe(0);
   });
-  it('٦٤٥ + ٥٩٠ + ٣٢٠ + ٢٧٠ → ٢٣٦ (خصم واحد على القطعة الثانية)', () => {
-    const r = computeBestOffer([item(645), item(590), item(320), item(270)], OFFERS);
-    expect(r.discount).toBe(236);
+  it('أكثر من N → يخصم أرخص قطعة في كامل الطلب مرة واحدة فقط', () => {
+    const cart = [item(645), item(590), item(320), item(270)];
+    const r = computeBestOffer(cart, OFFERS);
+    expect(r.discount).toBe(108);
     expect(r.offer.id).toBe('nth');
-    // Each priced line represents a different product, so 3+1 cannot combine them.
-    expect(r.candidates.map((c) => [c.id, c.discount])).toEqual([['nth', 236]]);
+    expect(r.offerBenefits.lines).toHaveLength(1);
+    expect(r.offerBenefits.lines[0]).toMatchObject({
+      cartIndex: 3,
+      regularQty: 0,
+      discountedUnits: [{ originalPrice: 270, discount: 108, finalPrice: 162, free: false }],
+    });
+    expect(computeOfferDiscount(cart, NTH)).toBe(r.discount);
+  });
+  it('ألوان ومقاسات المنتج نفسه تُحسب ضمن عدد القطع المؤهلة', () => {
+    const cart = [
+      item(645, 1, { id: 'A-black-M', productId: 'A', selectedColor: 'أسود', selectedSize: 'M' }),
+      item(320, 1, { id: 'A-white-L', productId: 'A', selectedColor: 'أبيض', selectedSize: 'L' }),
+    ];
+    const r = computeBestOffer(cart, [NTH]);
+    expect(r.discount).toBe(128);
+    expect(r.offerBenefits.lines).toHaveLength(1);
+    expect(r.offerBenefits.lines[0]).toMatchObject({
+      cartIndex: 1,
+      discountedUnits: [{ originalPrice: 320, discount: 128, finalPrice: 192 }],
+    });
   });
   it('لا يجمع عرض القطعة المجانية كميات منتجات مختلفة', () => {
     const cart = [item(645, 3, { id: 'A' }), item(590, 1, { id: 'B' })];
