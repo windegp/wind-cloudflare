@@ -286,6 +286,19 @@ describe('التواريخ (بتوقيت القاهرة)', () => {
   });
 });
 
+describe('قسائم الشراء لا تعمل تلقائيًا', () => {
+  it('يتجاهل القسيمة في اختيار العرض التلقائي حتى يدخل العميل كودها', () => {
+    const coupon = {
+      id: 'coupon-200', name: 'قسيمة 200', active: true, type: 'coupon_fixed',
+      couponCode: 'WIND200', config: { amount: 200 }, productScope: 'all',
+    };
+    const result = computeBestOffer([item(645, 2)], [coupon]);
+    expect(result.discount).toBe(0);
+    expect(result.offer).toBeNull();
+    expect(result.appliedOffers).toEqual([]);
+  });
+});
+
 describe('تفصيل القطع المستفيدة من العرض', () => {
   it('يفصل القطعة المجانية عن الثلاث قطع المدفوعة في نفس السطر', async () => {
     const { computeOfferBenefits } = await import('@/lib/offerEngine');
