@@ -59,6 +59,53 @@ export function calculateTotal(subtotal, shipping, discount = 0) {
 }
 
 /**
+ * Recalculate legacy promo codes against the current cart.
+ * The initial validation response is not a permanent discount snapshot:
+ * percent and fixed codes must follow cart quantity/product changes.
+ *
+ * Keep the same calculation semantics as /api/validate-promo in this step.
+ * Server checkout pricing alignment is handled separately.
+ */
+function calculateLegacyPromoDiscount(cartItems, promoResult, subtotal) {
+  const storedDiscount = Math.max(0, Number(promoResult?.discountAmount) || 0);
+  const value = Number(promoResult?.value);
+
+  if (promoResult?.type === 'percent') {
+    // Preserve compatibility with older promo payloads that did not include value.
+    if (!Number.isFinite(value) || value <= 0) return storedDiscount;
+
+    let applicableItems = Array.isArray(cartItems) ? cartItems : [];
+    if (Array.isArray(promoResult.scope) && promoResult.scope.length > 0) {
+      const scope = new Set(promoResult.scope.map(String));
+      applicableItems = applicableItems.filter((item) => {
+        const keys = [item?.id, item?.handle]
+          .filter((key) => key !== undefined && key !== null && String(key) !== '')
+          .map(String);
+        return keys.some((key) => scope.has(key));
+      });
+    }
+
+    const applicableSubtotal = applicableItems.reduce(
+      (sum, item) => sum + (parseFloat(item?.price) || 0) * (parseInt(item?.qty) || 1),
+      0
+    );
+    return Math.min(
+      subtotal,
+      Math.max(0, Math.round((applicableSubtotal * value) / 100))
+    );
+  }
+
+  if (promoResult?.type === 'fixed') {
+    // /api/validate-promo currently applies legacy fixed codes to the cart subtotal.
+    // Keep that behavior here; server/client policy alignment belongs to the next step.
+    if (!Number.isFinite(value) || value <= 0) return storedDiscount;
+    return Math.min(subtotal, value);
+  }
+
+  return storedDiscount;
+}
+
+/**
  * offers: العروض النشطة من /api/offers (اختياري — لو مفيش، النتيجة نفس القديمة بالظبط)
  * بترجع كمان: discountSource ('promo' | 'first_order' | 'offer' | 'none') و appliedOffer
  * القاعدة: أفضل خصم واحد للعميل بين (الكود / خصم الطلب الأول) و(العروض).
@@ -87,7 +134,7 @@ export function calculateAllTotals(cartItems, promoResult = null, shippingSettin
             const cap = Number(promoResult.maxDiscount) > 0 ? Number(promoResult.maxDiscount) : amount;
             return Math.min(amount, cap, eligibleSubtotal);
           })()
-        : Math.max(0, Number(promoResult.discountAmount) || 0)
+        : calculateLegacyPromoDiscount(cartItems, promoResult, subtotal)
       : 0;
 
   const firstOrderPercent = Number(shippingSettings?.firstOrderDiscount);
