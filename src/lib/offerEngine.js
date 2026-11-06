@@ -112,7 +112,7 @@ function expandUnits(items) {
  * في كل مجموعة كاملة، آخر benefitCount قطع (الأرخص) هي اللي بتاخد الميزة.
  * بترجع مجموع الميزة: factor = 1 (مجاناً) أو percent/100.
  */
-function sumTieredBenefit(units, groupSize, benefitCount, factor, maxUsesPerOrder = Infinity) {
+function sumTieredBenefit(units, groupSize, benefitCount, factor, maxUsesPerOrder = 1) {
   const availableGroups = Math.floor(units.length / groupSize);
   const groups = Math.min(availableGroups, maxUsesPerOrder);
   let total = 0;
@@ -166,7 +166,7 @@ export function computeOfferDiscount(cartItems, offer) {
     case OFFER_TYPES.BUY_X_GET_Y: {
       const buy = toInt(cfg.buyQty);
       const get = toInt(cfg.getQty);
-      const maxUses = getMaxUsesPerOrder(cfg);
+      const maxUses = getMaxUsesPerOrder();
       if (!(buy >= 1) || !(get >= 1) || maxUses === null) return 0;
       raw = sumTieredBenefit(expandUnits(eligible), buy + get, get, 1, maxUses);
       break;
