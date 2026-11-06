@@ -1,4 +1,4 @@
-import { isOfferLive } from "@/lib/offerEngine";
+import { isOfferLive } from "@/lib/offerDates";
 
 const MAX_UNITS_PER_LINE = 1000;
 
