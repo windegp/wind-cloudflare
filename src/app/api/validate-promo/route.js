@@ -98,14 +98,14 @@ export async function POST(req) {
     // ── 3. هل انتهت صلاحيته؟ ────────────────────────────────────
     if (promo.expiresAt) {
       const expiry = promo.expiresAt.toDate ? promo.expiresAt.toDate() : new Date(promo.expiresAt);
-      if (new Date() > expiry) {
+      if (Number.isNaN(expiry.getTime()) || new Date() > expiry) {
         return NextResponse.json({ valid: false, message: 'انتهت صلاحية هذا الكود' });
       }
     }
 
     // ── 4. حد الاستخدام الكلي ────────────────────────────────────
     if (promo.usageType === 'single_use' || promo.usageType === 'limited') {
-      const maxUses   = Number(promo.maxUses) || 1;
+      const maxUses   = Math.max(1, Number(promo.maxUses) || 1);
       const usedCount = Number(promo.usedCount) || 0;
       if (usedCount >= maxUses) {
         return NextResponse.json({ valid: false, message: 'تم استخدام هذا الكود بالفعل' });
@@ -119,10 +119,10 @@ export async function POST(req) {
 
     // ── 6. مرة واحدة لكل عميل ────────────────────────────────────
     if (promo.usageType === 'once_per_customer') {
-      const identifier = customerEmail?.toLowerCase().trim() || customerPhone?.replace(/\D/g, '');
+      const identifier = customerEmail?.toLowerCase().trim() || normalizePhone(customerPhone);
       if (identifier) {
-        const usedBy = promo.usedBy || [];
-        if (usedBy.includes(identifier)) {
+        const usedBy = Array.isArray(promo.usedBy) ? promo.usedBy.map((value) => String(value).toLowerCase()) : [];
+        if (usedBy.includes(identifier.toLowerCase())) {
           return NextResponse.json({ valid: false, message: 'لقد استخدمت هذا الكود من قبل' });
         }
       }
