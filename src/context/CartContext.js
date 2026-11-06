@@ -362,10 +362,10 @@ export function CartProvider({ children }) {
 
   // ── Calculations ───────────────────────────────────────────────
   const {
-    subtotal, discount, shipping, total, discountSource, appliedOffer, appliedOffers, offerBenefits,
+    subtotal, discount, shipping, total, discountSource, appliedOffer, appliedOffers, offerBenefits, customerChoiceGiftStatus,
   } = useMemo(
-    () => calculateAllTotals(cartItems, appliedPromo, shippingSettings, isFirstOrder, offers, freeShippingRule),
-    [cartItems, appliedPromo, shippingSettings, isFirstOrder, offers, freeShippingRule]
+    () => calculateAllTotals(cartItems, appliedPromo, shippingSettings, isFirstOrder, offers, freeShippingRule, customerChoiceGiftSelections),
+    [cartItems, appliedPromo, shippingSettings, isFirstOrder, offers, freeShippingRule, customerChoiceGiftSelections]
   );
 
   // لو عرض تلقائي كسب على كود الخصم: نوضح للعميل إن الكود ما اتطبقش
@@ -498,7 +498,7 @@ export function CartProvider({ children }) {
     addToCart, removeFromCart, updateQty, updateCartItemVariant, clearCart,
     isCartOpen, toggleCart, openCart, closeCart,
     subtotal, discount, shipping, total,
-    discountSource, appliedOffer, appliedOffers, offers, offerBenefits, freeShippingRule,
+    discountSource, appliedOffer, appliedOffers, offers, offerBenefits, customerChoiceGiftStatus, freeShippingRule,
     appliedPromo: appliedPromoView,
     applyPromoCode, removePromoCode,
     discountError, setDiscountError, promoLoading,
@@ -511,7 +511,7 @@ export function CartProvider({ children }) {
     addToCart, removeFromCart, updateQty, updateCartItemVariant, clearCart,
     isCartOpen, toggleCart, openCart, closeCart,
     subtotal, discount, shipping, total,
-    discountSource, appliedOffer, appliedOffers, offers, offerBenefits, freeShippingRule,
+    discountSource, appliedOffer, appliedOffers, offers, offerBenefits, customerChoiceGiftStatus, freeShippingRule,
     appliedPromoView, applyPromoCode, removePromoCode,
     discountError, setDiscountError, promoLoading, shippingSettings,
     isFirstOrder, setIsFirstOrder,
