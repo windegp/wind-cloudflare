@@ -56,7 +56,6 @@ const emptyForm = () => ({
 
 const emptyShippingRule = () => ({
   enabled: false,
-  scope: "store",
   productIds: [],
   condition: "quantity",
   minQuantity: "2",
@@ -237,12 +236,15 @@ export default function AdminOffersPage() {
       setOffers(loadedOffers);
       setProducts(productsSnap.docs.map((item) => ({ id: item.id, ...item.data() })));
       const savedShippingRule = shippingRuleSnap.exists() ? shippingRuleSnap.data() : {};
+      const savedShippingProductIds = Array.isArray(savedShippingRule.productIds)
+        ? savedShippingRule.productIds.map(String)
+        : [];
       setShippingRule({
         ...emptyShippingRule(),
         ...savedShippingRule,
-        enabled: savedShippingRule.enabled === true,
-        scope: savedShippingRule.scope === "selected" ? "selected" : "store",
-        productIds: Array.isArray(savedShippingRule.productIds) ? savedShippingRule.productIds.map(String) : [],
+        // Legacy store-wide rules are intentionally ignored. This section is product-only.
+        enabled: savedShippingRule.enabled === true && savedShippingProductIds.length > 0,
+        productIds: savedShippingProductIds,
         condition: savedShippingRule.condition === "subtotal" ? "subtotal" : "quantity",
         minQuantity: String(savedShippingRule.minQuantity ?? 2),
         minSubtotal: String(savedShippingRule.minSubtotal ?? 500),
@@ -422,7 +424,7 @@ export default function AdminOffersPage() {
 
   const saveShippingRule = async () => {
     setShippingRuleError("");
-    if (shippingRule.enabled && shippingRule.scope === "selected") {
+    if (shippingRule.enabled) {
       if (!Array.isArray(shippingRule.productIds) || shippingRule.productIds.length === 0) {
         setShippingRuleError("اختر منتجًا واحدًا على الأقل لتطبيق الشحن المجاني عليه.");
         return;
@@ -444,8 +446,7 @@ export default function AdminOffersPage() {
       const ruleEnvironment = getCurrentOfferEnvironment();
       const data = {
         enabled: Boolean(shippingRule.enabled),
-        scope: shippingRule.scope === "selected" ? "selected" : "store",
-        productIds: shippingRule.scope === "selected" ? (shippingRule.productIds || []).map(String) : [],
+        productIds: (shippingRule.productIds || []).map(String),
         condition: shippingRule.condition === "subtotal" ? "subtotal" : "quantity",
         minQuantity: Math.max(1, Math.floor(Number(shippingRule.minQuantity) || 1)),
         minSubtotal: Math.max(0, Number(shippingRule.minSubtotal) || 0),
@@ -556,43 +557,29 @@ export default function AdminOffersPage() {
           <span className="w-10 h-10 rounded-xl bg-sky-50 text-sky-700 flex items-center justify-center"><Package size={20} /></span>
           <div>
             <h2 className="font-black text-gray-900">قواعد الشحن المجاني</h2>
-            <p className="text-[11px] text-gray-500 mt-1">إعداد مستقل عن العروض والخصومات، ويعمل مع أي عرض دون دمج خصمين.</p>
+            <p className="text-[11px] text-gray-500 mt-1">ميزة إضافية لمنتجات تختارها فقط. الشحن المجاني العام يظل مُدارًا من قسم أكواد الخصم والشحن.</p>
           </div>
         </div>
         <div className="p-4 sm:p-5 space-y-4">
           <label className="flex items-start gap-3 rounded-xl border border-gray-200 p-3 cursor-pointer">
             <input type="checkbox" checked={shippingRule.enabled} onChange={(event) => updateShippingRule("enabled", event.target.checked)} className="w-4 h-4 accent-[#008060] mt-0.5" />
             <span>
-              <span className="block text-sm font-bold text-gray-800">تفعيل قواعد الشحن المجاني</span>
+              <span className="block text-sm font-bold text-gray-800">تفعيل الشحن المجاني للمنتجات المحددة</span>
               <span className="block text-[11px] text-gray-500 mt-1">عند إيقاف هذا الخيار، لن تطبق هذه القاعدة على السلة.</span>
             </span>
           </label>
           {shippingRule.enabled && (
             <>
-              <div className="flex flex-wrap gap-4 text-sm">
-                <label className="flex items-center gap-2">
-                  <input type="radio" name="free-shipping-scope" checked={shippingRule.scope === "store"} onChange={() => updateShippingRule("scope", "store")} className="accent-[#008060]" />
-                  الشحن مجاني للمتجر كله
-                </label>
-                <label className="flex items-center gap-2">
-                  <input type="radio" name="free-shipping-scope" checked={shippingRule.scope === "selected"} onChange={() => updateShippingRule("scope", "selected")} className="accent-[#008060]" />
-                  الشحن المجاني لمنتجات محددة
-                </label>
-              </div>
-              {shippingRule.scope === "store" ? (
-                <p className="text-xs text-sky-800 bg-sky-50 rounded-lg p-3">سيكون الشحن مجانيًا لكل الطلبات في هذه البيئة، سواء وُجد عرض خصم أم لا.</p>
-              ) : (
-                <>
-                  <ProductPicker
-                    title="المنتجات التي تمنح الشحن المجاني"
-                    hint="يُحسب الشرط على المنتجات التي تحددها هنا فقط، ولا تدخل المنتجات الأخرى في العدد أو القيمة."
-                    products={products}
-                    selected={shippingRule.productIds || []}
-                    search={shippingProductSearch}
-                    onSearch={setShippingProductSearch}
-                    onToggle={(product) => updateShippingRule("productIds", toggleProduct(shippingRule.productIds || [], product))}
-                  />
-                  <div className="border border-gray-200 rounded-xl p-3 space-y-3">
+              <ProductPicker
+                title="المنتجات التي تمنح الشحن المجاني"
+                hint="علّم على المنتجات المطلوبة، ويمكنك إلغاء تحديد أي منتج في أي وقت. لا يؤثر هذا الإعداد على الشحن المجاني العام الموجود في قسم أكواد الخصم والشحن."
+                products={products}
+                selected={shippingRule.productIds || []}
+                search={shippingProductSearch}
+                onSearch={setShippingProductSearch}
+                onToggle={(product) => updateShippingRule("productIds", toggleProduct(shippingRule.productIds || [], product))}
+              />
+              <div className="border border-gray-200 rounded-xl p-3 space-y-3">
                     <div className="text-sm font-bold text-gray-800">شرط استحقاق الشحن المجاني</div>
                     <div className="flex flex-wrap gap-4 text-sm">
                       <label className="flex items-center gap-2">
