@@ -6,6 +6,7 @@
 
 import { SHIPPING_COST, FREE_SHIPPING_THRESHOLD, CURRENCY } from '@/lib/constants';
 import { computeBestOffer, isFreeShippingRuleEligible } from '@/lib/offerEngine';
+import { isFreeShippingThresholdMet } from '@/lib/shippingCalculations';
 
 /**
  * Calculate subtotal from cart items
@@ -21,16 +22,17 @@ export function calculateSubtotal(cartItems) {
  * Calculate shipping cost.
  * promoResult: نتيجة validate-promo من الـ server { freeShipping, discountAmount, type }
  * shippingSettings: { shippingCost, freeShippingThreshold } من Firestore — يسقط على constants كـ fallback
+ * discount: الخصم النقدي الفائز، ويُخصم من subtotal قبل فحص حد الشحن المجاني.
  */
-export function calculateShipping(promoResult = null, subtotal = 0, cartItems = [], shippingSettings = null) {
+export function calculateShipping(promoResult = null, subtotal = 0, cartItems = [], shippingSettings = null, discount = 0) {
   const baseCost    = shippingSettings?.shippingCost         ?? SHIPPING_COST;
   const threshold   = shippingSettings?.freeShippingThreshold ?? FREE_SHIPPING_THRESHOLD;
 
   // 1. كود شحن مجاني
   if (promoResult?.freeShipping) return 0;
 
-  // 2. حد الشحن المجاني العام (threshold > 0)
-  if (threshold > 0 && subtotal >= threshold) return 0;
+  // 2. حد الشحن المجاني العام بعد الخصم النقدي الفائز.
+  if (isFreeShippingThresholdMet(subtotal, discount, threshold)) return 0;
 
   // 3. شحن مجاني من الباقة
   if (Array.isArray(cartItems) && cartItems.some(item => item.bundleFreeShipping === true)) return 0;
@@ -178,7 +180,7 @@ export function calculateAllTotals(cartItems, promoResult = null, shippingSettin
   const freeShippingByRule = isFreeShippingRuleEligible(cartItems, freeShippingRule);
   const shipping = freeShippingByRule
     ? 0
-    : calculateShipping(promoResult, subtotal, cartItems, shippingSettings);
+    : calculateShipping(promoResult, subtotal, cartItems, shippingSettings, discount);
   const total = calculateTotal(subtotal, shipping, discount);
   return {
     subtotal,
