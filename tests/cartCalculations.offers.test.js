@@ -95,4 +95,22 @@ describe('سيناريوهات الجمعة البيضاء (سلة فعلية)',
   it('٤ × ٦٤٥ → قطعة مجانية', () => {
     expect(calculateAllTotals([item(645, 4)], null, null, false, offers)).toMatchObject({ subtotal: 2580, discount: 645, shipping: 70, total: 2005 });
   });
+  it('من ٤ إلى ٨ قطع: يظل عرض ٣+١ بمنحة مجانية واحدة فقط', () => {
+    for (const quantity of [4, 5, 6, 8]) {
+      const result = calculateAllTotals([item(645, quantity)], null, null, false, offers);
+      expect(result.discount).toBe(645);
+      expect(result.appliedOffer.id).toBe('bxgy');
+      expect(result.offerBenefits.lines[0].regularQty).toBe(quantity - 1);
+      expect(result.offerBenefits.lines[0].discountedUnits).toHaveLength(1);
+      expect(result.total).toBe((645 * quantity) - 645 + 70);
+    }
+  });
+  it('عند تفعيل خصم ٤٠٪ فقط: يخصم قطعة واحدة مهما زادت الكمية', () => {
+    for (const quantity of [2, 3, 4, 8]) {
+      const result = calculateAllTotals([item(645, quantity)], null, null, false, [NTH]);
+      expect(result.discount).toBe(258);
+      expect(result.offerBenefits.lines[0].regularQty).toBe(quantity - 1);
+      expect(result.offerBenefits.lines[0].discountedUnits).toHaveLength(1);
+    }
+  });
 });
