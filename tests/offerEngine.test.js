@@ -225,10 +225,18 @@ describe('نطاق المنتجات', () => {
     expect(computeOfferDiscount(cart, { ...NTH, excludedProductIds: ['C'] })).toBe(128);
     expect(computeOfferDiscount(cart, { ...NTH, excludedProductIds: ['B', 'C'] })).toBe(0);
   });
-  it('استبعاد المنتجات اللي عليها خصم (compareAtPrice > price)', () => {
-    const cart = [item(645, 1, { id: 'A', compareAtPrice: 800 }), item(320, 1, { id: 'B' }), item(300, 1, { id: 'C' })];
-    expect(computeOfferDiscount(cart, { ...NTH, excludeDiscounted: true })).toBe(120); // (320,300) → 300×0.4
-    expect(computeOfferDiscount(cart, NTH)).toBe(computeOfferDiscount(cart, { ...NTH, excludeDiscounted: false }));
+  it('المنتجات المخفّضة تدخل العرض افتراضيًا، ويمكن استثناؤها يدويًا', () => {
+    const cart = [
+      item(200, 1, { id: 'A', compareAtPrice: 300 }),
+      item(600, 1, { id: 'B' }),
+    ];
+
+    // بدون الحقل أو عند false: المنتج المخفّض مؤهل وهو الأرخص.
+    expect(computeOfferDiscount(cart, NTH)).toBe(80);
+    expect(computeOfferDiscount(cart, { ...NTH, excludeDiscounted: false })).toBe(80);
+
+    // true فقط يستبعد المنتج المخفّض؛ يتبقى منتج واحد فلا يتحقق N=2.
+    expect(computeOfferDiscount(cart, { ...NTH, excludeDiscounted: true })).toBe(0);
   });
   it('compareAtPrice مساوي أو أقل من السعر لا يُعتبر خصم', () => {
     const cart = [item(645, 1, { id: 'A', compareAtPrice: 645 }), item(320, 1, { id: 'B', compareAtPrice: 100 })];
