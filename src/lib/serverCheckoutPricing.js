@@ -8,7 +8,7 @@ import {
   query,
   where,
 } from "firebase/firestore/lite";
-import { computeBestOffer, isFreeShippingRuleEligible } from "@/lib/offerEngine";
+import { computeBestOffer, isFreeShippingRuleEligible, isOfferLive } from "@/lib/offerEngine";
 import { FREE_SHIPPING_THRESHOLD, SHIPPING_COST } from "@/lib/constants";
 
 const MAX_CART_LINES = 50;
@@ -251,9 +251,31 @@ async function checkFirstOrder(db, email, phone) {
   return true;
 }
 
-async function validatePromo(db, code, customer, cartItems, isFirstOrder, now) {
+async function validatePromo(db, code, customer, cartItems, isFirstOrder, now, offers = []) {
   const normalizedCode = String(code || "").trim().toUpperCase();
   if (!normalizedCode) return null;
+
+  const coupon = offers.find((offer) => offer.type === "coupon_fixed" && String(offer.couponCode || "").trim().toUpperCase() === normalizedCode);
+  if (coupon) {
+    if (!isOfferLive(coupon, now)) throw new CheckoutQuoteError("قسيمة الشراء غير مفعّلة أو انتهت صلاحيتها.");
+    const eligibleItems = cartItems.filter((item) => {
+      const keys = [item.id, item.handle].map(String);
+      if (coupon.productScope === "selected") {
+        const selected = Array.isArray(coupon.productIds) ? coupon.productIds.map(String) : [];
+        if (!keys.some((key) => selected.includes(key))) return false;
+      }
+      const excluded = Array.isArray(coupon.excludedProductIds) ? coupon.excludedProductIds.map(String) : [];
+      if (keys.some((key) => excluded.includes(key))) return false;
+      if (coupon.excludeDiscounted === true && item.compareAtPrice && item.compareAtPrice > item.price) return false;
+      return true;
+    });
+    const eligibleSubtotal = eligibleItems.reduce((sum, item) => sum + item.price * item.qty, 0);
+    if (!eligibleItems.length || eligibleSubtotal < (Number(coupon.minCart) || 0)) throw new CheckoutQuoteError("القسيمة لا تنطبق على المنتجات الحالية أو لم يتحقق الحد الأدنى.");
+    const amount = Number(coupon.config?.amount);
+    if (!Number.isFinite(amount) || amount <= 0) throw new CheckoutQuoteError("إعداد مبلغ القسيمة غير صالح.", 409);
+    const discountAmount = Math.min(amount, eligibleSubtotal, Number(coupon.maxDiscount) > 0 ? Number(coupon.maxDiscount) : amount);
+    return { valid: true, code: normalizedCode, type: "coupon_fixed", value: amount, usageType: "unlimited", firstOrderOnly: false, freeShipping: false, discountAmount, message: "تم تفعيل قسيمة " + normalizedCode + " بخصم " + discountAmount + " ج.م.", couponOfferId: coupon.id, couponOfferName: coupon.name };
+  }
 
   const snap = await getDoc(doc(db, "promoCodes", normalizedCode));
   if (!snap.exists()) throw new CheckoutQuoteError("كود الخصم غير صالح.");
@@ -392,7 +414,8 @@ export async function createServerCheckoutQuote(input = {}) {
     customer,
     items,
     isFirstOrder,
-    now
+    now,
+    offers
   );
 
   const firstOrderDiscount =
