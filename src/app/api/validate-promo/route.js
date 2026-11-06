@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase';
-import { collection, doc, getDoc, getDocs } from 'firebase/firestore/lite';
+import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore/lite';
 import { SHIPPING_COST } from '@/lib/constants';
 
 export const dynamic = 'force-dynamic';
@@ -25,7 +25,7 @@ export async function POST(req) {
     const host = new URL(req.url).hostname.toLowerCase();
     const productionHosts = ['windeg.com', 'www.windeg.com', 'windeg.pages.dev'];
     const environment = productionHosts.includes(host) ? 'production' : 'preview';
-    const offersSnap = await getDocs(collection(db, 'offers'));
+    const offersSnap = await getDocs(query(collection(db, 'offers'), where('couponCode', '==', normalizedCode)));
     const coupon = offersSnap.docs
       .map((item) => ({ id: item.id, ...item.data() }))
       .find((offer) =>
@@ -45,6 +45,7 @@ export async function POST(req) {
         const keys = [item.id, item.handle].map(String);
         if (coupon.productScope === 'selected' && !(coupon.productIds || []).map(String).some((key) => keys.includes(key))) return false;
         if ((coupon.excludedProductIds || []).map(String).some((key) => keys.includes(key))) return false;
+        if (coupon.excludeDiscounted === true && Number(item.compareAtPrice) > Number(item.price)) return false;
         return true;
       });
       const eligibleSubtotal = eligibleItems.reduce((sum, item) => sum + (parseFloat(item.price) || 0) * (parseInt(item.qty) || 1), 0);
@@ -56,7 +57,7 @@ export async function POST(req) {
       return NextResponse.json({
         valid: true, code: normalizedCode, type: 'coupon_fixed', value: amount,
         scope: coupon.productScope === 'selected' ? coupon.productIds || [] : 'all',
-        freeShipping: false, discountAmount, couponOfferId: coupon.id,
+        freeShipping: false, discountAmount, maxDiscount: Number(coupon.maxDiscount) || 0, couponOfferId: coupon.id,
         message: 'تم تفعيل قسيمة ' + normalizedCode + ' بخصم ' + discountAmount + ' ج.م 🎉',
       });
     }
