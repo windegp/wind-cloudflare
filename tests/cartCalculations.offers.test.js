@@ -79,9 +79,22 @@ describe('أفضل خصم واحد: العرض ضد الكود ضد خصم ال�
     const big = { ...FIRST, firstOrderDiscount: 20 }; // 193
     expect(calculateAllTotals(CART, null, big, true, [NTH])).toMatchObject({ discount: 193, discountSource: 'first_order' });
   });
-  it('كود الشحن المجاني يفضل شغال مع العرض', () => {
+  it('كود الشحن المجاني يظل مستقلاً عن حد الشحن بعد الخصم', () => {
     const promo = { valid: true, type: 'free_shipping', freeShipping: true, code: 'FS' };
     expect(calculateAllTotals(CART, promo, null, false, [NTH])).toMatchObject({ discount: 128, shipping: 0, total: 837, discountSource: 'offer' });
+  });
+
+  it('القسيمة الثابتة تُخفض المبلغ المحتسب لحد الشحن المجاني', () => {
+    const settings = { shippingCost: 70, freeShippingThreshold: 900 };
+    const fixedCoupon = { valid: true, type: 'coupon_fixed', value: 100, discountAmount: 100, scope: 'all' };
+    expect(calculateAllTotals(CART, fixedCoupon, settings, false, []))
+      .toMatchObject({ subtotal: 965, discount: 100, shipping: 70, total: 935 });
+  });
+
+  it('خصم الطلب الأول يُخفض المبلغ المحتسب لحد الشحن المجاني', () => {
+    const settings = { ...FIRST, shippingCost: 70, freeShippingThreshold: 900, firstOrderDiscount: 10 };
+    expect(calculateAllTotals(CART, null, settings, true, []))
+      .toMatchObject({ subtotal: 965, discount: 97, shipping: 70, total: 938 });
   });
   it('خصم الطلب الأول يقارن فعلياً مع الكود والعرض', () => {
     const promo = { valid: true, type: 'fixed', discountAmount: 50 };
