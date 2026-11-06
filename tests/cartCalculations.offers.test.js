@@ -45,7 +45,7 @@ describe('العرض لوحده', () => {
     const explicitlyIncluded = calculateAllTotals(cart, null, null, false, [{ ...NTH, excludeDiscounted: false }]);
     const excluded = calculateAllTotals(cart, null, null, false, [{ ...NTH, excludeDiscounted: true }]);
 
-    expect(included).toMatchObject({ discount: 80, discountSource: 'offer', total: 720 });
+    expect(included).toMatchObject({ discount: 80, discountSource: 'offer', total: 790 });
     expect(explicitlyIncluded.discount).toBe(80);
     expect(excluded).toMatchObject({ discount: 0, discountSource: 'none', total: 870 });
   });
