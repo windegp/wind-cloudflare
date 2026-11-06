@@ -164,6 +164,7 @@ export default function CheckoutPage() {
     discountSource,
     appliedOffer,
     offerBenefits,
+    offerGiftSelections,
   } = useCart();
   
   const { signalPageReady } = usePageReady();
@@ -181,10 +182,23 @@ export default function CheckoutPage() {
       rows.push({ ...item, qty: benefitLine.regularQty, displayKey: `${cartIndex}-regular` });
     }
     benefitLine.discountedUnits.forEach((unit, unitIndex) => {
+      const giftSelection = unit.autoAdded
+        ? (offerGiftSelections?.[unit.giftKey] || {})
+        : {};
       rows.push({
-        ...item, qty: 1, price: unit.finalPrice,
+        ...item,
+        ...(unit.autoAdded ? {
+          selectedColor: giftSelection.selectedColor ?? item.selectedColor,
+          selectedSize: giftSelection.selectedSize ?? item.selectedSize,
+          image: giftSelection.image || item.image,
+        } : {}),
+        qty: 1,
+        price: unit.finalPrice,
         originalOfferPrice: unit.originalPrice,
-        isOfferBenefit: true, isFreeOfferBenefit: unit.free,
+        isOfferBenefit: true,
+        isFreeOfferBenefit: unit.free,
+        isAutoAddedOfferGift: unit.autoAdded === true,
+        offerGiftKey: unit.autoAdded ? unit.giftKey : undefined,
         displayKey: `${cartIndex}-benefit-${unitIndex}`,
       });
     });
@@ -198,8 +212,8 @@ export default function CheckoutPage() {
       ? `قسيمة شراء: ${appliedPromo.code || ''}`
       : (appliedPromo?.type && appliedPromo.type !== 'free_shipping' ? 'خصم الكود' : 'خصم الطلب الأول 🎉');
 
-  // بيانات المنتجات التي تُحفظ داخل الطلب دون أي استعلامات إضافية
-  const orderLineItems = cartItems.map(item => {
+  // بيانات المنتجات المدفوعة التي تُحفظ داخل الطلب دون أي استعلامات إضافية
+  const paidOrderLineItems = cartItems.map(item => {
     const currentPrice = Number.parseFloat(item.price) || 0;
     const rawCompareAtPrice = Number.parseFloat(item.compareAtPrice);
     const compareAtPrice =
@@ -220,6 +234,31 @@ export default function CheckoutPage() {
       image: item.image || item.images?.[0] || item.mainImage || ''
     };
   });
+
+  const autoGiftOrderLineItems = (offerBenefits?.lines || []).flatMap((line) => {
+    const sourceItem = cartItems[line.cartIndex];
+    if (!sourceItem) return [];
+    return line.discountedUnits
+      .filter((unit) => unit.autoAdded === true)
+      .map((unit) => {
+        const selection = offerGiftSelections?.[unit.giftKey] || {};
+        return {
+          productId: String(sourceItem.id ?? sourceItem.productId ?? sourceItem.handle ?? ''),
+          productHandle: String(sourceItem.handle ?? sourceItem.productId ?? sourceItem.id ?? ''),
+          productTitle: sourceItem.title || sourceItem.name || '',
+          name: `${sourceItem.title || sourceItem.name || 'منتج'}${selection.selectedSize || sourceItem.selectedSize ? ' - ' + (selection.selectedSize || sourceItem.selectedSize) : ''}`,
+          price: Math.max(0, Number(unit.finalPrice) || 0),
+          compareAtPrice: Number(unit.originalPrice) || null,
+          quantity: 1,
+          selectedSize: selection.selectedSize ?? sourceItem.selectedSize ?? '',
+          selectedColor: selection.selectedColor ?? sourceItem.selectedColor ?? '',
+          image: selection.image || sourceItem.image || sourceItem.images?.[0] || sourceItem.mainImage || '',
+          isAutoAddedOfferGift: true,
+        };
+      });
+  });
+
+  const orderLineItems = [...paidOrderLineItems, ...autoGiftOrderLineItems];
 
   // ملخص مالي محفوظ مع الطلب
   const originalSubtotal = orderLineItems.reduce(
@@ -588,6 +627,7 @@ export default function CheckoutPage() {
         body: JSON.stringify({
           orderId: activeOrderId,
           cartItems,
+          offerGiftSelections,
           promoCode: appliedPromo?.code || "",
           customerEmail: formData.email,
           customerPhone: formData.phone,
