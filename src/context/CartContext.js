@@ -303,7 +303,7 @@ export function CartProvider({ children }) {
         : "خصم الطلب الأول";
       return {
         ...appliedPromo,
-        message: `تم تطبيق ${winnerLabel} لأنه يوفّر لك خصماً أكبر — ولن يُحتسب استخدام الكود`,
+        message: `تم تطبيق ${winnerLabel} لأنه يوفّر لك خصماً أكبر — لم يتم تطبيق كود الخصم.`,
       };
     }
     return appliedPromo;
