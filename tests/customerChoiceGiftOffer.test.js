@@ -96,15 +96,15 @@ describe("customer-choice multi-product gift offer", () => {
     expect(result.discount).toBe(0);
   });
 
-  it("respects a maximum discount without exceeding selected unit prices", () => {
+  it("always makes each awarded gift unit fully free", () => {
     const result = computeCustomerChoiceGiftOffer(
       [product("A", 500, 2)],
       [product("G", 200), product("B", 300)],
-      offer({ maxDiscount: 250 })
+      offer({ maxDiscount: 1 })
     );
-    expect(result.discount).toBe(250);
-    expect(result.discountedUnits.reduce((sum, unit) => sum + unit.discount, 0)).toBe(250);
-    expect(result.discountedUnits.every((unit) => unit.discount <= unit.originalPrice)).toBe(true);
+    expect(result.discount).toBe(400);
+    expect(result.discountedUnits).toHaveLength(2);
+    expect(result.discountedUnits.every((unit) => unit.free && unit.finalPrice === 0)).toBe(true);
   });
 
   it("rejects invalid offer configuration", () => {
