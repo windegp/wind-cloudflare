@@ -98,13 +98,11 @@ export function calculateAllTotals(cartItems, promoResult = null, shippingSettin
   const discountSource = winner.source;
   const appliedOffer = discountSource === 'offer' ? offerResult.offer : null;
 
-  // عند تفعيل قاعدة المنتجات المحددة، لا نسمح لحد الشحن العام القديم بتجاوز نطاق المنتجات.
+  // قاعدة المنتجات المحددة إضافة مستقلة؛ تظل قواعد الشحن العامة والأكواد كما هي.
   const freeShippingByRule = isFreeShippingRuleEligible(cartItems, freeShippingRule);
-  const scopedShippingSettings =
-    freeShippingRule?.enabled === true && freeShippingRule.scope === 'selected'
-      ? { ...shippingSettings, freeShippingThreshold: 0 }
-      : shippingSettings;
-  const shipping = freeShippingByRule ? 0 : calculateShipping(promoResult, subtotal, cartItems, scopedShippingSettings);
+  const shipping = freeShippingByRule
+    ? 0
+    : calculateShipping(promoResult, subtotal, cartItems, shippingSettings);
   const total = calculateTotal(subtotal, shipping, discount);
   return {
     subtotal,
