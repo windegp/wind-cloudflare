@@ -784,6 +784,7 @@ export default function AdminOffersPage() {
                 <div className="flex items-center gap-3">
                   <input id="offer-exclude-discounted" type="checkbox" checked={form.excludeDiscounted} onChange={(event) => updateField("excludeDiscounted", event.target.checked)} className="w-4 h-4 accent-[#008060]" />
                   <label htmlFor="offer-exclude-discounted" className="text-sm font-bold text-gray-700">استثناء المنتجات المخفّضة بالفعل</label>
+                  <p className="text-[10px] text-gray-500">المنتجات المخفّضة تدخل العرض افتراضيًا؛ فعّل هذا الخيار لاستثنائها.</p>
                 </div>
               </div>
 
