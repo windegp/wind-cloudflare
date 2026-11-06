@@ -121,9 +121,15 @@ describe('قسائم الشراء بكود خصم', () => {
 
 describe('سيناريوهات الجمعة البيضاء (سلة فعلية)', () => {
   const offers = [BXGY, NTH];
-  it('٤ منتجات مختلفة → خصم ٤٠٪ مرة واحدة على القطعة الثانية (٢٣٦)', () => {
+  it('٤ منتجات مختلفة → خصم ٤٠٪ مرة واحدة على أرخص قطعة مؤهلة (١٠٨)', () => {
     const cart = [item(645), item(590), item(320), item(270)];
-    expect(calculateAllTotals(cart, null, null, false, offers)).toMatchObject({ subtotal: 1825, discount: 236, total: 1659 });
+    const result = calculateAllTotals(cart, null, null, false, [NTH]);
+    expect(result).toMatchObject({ subtotal: 1825, discount: 108, total: 1787, discountSource: 'offer' });
+    expect(result.offerBenefits.lines).toHaveLength(1);
+    expect(result.offerBenefits.lines[0]).toMatchObject({
+      cartIndex: 3,
+      discountedUnits: [{ originalPrice: 270, discount: 108, finalPrice: 162 }],
+    });
   });
   it('٤ × ٦٤٥ → قطعة مجانية', () => {
     expect(calculateAllTotals([item(645, 4)], null, null, false, offers)).toMatchObject({ subtotal: 2580, discount: 645, shipping: 70, total: 2005 });
