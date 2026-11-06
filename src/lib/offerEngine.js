@@ -127,11 +127,23 @@ function groupItemsByProduct(items) {
   return groups;
 }
 
-/** One free-gift award per eligible product, regardless of its quantity. */
+/** Stable key for the editable color/size selection of an automatically added gift. */
+export function getOfferGiftSelectionKey(offerId, item) {
+  const productKey = getProductGroupKey(item) || String(item?.id ?? item?.productId ?? item?.handle ?? "product");
+  return `offer-gift:${String(offerId ?? "")}:${productKey}`;
+}
+
+/** One automatically added free-gift award per eligible product, regardless of excess quantity. */
 function sumBuyXGetYBenefit(items, buyQty, getQty) {
   let total = 0;
   for (const productItems of groupItemsByProduct(items).values()) {
-    total += sumTieredBenefit(expandUnits(productItems), buyQty + getQty, getQty, 1, 1);
+    const units = expandUnits(productItems);
+    if (units.length < buyQty) continue;
+
+    // The customer only needs to buy X units. The Y gift units are additional.
+    for (let index = 0; index < getQty; index += 1) {
+      total += units[Math.max(0, units.length - 1 - index)];
+    }
   }
   return total;
 }
@@ -351,23 +363,37 @@ export function computeOfferBenefits(cartItems, offer, now = new Date()) {
       const buy = toInt(cfg.buyQty);
       const get = toInt(cfg.getQty);
       if (!(buy >= 1) || !(get >= 1)) break;
-      const groupSize = buy + get;
       const unitsByProduct = new Map();
       for (const unit of eligibleUnits) {
         const productKey = getProductGroupKey(cartItems[unit.cartIndex]) || `__cart_line_${unit.cartIndex}`;
         if (!unitsByProduct.has(productKey)) unitsByProduct.set(productKey, []);
         unitsByProduct.get(productKey).push(unit);
       }
+
+      const autoGiftUnits = [];
       for (const productUnits of unitsByProduct.values()) {
-        const orderedProductUnits = [...productUnits].sort(
-          (a, b) => b.price - a.price || a.cartIndex - b.cartIndex || a.unitIndex - b.unitIndex
+        if (productUnits.length < buy) continue;
+
+        // Choose the cheapest purchased variant as the default gift variant.
+        const cheapestFirst = [...productUnits].sort(
+          (a, b) => a.price - b.price || a.cartIndex - b.cartIndex || a.unitIndex - b.unitIndex
         );
-        if (orderedProductUnits.length < groupSize) continue;
-        // One qualifying group per product. Extra quantity does not create another gift.
-        for (let offset = groupSize - get; offset < groupSize; offset += 1) {
-          orderedProductUnits[offset].rawDiscount = orderedProductUnits[offset].price;
+
+        // One gift award per qualifying product. The free unit is additional;
+        // all buyQty (and any excess paid units) remain in the cart at full price.
+        for (let giftIndex = 0; giftIndex < get; giftIndex += 1) {
+          const giftSource = cheapestFirst[Math.min(giftIndex, cheapestFirst.length - 1)];
+          const giftItem = cartItems[giftSource.cartIndex];
+          autoGiftUnits.push({
+            ...giftSource,
+            unitIndex: Math.max(0, parseInt(giftItem.qty) || 0) + giftIndex,
+            rawDiscount: giftSource.price,
+            autoAdded: true,
+            giftKey: getOfferGiftSelectionKey(offer.id, giftItem),
+          });
         }
       }
+      eligibleUnits.push(...autoGiftUnits);
       break;
     }
     case OFFER_TYPES.NTH_PERCENT: {
@@ -434,6 +460,8 @@ export function computeOfferBenefits(cartItems, offer, now = new Date()) {
       discount,
       finalPrice,
       free,
+      autoAdded: unit.autoAdded === true,
+      giftKey: unit.autoAdded === true ? unit.giftKey : undefined,
       benefits: [{
         offerId: String(offer.id ?? ''),
         offerName: offer.name || '',
@@ -453,7 +481,10 @@ export function computeOfferBenefits(cartItems, offer, now = new Date()) {
     lines.push({
       cartIndex,
       itemId: String(item.id ?? item.productId ?? item.handle ?? ''),
-      regularQty: Math.max(0, (parseInt(item.qty) || 0) - discountedUnits.length),
+      regularQty: Math.max(
+        0,
+        (parseInt(item.qty) || 0) - discountedUnits.filter((unit) => unit.autoAdded !== true).length
+      ),
       discountedUnits,
     });
   }
