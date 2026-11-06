@@ -53,6 +53,8 @@ export function CartProvider({ children }) {
 
   // ── State ──────────────────────────────────────────────────────
   const [cartItems,     setCartItems]     = useState([]);
+  const [offerGiftSelections, setOfferGiftSelections] = useState({});
+  const [offerGiftSelectionsLoaded, setOfferGiftSelectionsLoaded] = useState(false);
   const [isCartOpen,    setIsCartOpen]    = useState(false);
   const [appliedPromo,  setAppliedPromo]  = useState(null);   // { code, type, freeShipping, discountAmount, message, ... }
   const [discountError, setDiscountError] = useState("");
@@ -83,8 +85,10 @@ export function CartProvider({ children }) {
 
   const clearCart = useCallback(() => {
     setCartItems([]);
+    setOfferGiftSelections({});
     setAppliedPromo(null);
     localStorage.removeItem('wind_cart');
+    localStorage.removeItem('wind_offer_gift_variants');
   }, []);
 
   const addToCart = useCallback((product) => {
@@ -114,6 +118,21 @@ export function CartProvider({ children }) {
   }, [openCart]);
 
   const updateCartItemVariant = useCallback((originalItem, selection) => {
+    // Automatically added gifts are not paid cart units. Save their variant
+    // choice separately so editing a gift never removes one of the paid units.
+    if (originalItem?.__autoOfferGiftKey) {
+      const giftKey = String(originalItem.__autoOfferGiftKey);
+      setOfferGiftSelections((prev) => ({
+        ...prev,
+        [giftKey]: {
+          selectedSize: selection.selectedSize || "",
+          selectedColor: selection.selectedColor || "",
+          image: selection.image || originalItem.image || "",
+        },
+      }));
+      return;
+    }
+
     setCartItems((prev) => {
       // وحدة العرض تُفصل عن باقي الكمية قبل تغيير اللون أو المقاس.
       if (originalItem.__offerBenefitUnit === true) {
@@ -355,6 +374,29 @@ export function CartProvider({ children }) {
 
   // ── Persistence ────────────────────────────────────────────────
   useEffect(() => {
+    try {
+      const saved = localStorage.getItem('wind_offer_gift_variants');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          setOfferGiftSelections(parsed);
+        }
+      }
+    } catch {
+      localStorage.removeItem('wind_offer_gift_variants');
+    } finally {
+      setOfferGiftSelectionsLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!offerGiftSelectionsLoaded) return;
+    try {
+      localStorage.setItem('wind_offer_gift_variants', JSON.stringify(offerGiftSelections));
+    } catch {}
+  }, [offerGiftSelections, offerGiftSelectionsLoaded]);
+
+  useEffect(() => {
     const saved = localStorage.getItem('wind_cart');
     if (saved) {
       try { setCartItems(JSON.parse(saved)); }
@@ -368,6 +410,7 @@ export function CartProvider({ children }) {
 
   const contextValue = useMemo(() => ({
     cartItems,
+    offerGiftSelections,
     addToCart, removeFromCart, updateQty, updateCartItemVariant, clearCart,
     isCartOpen, toggleCart, openCart, closeCart,
     subtotal, discount, shipping, total,
@@ -379,7 +422,7 @@ export function CartProvider({ children }) {
     isFirstOrder, setIsFirstOrder,
     setSelectedGovernorate,
   }), [
-    cartItems, addToCart, removeFromCart, updateQty, updateCartItemVariant, clearCart,
+    cartItems, offerGiftSelections, addToCart, removeFromCart, updateQty, updateCartItemVariant, clearCart,
     isCartOpen, toggleCart, openCart, closeCart,
     subtotal, discount, shipping, total,
     discountSource, appliedOffer, appliedOffers, offers, offerBenefits, freeShippingRule,
