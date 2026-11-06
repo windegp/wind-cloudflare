@@ -671,6 +671,7 @@ export default function CheckoutPage() {
       orderId,
       formData,
       cartItems: quote.cartItems,
+      lineItems: quote.lineItems,
       total: quote.total,
       amount: quote.total,
       subtotal: quote.subtotal,
@@ -867,6 +868,7 @@ export default function CheckoutPage() {
           phone: formData.phone,
           formData,
           cartItems: quote.cartItems,
+          lineItems: quote.lineItems,
           subtotal: quote.subtotal,
           discount: quote.discount,
           shipping: quote.shipping,
@@ -909,16 +911,32 @@ export default function CheckoutPage() {
         // Catalog أبداً. ونستخدم getCatalogId (نفس مصدر الكتالوج) بدل
         // الـ handle الخام، لأنه لازم يطابق g:id الخاص باللون الفعلي
         // المشترى، وليس فقط أول لون بالصدفة.
-        const purchaseContentIds = quote.cartItems
-          .filter(it => it.handle || it.id)
-          .map(it => getCatalogId(it.handle || it.id, it.selectedColor));
-        const purchaseNumItems = quote.cartItems.reduce((sum, item) => sum + item.qty, 0);
-        const purchaseCartSnapshot = quote.cartItems.map(it => ({
-          id: it.handle || it.id || it.title,
-          title: it.title,
-          price: it.price,
-          qty: it.qty,
-        }));
+        const autoGiftLineItems = (quote.lineItems || []).filter((item) => item.isAutoAddedOfferGift === true);
+        const purchaseContentIds = [
+          ...quote.cartItems
+            .filter(it => it.handle || it.id)
+            .map(it => getCatalogId(it.handle || it.id, it.selectedColor)),
+          ...autoGiftLineItems
+            .filter((item) => item.productHandle || item.productId)
+            .map((item) => getCatalogId(item.productHandle || item.productId, item.selectedColor)),
+        ];
+        const purchaseNumItems =
+          quote.cartItems.reduce((sum, item) => sum + item.qty, 0) +
+          autoGiftLineItems.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
+        const purchaseCartSnapshot = [
+          ...quote.cartItems.map(it => ({
+            id: it.handle || it.id || it.title,
+            title: it.title,
+            price: it.price,
+            qty: it.qty,
+          })),
+          ...autoGiftLineItems.map((item) => ({
+            id: item.productHandle || item.productId || item.productTitle,
+            title: item.productTitle || item.name,
+            price: item.price,
+            qty: Number(item.quantity) || 1,
+          })),
+        ];
 
         localStorage.removeItem('pendingOrder');
 
