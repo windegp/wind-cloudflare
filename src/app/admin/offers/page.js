@@ -267,7 +267,7 @@ export default function AdminOffersPage() {
     const term = search.trim().toLowerCase();
     if (!term) return offers;
     return offers.filter((offer) =>
-      [offer.name, offer.id, offer.type].some((value) =>
+      [offer.name, offer.id, offer.type, offer.couponCode].some((value) =>
         String(value || "").toLowerCase().includes(term)
       )
     );
