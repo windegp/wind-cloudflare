@@ -6,14 +6,14 @@
 // القواعد:
 //  - عرض واحد فقط بيتطبق (الأعلى خصماً للعميل) — العروض ما بتتجمعش.
 //  - الهدية المجانية: مرة واحدة لكل منتج مؤهل، ولا تُجمع كميات منتجات مختلفة.
-//  - خصم القطعة رقم N: مرة واحدة لكل طلب، ويمكن أن يشمل منتجات مختلفة.
+//  - خصم النسبة: عند بلوغ N قطع مؤهلة، على أرخص وحدة مؤهلة مرة واحدة لكل طلب.
 //  - الخصم الناتج رقم صحيح (الواجهة بتعرضه بـ ".00").
 //  - عند التعادل: priority الأقل أولاً، ثم id أبجدياً (نتيجة ثابتة).
 // ============================================
 
 export const OFFER_TYPES = {
   BUY_X_GET_Y: 'buy_x_get_y',     // اشتري X وخد Y مجاناً (الأرخص في كل مجموعة)
-  NTH_PERCENT: 'nth_percent',     // خصم % على القطعة رقم N (الأرخص في كل مجموعة)
+  NTH_PERCENT: 'nth_percent',     // خصم % مرة واحدة على أرخص وحدة عند بلوغ N قطع مؤهلة
   CART_PERCENT: 'cart_percent',   // خصم % على إجمالي المنتجات المؤهلة
   CART_FIXED: 'cart_fixed',       // خصم مبلغ ثابت على إجمالي المنتجات المؤهلة
   FREE_SHIPPING: 'free_shipping', // شحن مجاني فقط (منفعة مستقلة عن الخصم النقدي)
@@ -203,7 +203,18 @@ export function computeOfferDiscount(cartItems, offer) {
       const pct = toPercent(cfg.percent);
       const maxUses = getMaxUsesPerOrder();
       if (!(nth >= 2) || Number.isNaN(pct) || maxUses === null) return 0;
-      raw = sumTieredBenefit(expandUnits(eligible), nth, 1, pct / 100, maxUses);
+
+      const eligibleUnitCount = eligible.reduce(
+        (sum, item) => sum + Math.min(parseInt(item.qty) || 0, MAX_UNITS_PER_ITEM),
+        0
+      );
+      if (eligibleUnitCount < nth) return 0;
+
+      const cheapestUnitPrice = eligible.reduce(
+        (cheapest, item) => Math.min(cheapest, parseFloat(item.price) || 0),
+        Infinity
+      );
+      raw = cheapestUnitPrice * pct / 100;
       break;
     }
     case OFFER_TYPES.CART_PERCENT: {
@@ -333,9 +344,6 @@ export function computeOfferBenefits(cartItems, offer, now = new Date()) {
   }
 
   const cfg = offer.config || {};
-  const ordered = [...eligibleUnits].sort(
-    (a, b) => b.price - a.price || a.cartIndex - b.cartIndex || a.unitIndex - b.unitIndex
-  );
 
   switch (offer.type) {
     case OFFER_TYPES.BUY_X_GET_Y: {
@@ -364,14 +372,12 @@ export function computeOfferBenefits(cartItems, offer, now = new Date()) {
     case OFFER_TYPES.NTH_PERCENT: {
       const nth = toInt(cfg.nth);
       const percent = toPercent(cfg.percent);
-      if (!(nth >= 2) || Number.isNaN(percent)) break;
-      const maxUses = getMaxUsesPerOrder();
-      if (maxUses === null) break;
-      const groups = Math.min(Math.floor(ordered.length / nth), maxUses);
-      for (let group = 0; group < groups; group += 1) {
-        const unit = ordered[(group * nth) + nth - 1];
-        unit.rawDiscount = unit.price * percent / 100;
-      }
+      if (!(nth >= 2) || Number.isNaN(percent) || eligibleUnits.length < nth) break;
+
+      const cheapestUnit = [...eligibleUnits].sort(
+        (a, b) => a.price - b.price || a.cartIndex - b.cartIndex || a.unitIndex - b.unitIndex
+      )[0];
+      if (cheapestUnit) cheapestUnit.rawDiscount = cheapestUnit.price * percent / 100;
       break;
     }
     case OFFER_TYPES.CART_PERCENT: {
