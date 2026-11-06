@@ -74,14 +74,15 @@ export function calculateAllTotals(cartItems, promoResult = null, shippingSettin
       ? promoResult.type === 'coupon_fixed'
         ? (() => {
             const scope = Array.isArray(promoResult.scope) ? promoResult.scope.map(String) : null;
-            const eligibleSubtotal = scope
-              ? cartItems.reduce((sum, item) => {
-                  const keys = [item.id, item.handle].map(String);
-                  return keys.some((key) => scope.includes(key))
-                    ? sum + (Number(item.price) || 0) * (Number(item.qty) || 0)
-                    : sum;
-                }, 0)
-              : subtotal;
+            const excluded = Array.isArray(promoResult.excludedProductIds) ? promoResult.excludedProductIds.map(String) : [];
+            const eligibleSubtotal = cartItems.reduce((sum, item) => {
+              const keys = [item.id, item.handle].map(String);
+              if (scope && !keys.some((key) => scope.includes(key))) return sum;
+              if (keys.some((key) => excluded.includes(key))) return sum;
+              if (promoResult.excludeDiscounted === true && Number(item.compareAtPrice) > Number(item.price)) return sum;
+              return sum + (Number(item.price) || 0) * (Number(item.qty) || 0);
+            }, 0);
+            if (eligibleSubtotal < (Number(promoResult.minCart) || 0)) return 0;
             const amount = Number(promoResult.value) || 0;
             const cap = Number(promoResult.maxDiscount) > 0 ? Number(promoResult.maxDiscount) : amount;
             return Math.min(amount, cap, eligibleSubtotal);
