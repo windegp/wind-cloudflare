@@ -7,7 +7,7 @@ import { calculateAllTotals } from '@/lib/cartCalculations';
 const item = (price, qty = 1, extra = {}) => ({ id: `p${price}`, price, qty, ...extra });
 
 const NTH = {
-  id: 'nth', name: '٤٠٪ على القطعة التانية', active: true, type: 'nth_percent',
+  id: 'nth', name: '٤٠٪ على أرخص قطعة عند شراء قطعتين', active: true, type: 'nth_percent',
   config: { nth: 2, percent: 40 }, productScope: 'all', priority: 2,
 };
 const BXGY = {
@@ -39,7 +39,7 @@ describe('العرض لوحده', () => {
     expect(calculateAllTotals(CART, null, null, false, [NTH, BXGY])).toMatchObject({
       subtotal: 965, discount: 128, shipping: 70, total: 907,
       discountSource: 'offer',
-      appliedOffer: { id: 'nth', name: '٤٠٪ على القطعة التانية', type: 'nth_percent' },
+      appliedOffer: { id: 'nth', name: '٤٠٪ على أرخص قطعة عند شراء قطعتين', type: 'nth_percent' },
     });
   });
   it('الشحن لسه بيتحسب على الـ subtotal قبل الخصم', () => {
