@@ -515,13 +515,6 @@ export default function AdminOffersPage() {
   const fieldClass = "w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#008060]";
   const labelClass = "block text-xs font-bold text-gray-600 mb-1.5";
   const activeType = TYPE_OPTIONS.find((item) => item.value === form.type)?.label || "";
-  const selectedStackIds = (form.stackWithOfferIds || []).map(String);
-  const stackableOffers = offers.filter((offer) =>
-    offer.id !== editingId &&
-    offer.type !== "free_shipping" &&
-    (offer.active === true || selectedStackIds.includes(String(offer.id)))
-  );
-
   return (
     <div className="max-w-6xl mx-auto space-y-6" dir="rtl">
       {toast && (
