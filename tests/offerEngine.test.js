@@ -57,32 +57,38 @@ describe('سيناريوهات "أفضل عرض يكسب"', () => {
       discountedUnits: [{ originalPrice: 320, discount: 128, finalPrice: 192 }],
     });
   });
-  it('لا يجمع عرض القطعة المجانية كميات منتجات مختلفة', () => {
-    const cart = [item(645, 3, { id: 'A' }), item(590, 1, { id: 'B' })];
+  it('لا يجمع كميات منتجات مختلفة للوصول إلى شرط شراء ٣ قطع', () => {
+    const cart = [item(645, 2, { id: 'A' }), item(590, 1, { id: 'B' })];
     expect(computeOfferDiscount(cart, BXGY)).toBe(0);
     expect(computeBestOffer(cart, [BXGY]).offer).toBeNull();
   });
-  it('يمنح هدية مستقلة لكل منتج يحقق الشرط، مرة واحدة فقط لكل منتج', () => {
+  it('يضيف هدية مستقلة لكل منتج وصل إلى ٣ قطع مدفوعة، مرة واحدة فقط لكل منتج', () => {
     const cart = [
       item(645, 6, { id: 'A' }),
       item(320, 4, { id: 'B' }),
       item(270, 3, { id: 'C' }),
     ];
     const result = computeBestOffer(cart, [BXGY]);
-    expect(result.discount).toBe(965); // هدية واحدة من A وهدية واحدة من B فقط
+    expect(result.discount).toBe(1235); // هدية واحدة من A وB وC
     const gifts = result.offerBenefits.lines.flatMap((line) => line.discountedUnits);
-    expect(gifts).toHaveLength(2);
-    expect(gifts.every((unit) => unit.free)).toBe(true);
-    expect(result.offerBenefits.lines.map((line) => line.cartIndex)).toEqual([0, 1]);
+    expect(gifts).toHaveLength(3);
+    expect(gifts.every((unit) => unit.free && unit.autoAdded)).toBe(true);
+    expect(result.offerBenefits.lines.map((line) => line.cartIndex)).toEqual([0, 1, 2]);
+    expect(result.offerBenefits.lines.map((line) => line.regularQty)).toEqual([6, 4, 3]);
   });
-  it('يجمع نفس المنتج عبر أسطر ألوان أو مقاسات مختلفة', () => {
+  it('ثلاثة ألوان مختلفة للمنتج نفسه تكفي لإضافة الهدية تلقائيًا', () => {
     const cart = [
-      item(645, 2, { id: 'A-black', handle: 'product-a', selectedColor: 'أسود' }),
-      item(645, 2, { id: 'A-white', handle: 'product-a', selectedColor: 'أبيض' }),
+      item(645, 1, { id: 'A-black', productId: 'A', handle: 'product-a', selectedColor: 'أسود' }),
+      item(645, 1, { id: 'A-white', productId: 'A', handle: 'product-a', selectedColor: 'أبيض' }),
+      item(645, 1, { id: 'A-navy', productId: 'A', handle: 'product-a', selectedColor: 'كحلي' }),
     ];
     const result = computeBestOffer(cart, [BXGY]);
     expect(result.discount).toBe(645);
-    expect(result.offerBenefits.lines.flatMap((line) => line.discountedUnits)).toHaveLength(1);
+    expect(result.offerBenefits.lines).toHaveLength(1);
+    expect(result.offerBenefits.lines[0].regularQty).toBe(1);
+    expect(result.offerBenefits.lines[0].discountedUnits).toMatchObject([
+      { originalPrice: 645, discount: 645, finalPrice: 0, free: true, autoAdded: true, giftKey: 'offer-gift:bxgy:A' },
+    ]);
   });
   it('٤ × ٦٤٥ → اشتري ٣ وخد ١ (٦٤٥ أحسن من ٥١٦)', () => {
     const r = computeBestOffer([item(645, 4)], OFFERS);
@@ -94,8 +100,9 @@ describe('سيناريوهات "أفضل عرض يكسب"', () => {
     expect(r.discount).toBe(645);
     expect(r.offer.id).toBe('bxgy');
     expect(r.appliedOffers).toHaveLength(1);
-    expect(r.offerBenefits.lines[0].regularQty).toBe(5);
+    expect(r.offerBenefits.lines[0].regularQty).toBe(6);
     expect(r.offerBenefits.lines[0].discountedUnits).toHaveLength(1);
+    expect(r.offerBenefits.lines[0].discountedUnits[0].autoAdded).toBe(true);
     expect(r.offerBenefits.lines[0].discountedUnits[0].free).toBe(true);
   });
   it('٨ × ٦٤٥ → يظل عرض ٣+١ قطعة مجانية واحدة فقط مهما زادت الكمية', () => {
@@ -103,8 +110,9 @@ describe('سيناريوهات "أفضل عرض يكسب"', () => {
     expect(r.discount).toBe(645);
     expect(r.offer.id).toBe('bxgy');
     expect(r.appliedOffers).toHaveLength(1);
-    expect(r.offerBenefits.lines[0].regularQty).toBe(7);
+    expect(r.offerBenefits.lines[0].regularQty).toBe(8);
     expect(r.offerBenefits.lines[0].discountedUnits).toHaveLength(1);
+    expect(r.offerBenefits.lines[0].discountedUnits[0].autoAdded).toBe(true);
     expect(r.offerBenefits.lines[0].discountedUnits[0].free).toBe(true);
   });
   it('قطعة واحدة → لا عرض', () => {
@@ -125,14 +133,14 @@ describe('سيناريوهات "أفضل عرض يكسب"', () => {
     expect(legacyHelperResult.offers.map((offer) => offer.id)).toEqual(["nth"]);
     expect(legacyHelperResult.discount).toBe(108);
   });
-  it.each([4, 5, 6, 8, 12])('من ٤ إلى %i قطعة: يظل عرض ٣+١ ثابتًا بمنفعة واحدة', (quantity) => {
-    const result = computeBestOffer([item(645, quantity)], OFFERS);
+  it.each([3, 4, 5, 6, 8, 12])('من ٣ إلى %i قطعة مدفوعة: يظل عرض ٣+١ بمنحة إضافية واحدة', (quantity) => {
+    const result = computeBestOffer([item(645, quantity)], [BXGY]);
     expect(result.offer.id).toBe("bxgy");
     expect(result.appliedOffers).toHaveLength(1);
     expect(result.discount).toBe(645);
-    expect(result.offerBenefits.lines[0].regularQty).toBe(quantity - 1);
+    expect(result.offerBenefits.lines[0].regularQty).toBe(quantity);
     expect(result.offerBenefits.lines[0].discountedUnits).toHaveLength(1);
-    expect(result.offerBenefits.lines[0].discountedUnits[0].free).toBe(true);
+    expect(result.offerBenefits.lines[0].discountedUnits[0]).toMatchObject({ free: true, autoAdded: true });
   });
   it('عرض ٤٠٪ على أرخص قطعة يمنح خصمًا مرة واحدة عند أي كمية مؤهلة', () => {
     const offer = { ...NTH };
@@ -155,7 +163,8 @@ describe('سيناريوهات "أفضل عرض يكسب"', () => {
     expect(computeOfferDiscount(cart, legacyUnlimited)).toBe(645);
     const result = computeBestOffer(cart, [legacyUnlimited]);
     expect(result.discount).toBe(645);
-    expect(result.offerBenefits.lines[0].regularQty).toBe(7);
+    expect(result.offerBenefits.lines[0].regularQty).toBe(8);
+    expect(result.offerBenefits.lines[0].discountedUnits[0].autoAdded).toBe(true);
     expect(result.offerBenefits.lines[0].discountedUnits).toHaveLength(1);
   });
   it('قاعدة المتجر القديمة لا تفعّل الشحن من قسم المنتجات المحددة', () => {
@@ -362,14 +371,14 @@ describe('قسائم الشراء لا تعمل تلقائيًا', () => {
 });
 
 describe('تفصيل القطع المستفيدة من العرض', () => {
-  it('يفصل القطعة المجانية عن الثلاث قطع المدفوعة في نفس السطر', async () => {
+  it('ينشئ الهدية كسطر إضافي بعد شراء ٣ قطع دون خصم أي قطعة مدفوعة', async () => {
     const { computeOfferBenefits } = await import('@/lib/offerEngine');
-    const result = computeOfferBenefits([item(645, 4)], BXGY);
+    const result = computeOfferBenefits([item(645, 3)], BXGY);
     expect(result.discount).toBe(645);
     expect(result.lines).toHaveLength(1);
     expect(result.lines[0].regularQty).toBe(3);
     expect(result.lines[0].discountedUnits).toMatchObject([
-      { unitIndex: 3, originalPrice: 645, discount: 645, finalPrice: 0, free: true },
+      { unitIndex: 3, originalPrice: 645, discount: 645, finalPrice: 0, free: true, autoAdded: true },
     ]);
   });
 
