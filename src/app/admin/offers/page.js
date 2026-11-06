@@ -571,42 +571,40 @@ export default function AdminOffersPage() {
               <span className="block text-[11px] text-gray-500 mt-1">عند إيقاف هذا الخيار، لن تطبق هذه القاعدة على السلة.</span>
             </span>
           </label>
+          <ProductPicker
+            title="المنتجات التي تمنح الشحن المجاني"
+            hint="علّم على المنتجات المطلوبة، ويمكنك إلغاء تحديد أي منتج في أي وقت. لا يؤثر هذا الإعداد على الشحن المجاني العام الموجود في قسم أكواد الخصم والشحن."
+            products={products}
+            selected={shippingRule.productIds || []}
+            search={shippingProductSearch}
+            onSearch={setShippingProductSearch}
+            onToggle={(product) => updateShippingRule("productIds", toggleProduct(shippingRule.productIds || [], product))}
+          />
           {shippingRule.enabled && (
-            <>
-              <ProductPicker
-                title="المنتجات التي تمنح الشحن المجاني"
-                hint="علّم على المنتجات المطلوبة، ويمكنك إلغاء تحديد أي منتج في أي وقت. لا يؤثر هذا الإعداد على الشحن المجاني العام الموجود في قسم أكواد الخصم والشحن."
-                products={products}
-                selected={shippingRule.productIds || []}
-                search={shippingProductSearch}
-                onSearch={setShippingProductSearch}
-                onToggle={(product) => updateShippingRule("productIds", toggleProduct(shippingRule.productIds || [], product))}
-              />
-              <div className="border border-gray-200 rounded-xl p-3 space-y-3">
-                <div className="text-sm font-bold text-gray-800">شرط استحقاق الشحن المجاني</div>
-                <div className="flex flex-wrap gap-4 text-sm">
-                  <label className="flex items-center gap-2">
-                    <input type="radio" name="free-shipping-condition" checked={shippingRule.condition === "quantity"} onChange={() => updateShippingRule("condition", "quantity")} className="accent-[#008060]" />
-                    عند شراء عدد قطع
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input type="radio" name="free-shipping-condition" checked={shippingRule.condition === "subtotal"} onChange={() => updateShippingRule("condition", "subtotal")} className="accent-[#008060]" />
-                    عند الوصول لإجمالي قيمة
-                  </label>
-                </div>
-                {shippingRule.condition === "quantity" ? (
-                  <div className="max-w-xs">
-                    <label className={labelClass}>الحد الأدنى لعدد القطع</label>
-                    <input type="number" min="1" step="1" value={shippingRule.minQuantity} onChange={(event) => updateShippingRule("minQuantity", event.target.value)} className={fieldClass} />
-                  </div>
-                ) : (
-                  <div className="max-w-xs">
-                    <label className={labelClass}>الحد الأدنى لقيمة المنتجات المختارة (ج.م)</label>
-                    <input type="number" min="1" step="1" value={shippingRule.minSubtotal} onChange={(event) => updateShippingRule("minSubtotal", event.target.value)} className={fieldClass} />
-                  </div>
-                )}
+            <div className="border border-gray-200 rounded-xl p-3 space-y-3">
+              <div className="text-sm font-bold text-gray-800">شرط استحقاق الشحن المجاني</div>
+              <div className="flex flex-wrap gap-4 text-sm">
+                <label className="flex items-center gap-2">
+                  <input type="radio" name="free-shipping-condition" checked={shippingRule.condition === "quantity"} onChange={() => updateShippingRule("condition", "quantity")} className="accent-[#008060]" />
+                  عند شراء عدد قطع
+                </label>
+                <label className="flex items-center gap-2">
+                  <input type="radio" name="free-shipping-condition" checked={shippingRule.condition === "subtotal"} onChange={() => updateShippingRule("condition", "subtotal")} className="accent-[#008060]" />
+                  عند الوصول لإجمالي قيمة
+                </label>
               </div>
-            </>
+              {shippingRule.condition === "quantity" ? (
+                <div className="max-w-xs">
+                  <label className={labelClass}>الحد الأدنى لعدد القطع</label>
+                  <input type="number" min="1" step="1" value={shippingRule.minQuantity} onChange={(event) => updateShippingRule("minQuantity", event.target.value)} className={fieldClass} />
+                </div>
+              ) : (
+                <div className="max-w-xs">
+                  <label className={labelClass}>الحد الأدنى لقيمة المنتجات المختارة (ج.م)</label>
+                  <input type="number" min="1" step="1" value={shippingRule.minSubtotal} onChange={(event) => updateShippingRule("minSubtotal", event.target.value)} className={fieldClass} />
+                </div>
+              )}
+            </div>
           )}
           {shippingRuleError && <p className="text-xs text-red-700 bg-red-50 border border-red-100 rounded-lg p-3">{shippingRuleError}</p>}
           <div className="flex justify-end">
