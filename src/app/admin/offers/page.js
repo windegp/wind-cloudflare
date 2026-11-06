@@ -374,6 +374,25 @@ export default function AdminOffersPage() {
     try {
       const db = getDb();
       const now = new Date().toISOString();
+      if (form.type === "coupon_fixed") {
+        const normalizedCode = form.couponCode.trim().toUpperCase();
+        const duplicate = offers.some((offer) =>
+          offer.type === "coupon_fixed" &&
+          offer.id !== editingId &&
+          String(offer.couponCode || "").trim().toUpperCase() === normalizedCode
+        );
+        if (duplicate) {
+          setFormError("كود القسيمة مستخدم بالفعل في هذه البيئة.");
+          setSaving(false);
+          return;
+        }
+        const legacyCode = await getDoc(doc(db, "promoCodes", normalizedCode));
+        if (legacyCode.exists()) {
+          setFormError("هذا الكود مستخدم بالفعل في أكواد الخصم القديمة. اختر كودًا آخر.");
+          setSaving(false);
+          return;
+        }
+      }
       const numericConfig = {};
       if (form.type === "buy_x_get_y") {
         numericConfig.buyQty = Number(form.config.buyQty);
