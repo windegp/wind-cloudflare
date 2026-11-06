@@ -398,8 +398,13 @@ export async function createServerCheckoutQuote(input = {}) {
   const freeShippingRule = shippingRulesSnap.exists() ? shippingRulesSnap.data() : null;
   // Avoid customer-document reads when the first-order discount is disabled
   // and no promo code was entered.
+  const normalizedInputCode = String(input.promoCode || "").trim().toUpperCase();
+  const isCouponCode = normalizedInputCode && offers.some((offer) =>
+    offer.type === "coupon_fixed" &&
+    String(offer.couponCode || "").trim().toUpperCase() === normalizedInputCode
+  );
   const isFirstOrder =
-    promotions.firstOrderEnabled === true || Boolean(input.promoCode)
+    promotions.firstOrderEnabled === true || (Boolean(input.promoCode) && !isCouponCode)
       ? await checkFirstOrder(db, customer.email, customer.phone)
       : false;
   const offers = offersSnap.docs
