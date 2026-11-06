@@ -61,9 +61,13 @@ describe('calculateAllTotals — أكواد الخصم', () => {
     const promo = { valid: true, type: 'free_shipping', freeShipping: true, discountAmount: 70 };
     expect(calculateAllTotals(CART, promo)).toMatchObject({ discount: 0, shipping: 0, total: 1285 });
   });
-  it('الإجمالي لا ينزل عن صفر', () => {
+  it('fixed promo discount is capped at eligible product subtotal', () => {
     const promo = { valid: true, type: 'fixed', discountAmount: 500 };
-    expect(calculateAllTotals([item(100)], promo)).toMatchObject({ discount: 500, total: 0 });
+    expect(calculateAllTotals([item(100)], promo)).toMatchObject({
+      discount: 100,
+      shipping: 70,
+      total: 70,
+    });
   });
 });
 
@@ -104,10 +108,17 @@ describe('calculateShipping', () => {
     expect(calculateShipping(null, 500, [], { shippingCost: 55, freeShippingThreshold: 0 })).toBe(55);
     expect(calculateShipping(null, 500, [], { shippingCost: 0, freeShippingThreshold: 0 })).toBe(0);
   });
-  it('حد الشحن المجاني بيتحسب على الـ subtotal قبل الخصم', () => {
+  it('حد الشحن المجاني بيتحسب على قيمة المنتجات بعد الخصم النقدي', () => {
     const settings = { shippingCost: 70, freeShippingThreshold: 1000 };
+
+    // 1100 - 300 = 800، فلا يتحقق الحد رغم أن subtotal الأصلي أعلى من 1000.
     expect(calculateAllTotals([item(1100)], { valid: true, type: 'fixed', discountAmount: 300 }, settings))
-      .toMatchObject({ discount: 300, shipping: 0, total: 800 });
+      .toMatchObject({ subtotal: 1100, discount: 300, shipping: 70, total: 870 });
+
+    // 1100 - 100 = 1000، والحد يتحقق عند المساواة تمامًا.
+    expect(calculateAllTotals([item(1100)], { valid: true, type: 'fixed', discountAmount: 100 }, settings))
+      .toMatchObject({ subtotal: 1100, discount: 100, shipping: 0, total: 1000 });
+
     expect(calculateAllTotals([item(900)], null, settings)).toMatchObject({ shipping: 70, total: 970 });
   });
   it('الباقة بشحن مجاني', () => {

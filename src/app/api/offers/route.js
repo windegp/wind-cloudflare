@@ -6,7 +6,8 @@ export const dynamic = 'force-dynamic';
 
 /**
  * GET /api/offers
- * بترجع العروض المفعّلة (active === true) فقط.
+ * بترجع العروض التلقائية المفعّلة فقط.
+ * قسائم الشراء بكود لا تُرسل للمتصفح؛ التحقق منها يظل على السيرفر.
  * فلترة التواريخ (بتوقيت القاهرة) بتتم في offerEngine وقت الحساب.
  * أي فشل → قائمة فاضية، والسلة تشتغل بدون عروض زي ما هي.
  */
@@ -26,7 +27,7 @@ export async function GET(request) {
     ]);
     const offers = snap.docs
       .map((d) => ({ id: d.id, ...d.data() }))
-      .filter((o) => o.active === true && (environment === "preview"
+      .filter((o) => o.active === true && o.type !== "coupon_fixed" && (environment === "preview"
         ? o.environment === "preview"
         : o.environment !== "preview"));
 

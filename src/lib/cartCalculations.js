@@ -6,6 +6,7 @@
 
 import { SHIPPING_COST, FREE_SHIPPING_THRESHOLD, CURRENCY } from '@/lib/constants';
 import { computeBestOffer, isFreeShippingRuleEligible } from '@/lib/offerEngine';
+import { isFreeShippingThresholdMet } from '@/lib/shippingCalculations';
 
 /**
  * Calculate subtotal from cart items
@@ -21,16 +22,17 @@ export function calculateSubtotal(cartItems) {
  * Calculate shipping cost.
  * promoResult: نتيجة validate-promo من الـ server { freeShipping, discountAmount, type }
  * shippingSettings: { shippingCost, freeShippingThreshold } من Firestore — يسقط على constants كـ fallback
+ * discount: الخصم النقدي الفائز، ويُخصم من subtotal قبل فحص حد الشحن المجاني.
  */
-export function calculateShipping(promoResult = null, subtotal = 0, cartItems = [], shippingSettings = null) {
+export function calculateShipping(promoResult = null, subtotal = 0, cartItems = [], shippingSettings = null, discount = 0) {
   const baseCost    = shippingSettings?.shippingCost         ?? SHIPPING_COST;
   const threshold   = shippingSettings?.freeShippingThreshold ?? FREE_SHIPPING_THRESHOLD;
 
   // 1. كود شحن مجاني
   if (promoResult?.freeShipping) return 0;
 
-  // 2. حد الشحن المجاني العام (threshold > 0)
-  if (threshold > 0 && subtotal >= threshold) return 0;
+  // 2. حد الشحن المجاني العام بعد الخصم النقدي الفائز.
+  if (isFreeShippingThresholdMet(subtotal, discount, threshold)) return 0;
 
   // 3. شحن مجاني من الباقة
   if (Array.isArray(cartItems) && cartItems.some(item => item.bundleFreeShipping === true)) return 0;
@@ -56,6 +58,66 @@ export function calculateDiscount(promoResult = null, subtotal = 0, isFirstOrder
 
 export function calculateTotal(subtotal, shipping, discount = 0) {
   return Math.max(0, subtotal - discount + shipping);
+}
+
+/**
+ * Recalculate legacy promo codes against the current cart.
+ * The initial validation response is not a permanent discount snapshot:
+ * percent and fixed codes must follow cart quantity/product changes.
+ *
+ * Keep the same calculation semantics as /api/validate-promo and server checkout pricing.
+ */
+function calculateLegacyPromoDiscount(cartItems, promoResult, subtotal) {
+  const storedDiscount = Math.max(0, Number(promoResult?.discountAmount) || 0);
+  const value = Number(promoResult?.value);
+
+  if (promoResult?.type === 'percent') {
+    // Preserve compatibility with older promo payloads that did not include value.
+    if (!Number.isFinite(value) || value <= 0) return storedDiscount;
+
+    let applicableItems = Array.isArray(cartItems) ? cartItems : [];
+    if (Array.isArray(promoResult.scope) && promoResult.scope.length > 0) {
+      const scope = new Set(promoResult.scope.map(String));
+      applicableItems = applicableItems.filter((item) => {
+        const keys = [item?.id, item?.handle]
+          .filter((key) => key !== undefined && key !== null && String(key) !== '')
+          .map(String);
+        return keys.some((key) => scope.has(key));
+      });
+    }
+
+    const applicableSubtotal = applicableItems.reduce(
+      (sum, item) => sum + (parseFloat(item?.price) || 0) * (parseInt(item?.qty) || 1),
+      0
+    );
+    return Math.min(
+      subtotal,
+      Math.max(0, Math.round((applicableSubtotal * value) / 100))
+    );
+  }
+
+  if (promoResult?.type === 'fixed') {
+    if (!Number.isFinite(value) || value <= 0) return storedDiscount;
+
+    let applicableItems = Array.isArray(cartItems) ? cartItems : [];
+    if (Array.isArray(promoResult.scope) && promoResult.scope.length > 0) {
+      const scope = new Set(promoResult.scope.map(String));
+      applicableItems = applicableItems.filter((item) => {
+        const keys = [item?.id, item?.handle]
+          .filter((key) => key !== undefined && key !== null && String(key) !== '')
+          .map(String);
+        return keys.some((key) => scope.has(key));
+      });
+    }
+
+    const applicableSubtotal = applicableItems.reduce(
+      (sum, item) => sum + (parseFloat(item?.price) || 0) * (parseInt(item?.qty) || 1),
+      0
+    );
+    return Math.min(applicableSubtotal, value);
+  }
+
+  return storedDiscount;
 }
 
 /**
@@ -87,7 +149,7 @@ export function calculateAllTotals(cartItems, promoResult = null, shippingSettin
             const cap = Number(promoResult.maxDiscount) > 0 ? Number(promoResult.maxDiscount) : amount;
             return Math.min(amount, cap, eligibleSubtotal);
           })()
-        : Math.max(0, Number(promoResult.discountAmount) || 0)
+        : calculateLegacyPromoDiscount(cartItems, promoResult, subtotal)
       : 0;
 
   const firstOrderPercent = Number(shippingSettings?.firstOrderDiscount);
@@ -114,11 +176,11 @@ export function calculateAllTotals(cartItems, promoResult = null, shippingSettin
   const discountSource = winner.source;
   const appliedOffer = discountSource === 'offer' ? offerResult.offer : null;
 
-  // قاعدة المنتجات المحددة إضافة مستقلة؛ تظل قواعد الشحن العامة والأكواد كما هي.
+  // شحن المنتجات المحددة مستقل عن الحد العام الذي يُحسب بعد الخصم النقدي.
   const freeShippingByRule = isFreeShippingRuleEligible(cartItems, freeShippingRule);
   const shipping = freeShippingByRule
     ? 0
-    : calculateShipping(promoResult, subtotal, cartItems, shippingSettings);
+    : calculateShipping(promoResult, subtotal, cartItems, shippingSettings, discount);
   const total = calculateTotal(subtotal, shipping, discount);
   return {
     subtotal,

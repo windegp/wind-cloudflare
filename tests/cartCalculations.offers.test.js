@@ -7,7 +7,7 @@ import { calculateAllTotals } from '@/lib/cartCalculations';
 const item = (price, qty = 1, extra = {}) => ({ id: `p${price}`, price, qty, ...extra });
 
 const NTH = {
-  id: 'nth', name: '٤٠٪ على القطعة التانية', active: true, type: 'nth_percent',
+  id: 'nth', name: '٤٠٪ على أرخص قطعة عند شراء قطعتين', active: true, type: 'nth_percent',
   config: { nth: 2, percent: 40 }, productScope: 'all', priority: 2,
 };
 const BXGY = {
@@ -35,16 +35,39 @@ describe('بدون عروض = نفس السلوك القديم', () => {
 });
 
 describe('العرض لوحده', () => {
+  it('المنتجات المخفّضة مؤهلة افتراضيًا ويمكن استثناؤها من الأدمن', () => {
+    const cart = [
+      item(200, 1, { id: 'A', compareAtPrice: 300 }),
+      item(600, 1, { id: 'B' }),
+    ];
+
+    const included = calculateAllTotals(cart, null, null, false, [NTH]);
+    const explicitlyIncluded = calculateAllTotals(cart, null, null, false, [{ ...NTH, excludeDiscounted: false }]);
+    const excluded = calculateAllTotals(cart, null, null, false, [{ ...NTH, excludeDiscounted: true }]);
+
+    expect(included).toMatchObject({ discount: 80, discountSource: 'offer', total: 790 });
+    expect(explicitlyIncluded.discount).toBe(80);
+    expect(excluded).toMatchObject({ discount: 0, discountSource: 'none', total: 870 });
+  });
+
   it('يتطبق ويظهر في الإجمالي', () => {
     expect(calculateAllTotals(CART, null, null, false, [NTH, BXGY])).toMatchObject({
       subtotal: 965, discount: 128, shipping: 70, total: 907,
       discountSource: 'offer',
-      appliedOffer: { id: 'nth', name: '٤٠٪ على القطعة التانية', type: 'nth_percent' },
+      appliedOffer: { id: 'nth', name: '٤٠٪ على أرخص قطعة عند شراء قطعتين', type: 'nth_percent' },
     });
   });
-  it('الشحن لسه بيتحسب على الـ subtotal قبل الخصم', () => {
-    const settings = { shippingCost: 70, freeShippingThreshold: 900 };
-    expect(calculateAllTotals(CART, null, settings, false, [NTH])).toMatchObject({ discount: 128, shipping: 0, total: 837 });
+  it('حد الشحن المجاني يعتمد على subtotal بعد خصم العرض', () => {
+    const belowThreshold = { shippingCost: 70, freeShippingThreshold: 900 };
+    const exactThreshold = { shippingCost: 70, freeShippingThreshold: 837 };
+
+    // 965 - 128 = 837، أقل من 900؛ إذن الشحن مدفوع.
+    expect(calculateAllTotals(CART, null, belowThreshold, false, [NTH]))
+      .toMatchObject({ subtotal: 965, discount: 128, shipping: 70, total: 907 });
+
+    // نفس الصافي يساوي حد 837؛ إذن الشحن مجاني.
+    expect(calculateAllTotals(CART, null, exactThreshold, false, [NTH]))
+      .toMatchObject({ subtotal: 965, discount: 128, shipping: 0, total: 837 });
   });
 });
 
@@ -71,9 +94,22 @@ describe('أفضل خصم واحد: العرض ضد الكود ضد خصم ال�
     const big = { ...FIRST, firstOrderDiscount: 20 }; // 193
     expect(calculateAllTotals(CART, null, big, true, [NTH])).toMatchObject({ discount: 193, discountSource: 'first_order' });
   });
-  it('كود الشحن المجاني يفضل شغال مع العرض', () => {
+  it('كود الشحن المجاني يظل مستقلاً عن حد الشحن بعد الخصم', () => {
     const promo = { valid: true, type: 'free_shipping', freeShipping: true, code: 'FS' };
     expect(calculateAllTotals(CART, promo, null, false, [NTH])).toMatchObject({ discount: 128, shipping: 0, total: 837, discountSource: 'offer' });
+  });
+
+  it('القسيمة الثابتة تُخفض المبلغ المحتسب لحد الشحن المجاني', () => {
+    const settings = { shippingCost: 70, freeShippingThreshold: 900 };
+    const fixedCoupon = { valid: true, type: 'coupon_fixed', value: 100, discountAmount: 100, scope: 'all' };
+    expect(calculateAllTotals(CART, fixedCoupon, settings, false, []))
+      .toMatchObject({ subtotal: 965, discount: 100, shipping: 70, total: 935 });
+  });
+
+  it('خصم الطلب الأول يُخفض المبلغ المحتسب لحد الشحن المجاني', () => {
+    const settings = { ...FIRST, shippingCost: 70, freeShippingThreshold: 900, firstOrderDiscount: 10 };
+    expect(calculateAllTotals(CART, null, settings, true, []))
+      .toMatchObject({ subtotal: 965, discount: 97, shipping: 70, total: 938 });
   });
   it('خصم الطلب الأول يقارن فعلياً مع الكود والعرض', () => {
     const promo = { valid: true, type: 'fixed', discountAmount: 50 };
@@ -91,6 +127,25 @@ describe('قسائم الشراء بكود خصم', () => {
     valid: true, type: 'coupon_fixed', value: 200, discountAmount: 200,
     maxDiscount: 0, scope: 'all', code: 'WIND200',
   };
+
+  it('المنتجات المخفّضة تدخل القسيمة افتراضيًا ويمكن استثناؤها', () => {
+    const cart = [
+      item(200, 1, { id: 'A', compareAtPrice: 300 }),
+      item(600, 1, { id: 'B' }),
+    ];
+    const eligibleCoupon = {
+      ...coupon,
+      value: 100,
+      discountAmount: 100,
+      minCart: 700,
+    };
+
+    // الإجمالي المؤهل 800 في الحالة الافتراضية، فيتحقق الحد الأدنى.
+    expect(calculateAllTotals(cart, eligibleCoupon).discount).toBe(100);
+
+    // عند استثناء A المخفّض، يتبقى 600 فقط، فلا يتحقق الحد الأدنى 700.
+    expect(calculateAllTotals(cart, { ...eligibleCoupon, excludeDiscounted: true }).discount).toBe(0);
+  });
 
   it('القسيمة تفوز عندما يكون خصمها أكبر من العرض التلقائي', () => {
     const result = calculateAllTotals(CART, coupon, null, false, [NTH]);
@@ -121,9 +176,15 @@ describe('قسائم الشراء بكود خصم', () => {
 
 describe('سيناريوهات الجمعة البيضاء (سلة فعلية)', () => {
   const offers = [BXGY, NTH];
-  it('٤ منتجات مختلفة → خصم ٤٠٪ مرة واحدة على القطعة الثانية (٢٣٦)', () => {
+  it('٤ منتجات مختلفة → خصم ٤٠٪ مرة واحدة على أرخص قطعة مؤهلة (١٠٨)', () => {
     const cart = [item(645), item(590), item(320), item(270)];
-    expect(calculateAllTotals(cart, null, null, false, offers)).toMatchObject({ subtotal: 1825, discount: 236, total: 1659 });
+    const result = calculateAllTotals(cart, null, null, false, [NTH]);
+    expect(result).toMatchObject({ subtotal: 1825, discount: 108, total: 1787, discountSource: 'offer' });
+    expect(result.offerBenefits.lines).toHaveLength(1);
+    expect(result.offerBenefits.lines[0]).toMatchObject({
+      cartIndex: 3,
+      discountedUnits: [{ originalPrice: 270, discount: 108, finalPrice: 162 }],
+    });
   });
   it('٤ × ٦٤٥ → قطعة مجانية', () => {
     expect(calculateAllTotals([item(645, 4)], null, null, false, offers)).toMatchObject({ subtotal: 2580, discount: 645, shipping: 70, total: 2005 });

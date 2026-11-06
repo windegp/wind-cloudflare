@@ -1,9 +1,27 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase';
-import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore/lite';
-import { SHIPPING_COST } from '@/lib/constants';
+import { collection, doc, getDoc, getDocs, limit, query, where } from 'firebase/firestore/lite';
 
 export const dynamic = 'force-dynamic';
+
+function normalizePhone(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+async function checkFirstOrder(db, email, phone) {
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  const normalizedPhone = normalizePhone(phone);
+  if (!normalizedEmail || !normalizedEmail.includes('@') || normalizedPhone.length < 11) return false;
+  const [emailSnap, phoneDocSnap] = await Promise.all([
+    getDoc(doc(db, 'Customers', normalizedEmail)),
+    getDoc(doc(db, 'Customers', normalizedPhone)),
+  ]);
+  if (emailSnap.exists() && Number(emailSnap.data()['Total Orders'] || 0) > 0) return false;
+  if (phoneDocSnap.exists() && Number(phoneDocSnap.data()['Total Orders'] || 0) > 0) return false;
+  const phoneQuery = await getDocs(query(collection(db, 'Customers'), where('Phone', '==', String(phone).trim()), limit(1)));
+  if (!phoneQuery.empty && Number(phoneQuery.docs[0].data()['Total Orders'] || 0) > 0) return false;
+  return true;
+}
 
 /**
  * POST /api/validate-promo
@@ -12,7 +30,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(req) {
   try {
-    const { code, customerEmail, customerPhone, cartItems = [], subtotal = 0 } = await req.json();
+    const { code, customerEmail, customerPhone, cartItems = [] } = await req.json();
 
     if (!code || !code.trim()) {
       return NextResponse.json({ valid: false, message: 'الرجاء إدخال كود الخصم' });
@@ -22,13 +40,10 @@ export async function POST(req) {
     const db = getDb();
 
     // ── 1. جلب الكود من Firestore ──────────────────────────────
-    const promoSnap = await getDoc(doc(db, 'promoCodes', normalizedCode));
     const host = new URL(req.url).hostname.toLowerCase();
     const productionHosts = ['windeg.com', 'www.windeg.com', 'windeg.pages.dev'];
     const environment = productionHosts.includes(host) ? 'production' : 'preview';
-    const offersSnap = promoSnap.exists()
-      ? { docs: [] }
-      : await getDocs(query(collection(db, 'offers'), where('couponCode', '==', normalizedCode)));
+    const offersSnap = await getDocs(query(collection(db, 'offers'), where('couponCode', '==', normalizedCode)));
     const coupon = offersSnap.docs
       .map((item) => ({ id: item.id, ...item.data() }))
       .find((offer) =>
@@ -37,6 +52,8 @@ export async function POST(req) {
         String(offer.couponCode || '').trim().toUpperCase() === normalizedCode &&
         (environment === 'preview' ? offer.environment === 'preview' : offer.environment !== 'preview')
       );
+
+    const promoSnap = coupon ? null : await getDoc(doc(db, 'promoCodes', normalizedCode));
 
     if (coupon) {
       const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Cairo' }).format(new Date());
@@ -67,7 +84,7 @@ export async function POST(req) {
       });
     }
 
-    if (!promoSnap.exists()) {
+    if (!promoSnap?.exists()) {
       return NextResponse.json({ valid: false, message: 'عذراً، هذا الكود غير صالح' });
     }
 
@@ -81,14 +98,14 @@ export async function POST(req) {
     // ── 3. هل انتهت صلاحيته؟ ────────────────────────────────────
     if (promo.expiresAt) {
       const expiry = promo.expiresAt.toDate ? promo.expiresAt.toDate() : new Date(promo.expiresAt);
-      if (new Date() > expiry) {
+      if (Number.isNaN(expiry.getTime()) || new Date() > expiry) {
         return NextResponse.json({ valid: false, message: 'انتهت صلاحية هذا الكود' });
       }
     }
 
     // ── 4. حد الاستخدام الكلي ────────────────────────────────────
     if (promo.usageType === 'single_use' || promo.usageType === 'limited') {
-      const maxUses   = Number(promo.maxUses) || 1;
+      const maxUses   = Math.max(1, Number(promo.maxUses) || 1);
       const usedCount = Number(promo.usedCount) || 0;
       if (usedCount >= maxUses) {
         return NextResponse.json({ valid: false, message: 'تم استخدام هذا الكود بالفعل' });
@@ -96,25 +113,16 @@ export async function POST(req) {
     }
 
     // ── 5. أول طلب فقط ──────────────────────────────────────────
-    if (promo.firstOrderOnly) {
-      const identifier = customerEmail?.toLowerCase().trim() || customerPhone?.replace(/\D/g, '');
-      if (identifier) {
-        const customerSnap = await getDoc(doc(db, 'Customers', identifier));
-        if (customerSnap.exists()) {
-          const totalOrders = Number(customerSnap.data()['Total Orders'] || 0);
-          if (totalOrders > 0) {
-            return NextResponse.json({ valid: false, message: 'هذا الكود للطلب الأول فقط' });
-          }
-        }
-      }
+    if (promo.firstOrderOnly && !(await checkFirstOrder(db, customerEmail, customerPhone))) {
+      return NextResponse.json({ valid: false, message: 'هذا الكود للطلب الأول فقط' });
     }
 
     // ── 6. مرة واحدة لكل عميل ────────────────────────────────────
     if (promo.usageType === 'once_per_customer') {
-      const identifier = customerEmail?.toLowerCase().trim() || customerPhone?.replace(/\D/g, '');
+      const identifier = customerEmail?.toLowerCase().trim() || normalizePhone(customerPhone);
       if (identifier) {
-        const usedBy = promo.usedBy || [];
-        if (usedBy.includes(identifier)) {
+        const usedBy = Array.isArray(promo.usedBy) ? promo.usedBy.map((value) => String(value).toLowerCase()) : [];
+        if (usedBy.includes(identifier.toLowerCase())) {
           return NextResponse.json({ valid: false, message: 'لقد استخدمت هذا الكود من قبل' });
         }
       }
@@ -123,34 +131,36 @@ export async function POST(req) {
     // ── 7. نطاق المنتجات ─────────────────────────────────────────
     const scope = promo.scope || 'all';
     let applicableItems = cartItems;
-    if (scope !== 'all' && Array.isArray(scope) && scope.length > 0) {
-      applicableItems = cartItems.filter(item =>
-        scope.includes(item.id) || scope.includes(item.handle)
+    if (Array.isArray(scope) && scope.length > 0) {
+      const allowed = new Set(scope.map(String));
+      applicableItems = cartItems.filter((item) =>
+        [item.id, item.handle].some((key) => key !== undefined && key !== null && allowed.has(String(key)))
       );
-      if (applicableItems.length === 0) {
-        return NextResponse.json({
-          valid: false,
-          message: 'هذا الكود لا ينطبق على المنتجات في سلتك',
-        });
-      }
+      if (applicableItems.length === 0) return NextResponse.json({ valid: false, message: 'هذا الكود لا ينطبق على المنتجات في سلتك' });
+    } else if (scope !== 'all' && !(Array.isArray(scope) && scope.length === 0)) {
+      return NextResponse.json({ valid: false, message: 'إعداد نطاق كود الخصم غير صالح' });
     }
 
     // ── 8. حساب قيمة الخصم ───────────────────────────────────────
     let discountAmount = 0;
     let freeShipping   = false;
-    const shippingCost = Number(SHIPPING_COST);
-
+    const applicableSubtotal = applicableItems.reduce(
+      (sum, item) => sum + (parseFloat(item.price) || 0) * (parseInt(item.qty) || 1),
+      0
+    );
     if (promo.type === 'free_shipping') {
-      freeShipping  = true;
-      discountAmount = shippingCost;
+      freeShipping = true;
+      discountAmount = 0;
     } else if (promo.type === 'percent') {
-      const applicableSubtotal = applicableItems.reduce(
-        (sum, item) => sum + (parseFloat(item.price) || 0) * (parseInt(item.qty) || 1),
-        0
-      );
-      discountAmount = Math.round((applicableSubtotal * Number(promo.value)) / 100);
+      const percent = Number(promo.value);
+      if (!Number.isFinite(percent) || percent <= 0 || percent > 100) return NextResponse.json({ valid: false, message: 'إعداد نسبة كود الخصم غير صالح' });
+      discountAmount = Math.round((applicableSubtotal * percent) / 100);
     } else if (promo.type === 'fixed') {
-      discountAmount = Math.min(Number(promo.value), subtotal);
+      const fixed = Number(promo.value);
+      if (!Number.isFinite(fixed) || fixed <= 0) return NextResponse.json({ valid: false, message: 'إعداد مبلغ كود الخصم غير صالح' });
+      discountAmount = Math.min(fixed, applicableSubtotal);
+    } else {
+      return NextResponse.json({ valid: false, message: 'نوع كود الخصم غير مدعوم' });
     }
 
     return NextResponse.json({

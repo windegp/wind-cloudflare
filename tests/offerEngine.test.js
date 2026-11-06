@@ -16,7 +16,7 @@ const BXGY = {
   config: { buyQty: 3, getQty: 1 }, productScope: 'all', priority: 1,
 };
 const NTH = {
-  id: 'nth', name: '٤٠٪ على القطعة التانية', active: true, type: 'nth_percent',
+  id: 'nth', name: '٤٠٪ على أرخص قطعة عند شراء قطعتين', active: true, type: 'nth_percent',
   config: { nth: 2, percent: 40 }, productScope: 'all', priority: 2,
 };
 const OFFERS = [BXGY, NTH];
@@ -25,17 +25,37 @@ describe('سيناريوهات "أفضل عرض يكسب"', () => {
   it('٦٤٥ + ٣٢٠ → ٤٠٪ على التانية = ١٢٨', () => {
     const r = computeBestOffer([item(645), item(320)], OFFERS);
     expect(r.discount).toBe(128);
-    expect(r.offer).toEqual({ id: 'nth', name: '٤٠٪ على القطعة التانية', type: 'nth_percent' });
+    expect(r.offer).toEqual({ id: 'nth', name: '٤٠٪ على أرخص قطعة عند شراء قطعتين', type: 'nth_percent' });
   });
-  it('٦٤٥ + ٥٩٠ + ٣٢٠ → ٢٣٦ (الخصم على الأرخص في الزوج الأول)', () => {
-    expect(computeBestOffer([item(645), item(590), item(320)], OFFERS).discount).toBe(236);
+  it('أقل من N قطع مؤهلة → لا خصم', () => {
+    expect(computeOfferDiscount([item(645)], NTH)).toBe(0);
+    expect(computeBestOffer([item(645)], [NTH]).discount).toBe(0);
   });
-  it('٦٤٥ + ٥٩٠ + ٣٢٠ + ٢٧٠ → ٢٣٦ (خصم واحد على القطعة الثانية)', () => {
-    const r = computeBestOffer([item(645), item(590), item(320), item(270)], OFFERS);
-    expect(r.discount).toBe(236);
+  it('أكثر من N → يخصم أرخص قطعة في كامل الطلب مرة واحدة فقط', () => {
+    const cart = [item(645), item(590), item(320), item(270)];
+    const r = computeBestOffer(cart, OFFERS);
+    expect(r.discount).toBe(108);
     expect(r.offer.id).toBe('nth');
-    // Each priced line represents a different product, so 3+1 cannot combine them.
-    expect(r.candidates.map((c) => [c.id, c.discount])).toEqual([['nth', 236]]);
+    expect(r.offerBenefits.lines).toHaveLength(1);
+    expect(r.offerBenefits.lines[0]).toMatchObject({
+      cartIndex: 3,
+      regularQty: 0,
+      discountedUnits: [{ originalPrice: 270, discount: 108, finalPrice: 162, free: false }],
+    });
+    expect(computeOfferDiscount(cart, NTH)).toBe(r.discount);
+  });
+  it('ألوان ومقاسات المنتج نفسه تُحسب ضمن عدد القطع المؤهلة', () => {
+    const cart = [
+      item(645, 1, { id: 'A-black-M', productId: 'A', selectedColor: 'أسود', selectedSize: 'M' }),
+      item(320, 1, { id: 'A-white-L', productId: 'A', selectedColor: 'أبيض', selectedSize: 'L' }),
+    ];
+    const r = computeBestOffer(cart, [NTH]);
+    expect(r.discount).toBe(128);
+    expect(r.offerBenefits.lines).toHaveLength(1);
+    expect(r.offerBenefits.lines[0]).toMatchObject({
+      cartIndex: 1,
+      discountedUnits: [{ originalPrice: 320, discount: 128, finalPrice: 192 }],
+    });
   });
   it('لا يجمع عرض القطعة المجانية كميات منتجات مختلفة', () => {
     const cart = [item(645, 3, { id: 'A' }), item(590, 1, { id: 'B' })];
@@ -99,11 +119,11 @@ describe('سيناريوهات "أفضل عرض يكسب"', () => {
     expect(result.offer.id).toBe("nth");
     expect(result.appliedOffers.map((offer) => offer.id)).toEqual(["nth"]);
     expect(result.offerBenefits.offers.map((offer) => offer.id)).toEqual(["nth"]);
-    expect(result.discount).toBe(236);
+    expect(result.discount).toBe(108);
 
     const legacyHelperResult = computeStackedOfferBenefits(cart, [legacyStackedOffer, BXGY]);
     expect(legacyHelperResult.offers.map((offer) => offer.id)).toEqual(["nth"]);
-    expect(legacyHelperResult.discount).toBe(236);
+    expect(legacyHelperResult.discount).toBe(108);
   });
   it.each([4, 5, 6, 8, 12])('من ٤ إلى %i قطعة: يظل عرض ٣+١ ثابتًا بمنفعة واحدة', (quantity) => {
     const result = computeBestOffer([item(645, quantity)], OFFERS);
@@ -114,7 +134,7 @@ describe('سيناريوهات "أفضل عرض يكسب"', () => {
     expect(result.offerBenefits.lines[0].discountedUnits).toHaveLength(1);
     expect(result.offerBenefits.lines[0].discountedUnits[0].free).toBe(true);
   });
-  it('عرض ٤٠٪ على القطعة الثانية يمنح خصمًا على قطعة واحدة فقط عند أي كمية', () => {
+  it('عرض ٤٠٪ على أرخص قطعة يمنح خصمًا مرة واحدة عند أي كمية مؤهلة', () => {
     const offer = { ...NTH };
     for (const quantity of [2, 3, 4, 8]) {
       const result = computeBestOffer([item(645, quantity)], [offer]);
@@ -166,10 +186,10 @@ describe('سيناريوهات "أفضل عرض يكسب"', () => {
     const a = computeBestOffer([item(320), item(645), item(270), item(590)], OFFERS);
     const b = computeBestOffer([item(645), item(590), item(320), item(270)], OFFERS);
     expect(a.discount).toBe(b.discount);
-  });
-  it('قطعة بكمية ٢ + قطعة تانية: الزوج الأول من نفس القطعة', () => {
-    // الوحدات: 645, 645, 320 → زوج (645,645) = 258
-    expect(computeBestOffer([item(645, 2), item(320)], [NTH]).discount).toBe(258);
+   });
+  it('NTH_PERCENT discounts only the cheapest eligible unit across the cart', () => {
+    // Units: 645, 645, 320 -> 40% of cheapest (320) = 128
+    expect(computeBestOffer([item(645, 2), item(320)], [NTH]).discount).toBe(128);
   });
 });
 
@@ -205,10 +225,24 @@ describe('نطاق المنتجات', () => {
     expect(computeOfferDiscount(cart, { ...NTH, excludedProductIds: ['C'] })).toBe(128);
     expect(computeOfferDiscount(cart, { ...NTH, excludedProductIds: ['B', 'C'] })).toBe(0);
   });
-  it('استبعاد المنتجات اللي عليها خصم (compareAtPrice > price)', () => {
-    const cart = [item(645, 1, { id: 'A', compareAtPrice: 800 }), item(320, 1, { id: 'B' }), item(300, 1, { id: 'C' })];
-    expect(computeOfferDiscount(cart, { ...NTH, excludeDiscounted: true })).toBe(120); // (320,300) → 300×0.4
-    expect(computeOfferDiscount(cart, NTH)).toBe(computeOfferDiscount(cart, { ...NTH, excludeDiscounted: false }));
+  it('المنتجات المخفّضة تدخل العرض افتراضيًا، ويمكن استثناؤها يدويًا', () => {
+    const cart = [
+      item(200, 1, { id: 'A', compareAtPrice: 300 }),
+      item(600, 1, { id: 'B' }),
+    ];
+
+    // بدون الحقل أو عند false: المنتج المخفّض مؤهل وهو الأرخص.
+    expect(computeOfferDiscount(cart, NTH)).toBe(80);
+    expect(computeOfferDiscount(cart, { ...NTH, excludeDiscounted: false })).toBe(80);
+
+    const benefits = computeOfferBenefits(cart, NTH);
+    expect(benefits.discount).toBe(80);
+    expect(benefits.lines).toMatchObject([
+      { cartIndex: 0, discountedUnits: [{ originalPrice: 200, discount: 80, finalPrice: 120 }] },
+    ]);
+
+    // true فقط يستبعد المنتج المخفّض؛ يتبقى منتج واحد فلا يتحقق N=2.
+    expect(computeOfferDiscount(cart, { ...NTH, excludeDiscounted: true })).toBe(0);
   });
   it('compareAtPrice مساوي أو أقل من السعر لا يُعتبر خصم', () => {
     const cart = [item(645, 1, { id: 'A', compareAtPrice: 645 }), item(320, 1, { id: 'B', compareAtPrice: 100 })];
@@ -339,7 +373,7 @@ describe('تفصيل القطع المستفيدة من العرض', () => {
     ]);
   });
 
-  it('يحدد القطعة الثانية بخصم 40% ويترك الأولى بسعرها', async () => {
+  it('يحدد أرخص قطعة بخصم 40% ويترك الأغلى بسعره', async () => {
     const { computeOfferBenefits } = await import('@/lib/offerEngine');
     const result = computeOfferBenefits([item(645), item(320)], NTH);
     expect(result.discount).toBe(128);

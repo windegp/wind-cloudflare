@@ -10,6 +10,7 @@ import {
 } from "firebase/firestore/lite";
 import { computeBestOffer, isFreeShippingRuleEligible, isOfferLive } from "@/lib/offerEngine";
 import { FREE_SHIPPING_THRESHOLD, SHIPPING_COST } from "@/lib/constants";
+import { isFreeShippingThresholdMet } from "@/lib/shippingCalculations";
 
 const MAX_CART_LINES = 50;
 const MAX_QTY_PER_LINE = 100;
@@ -445,8 +446,8 @@ export async function createServerCheckoutQuote(input = {}) {
     0,
     Number(promotions.freeShippingThreshold ?? FREE_SHIPPING_THRESHOLD) || 0
   );
-  // Existing store-wide threshold remains independent from selected-product shipping rules.
-  const freeShippingByThreshold = freeShippingThreshold > 0 && subtotal >= freeShippingThreshold;
+  // The store-wide threshold is checked against the amount payable for products after the winning cash discount.
+  const freeShippingByThreshold = isFreeShippingThresholdMet(subtotal, discount, freeShippingThreshold);
   const freeShippingByPromo = Boolean(promo?.freeShipping);
   const freeShippingByBundle = items.some((item) => item.bundleFreeShipping === true);
   const freeShippingByRule = isFreeShippingRuleEligible(items, freeShippingRule);
