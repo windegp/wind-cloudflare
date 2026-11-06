@@ -560,7 +560,7 @@ export async function createServerCheckoutQuote(input = {}) {
   );
   const productDiscountTotal = items.reduce(
     (sum, item) => sum + Math.max(0, (item.compareAtPrice ?? item.price) - item.price) * item.qty,
-    0
+    autoGiftSubtotal
   );
 
   return {
