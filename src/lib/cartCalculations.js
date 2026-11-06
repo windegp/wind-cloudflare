@@ -176,7 +176,7 @@ export function calculateAllTotals(cartItems, promoResult = null, shippingSettin
   const discountSource = winner.source;
   const appliedOffer = discountSource === 'offer' ? offerResult.offer : null;
 
-  // قاعدة المنتجات المحددة إضافة مستقلة؛ تظل قواعد الشحن العامة والأكواد كما هي.
+  // شحن المنتجات المحددة مستقل عن الحد العام الذي يُحسب بعد الخصم النقدي.
   const freeShippingByRule = isFreeShippingRuleEligible(cartItems, freeShippingRule);
   const shipping = freeShippingByRule
     ? 0
