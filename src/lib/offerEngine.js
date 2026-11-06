@@ -66,7 +66,7 @@ function isItemEligible(item, offer) {
   const qty = parseInt(item.qty) || 0;
   if (price <= 0 || qty <= 0) return false;
 
-  const keys = [item.id, item.handle]
+  const keys = [item.productId, item.id, item.productHandle, item.handle]
     .filter((v) => v !== undefined && v !== null && v !== '')
     .map(String);
 
@@ -107,6 +107,33 @@ function expandUnits(items) {
   return units.sort((a, b) => b - a);
 }
 
+/** Product identity shared by cart lines with different colors/sizes. */
+function getProductGroupKey(item) {
+  const identity = [item?.productId, item?.id, item?.productHandle, item?.handle]
+    .find((value) => value !== undefined && value !== null && String(value).trim() !== '');
+  return identity === undefined ? null : String(identity).trim();
+}
+
+/** Keep separate unidentified cart lines from accidentally qualifying together. */
+function groupItemsByProduct(items) {
+  const groups = new Map();
+  items.forEach((item, index) => {
+    const key = getProductGroupKey(item) || `__cart_line_${index}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  });
+  return groups;
+}
+
+/** One free-gift award per eligible product, regardless of its quantity. */
+function sumBuyXGetYBenefit(items, buyQty, getQty) {
+  let total = 0;
+  for (const productItems of groupItemsByProduct(items).values()) {
+    total += sumTieredBenefit(expandUnits(productItems), buyQty + getQty, getQty, 1, 1);
+  }
+  return total;
+}
+
 /**
  * مجموعات متتالية من الأغلى للأرخص، بحجم groupSize.
  * في كل مجموعة كاملة، آخر benefitCount قطع (الأرخص) هي اللي بتاخد الميزة.
@@ -131,9 +158,9 @@ function toInt(value) {
 }
 
 /**
- * WIND policy: tiered offers grant their benefit once per order only.
- * Legacy maxUsesPerOrder values are intentionally ignored so old offers
- * cannot multiply free or discounted units when quantity increases.
+ * WIND policy: nth-percent grants its benefit once per order only.
+ * Buy-X-get-Y uses a separate once-per-product rule.
+ * Legacy maxUsesPerOrder values are intentionally ignored.
  */
 function getMaxUsesPerOrder() {
   return 1;
@@ -166,9 +193,8 @@ export function computeOfferDiscount(cartItems, offer) {
     case OFFER_TYPES.BUY_X_GET_Y: {
       const buy = toInt(cfg.buyQty);
       const get = toInt(cfg.getQty);
-      const maxUses = getMaxUsesPerOrder();
-      if (!(buy >= 1) || !(get >= 1) || maxUses === null) return 0;
-      raw = sumTieredBenefit(expandUnits(eligible), buy + get, get, 1, maxUses);
+      if (!(buy >= 1) || !(get >= 1)) return 0;
+      raw = sumBuyXGetYBenefit(eligible, buy, get);
       break;
     }
     case OFFER_TYPES.NTH_PERCENT: {
@@ -315,15 +341,21 @@ export function computeOfferBenefits(cartItems, offer, now = new Date()) {
       const buy = toInt(cfg.buyQty);
       const get = toInt(cfg.getQty);
       if (!(buy >= 1) || !(get >= 1)) break;
-      const maxUses = getMaxUsesPerOrder();
-      if (maxUses === null) break;
       const groupSize = buy + get;
-      const groups = Math.min(Math.floor(ordered.length / groupSize), maxUses);
-      for (let group = 0; group < groups; group += 1) {
-        const start = group * groupSize;
+      const unitsByProduct = new Map();
+      for (const unit of eligibleUnits) {
+        const productKey = getProductGroupKey(cartItems[unit.cartIndex]) || `__cart_line_${unit.cartIndex}`;
+        if (!unitsByProduct.has(productKey)) unitsByProduct.set(productKey, []);
+        unitsByProduct.get(productKey).push(unit);
+      }
+      for (const productUnits of unitsByProduct.values()) {
+        const orderedProductUnits = [...productUnits].sort(
+          (a, b) => b.price - a.price || a.cartIndex - b.cartIndex || a.unitIndex - b.unitIndex
+        );
+        if (orderedProductUnits.length < groupSize) continue;
+        // One qualifying group per product. Extra quantity does not create another gift.
         for (let offset = groupSize - get; offset < groupSize; offset += 1) {
-          const unit = ordered[start + offset];
-          unit.rawDiscount = unit.price;
+          orderedProductUnits[offset].rawDiscount = orderedProductUnits[offset].price;
         }
       }
       break;
