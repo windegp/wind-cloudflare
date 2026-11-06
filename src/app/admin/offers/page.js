@@ -40,7 +40,7 @@ const TYPE_OPTIONS = [
 const emptyForm = () => ({
   name: "",
   type: "buy_x_get_y",
-  config: { buyQty: "2", getQty: "1", nth: "2", percent: "40", amount: "100" },
+  config: { buyQty: "2", getQty: "1", nth: "2", percent: "40", amount: "100", maxUsesPerOrder: "0" },
   minCart: "0",
   maxDiscount: "0",
   priority: "100",
@@ -51,7 +51,6 @@ const emptyForm = () => ({
   productIds: [],
   excludedProductIds: [],
   excludeDiscounted: false,
-  stackWithOfferIds: [],
 });
 
 const emptyShippingRule = () => ({
@@ -301,6 +300,7 @@ export default function AdminOffersPage() {
         nth: String(offer.config?.nth ?? 2),
         percent: String(offer.config?.percent ?? 40),
         amount: String(offer.config?.amount ?? 100),
+        maxUsesPerOrder: String(offer.config?.maxUsesPerOrder ?? 0),
       },
       minCart: String(offer.minCart ?? 0),
       maxDiscount: String(offer.maxDiscount ?? 0),
@@ -312,7 +312,6 @@ export default function AdminOffersPage() {
       excludedProductIds: Array.isArray(offer.excludedProductIds) ? offer.excludedProductIds.map(String) : [],
       active: offer.active === true,
       excludeDiscounted: offer.excludeDiscounted === true,
-      stackWithOfferIds: Array.isArray(offer.stackWithOfferIds) ? offer.stackWithOfferIds.map(String) : [],
     });
     setFormError("");
     setIncludeSearch("");
@@ -334,10 +333,12 @@ export default function AdminOffersPage() {
     if (form.type === "buy_x_get_y") {
       if (!Number.isInteger(Number(form.config.buyQty)) || Number(form.config.buyQty) < 1) return "عدد القطع المطلوب شراؤها يجب أن يكون 1 أو أكثر.";
       if (!Number.isInteger(Number(form.config.getQty)) || Number(form.config.getQty) < 1) return "عدد القطع المجانية يجب أن يكون 1 أو أكثر.";
+      if (!Number.isInteger(Number(form.config.maxUsesPerOrder)) || Number(form.config.maxUsesPerOrder) < 0) return "حد مرات تطبيق العرض يجب أن يكون صفرًا أو رقمًا صحيحًا أكبر.";
     }
     if (form.type === "nth_percent") {
       if (!Number.isInteger(Number(form.config.nth)) || Number(form.config.nth) < 2) return "رقم القطعة يجب أن يكون 2 أو أكثر.";
       if (!(Number(form.config.percent) > 0 && Number(form.config.percent) <= 100)) return "نسبة الخصم يجب أن تكون بين 1 و100.";
+      if (!Number.isInteger(Number(form.config.maxUsesPerOrder)) || Number(form.config.maxUsesPerOrder) < 0) return "حد مرات تطبيق العرض يجب أن يكون صفرًا أو رقمًا صحيحًا أكبر.";
     }
     if (form.type === "cart_percent") {
       if (!(Number(form.config.percent) > 0 && Number(form.config.percent) <= 100)) return "نسبة الخصم يجب أن تكون بين 1 و100.";
@@ -374,9 +375,11 @@ export default function AdminOffersPage() {
       if (form.type === "buy_x_get_y") {
         numericConfig.buyQty = Number(form.config.buyQty);
         numericConfig.getQty = Number(form.config.getQty);
+        numericConfig.maxUsesPerOrder = Number(form.config.maxUsesPerOrder);
       } else if (form.type === "nth_percent") {
         numericConfig.nth = Number(form.config.nth);
         numericConfig.percent = Number(form.config.percent);
+        numericConfig.maxUsesPerOrder = Number(form.config.maxUsesPerOrder);
       } else if (form.type === "cart_percent") {
         numericConfig.percent = Number(form.config.percent);
       } else if (form.type === "cart_fixed") {
@@ -397,7 +400,8 @@ export default function AdminOffersPage() {
         productIds: form.productScope === "selected" ? form.productIds : [],
         excludedProductIds: form.excludedProductIds,
         excludeDiscounted: Boolean(form.excludeDiscounted),
-        stackWithOfferIds: [...new Set((form.stackWithOfferIds || []).map(String))],
+        // Legacy stackWithOfferIds are intentionally cleared: automatic offers are exclusive.
+        stackWithOfferIds: [],
         freeShipping: false,
         environment: getCurrentOfferEnvironment(),
         updatedAt: now,
@@ -642,7 +646,7 @@ export default function AdminOffersPage() {
         <div className="p-4 sm:p-5 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
           <div>
             <h2 className="font-black text-gray-900">العروض المحفوظة</h2>
-            <p className="text-[11px] text-gray-500 mt-1">كل عرض يعمل منفردًا افتراضيًا. لا يتم دمج عرض آخر إلا إذا اخترته صراحةً داخل إعداد العرض.</p>
+            <p className="text-[11px] text-gray-500 mt-1">يختار المتجر عرضًا تلقائيًا واحدًا فقط من العروض المؤهلة، وهو الذي يحقق أكبر توفير للعميل. لا يتم دمج عرضين تلقائيين في الطلب نفسه.</p>
           </div>
           <div className="relative w-full sm:w-64">
             <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -739,12 +743,14 @@ export default function AdminOffersPage() {
                   <>
                     <div><label className={labelClass}>عدد القطع المطلوب شراؤها (X)</label><input type="number" min="1" step="1" value={form.config.buyQty} onChange={(event) => updateConfig("buyQty", event.target.value)} className={fieldClass} /></div>
                     <div><label className={labelClass}>عدد القطع المجانية (Y)</label><input type="number" min="1" step="1" value={form.config.getQty} onChange={(event) => updateConfig("getQty", event.target.value)} className={fieldClass} /></div>
+                    <div className="sm:col-span-2"><label className={labelClass}>أقصى مرات تطبيق العرض داخل الطلب</label><input type="number" min="0" step="1" value={form.config.maxUsesPerOrder} onChange={(event) => updateConfig("maxUsesPerOrder", event.target.value)} className={fieldClass} /><p className="text-[10px] text-gray-400 mt-1">اكتب 0 للسماح بتكرار العرض مع كل مجموعة مؤهلة، أو 1 لمنح الميزة مرة واحدة فقط في الطلب.</p></div>
                   </>
                 )}
                 {form.type === "nth_percent" && (
                   <>
                     <div><label className={labelClass}>رقم القطعة داخل المجموعة (N)</label><input type="number" min="2" step="1" value={form.config.nth} onChange={(event) => updateConfig("nth", event.target.value)} className={fieldClass} /><p className="text-[10px] text-gray-400 mt-1">مثال: N=2 يعني القطعة الثانية في كل مجموعة.</p></div>
                     <div><label className={labelClass}>نسبة الخصم على القطعة (%)</label><input type="number" min="1" max="100" step="1" value={form.config.percent} onChange={(event) => updateConfig("percent", event.target.value)} className={fieldClass} /></div>
+                    <div className="sm:col-span-2"><label className={labelClass}>أقصى مرات تطبيق العرض داخل الطلب</label><input type="number" min="0" step="1" value={form.config.maxUsesPerOrder} onChange={(event) => updateConfig("maxUsesPerOrder", event.target.value)} className={fieldClass} /><p className="text-[10px] text-gray-400 mt-1">اكتب 0 للسماح بتكرار الخصم مع كل مجموعة مؤهلة، أو 1 لتطبيق الخصم مرة واحدة فقط في الطلب.</p></div>
                   </>
                 )}
                 {form.type === "cart_percent" && (
@@ -761,41 +767,6 @@ export default function AdminOffersPage() {
                   <input id="offer-exclude-discounted" type="checkbox" checked={form.excludeDiscounted} onChange={(event) => updateField("excludeDiscounted", event.target.checked)} className="w-4 h-4 accent-[#008060]" />
                   <label htmlFor="offer-exclude-discounted" className="text-sm font-bold text-gray-700">استثناء المنتجات المخفّضة بالفعل</label>
                 </div>
-              </div>
-
-              <div className="border-t border-gray-100 pt-5 space-y-3">
-                <div>
-                  <div className="font-black text-sm text-gray-800">العروض التي تسمح بدمجها مع هذا العرض (اختياري)</div>
-                  <p className="text-[11px] text-gray-500 mt-1">من دون تحديد أي عرض هنا، سيظل هذا العرض منفردًا تمامًا. اختر عرضًا أو أكثر فقط عندما تريد تطبيقها معًا.</p>
-                </div>
-                {stackableOffers.length === 0 ? (
-                  <p className="text-xs text-gray-400 rounded-lg bg-gray-50 p-3">لا توجد عروض أخرى مفعّلة في هذه البيئة يمكن دمجها حاليًا.</p>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {stackableOffers.map((otherOffer) => {
-                      const selected = selectedStackIds.includes(String(otherOffer.id));
-                      return (
-                        <label key={otherOffer.id} className="flex items-start gap-2 rounded-lg border border-gray-200 p-3 cursor-pointer hover:bg-gray-50">
-                          <input
-                            type="checkbox"
-                            checked={selected}
-                            onChange={(event) => updateField(
-                              "stackWithOfferIds",
-                              event.target.checked
-                                ? [...new Set([...selectedStackIds, String(otherOffer.id)])]
-                                : selectedStackIds.filter((id) => id !== String(otherOffer.id))
-                            )}
-                            className="w-4 h-4 accent-[#008060] mt-0.5"
-                          />
-                          <span className="min-w-0">
-                            <span className="block text-xs font-bold text-gray-800">{otherOffer.name || "عرض بدون اسم"}</span>
-                            <span className="block text-[10px] text-gray-500 mt-1">{offerDescription(otherOffer)}</span>
-                          </span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                )}
               </div>
 
               <div className="border-t border-gray-100 pt-5 space-y-3">
