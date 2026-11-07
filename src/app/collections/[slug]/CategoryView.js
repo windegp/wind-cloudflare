@@ -61,7 +61,9 @@ export default function CategoryView({ initialSlug, initialCategoryData }) {
 
   const fetchMore = async () => {
     if (!lastDoc || loadingMore) return;
+
     setLoadingMore(true);
+
     try {
       const db = getDb();
       let baseQ;
@@ -71,38 +73,89 @@ export default function CategoryView({ initialSlug, initialCategoryData }) {
       } else if (currentSlug === 'most-liked-all-time') {
         baseQ = query(collection(db, "products"), orderBy("likesCount", "desc"));
       } else if (currentSlug === 'most-liked-weekly') {
-        const d = new Date(); d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+        const d = new Date();
+        d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+
         const weekStr = `${d.getUTCFullYear()}-W${Math.ceil((((d - new Date(Date.UTC(d.getUTCFullYear(), 0, 1))) / 86400000) + 1) / 7)}`;
-        baseQ = query(collection(db, "products"), where("currentWeekId", "==", weekStr), orderBy("weeklyLikesCount", "desc"));
+
+        baseQ = query(
+          collection(db, "products"),
+          where("currentWeekId", "==", weekStr),
+          orderBy("weeklyLikesCount", "desc")
+        );
       } else {
         baseQ = query(
           collection(db, "products"),
           where("categories", "array-contains-any", [currentSlug, `/${currentSlug}`]),
-          orderBy("createdAt", "desc") // 🔥 لازم يطابق usePaginatedProducts بالضبط
-                                         // وإلا startAfter(lastDoc) بيرجّع منتجات سبق ظهورها (تكرار)
+          orderBy("createdAt", "desc")
         );
       }
 
-      const q = query(baseQ, startAfter(lastDoc), limit(PAGE_SIZE));
-      const snap = await getDocs(q);
-      let newItems = snap.docs
-        .map(doc => ({ id: doc.id, ...doc.data() }))
-        // 🔥 Phase 8: منتجات SEASONAL لا تظهر في أي قسم (بما فيها top-rated/most-liked)
-        .filter(p => !isProductHiddenFromListings(p.variants));
+      let cursor = lastDoc;
+      let newItems = [];
+      let hasMoreAfterFetch = false;
 
+      // جلب عدد كافٍ لإكمال 12 منتجًا ظاهرًا في الدفعة.
+      while (newItems.length < PAGE_SIZE) {
+        const remainingCount = PAGE_SIZE - newItems.length;
+
+        const q = query(
+          baseQ,
+          startAfter(cursor),
+          limit(remainingCount)
+        );
+
+        const snap = await getDocs(q);
+
+        if (snap.empty) {
+          hasMoreAfterFetch = false;
+          break;
+        }
+
+        // تحريك المؤشر بعد آخر مستند، حتى المنتجات المخفية.
+        cursor = snap.docs[snap.docs.length - 1];
+
+        const visibleItems = snap.docs
+          .map(doc => ({ id: doc.id, ...doc.data() }))
+          .filter(p => !isProductHiddenFromListings(p.variants));
+
+        newItems.push(...visibleItems);
+
+        hasMoreAfterFetch = snap.docs.length === remainingCount;
+
+        if (snap.docs.length < remainingCount) {
+          hasMoreAfterFetch = false;
+          break;
+        }
+      }
+
+      // جلب إحصائيات المنتجات التي ستُعرض فقط.
       if (newItems.length > 0) {
         try {
-          const handles = newItems.map(p => p.handle || p.id).filter(Boolean);
+          const handles = newItems
+            .map(p => p.handle || p.id)
+            .filter(Boolean);
+
           if (handles.length > 0) {
-            const statsRes = await fetch(`/api/product-stats-batch?handles=${encodeURIComponent(handles.join(','))}`);
+            const statsRes = await fetch(
+              `/api/product-stats-batch?handles=${encodeURIComponent(handles.join(','))}`
+            );
+
             if (statsRes.ok) {
               const { stats } = await statsRes.json();
+
               newItems = newItems.map(p => {
                 const handle = p.handle || p.id;
                 const stat = stats[handle];
+
                 if (stat) {
-                  return { ...p, reviewsCount: stat.count, rating: stat.rating };
+                  return {
+                    ...p,
+                    reviewsCount: stat.count,
+                    rating: stat.rating,
+                  };
                 }
+
                 return p;
               });
             }
@@ -113,8 +166,9 @@ export default function CategoryView({ initialSlug, initialCategoryData }) {
       }
 
       setProducts(prev => [...prev, ...newItems]);
-      setLastDoc(snap.docs[snap.docs.length - 1] || null);
-      setHasMore(snap.docs.length === PAGE_SIZE);
+      setLastDoc(cursor);
+      setHasMore(hasMoreAfterFetch);
+
     } catch (err) {
       console.error("Fetch More Error:", err);
     } finally {

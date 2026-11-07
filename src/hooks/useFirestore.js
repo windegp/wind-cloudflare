@@ -280,42 +280,71 @@ export const useHomepageProductsSections = () => {
 };
 
 // هوك جلب منتجات القسم مع Pagination لدعم التصفح اللانهائي
+// هوك جلب منتجات القسم مع Pagination حسب عدد المنتجات الظاهرة فعليًا.
 export const usePaginatedProducts = (categorySlug, limitCount = 10, lastVisibleDoc = null) => {
   const fetcher = async () => {
     const db = getDb();
     const productsRef = collection(db, "products");
-    
-    // بناء الكويري الأساسي للقسم
-    let q = query(
-  productsRef, 
-  where("categories", "array-contains-any", [categorySlug, `/${categorySlug}`]), // السلاش للقديم وبدونه للجديد
-  orderBy("createdAt", "desc"), 
-  limit(limitCount)
-);
 
-    // إذا كان هناك وثيقة سابقة، ابدأ التحميل من بعدها
-    if (lastVisibleDoc) {
-      q = query(q, startAfter(lastVisibleDoc));
+    const products = [];
+    let cursor = lastVisibleDoc;
+    let hasMore = false;
+
+    // استمر في الجلب حتى نحصل على العدد المطلوب من المنتجات الظاهرة.
+    while (products.length < limitCount) {
+      const remainingCount = limitCount - products.length;
+
+      const constraints = [
+        where("categories", "array-contains-any", [categorySlug, `/${categorySlug}`]),
+        orderBy("createdAt", "desc"),
+        ...(cursor ? [startAfter(cursor)] : []),
+        limit(remainingCount),
+      ];
+
+      const snap = await getDocs(query(productsRef, ...constraints));
+
+      if (snap.empty) {
+        hasMore = false;
+        break;
+      }
+
+      // المؤشر يعتمد على آخر مستند Firestore، حتى لو كان مخفيًا.
+      cursor = snap.docs[snap.docs.length - 1];
+
+      const visibleProducts = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(p => !isProductHiddenFromListings(p.variants));
+
+      products.push(...visibleProducts);
+
+      hasMore = snap.docs.length === remainingCount;
+
+      // لا توجد مستندات أخرى متاحة.
+      if (snap.docs.length < remainingCount) {
+        hasMore = false;
+        break;
+      }
     }
 
-    const snap = await getDocs(q);
-    const products = snap.docs
-      .map(d => ({ id: d.id, ...d.data() }))
-      // 🔥 Phase 8: منتجات SEASONAL لا تظهر في صفحات الأقسام
-      .filter(p => !isProductHiddenFromListings(p.variants));
-    
-    // 🔥 Batch fetch all stats in one request to eliminate ProductCard request storm
+    // جلب إحصائيات المنتجات الظاهرة فقط.
     if (products.length > 0) {
       try {
-        const handles = products.map(p => p.handle || p.id).filter(Boolean);
+        const handles = products
+          .map(p => p.handle || p.id)
+          .filter(Boolean);
+
         if (handles.length > 0) {
-          const statsRes = await fetch(`/api/product-stats-batch?handles=${encodeURIComponent(handles.join(','))}`);
+          const statsRes = await fetch(
+            `/api/product-stats-batch?handles=${encodeURIComponent(handles.join(','))}`
+          );
+
           if (statsRes.ok) {
             const { stats } = await statsRes.json();
-            // Enrich products with stats
+
             products.forEach(p => {
               const handle = p.handle || p.id;
               const stat = stats[handle];
+
               if (stat) {
                 p.reviewsCount = stat.count;
                 p.rating = stat.rating;
@@ -325,32 +354,33 @@ export const usePaginatedProducts = (categorySlug, limitCount = 10, lastVisibleD
         }
       } catch (e) {
         console.error("WIND: Batch stats fetch failed", e);
-        // Continue without stats - ProductCard will fallback to individual fetch if needed
       }
     }
-    
+
     return {
       products,
-      lastDoc: snap.docs[snap.docs.length - 1] || null,
-      // حساب استمرار الصفحات من مستندات Firestore قبل استبعاد المنتجات المخفية.
-      hasMore: snap.docs.length === limitCount,
+      lastDoc: cursor || null,
+      hasMore,
     };
   };
 
-  // مفتاح SWR فريد يعتمد على القسم ومكان التوقف (lastVisibleDoc)
   const lastDocId = lastVisibleDoc ? lastVisibleDoc.id : 'start';
+
   return useSWR(`paginated-products-${categorySlug}-${lastDocId}`, fetcher, {
     revalidateOnFocus: false,
-    dedupingInterval: 300000, // كاش 5 دقائق
+    dedupingInterval: 300000,
   });
 };
+
 // 🚀 هوك جلب تفاصيل منتج واحد (SWR)
 export const useProduct = (id) => {
   const fetcherWithCache = async () => {
     if (!id) return null;
+
     try {
       // جيب من KV Cache عبر API
       const res = await fetch(`/api/product/${id}`);
+
       if (res.ok) {
         const result = await res.json();
         if (result && result.id) return result;
@@ -358,11 +388,14 @@ export const useProduct = (id) => {
     } catch (e) {
       console.error("WIND Product Cache Error:", e);
     }
+
     // Fallback لفايربيز
     const db = getDb();
     const snap = await getDoc(doc(db, "products", id));
+
     return snap.exists() ? { id: snap.id, ...snap.data() } : null;
   };
+
   return useSWR(id ? `product-${id}` : null, fetcherWithCache, {
     revalidateOnFocus: false,
     dedupingInterval: 300000 // 5 دقائق كاش
