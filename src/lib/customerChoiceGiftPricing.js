@@ -1,6 +1,8 @@
 const MAX_SELECTION_ID_LENGTH = 128;
 const MAX_VARIANT_VALUE_LENGTH = 120;
 
+import { isOfferLive } from "@/lib/offerDates";
+
 function stringValue(value, maxLength = MAX_VARIANT_VALUE_LENGTH) {
   return String(value ?? "").trim().slice(0, maxLength);
 }
@@ -13,6 +15,36 @@ export function getCustomerChoiceGiftIdentityKeys(...items) {
   ])
     .filter((value) => value !== undefined && value !== null && String(value).trim() !== "")
     .map((value) => String(value).trim()))];
+}
+
+
+/**
+ * Avoid Firestore reads for manual gifts unless their count could complete
+ * at least one active customer-choice offer. All purchase quantities here
+ * are already resolved and validated by the checkout server.
+ */
+export function hasPotentiallyCompleteCustomerChoiceGiftOffer(purchaseItems, giftSelections, offers, now = new Date()) {
+  if (!Array.isArray(purchaseItems) || !Array.isArray(giftSelections) || giftSelections.length === 0) {
+    return false;
+  }
+
+  return (Array.isArray(offers) ? offers : []).some((offer) => {
+    if (offer?.type !== "buy_x_get_y_select_gift" || !isOfferLive(offer, now)) return false;
+    const buyQty = Number(offer.config?.buyQty);
+    const getQty = Number(offer.config?.getQty);
+    if (!Number.isInteger(buyQty) || buyQty < 1 || !Number.isInteger(getQty) || getQty < 1) return false;
+    const purchaseIds = new Set(Array.isArray(offer.purchaseProductIds) ? offer.purchaseProductIds.map(String) : []);
+    if (!purchaseIds.size) return false;
+
+    const eligiblePurchaseQty = purchaseItems.reduce((sum, item) => {
+      const identities = getCustomerChoiceGiftIdentityKeys(item);
+      if (!identities.some((identity) => purchaseIds.has(identity))) return sum;
+      const qty = Number(item?.qty);
+      return sum + (Number.isInteger(qty) && qty > 0 ? qty : 0);
+    }, 0);
+    const requiredGiftQty = Math.floor(eligiblePurchaseQty / buyQty) * getQty;
+    return requiredGiftQty > 0 && requiredGiftQty === giftSelections.length;
+  });
 }
 
 /** Check only identifiers proven by the Firestore lookup, not client-supplied aliases. */
