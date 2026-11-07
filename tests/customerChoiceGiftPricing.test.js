@@ -32,6 +32,17 @@ describe("trusted customer-choice gift resolution helpers", () => {
     )).toBe(false);
   });
 
+  it("does not accept a client alias when the resolved Firestore product is outside the allowlist", () => {
+    expect(isCustomerChoiceGiftAllowed(
+      {
+        id: "outside-product-id",
+        handle: "outside-product-handle",
+        _resolvedIdentifiers: ["outside-product-id"],
+      },
+      [offer]
+    )).toBe(false);
+  });
+
   it("uses Firestore identity and price instead of client-supplied values", () => {
     const result = buildTrustedCustomerChoiceGiftSelection(
       {
@@ -89,6 +100,23 @@ describe("trusted customer-choice gift resolution helpers", () => {
       { id: result.id, handle: result.handle, _resolvedIdentifiers: ["gift-old-id"] },
       [{ ...offer, giftProductIds: ["gift-old-id"] }]
     )).toBe(true);
+  });
+
+  it("uses only a Firestore-resolved identifier for redirected product matching", () => {
+    const result = buildTrustedCustomerChoiceGiftSelection(
+      {
+        selectionId: "spoof-check",
+        id: "client-fake-id",
+        handle: "client-fake-handle",
+      },
+      {
+        id: "firestore-product-id",
+        handle: "firestore-product-handle",
+        _resolvedIdentifiers: ["firestore-product-id"],
+      },
+      220
+    );
+    expect(result.requestedProductId).toBe("firestore-product-id");
   });
 
   it("rejects incomplete or invalid trusted product data", () => {
