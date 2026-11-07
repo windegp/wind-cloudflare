@@ -17,7 +17,13 @@ export function getCustomerChoiceGiftIdentityKeys(...items) {
 
 /** Check only identifiers proven by the Firestore lookup, not client-supplied aliases. */
 export function isCustomerChoiceGiftAllowed(product, offers) {
-  const identities = new Set(getCustomerChoiceGiftIdentityKeys(product));
+  // These are the canonical document ID, canonical handle, and aliases that
+  // the server actually resolved. Ignore stored productId/productHandle fields.
+  const identities = new Set(
+    [product?.id, product?.handle, ...(Array.isArray(product?._resolvedIdentifiers) ? product._resolvedIdentifiers : [])]
+      .filter((value) => value !== undefined && value !== null && String(value).trim() !== "")
+      .map((value) => String(value).trim())
+  );
   if (!identities.size || !Array.isArray(offers)) return false;
 
   return offers.some((offer) => {
