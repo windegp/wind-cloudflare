@@ -500,8 +500,8 @@ export default function CartDrawer() {
                         </div>
                         <div className="flex items-center justify-between mt-3">
                           {row.isCustomerChoiceGift ? (
-                            <span className={`text-[10px] font-bold rounded-full px-2 py-1 ${row.isPendingCustomerChoiceGift ? "text-amber-700 bg-amber-50 border border-amber-100" : "text-emerald-700 bg-emerald-50 border border-emerald-100"}`}>
-                              {row.isPendingCustomerChoiceGift ? "اختيار هدية" : "هدية من اختيارك"}
+                            <span className={`text-[10px] font-bold rounded-full px-2 py-1 ${row.isPendingCustomerChoiceGift ? "text-amber-700 bg-amber-50 border border-amber-100" : benefit?.free ? "text-emerald-700 bg-emerald-50 border border-emerald-100" : "text-gray-600 bg-gray-100 border border-gray-200"}`}>
+                              {row.isPendingCustomerChoiceGift ? "اختيار هدية" : benefit?.free ? "هدية مجانية" : "اختيار ضمن العرض"}
                             </span>
                           ) : row.isAutoAddedGift ? (
                             <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-2 py-1">تُضاف تلقائيًا</span>
