@@ -287,6 +287,8 @@ export function computeBestOffer(cartItems, offers, now = new Date(), giftSelect
     (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
   );
   giftStatusCandidates.sort((a, b) =>
+    Number(b.status.complete) - Number(a.status.complete) ||
+    (Number(b.status.selectedGiftQty) || 0) - (Number(a.status.selectedGiftQty) || 0) ||
     a.priority - b.priority ||
     (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
   );
