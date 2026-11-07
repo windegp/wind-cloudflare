@@ -407,6 +407,8 @@ export default function CartDrawer() {
           selectedSize: editingCartItem.selectedSize,
           selectedColor: editingCartItem.selectedColor,
         } : null}
+        variantActionLabel={giftProductToAdd ? "إضافة الهدية" : "حفظ التعديل"}
+        variantLoadingLabel={giftProductToAdd ? "جاري إضافة الهدية..." : "جاري الحفظ..."}
         onVariantSelect={giftProductToAdd
           ? (selection) => addCustomerChoiceGift({
               ...giftProductToAdd,
