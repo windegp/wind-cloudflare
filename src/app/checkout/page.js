@@ -977,36 +977,21 @@ export default function CheckoutPage() {
         // Catalog أبداً. ونستخدم getCatalogId (نفس مصدر الكتالوج) بدل
         // الـ handle الخام، لأنه لازم يطابق g:id الخاص باللون الفعلي
         // المشترى، وليس فقط أول لون بالصدفة.
-        const autoGiftLineItems = (quote.lineItems || []).filter((item) => item.isAutoAddedOfferGift === true);
-        const customerChoiceGiftLineItems = (quote.lineItems || []).filter(
-          (item) => item.isCustomerChoiceGiftSelection === true
+        // Use the server-quoted per-unit lines so zero-value units stay at zero in analytics.
+        const purchaseLineItems = Array.isArray(quote.lineItems) ? quote.lineItems : [];
+        const purchaseContentIds = purchaseLineItems
+          .filter((item) => item.productHandle || item.productId)
+          .map((item) => getCatalogId(item.productHandle || item.productId, item.selectedColor));
+        const purchaseNumItems = purchaseLineItems.reduce(
+          (sum, item) => sum + (Number(item.quantity) || 1),
+          0
         );
-        const additionalGiftLineItems = [...autoGiftLineItems, ...customerChoiceGiftLineItems];
-        const purchaseContentIds = [
-          ...quote.cartItems
-            .filter(it => it.handle || it.id)
-            .map(it => getCatalogId(it.handle || it.id, it.selectedColor)),
-          ...additionalGiftLineItems
-            .filter((item) => item.productHandle || item.productId)
-            .map((item) => getCatalogId(item.productHandle || item.productId, item.selectedColor)),
-        ];
-        const purchaseNumItems =
-          quote.cartItems.reduce((sum, item) => sum + item.qty, 0) +
-          additionalGiftLineItems.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
-        const purchaseCartSnapshot = [
-          ...quote.cartItems.map(it => ({
-            id: it.handle || it.id || it.title,
-            title: it.title,
-            price: it.price,
-            qty: it.qty,
-          })),
-          ...additionalGiftLineItems.map((item) => ({
-            id: item.productHandle || item.productId || item.productTitle,
-            title: item.productTitle || item.name,
-            price: item.price,
-            qty: Number(item.quantity) || 1,
-          })),
-        ];
+        const purchaseCartSnapshot = purchaseLineItems.map((item) => ({
+          id: item.productHandle || item.productId || item.productTitle,
+          title: item.productTitle || item.name,
+          price: Number(item.price) || 0,
+          qty: Number(item.quantity) || 1,
+        }));
 
         localStorage.removeItem('pendingOrder');
 
