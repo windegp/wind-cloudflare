@@ -233,27 +233,62 @@ export default function CheckoutPage() {
       ? `قسيمة شراء: ${appliedPromo.code || ''}`
       : (appliedPromo?.type && appliedPromo.type !== 'free_shipping' ? 'خصم الكود' : 'خصم الطلب الأول 🎉');
 
-  // بيانات المنتجات المدفوعة التي تُحفظ داخل الطلب دون أي استعلامات إضافية
-  const paidOrderLineItems = cartItems.map(item => {
+  // بيانات المنتجات المدفوعة للسلة المتروكة. في عرض اختيار الهدايا نفصل
+  // الوحدات المجانية من المشتريات نفسها حتى يطابق التفصيل الإجمالي المحسوب.
+  const paidOrderLineItems = cartItems.flatMap((item, cartIndex) => {
     const currentPrice = Number.parseFloat(item.price) || 0;
     const rawCompareAtPrice = Number.parseFloat(item.compareAtPrice);
     const compareAtPrice =
       Number.isFinite(rawCompareAtPrice) && rawCompareAtPrice > currentPrice
         ? rawCompareAtPrice
         : null;
-
-    return {
+    const baseLine = {
       productId: String(item.id ?? item.productId ?? item.handle ?? ''),
       productHandle: String(item.handle ?? item.productId ?? item.id ?? ''),
       productTitle: item.title || item.name || '',
       name: `${item.title || item.name || 'منتج'}${item.selectedSize ? ' - ' + item.selectedSize : ''}`,
-      price: currentPrice,
-      compareAtPrice,
-      quantity: Number(item.qty) || 1,
       selectedSize: item.selectedSize || '',
       selectedColor: item.selectedColor || '',
-      image: item.image || item.images?.[0] || item.mainImage || ''
+      image: item.image || item.images?.[0] || item.mainImage || '',
     };
+
+    const choiceGiftBenefitLine = offerBenefits?.type === "buy_x_get_y_select_gift"
+      ? (offerBenefits.lines || []).find((line) => line.cartIndex === cartIndex)
+      : null;
+    if (!choiceGiftBenefitLine) {
+      return [{
+        ...baseLine,
+        price: currentPrice,
+        compareAtPrice,
+        quantity: Number(item.qty) || 1,
+      }];
+    }
+
+    const lines = [];
+    if (choiceGiftBenefitLine.regularQty > 0) {
+      lines.push({
+        ...baseLine,
+        price: currentPrice,
+        compareAtPrice,
+        quantity: choiceGiftBenefitLine.regularQty,
+      });
+    }
+    choiceGiftBenefitLine.discountedUnits
+      .filter((unit) => unit.autoAdded !== true)
+      .forEach((unit) => {
+        lines.push({
+          ...baseLine,
+          price: unit.finalPrice,
+          compareAtPrice: unit.originalPrice,
+          originalPrice: unit.originalPrice,
+          unitDiscount: unit.discount,
+          quantity: 1,
+          isOfferBenefit: true,
+          isFree: unit.free,
+          isFreeOfferBenefit: unit.free,
+        });
+      });
+    return lines;
   });
 
   const autoGiftOrderLineItems = (offerBenefits?.lines || []).flatMap((line) => {
