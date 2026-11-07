@@ -11,14 +11,15 @@ export function getCustomerChoiceGiftIdentityKeys(...items) {
     item?.productId,
     item?.handle,
     item?.productHandle,
+    ...(Array.isArray(item?._resolvedIdentifiers) ? item._resolvedIdentifiers : []),
   ])
     .filter((value) => value !== undefined && value !== null && String(value).trim() !== "")
     .map((value) => String(value).trim()))];
 }
 
-/** A submitted gift must belong to at least one currently usable choice-gift offer. */
-export function isCustomerChoiceGiftAllowed(selection, product, offers) {
-  const identities = new Set(getCustomerChoiceGiftIdentityKeys(selection, product));
+/** Check only identifiers proven by the Firestore lookup, not client-supplied aliases. */
+export function isCustomerChoiceGiftAllowed(product, offers) {
+  const identities = new Set(getCustomerChoiceGiftIdentityKeys(product));
   if (!identities.size || !Array.isArray(offers)) return false;
 
   return offers.some((offer) => {
@@ -34,7 +35,11 @@ export function buildTrustedCustomerChoiceGiftSelection(selection, product, trus
   const price = Number(trustedPrice);
   if (!selectionId || !product?.id || !Number.isFinite(price) || price <= 0) return null;
 
-  const requestedId = String(selection?.id || selection?.productId || selection?.handle || product.id);
+  const requestedId = String(
+    Array.isArray(product?._resolvedIdentifiers) && product._resolvedIdentifiers.length
+      ? product._resolvedIdentifiers[0]
+      : product.id
+  );
   return {
     selectionId,
     id: String(product.id),
