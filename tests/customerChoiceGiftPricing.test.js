@@ -43,6 +43,19 @@ describe("trusted customer-choice gift resolution helpers", () => {
     )).toBe(false);
   });
 
+  it("ignores productId aliases stored on the document when checking the allowlist", () => {
+    expect(isCustomerChoiceGiftAllowed(
+      {
+        id: "outside-document-id",
+        handle: "outside-document-handle",
+        productId: "gift-product-id",
+        productHandle: "gift-handle",
+        _resolvedIdentifiers: ["outside-document-id"],
+      },
+      [offer]
+    )).toBe(false);
+  });
+
   it("uses Firestore identity and price instead of client-supplied values", () => {
     const result = buildTrustedCustomerChoiceGiftSelection(
       {
@@ -80,7 +93,7 @@ describe("trusted customer-choice gift resolution helpers", () => {
 
   it("preserves resolved aliases for allowlist matching", () => {
     expect(getCustomerChoiceGiftIdentityKeys(
-      { id: "client-id", productHandle: "gift-handle" },
+      { id: "client-id", handle: "gift-handle" },
       { id: "firestore-id", handle: "gift-handle" }
     )).toEqual(["client-id", "gift-handle", "firestore-id"]);
   });
