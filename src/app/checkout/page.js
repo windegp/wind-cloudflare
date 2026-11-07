@@ -165,6 +165,7 @@ export default function CheckoutPage() {
     appliedOffer,
     offerBenefits,
     offerGiftSelections,
+    customerChoiceGiftSelections,
   } = useCart();
   
   const { signalPageReady } = usePageReady();
@@ -174,7 +175,7 @@ export default function CheckoutPage() {
   const finalTotal    = total;
 
   // عرض كل قطعة مستفيدة كسطر مستقل في ملخص الدفع.
-  const checkoutDisplayRows = cartItems.flatMap((item, cartIndex) => {
+  const paidCheckoutDisplayRows = cartItems.flatMap((item, cartIndex) => {
     const benefitLine = (offerBenefits?.lines || []).find((line) => line.cartIndex === cartIndex);
     if (!benefitLine) return [{ ...item, displayKey: `${cartIndex}-regular` }];
     const rows = [];
@@ -204,6 +205,26 @@ export default function CheckoutPage() {
     });
     return rows;
   });
+
+  const customerChoiceGiftCheckoutRows =
+    offerBenefits?.type === "buy_x_get_y_select_gift"
+      ? (offerBenefits.giftLines || []).flatMap((giftLine) => {
+          const selection = customerChoiceGiftSelections[giftLine.selectionIndex];
+          if (!selection) return [];
+          const unitBenefit = giftLine.discountedUnits?.[0] || null;
+          return [{
+            ...selection,
+            qty: 1,
+            price: unitBenefit ? unitBenefit.finalPrice : selection.price,
+            originalOfferPrice: unitBenefit?.originalPrice,
+            isOfferBenefit: Boolean(unitBenefit),
+            isFreeOfferBenefit: Boolean(unitBenefit?.free),
+            isCustomerChoiceGiftSelection: true,
+            displayKey: `customer-choice-gift-${selection.selectionId}`,
+          }];
+        })
+      : [];
+  const checkoutDisplayRows = [...paidCheckoutDisplayRows, ...customerChoiceGiftCheckoutRows];
 
   // اسم سطر الخصم في ملخص الطلب
   const discountLabel = discountSource === 'offer'
@@ -258,7 +279,51 @@ export default function CheckoutPage() {
       });
   });
 
-  const orderLineItems = [...paidOrderLineItems, ...autoGiftOrderLineItems];
+  const customerChoiceGiftOrderLineItems =
+    offerBenefits?.type === "buy_x_get_y_select_gift"
+      ? (offerBenefits.giftLines || []).flatMap((giftLine) => {
+          const selection = customerChoiceGiftSelections[giftLine.selectionIndex];
+          if (!selection) return [];
+          const baseLine = {
+            productId: String(selection.id ?? selection.productId ?? selection.handle ?? ""),
+            productHandle: String(selection.handle ?? selection.productHandle ?? selection.id ?? ""),
+            productTitle: selection.title || selection.name || "",
+            name: `${selection.title || selection.name || "منتج"}${selection.selectedSize ? " - " + selection.selectedSize : ""}`,
+            selectedSize: selection.selectedSize || "",
+            selectedColor: selection.selectedColor || "",
+            image: selection.image || selection.images?.[0] || selection.mainImage || "",
+            isCustomerChoiceGiftSelection: true,
+            giftSelectionId: selection.selectionId,
+          };
+          const rows = [];
+          if (giftLine.regularQty > 0) {
+            rows.push({
+              ...baseLine,
+              price: Number(selection.price) || 0,
+              compareAtPrice: selection.compareAtPrice || null,
+              quantity: giftLine.regularQty,
+            });
+          }
+          giftLine.discountedUnits.forEach((unit) => {
+            rows.push({
+              ...baseLine,
+              price: unit.finalPrice,
+              compareAtPrice: unit.originalPrice,
+              quantity: 1,
+              isOfferBenefit: true,
+              isFree: unit.free,
+              isFreeOfferBenefit: unit.free,
+            });
+          });
+          return rows;
+        })
+      : [];
+
+  const orderLineItems = [
+    ...paidOrderLineItems,
+    ...autoGiftOrderLineItems,
+    ...customerChoiceGiftOrderLineItems,
+  ];
 
   // ملخص مالي محفوظ مع الطلب
   const originalSubtotal = orderLineItems.reduce(
@@ -628,6 +693,7 @@ export default function CheckoutPage() {
           orderId: activeOrderId,
           cartItems,
           offerGiftSelections,
+          customerChoiceGiftSelections,
           promoCode: appliedPromo?.code || "",
           customerEmail: formData.email,
           customerPhone: formData.phone,
@@ -912,17 +978,21 @@ export default function CheckoutPage() {
         // الـ handle الخام، لأنه لازم يطابق g:id الخاص باللون الفعلي
         // المشترى، وليس فقط أول لون بالصدفة.
         const autoGiftLineItems = (quote.lineItems || []).filter((item) => item.isAutoAddedOfferGift === true);
+        const customerChoiceGiftLineItems = (quote.lineItems || []).filter(
+          (item) => item.isCustomerChoiceGiftSelection === true
+        );
+        const additionalGiftLineItems = [...autoGiftLineItems, ...customerChoiceGiftLineItems];
         const purchaseContentIds = [
           ...quote.cartItems
             .filter(it => it.handle || it.id)
             .map(it => getCatalogId(it.handle || it.id, it.selectedColor)),
-          ...autoGiftLineItems
+          ...additionalGiftLineItems
             .filter((item) => item.productHandle || item.productId)
             .map((item) => getCatalogId(item.productHandle || item.productId, item.selectedColor)),
         ];
         const purchaseNumItems =
           quote.cartItems.reduce((sum, item) => sum + item.qty, 0) +
-          autoGiftLineItems.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
+          additionalGiftLineItems.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
         const purchaseCartSnapshot = [
           ...quote.cartItems.map(it => ({
             id: it.handle || it.id || it.title,
@@ -930,7 +1000,7 @@ export default function CheckoutPage() {
             price: it.price,
             qty: it.qty,
           })),
-          ...autoGiftLineItems.map((item) => ({
+          ...additionalGiftLineItems.map((item) => ({
             id: item.productHandle || item.productId || item.productTitle,
             title: item.productTitle || item.name,
             price: item.price,
