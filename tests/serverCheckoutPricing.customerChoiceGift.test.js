@@ -283,8 +283,6 @@ describe("server checkout quote: customer-choice gifts", () => {
       priority: 2,
     };
 
-    const quote = await createServerCheckoutQuote(quoteInput(),);
-    // Re-run with the stronger offer included in the Firestore offers collection.
     installFixture([choiceOffer, strongerOffer]);
     const strongerQuote = await createServerCheckoutQuote(quoteInput());
 
