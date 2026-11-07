@@ -13,7 +13,6 @@ const offer = {
 describe("trusted customer-choice gift resolution helpers", () => {
   it("matches the gift allowlist by Firestore product ID", () => {
     expect(isCustomerChoiceGiftAllowed(
-      { id: "gift-product-id" },
       { id: "gift-product-id", handle: "gift-shirt" },
       [offer]
     )).toBe(true);
@@ -21,7 +20,6 @@ describe("trusted customer-choice gift resolution helpers", () => {
 
   it("matches the gift allowlist by product handle", () => {
     expect(isCustomerChoiceGiftAllowed(
-      { id: "some-client-id", handle: "gift-handle" },
       { id: "gift-product-id", handle: "gift-handle" },
       [offer]
     )).toBe(true);
@@ -29,7 +27,6 @@ describe("trusted customer-choice gift resolution helpers", () => {
 
   it("rejects products outside every active gift allowlist", () => {
     expect(isCustomerChoiceGiftAllowed(
-      { id: "outside" },
       { id: "outside", handle: "outside-handle" },
       [offer]
     )).toBe(false);
@@ -80,7 +77,7 @@ describe("trusted customer-choice gift resolution helpers", () => {
   it("preserves a requested ID alias when Firestore resolves a redirected product", () => {
     const result = buildTrustedCustomerChoiceGiftSelection(
       { selectionId: "redirected-1", id: "gift-old-id" },
-      { id: "gift-new-id", handle: "gift-new-handle", title: "Gift", price: 180 },
+      { id: "gift-new-id", handle: "gift-new-handle", title: "Gift", price: 180, _resolvedIdentifiers: ["gift-old-id"] },
       180
     );
 
@@ -89,8 +86,7 @@ describe("trusted customer-choice gift resolution helpers", () => {
       requestedProductId: "gift-old-id",
     });
     expect(isCustomerChoiceGiftAllowed(
-      { id: "gift-old-id" },
-      { id: result.id, handle: result.handle },
+      { id: result.id, handle: result.handle, _resolvedIdentifiers: ["gift-old-id"] },
       [{ ...offer, giftProductIds: ["gift-old-id"] }]
     )).toBe(true);
   });
