@@ -27,6 +27,7 @@ const firestoreMocks = vi.hoisted(() => {
     getDoc: vi.fn(async (reference) => {
       const value = state.docs.get(`${reference.collection}/${reference.id}`);
       return {
+        id: reference.id,
         exists: () => value !== undefined,
         data: () => value,
       };
