@@ -239,16 +239,18 @@ async function resolveCartItems(db, cartItems) {
 }
 
 async function resolveCustomerChoiceGiftSelections(db, purchaseItems, selections, offers, now, maxUnits = MAX_TOTAL_UNITS) {
-  if (selections === undefined || selections === null || selections.length === 0) return [];
-  if (!Array.isArray(selections) || selections.length > MAX_TOTAL_UNITS) {
-    throw new CheckoutQuoteError("اختيارات الهدايا غير صالحة. حدّث السلة وحاول مرة أخرى.");
-  }
+  if (selections === undefined || selections === null) return [];
 
   const liveChoiceOffers = (Array.isArray(offers) ? offers : []).filter(
     (offer) => offer?.type === "buy_x_get_y_select_gift" && isOfferLive(offer, now)
   );
   // Expired/disabled choice-gift offers must not block an ordinary checkout.
   if (!liveChoiceOffers.length) return [];
+  // Manual gift choices are optional. Ignore malformed or empty selection state.
+  if (!Array.isArray(selections) || selections.length === 0) return [];
+  if (selections.length > MAX_TOTAL_UNITS) {
+    throw new CheckoutQuoteError("اختيارات الهدايا تتجاوز الحد المسموح. احذف بعض الاختيارات ثم حاول مرة أخرى.");
+  }
   if (!hasPotentiallyCompleteCustomerChoiceGiftOffer(
     purchaseItems, selections, liveChoiceOffers, now
   )) return [];
