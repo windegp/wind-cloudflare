@@ -1,7 +1,7 @@
+import { isOfferLive } from "@/lib/offerDates";
+
 const MAX_SELECTION_ID_LENGTH = 128;
 const MAX_VARIANT_VALUE_LENGTH = 120;
-
-import { isOfferLive } from "@/lib/offerDates";
 
 function stringValue(value, maxLength = MAX_VARIANT_VALUE_LENGTH) {
   return String(value ?? "").trim().slice(0, maxLength);
