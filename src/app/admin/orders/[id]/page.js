@@ -493,7 +493,7 @@ export default function OrderDetailsPage() {
                     productsList.map((product, idx) => {
                       const quantity = Number(product.quantity ?? product.qty) || 1;
                       const price = toAmount(product.price);
-                      const comparePrice = toAmount(product.compareAtPrice);
+                      const comparePrice = toAmount(product.originalPrice ?? product.compareAtPrice);
                       const productName =
                         product.productTitle ||
                         product.title ||
@@ -507,7 +507,7 @@ export default function OrderDetailsPage() {
 
                       return (
                         <div
-                          key={product.productId || product.id || `${productName}-${idx}`}
+                          key={`${product.productId || product.id || productName}-${product.giftSelectionId || idx}`}
                           className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 py-4 border-b border-gray-100 last:border-0"
                         >
                           <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -529,6 +529,12 @@ export default function OrderDetailsPage() {
                               <p className="text-sm font-bold text-gray-900 leading-relaxed">
                                 {productName}
                               </p>
+                              {product.isFree === true && (
+                                <p className="text-[11px] font-semibold text-emerald-700 mt-1">هدية مجانية من العرض</p>
+                              )}
+                              {product.isCustomerChoiceGiftSelection === true && product.isFree !== true && (
+                                <p className="text-[11px] font-semibold text-gray-500 mt-1">اختيار ضمن العرض</p>
+                              )}
 
                               {variants.length > 0 && (
                                 <p className="text-xs text-gray-500 mt-1">
