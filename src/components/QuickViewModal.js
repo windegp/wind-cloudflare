@@ -13,7 +13,15 @@ import { ttTrack } from "@/lib/ttTrack";
 import { getCatalogId } from "@/lib/catalogId";
 import { gaAddToCart } from "@/lib/gaTrack";
 
-export default function QuickViewModal({ product, isOpen, onClose, initialSelection = null, onVariantSelect = null }) {
+export default function QuickViewModal({
+  product,
+  isOpen,
+  onClose,
+  initialSelection = null,
+  onVariantSelect = null,
+  variantActionLabel = "حفظ التعديل",
+  variantLoadingLabel = "جاري الحفظ...",
+}) {
   const { addToCart } = useCart();
   
   const [mounted, setMounted] = useState(false);
@@ -467,7 +475,7 @@ export default function QuickViewModal({ product, isOpen, onClose, initialSelect
                   style={{fontFamily:"Cairo,sans-serif"}}
                 >
                   <ShoppingBag size={16} />
-                  {isAdding ? (onVariantSelect ? "جاري الحفظ..." : "جاري الإضافة...") : (canPurchase ? (onVariantSelect ? "حفظ التعديل" : `أضف إلي السلة — ${product.price * qvQuantity} ج.م`) : presentation.buttonText)}
+                  {isAdding ? (onVariantSelect ? variantLoadingLabel : "جاري الإضافة...") : (canPurchase ? (onVariantSelect ? variantActionLabel : `أضف إلي السلة — ${product.price * qvQuantity} ج.م`) : presentation.buttonText)}
                 </button>
                 {!onVariantSelect && <div className="flex items-center justify-between bg-white border border-gray-200 rounded-xl px-1 w-[90px] shrink-0 shadow-sm">
                   <button onClick={() => setQvQuantity(q => q + 1)} className="text-gray-500 hover:text-[#1A1A1A] p-2 transition-colors"><Plus size={16} /></button>
