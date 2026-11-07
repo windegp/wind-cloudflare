@@ -729,8 +729,24 @@ export default function CheckoutPage() {
           const trustedSelection = quotedCustomerChoiceGiftSelections.find(
             (item) => item.selectionId === selection.selectionId
           );
+          const clientIdentifiers = [
+            selection.id,
+            selection.productId,
+            selection.handle,
+            selection.productHandle,
+          ].filter(Boolean).map(String);
+          const trustedIdentifiers = trustedSelection ? [
+            trustedSelection.id,
+            trustedSelection.productId,
+            trustedSelection.handle,
+            trustedSelection.productHandle,
+            trustedSelection.requestedProductId,
+          ].filter(Boolean).map(String) : [];
+          const identityMatches = clientIdentifiers.some((identifier) =>
+            trustedIdentifiers.includes(identifier)
+          );
           return !trustedSelection ||
-            String(trustedSelection.id) !== String(selection.id) ||
+            !identityMatches ||
             String(trustedSelection.selectedColor || "") !== String(selection.selectedColor || "") ||
             String(trustedSelection.selectedSize || "") !== String(selection.selectedSize || "") ||
             Math.abs(Number(trustedSelection.price) - Number(selection.price)) > 0.01;
