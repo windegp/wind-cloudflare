@@ -131,7 +131,7 @@ export default function CartDrawer() {
         const productById = new Map();
         snapshots.forEach((snapshot) => {
           snapshot.docs.forEach((productDoc) => {
-            productById.set(productDoc.id, { id: productDoc.id, ...productDoc.data() });
+            productById.set(productDoc.id, { ...productDoc.data(), id: productDoc.id });
           });
         });
         setCustomerChoiceGiftProducts(ids.map((id) => productById.get(id)).filter(Boolean));
