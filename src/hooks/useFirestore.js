@@ -331,7 +331,9 @@ export const usePaginatedProducts = (categorySlug, limitCount = 10, lastVisibleD
     
     return {
       products,
-      lastDoc: snap.docs[snap.docs.length - 1] || null 
+      lastDoc: snap.docs[snap.docs.length - 1] || null,
+      // حساب استمرار الصفحات من مستندات Firestore قبل استبعاد المنتجات المخفية.
+      hasMore: snap.docs.length === limitCount,
     };
   };
 

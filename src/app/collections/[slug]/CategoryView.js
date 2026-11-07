@@ -45,7 +45,7 @@ export default function CategoryView({ initialSlug, initialCategoryData }) {
     if (swrData && !lastDoc) {
       setProducts(swrData.products);
       setLastDoc(swrData.lastDoc);
-      setHasMore(swrData.products.length === PAGE_SIZE);
+      setHasMore(Boolean(swrData.hasMore));
       setLoading(false);
     }
   }, [swrData]);
