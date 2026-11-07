@@ -71,7 +71,30 @@ export function isCustomerChoiceGiftAllowed(product, offers) {
   });
 }
 
-/** Build the evaluator input from Firestore product data, never the submitted price/title. */
+function getTrustedCustomerChoiceGiftImage(product, selectedColor) {
+  const colorSwatch = selectedColor ? product?.colorSwatches?.[selectedColor] : null;
+  const isColorImage =
+    typeof colorSwatch === "string" &&
+    (
+      colorSwatch.startsWith("http") ||
+      colorSwatch.startsWith("//") ||
+      colorSwatch.startsWith("/") ||
+      colorSwatch.includes("/") ||
+      /\.(avif|webp|png|jpe?g|gif)(\?.*)?$/i.test(colorSwatch)
+    );
+  const candidate = isColorImage
+    ? colorSwatch
+    : product?.mainImage || product?.mainImageUrl || product?.image || product?.images?.[0] || "";
+  const image = stringValue(candidate, 2048);
+  if (!image) return "";
+  if (image.startsWith("http")) return image;
+  if (image.startsWith("//")) return `https:${image}`;
+  if (image.startsWith("/cdn/")) return `https://cdn.shopify.com${image}`;
+  if (product?.folderName) return `/images/products/${product.folderName}/${image}`;
+  return "";
+}
+
+/** Build the evaluator input from Firestore product data, never the submitted price/title/image. */
 export function buildTrustedCustomerChoiceGiftSelection(selection, product, trustedPrice) {
   const selectionId = stringValue(selection?.selectionId, MAX_SELECTION_ID_LENGTH);
   const price = Number(trustedPrice);
@@ -90,7 +113,7 @@ export function buildTrustedCustomerChoiceGiftSelection(selection, product, trus
     productHandle: String(product.handle || product.id),
     title: String(product.title || "منتج"),
     price,
-    image: stringValue(selection?.image, 2048) || String(product.images?.[0] || product.mainImage || product.mainImageUrl || ""),
+    image: getTrustedCustomerChoiceGiftImage(product, stringValue(selection?.selectedColor)),
     selectedColor: stringValue(selection?.selectedColor),
     selectedSize: stringValue(selection?.selectedSize),
     qty: 1,
