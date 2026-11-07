@@ -248,12 +248,12 @@ async function resolveCustomerChoiceGiftSelections(db, purchaseItems, selections
   if (!liveChoiceOffers.length) return [];
   // Manual gift choices are optional. Ignore malformed or empty selection state.
   if (!Array.isArray(selections) || selections.length === 0) return [];
-  if (selections.length > MAX_TOTAL_UNITS) {
-    throw new CheckoutQuoteError("اختيارات الهدايا تتجاوز الحد المسموح. احذف بعض الاختيارات ثم حاول مرة أخرى.");
-  }
   if (!hasPotentiallyCompleteCustomerChoiceGiftOffer(
     purchaseItems, selections, liveChoiceOffers, now
   )) return [];
+  if (selections.length > MAX_TOTAL_UNITS) {
+    throw new CheckoutQuoteError("اختيارات الهدايا تتجاوز الحد المسموح. احذف بعض الاختيارات ثم حاول مرة أخرى.");
+  }
   if (selections.length > maxUnits) {
     throw new CheckoutQuoteError("عدد الهدايا المختارة يتجاوز الحد المسموح.");
   }
