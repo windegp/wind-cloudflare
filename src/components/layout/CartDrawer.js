@@ -8,15 +8,40 @@ import { doc, getDoc, collection, query, where, getDocs, documentId } from "fire
 import QuickViewModal from "@/components/QuickViewModal"; 
 
 export default function CartDrawer() {
-  const { cartItems, offerGiftSelections, isCartOpen, toggleCart, removeFromCart, updateQty, updateCartItemVariant, subtotal, discount, shipping, offerBenefits } = useCart();
-  
-    const [suggestedProducts, setSuggestedProducts] = useState([]);
+  const {
+    cartItems,
+    offerGiftSelections,
+    customerChoiceGiftSelections,
+    customerChoiceGiftStatus,
+    offers,
+    appliedOffer,
+    discountSource,
+    isCartOpen,
+    toggleCart,
+    removeFromCart,
+    removeCustomerChoiceGift,
+    addCustomerChoiceGift,
+    updateQty,
+    updateCartItemVariant,
+    subtotal,
+    discount,
+    shipping,
+    offerBenefits,
+  } = useCart();
+
+  const [suggestedProducts, setSuggestedProducts] = useState([]);
+  const [customerChoiceGiftProducts, setCustomerChoiceGiftProducts] = useState([]);
+  const [isLoadingCustomerChoiceGiftProducts, setIsLoadingCustomerChoiceGiftProducts] = useState(false);
+  const [giftProductToAdd, setGiftProductToAdd] = useState(null);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [quickViewProduct, setQuickViewProduct] = useState(null);
   const [editingCartItem, setEditingCartItem] = useState(null);
   const [offerCelebration, setOfferCelebration] = useState(false);
   const previousOfferBenefitRef = useRef(false);
-  const hasOfferBenefit = Boolean(offerBenefits?.lines?.some((line) => line.discountedUnits?.length));
+  const hasOfferBenefit = Boolean(
+    offerBenefits?.lines?.some((line) => line.discountedUnits?.length) ||
+    offerBenefits?.giftLines?.some((line) => line.discountedUnits?.length)
+  );
 
   useEffect(() => {
     if (!isCartOpen) return;
@@ -62,6 +87,66 @@ export default function CartDrawer() {
 
     setIsNavigatingToCheckout(false);
   }, [isCartOpen]);
+  const customerChoiceOffer = customerChoiceGiftStatus?.offerId
+    ? offers.find((offer) =>
+        String(offer?.id ?? "") === String(customerChoiceGiftStatus.offerId) &&
+        offer?.type === "buy_x_get_y_select_gift"
+      )
+    : null;
+  const customerChoiceGiftProductIds = Array.isArray(customerChoiceOffer?.giftProductIds)
+    ? customerChoiceOffer.giftProductIds.map(String).filter(Boolean)
+    : [];
+  const customerChoiceGiftProductIdsKey = JSON.stringify(customerChoiceGiftProductIds);
+  const requiredCustomerChoiceGiftQty = Math.max(0, Number(customerChoiceGiftStatus?.requiredGiftQty) || 0);
+  const selectedCustomerChoiceGiftQty = Math.max(0, Number(customerChoiceGiftStatus?.selectedGiftQty) || 0);
+  const canSelectMoreCustomerChoiceGifts =
+    requiredCustomerChoiceGiftQty > selectedCustomerChoiceGiftQty;
+
+  // جلب منتجات مجموعة الهدايا المختارة فقط، بدفعات صغيرة لتفادي حدود استعلام Firestore.
+  useEffect(() => {
+    if (!isCartOpen || !customerChoiceGiftProductIdsKey || customerChoiceGiftProductIdsKey === "[]") {
+      setCustomerChoiceGiftProducts([]);
+      setIsLoadingCustomerChoiceGiftProducts(false);
+      return;
+    }
+
+    let cancelled = false;
+    const fetchGiftProducts = async () => {
+      setIsLoadingCustomerChoiceGiftProducts(true);
+      try {
+        const ids = JSON.parse(customerChoiceGiftProductIdsKey);
+        const db = getDb();
+        const batches = [];
+        for (let index = 0; index < ids.length; index += 10) {
+          batches.push(ids.slice(index, index + 10));
+        }
+
+        const snapshots = await Promise.all(
+          batches.map((batch) =>
+            getDocs(query(collection(db, "products"), where(documentId(), "in", batch)))
+          )
+        );
+        if (cancelled) return;
+
+        const productById = new Map();
+        snapshots.forEach((snapshot) => {
+          snapshot.docs.forEach((productDoc) => {
+            productById.set(productDoc.id, { id: productDoc.id, ...productDoc.data() });
+          });
+        });
+        setCustomerChoiceGiftProducts(ids.map((id) => productById.get(id)).filter(Boolean));
+      } catch (error) {
+        console.error("WIND Error: Customer-choice gift products fetch failed", error);
+        if (!cancelled) setCustomerChoiceGiftProducts([]);
+      } finally {
+        if (!cancelled) setIsLoadingCustomerChoiceGiftProducts(false);
+      }
+    };
+
+    fetchGiftProducts();
+    return () => { cancelled = true; };
+  }, [isCartOpen, customerChoiceGiftProductIdsKey]);
+
   // جلب المنتجات المقترحة (المنطق الأصلي مع تحسين الأداء)
   useEffect(() => {
     const fetchSuggestions = async () => {
@@ -149,7 +234,23 @@ export default function CartDrawer() {
 
   const openQuickView = (product) => {
     setEditingCartItem(null);
+    setGiftProductToAdd(null);
     setQuickViewProduct(product);
+  };
+
+  const openCustomerChoiceGiftProduct = (product) => {
+    setEditingCartItem(null);
+    setGiftProductToAdd(product);
+    setQuickViewProduct(product);
+  };
+
+  const openCustomerChoiceGiftEditor = (item) => {
+    setGiftProductToAdd(null);
+    setEditingCartItem({
+      ...item,
+      __customerChoiceGiftSelectionId: item.selectionId,
+    });
+    setQuickViewProduct(item);
   };
 
   const openCartItemEditor = (item, cartIndex, benefit = null) => {
@@ -169,6 +270,7 @@ export default function CartDrawer() {
   const closeQuickView = () => {
     setQuickViewProduct(null);
     setEditingCartItem(null);
+    setGiftProductToAdd(null);
   };
 
   const getBenefitLabel = (benefit) => {
@@ -187,7 +289,7 @@ export default function CartDrawer() {
     return labels.length ? labels.join(" + ") : "خصم العرض";
   };
 
-  const cartDisplayRows = cartItems.flatMap((item, cartIndex) => {
+  const paidCartDisplayRows = cartItems.flatMap((item, cartIndex) => {
     const benefitLine = offerBenefits?.lines?.find((line) => line.cartIndex === cartIndex);
     if (!benefitLine) {
       return [{ key: `regular-${cartIndex}`, item, qty: item.qty, benefit: null, cartIndex }];
@@ -223,6 +325,34 @@ export default function CartDrawer() {
     });
     return rows;
   });
+
+  const customerChoiceGiftBenefitLines = new Map(
+    (offerBenefits?.type === "buy_x_get_y_select_gift" ? offerBenefits.giftLines || [] : [])
+      .map((line) => [line.selectionId, line])
+  );
+  const customerChoiceGiftDisplayRows = customerChoiceGiftSelections.map((selection) => {
+    const benefitLine = customerChoiceGiftBenefitLines.get(String(selection.selectionId));
+    const benefit = benefitLine?.discountedUnits?.[0] || null;
+    const isApplied = Boolean(
+      offerBenefits?.type === "buy_x_get_y_select_gift" &&
+      offerBenefits?.offerId === customerChoiceGiftStatus?.offerId &&
+      benefitLine
+    );
+    const displayItem = benefit
+      ? { ...selection, price: benefit.finalPrice, compareAtPrice: benefit.originalPrice }
+      : selection;
+
+    return {
+      key: `customer-choice-gift-${selection.selectionId}`,
+      item: displayItem,
+      qty: 1,
+      benefit,
+      isCustomerChoiceGift: true,
+      isPendingCustomerChoiceGift: !isApplied,
+      selectionId: selection.selectionId,
+    };
+  });
+  const cartDisplayRows = [...paidCartDisplayRows, ...customerChoiceGiftDisplayRows];
 
 
   if (!isCartOpen) return null;
@@ -276,9 +406,17 @@ export default function CartDrawer() {
           selectedSize: editingCartItem.selectedSize,
           selectedColor: editingCartItem.selectedColor,
         } : null}
-        onVariantSelect={editingCartItem
-          ? (selection) => updateCartItemVariant(editingCartItem, selection)
-          : null}
+        onVariantSelect={giftProductToAdd
+          ? (selection) => addCustomerChoiceGift({
+              ...giftProductToAdd,
+              selectedSize: selection.selectedSize,
+              selectedColor: selection.selectedColor,
+              image: selection.image || giftProductToAdd.image,
+              qty: 1,
+            })
+          : editingCartItem
+            ? (selection) => updateCartItemVariant(editingCartItem, selection)
+            : null}
       />
 
       <div className="cart-drawer fixed inset-0 z-[1000] overflow-hidden" dir="rtl">
@@ -335,7 +473,11 @@ export default function CartDrawer() {
                               {formatVariable(item.selectedColor)}{item.selectedColor && item.selectedSize ? ' / ' : ''}{formatVariable(item.selectedSize)}
                             </p>
                           )}
-                          {benefit ? (
+                          {row.isPendingCustomerChoiceGift ? (
+                            <p className="mt-1.5 text-[11px] text-amber-700 leading-5">
+                              اختيار معلّق — لن يُحتسب ضمن الطلب قبل اكتمال العرض.
+                            </p>
+                          ) : benefit ? (
                             <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-sm">
                               <span className="text-xs font-bold rounded-full px-2 py-0.5 bg-red-50 text-red-700 border border-red-100">{getBenefitLabel(benefit)}</span>
                               <span className="text-gray-400 line-through text-xs">{benefit.originalPrice} ج.م</span>
@@ -349,7 +491,11 @@ export default function CartDrawer() {
                           )}
                         </div>
                         <div className="flex items-center justify-between mt-3">
-{row.isAutoAddedGift ? (
+                          {row.isCustomerChoiceGift ? (
+                            <span className={`text-[10px] font-bold rounded-full px-2 py-1 ${row.isPendingCustomerChoiceGift ? "text-amber-700 bg-amber-50 border border-amber-100" : "text-emerald-700 bg-emerald-50 border border-emerald-100"}`}>
+                              {row.isPendingCustomerChoiceGift ? "اختيار هدية" : "هدية من اختيارك"}
+                            </span>
+                          ) : row.isAutoAddedGift ? (
                             <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-2 py-1">تُضاف تلقائيًا</span>
                           ) : (
                             <div className="flex items-center border border-gray-200 rounded-md bg-white h-8">
@@ -360,14 +506,24 @@ export default function CartDrawer() {
                           )}
                           <div className="flex items-center gap-3">
                             <button
-                              onClick={() => openCartItemEditor(item, row.cartIndex, benefit)}
+                              onClick={() => row.isCustomerChoiceGift
+                                ? openCustomerChoiceGiftEditor(item)
+                                : openCartItemEditor(item, row.cartIndex, benefit)}
                               title="تعديل اللون والمقاس"
                               aria-label="تعديل اللون والمقاس"
                               className="text-gray-400 hover:text-[#1A1A1A] flex items-center"
                             >
                               <Edit2 size={15} />
                             </button>
-                            {!row.isAutoAddedGift && (
+                            {row.isCustomerChoiceGift ? (
+                              <button
+                                onClick={() => removeCustomerChoiceGift(row.selectionId)}
+                                className="text-gray-400 hover:text-red-500 flex items-center gap-1.5 group"
+                              >
+                                <span className="text-sm font-medium underline decoration-gray-300 group-hover:decoration-red-500 underline-offset-4">إزالة</span>
+                                <Trash2 size={15} />
+                              </button>
+                            ) : !row.isAutoAddedGift ? (
                               <button
                                 onClick={() => benefit
                                   ? updateQty(item.id, item.selectedSize, -1, item.selectedColor, item.bundleGroupId || "", row.cartIndex)
@@ -377,7 +533,7 @@ export default function CartDrawer() {
                                 <span className="text-sm font-medium underline decoration-gray-300 group-hover:decoration-red-500 underline-offset-4">إزالة</span>
                                 <Trash2 size={15} />
                               </button>
-                            )}
+                            ) : null}
                           </div>
                         </div>
                       </div>
@@ -386,6 +542,63 @@ export default function CartDrawer() {
                   })
                 )}
               </div>
+
+              {cartItems.length > 0 && customerChoiceOffer && (
+                <div className="mx-5 my-3 rounded-xl border border-gray-200 bg-[#FAF9F6] p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-bold text-[#1A1A1A]">اختر هداياك بنفسك</h3>
+                    <span className="shrink-0 rounded-full bg-white px-3 py-1 text-xs font-bold text-[#1A1A1A] border border-gray-200">
+                      {selectedCustomerChoiceGiftQty} / {requiredCustomerChoiceGiftQty}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs leading-6 text-gray-600">
+                    {requiredCustomerChoiceGiftQty === 0
+                      ? `أضف ${Math.max(1, Number(customerChoiceOffer.config?.buyQty) || 1) - (Math.max(0, Number(customerChoiceGiftStatus?.eligiblePurchaseQty) || 0) % Math.max(1, Number(customerChoiceOffer.config?.buyQty) || 1))} قطعة أخرى من المنتجات المؤهلة أولًا لتفعيل اختيار الهدايا.`
+                      : selectedCustomerChoiceGiftQty < requiredCustomerChoiceGiftQty
+                        ? `اختر ${requiredCustomerChoiceGiftQty - selectedCustomerChoiceGiftQty} هدية إضافية لتفعيل العرض. لن تُحتسب الاختيارات في الإجمالي قبل اكتمال العدد.`
+                        : selectedCustomerChoiceGiftQty > requiredCustomerChoiceGiftQty
+                          ? `لديك اختيارات أكثر من العدد المطلوب. أزل ${selectedCustomerChoiceGiftQty - requiredCustomerChoiceGiftQty} هدية لتفعيل العرض.`
+                          : discountSource === "offer" && appliedOffer?.id === customerChoiceOffer.id
+                            ? "تم تفعيل العرض. تم احتساب الهدايا وتطبيق الخصم على أرخص القطع المشاركة."
+                            : "اكتمل اختيار الهدايا، لكن خصمًا آخر هو الأفضل حاليًا؛ لن تُحتسب هذه الهدايا في الإجمالي."}
+                  </p>
+
+                  {requiredCustomerChoiceGiftQty > 0 && (
+                    <>
+                      {isLoadingCustomerChoiceGiftProducts ? (
+                        <div className="flex justify-center py-5">
+                          <Loader2 className="animate-spin text-gray-400" size={22} />
+                        </div>
+                      ) : customerChoiceGiftProducts.length > 0 ? (
+                        <div className="mt-3 flex gap-3 overflow-x-auto cart-scroll pb-2">
+                          {customerChoiceGiftProducts.map((product) => (
+                            <button
+                              key={product.id}
+                              type="button"
+                              disabled={!canSelectMoreCustomerChoiceGifts}
+                              onClick={() => openCustomerChoiceGiftProduct(product)}
+                              className="w-[104px] shrink-0 text-right disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              <span className="block w-full h-[126px] rounded-lg overflow-hidden bg-white border border-gray-200">
+                                <img src={getImageUrl(product)} alt={product.title || "منتج هدية"} className="w-full h-full object-cover" />
+                              </span>
+                              <span className="block mt-2 text-[11px] font-bold text-gray-800 line-clamp-2 min-h-[32px]">
+                                {formatVariable(product.title)}
+                              </span>
+                              <span className="block mt-1 text-[11px] text-gray-500">{product.price} ج.م</span>
+                              <span className="block mt-1 text-[10px] font-bold text-[#1A1A1A]">
+                                {canSelectMoreCustomerChoiceGifts ? "اختيار الهدية" : "اكتمل العدد"}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mt-3 text-xs text-gray-500">لا توجد منتجات متاحة في مجموعة الهدايا حاليًا.</p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
 
               {cartItems.length > 0 && suggestedProducts.length > 0 && (
                 <div className="bg-[#FAF9F6] border-t border-gray-100 pt-5 pb-6 px-5">
