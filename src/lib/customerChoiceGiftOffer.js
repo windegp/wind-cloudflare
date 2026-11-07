@@ -7,7 +7,7 @@ function toIds(value) {
 }
 
 function itemKeys(item) {
-  return [item?.productId, item?.id, item?.productHandle, item?.handle]
+  return [item?.productId, item?.id, item?.productHandle, item?.handle, item?.requestedProductId]
     .filter((value) => value !== undefined && value !== null && String(value) !== "")
     .map(String);
 }
