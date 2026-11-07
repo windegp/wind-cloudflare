@@ -2,7 +2,7 @@
 // ============================================
 // 🛒 CART CONTEXT
 // ============================================
-import { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { calculateSubtotal, calculateShipping, calculateDiscount, calculateTotal, calculateAllTotals } from '@/lib/cartCalculations';
 import { useSettings } from '@/context/SettingsContext';
 
@@ -52,9 +52,13 @@ export function CartProvider({ children }) {
   const [isFirstOrder, setIsFirstOrder] = useState(false);
 
   // ── State ──────────────────────────────────────────────────────
-  const [cartItems,     setCartItems]     = useState([]);
-  // Customer-selected gifts are separate from paid cart lines and legacy auto-gift variants.
-  const [customerChoiceGiftSelections, setCustomerChoiceGiftSelections] = useState([]);
+const [cartItems,     setCartItems]     = useState([]);
+const [cartItemsLoaded, setCartItemsLoaded] = useState(false);
+const cartEmptyCleanupInitialized = useRef(false);
+const previousCartHadItems = useRef(false);
+
+// Customer-selected gifts are separate from paid cart lines and legacy auto-gift variants.
+const [customerChoiceGiftSelections, setCustomerChoiceGiftSelections] = useState([]);
   const [customerChoiceGiftSelectionsLoaded, setCustomerChoiceGiftSelectionsLoaded] = useState(false);
   const [offerGiftSelections, setOfferGiftSelections] = useState({});
   const [offerGiftSelectionsLoaded, setOfferGiftSelectionsLoaded] = useState(false);
@@ -449,6 +453,13 @@ export function CartProvider({ children }) {
   }, []);
 
   useEffect(() => {
+    if (!offerGiftSelectionsLoaded) return;
+    try {
+      localStorage.setItem('wind_offer_gift_variants', JSON.stringify(offerGiftSelections));
+    } catch {}
+  }, [offerGiftSelections, offerGiftSelectionsLoaded]);
+
+  useEffect(() => {
     if (!customerChoiceGiftSelectionsLoaded) return;
     try {
       localStorage.setItem('wind_customer_choice_gifts', JSON.stringify(customerChoiceGiftSelections));
@@ -472,23 +483,65 @@ export function CartProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    if (!offerGiftSelectionsLoaded) return;
-    try {
-      localStorage.setItem('wind_offer_gift_variants', JSON.stringify(offerGiftSelections));
-    } catch {}
-  }, [offerGiftSelections, offerGiftSelectionsLoaded]);
-
-  useEffect(() => {
+  try {
     const saved = localStorage.getItem('wind_cart');
     if (saved) {
-      try { setCartItems(JSON.parse(saved)); }
-      catch { localStorage.removeItem('wind_cart'); }
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) {
+        setCartItems(parsed);
+      } else {
+        localStorage.removeItem('wind_cart');
+      }
     }
-  }, []);
+  } catch {
+    localStorage.removeItem('wind_cart');
+  } finally {
+    setCartItemsLoaded(true);
+  }
+}, []);
 
-  useEffect(() => {
-    localStorage.setItem('wind_cart', JSON.stringify(cartItems));
-  }, [cartItems]);
+useEffect(() => {
+  if (
+    !cartItemsLoaded ||
+    !customerChoiceGiftSelectionsLoaded ||
+    !offerGiftSelectionsLoaded
+  ) {
+    return;
+  }
+
+  if (!cartEmptyCleanupInitialized.current) {
+    cartEmptyCleanupInitialized.current = true;
+    previousCartHadItems.current = cartItems.length > 0;
+    return;
+  }
+
+  if (cartItems.length > 0) {
+    previousCartHadItems.current = true;
+    return;
+  }
+
+  if (previousCartHadItems.current) {
+    previousCartHadItems.current = false;
+
+    setCustomerChoiceGiftSelections([]);
+    setOfferGiftSelections({});
+    setAppliedPromo(null);
+
+    localStorage.removeItem('wind_customer_choice_gifts');
+    localStorage.removeItem('wind_offer_gift_variants');
+  }
+}, [
+  cartItems,
+  cartItemsLoaded,
+  customerChoiceGiftSelectionsLoaded,
+  offerGiftSelectionsLoaded,
+]);
+
+useEffect(() => {
+  if (!cartItemsLoaded) return;
+
+  localStorage.setItem('wind_cart', JSON.stringify(cartItems));
+}, [cartItems, cartItemsLoaded]);
 
   const contextValue = useMemo(() => ({
     cartItems,
