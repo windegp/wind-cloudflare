@@ -59,38 +59,30 @@ function SuccessContent() {
 
       // Include server-quoted automatic gifts as zero-value items in catalog
       // tracking, while keeping the purchase revenue equal to the amount paid.
-      const autoGiftLineItems = (parsed.lineItems || []).filter(
-        (item) => item.isAutoAddedOfferGift === true
+      // Prefer server-quoted per-unit lines so free units carry zero item revenue.
+      const purchaseLineItems = Array.isArray(parsed.lineItems) && parsed.lineItems.length
+        ? parsed.lineItems
+        : (parsed.cartItems || []).map((item) => ({
+            productId: item.id,
+            productHandle: item.handle || item.id,
+            productTitle: item.title,
+            price: item.price,
+            quantity: item.qty,
+            selectedColor: item.selectedColor,
+          }));
+      const purchaseContentIds = purchaseLineItems
+        .filter(item => item.productHandle || item.productId)
+        .map(item => getCatalogId(item.productHandle || item.productId, item.selectedColor));
+      const purchaseNumItems = purchaseLineItems.reduce(
+        (sum, item) => sum + (Number(item.quantity) || 1),
+        0
       );
-      const customerChoiceGiftLineItems = (parsed.lineItems || []).filter(
-        (item) => item.isCustomerChoiceGiftSelection === true
-      );
-      const additionalGiftLineItems = [...autoGiftLineItems, ...customerChoiceGiftLineItems];
-      const purchaseContentIds = [
-        ...(parsed.cartItems || [])
-          .filter(it => it.handle || it.id)
-          .map(it => getCatalogId(it.handle || it.id, it.selectedColor)),
-        ...additionalGiftLineItems
-          .filter(item => item.productHandle || item.productId)
-          .map(item => getCatalogId(item.productHandle || item.productId, item.selectedColor)),
-      ];
-      const purchaseNumItems =
-        (parsed.cartItems || []).reduce((sum, item) => sum + (Number(item.qty) || 0), 0) +
-        additionalGiftLineItems.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
-      const purchaseItems = [
-        ...(parsed.cartItems || []).map((item) => ({
-          id: item.handle || item.id || item.title,
-          title: item.title,
-          price: item.price,
-          qty: item.qty,
-        })),
-        ...additionalGiftLineItems.map((item) => ({
-          id: item.productHandle || item.productId || item.productTitle,
-          title: item.productTitle || item.name,
-          price: item.price,
-          qty: Number(item.quantity) || 1,
-        })),
-      ];
+      const purchaseItems = purchaseLineItems.map((item) => ({
+        id: item.productHandle || item.productId || item.productTitle,
+        title: item.productTitle || item.name,
+        price: Number(item.price) || 0,
+        qty: Number(item.quantity) || 1,
+      }));
 
       // ضع العلامة قبل fbTrack — حتى لو fbTrack فشل لا نُعيد الإرسال
       sessionStorage.setItem(purchaseGuardKey, '1');
