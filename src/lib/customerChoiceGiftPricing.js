@@ -37,7 +37,13 @@ export function hasPotentiallyCompleteCustomerChoiceGiftOffer(purchaseItems, gif
     if (!purchaseIds.size) return false;
 
     const eligiblePurchaseQty = purchaseItems.reduce((sum, item) => {
-      const identities = getCustomerChoiceGiftIdentityKeys(item);
+      const identities = [
+        item?.id,
+        item?.productId,
+        item?.handle,
+        item?.productHandle,
+        item?.requestedProductId,
+      ].filter((value) => value !== undefined && value !== null && String(value).trim() !== "").map(String);
       if (!identities.some((identity) => purchaseIds.has(identity))) return sum;
       const qty = Number(item?.qty);
       return sum + (Number.isInteger(qty) && qty > 0 ? qty : 0);
