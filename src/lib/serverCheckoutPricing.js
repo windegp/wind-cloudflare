@@ -256,53 +256,48 @@ async function resolveCustomerChoiceGiftSelections(db, selections, offers, now, 
   const resolved = [];
 
   for (const selection of selections) {
-    if (!selection || typeof selection !== "object" || Array.isArray(selection)) {
-      throw new CheckoutQuoteError("إحدى اختيارات الهدايا غير صالحة.");
-    }
+    // Manual gift choices are optional: stale or invalid selections are ignored
+    // so an incomplete gift choice never blocks an otherwise valid checkout.
+    if (!selection || typeof selection !== "object" || Array.isArray(selection)) continue;
 
     const selectionId = String(selection.selectionId || "").trim();
-    if (!selectionId || selectionId.length > 128 || seenSelectionIds.has(selectionId)) {
-      throw new CheckoutQuoteError("تعذر التحقق من اختيارات الهدايا. أعد اختيار الهدايا وحاول مرة أخرى.");
-    }
+    if (!selectionId || selectionId.length > 128 || seenSelectionIds.has(selectionId)) continue;
     seenSelectionIds.add(selectionId);
 
-    const cacheKey = [
+    const cacheKey = JSON.stringify([
       selection.id,
       selection.productId,
       selection.handle,
       selection.productHandle,
-    ].filter(Boolean).map(String).join("|");
-    let product = productsByIdentifier.get(cacheKey);
-    if (!product) {
-      product = await getProductByIdentifier(db, selection);
-      productsByIdentifier.set(cacheKey, product);
-    }
+    ]);
+    try {
+      let product = productsByIdentifier.get(cacheKey);
+      if (!product) {
+        product = await getProductByIdentifier(db, selection);
+        productsByIdentifier.set(cacheKey, product);
+      }
 
-    if (!isCustomerChoiceGiftAllowed(product, liveChoiceOffers)) {
-      throw new CheckoutQuoteError("أحد المنتجات المختارة ليس ضمن مجموعة الهدايا المسموح بها لهذا العرض.", 409);
-    }
-    if (!matchesVariant(product, selection)) {
-      throw new CheckoutQuoteError("لون أو مقاس إحدى الهدايا لم يعد متاحاً. اختر خياراً آخر.", 409);
-    }
+      if (!isCustomerChoiceGiftAllowed(product, liveChoiceOffers)) continue;
+      if (!matchesVariant(product, selection)) continue;
 
-    const trustedPrice = money(product.price);
-    if (!Number.isFinite(trustedPrice) || trustedPrice <= 0) {
-      throw new CheckoutQuoteError("تعذر تأكيد سعر إحدى الهدايا. اختر منتجاً آخر.", 409);
-    }
+      const trustedPrice = money(product.price);
+      if (!Number.isFinite(trustedPrice) || trustedPrice <= 0) continue;
 
-    const trustedSelection = buildTrustedCustomerChoiceGiftSelection(
-      { ...selection, selectionId },
-      product,
-      trustedPrice
-    );
-    if (!trustedSelection) {
-      throw new CheckoutQuoteError("تعذر تأكيد إحدى الهدايا. أعد اختيارها وحاول مرة أخرى.", 409);
-    }
+      const trustedSelection = buildTrustedCustomerChoiceGiftSelection(
+        { ...selection, selectionId },
+        product,
+        trustedPrice
+      );
+      if (!trustedSelection) continue;
 
-    const compareAtValue = money(product.compareAtPrice);
-    trustedSelection.compareAtPrice =
-      Number.isFinite(compareAtValue) && compareAtValue > trustedPrice ? compareAtValue : null;
-    resolved.push(trustedSelection);
+      const compareAtValue = money(product.compareAtPrice);
+      trustedSelection.compareAtPrice =
+        Number.isFinite(compareAtValue) && compareAtValue > trustedPrice ? compareAtValue : null;
+      resolved.push(trustedSelection);
+    } catch (error) {
+      if (error instanceof CheckoutQuoteError) continue;
+      throw error;
+    }
   }
 
   return resolved;
