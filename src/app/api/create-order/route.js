@@ -175,7 +175,9 @@ export async function POST(req) {
       const isOfferBenefit = item.isOfferBenefit === true;
       const benefitLabel = isOfferBenefit
         ? (item.isFree ? "هدية مجانية من العرض" : "خصم العرض")
-        : "";
+        : item.isCustomerChoiceGiftSelection
+          ? "اختيار ضمن العرض"
+          : "";
       const imgUrl = item.image || (Array.isArray(item.images) ? item.images[0] : '') || '';
       return `
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: #fafafa; border-radius: 6px; border: 1px solid #f0f0f0; margin-bottom: 8px;">
