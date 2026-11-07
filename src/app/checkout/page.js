@@ -693,7 +693,16 @@ export default function CheckoutPage() {
           orderId: activeOrderId,
           cartItems,
           offerGiftSelections,
-          customerChoiceGiftSelections,
+          customerChoiceGiftSelections: customerChoiceGiftSelections.map((selection) => ({
+            selectionId: selection.selectionId,
+            id: selection.id,
+            productId: selection.productId,
+            handle: selection.handle,
+            productHandle: selection.productHandle,
+            selectedColor: selection.selectedColor,
+            selectedSize: selection.selectedSize,
+            image: selection.image,
+          })),
           promoCode: appliedPromo?.code || "",
           customerEmail: formData.email,
           customerPhone: formData.phone,
@@ -1172,7 +1181,11 @@ router.push(`/thank-you?orderId=${orderId}`);
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-semibold text-gray-800 leading-tight">{item.title}</p>
-                  {item.isOfferBenefit && <p className="text-[11px] font-semibold text-emerald-700 mt-1">{item.isFreeOfferBenefit ? "هدية مجانية من العرض" : "خصم العرض"}</p>}
+                  {item.isOfferBenefit ? (
+                    <p className="text-[11px] font-semibold text-emerald-700 mt-1">{item.isFreeOfferBenefit ? "هدية مجانية من العرض" : "خصم العرض"}</p>
+                  ) : item.isCustomerChoiceGiftSelection ? (
+                    <p className="text-[11px] font-semibold text-gray-500 mt-1">اختيار ضمن العرض</p>
+                  ) : null}
                   <p className="text-xs text-gray-400">
                     {[item.selectedSize, item.selectedColor].filter(Boolean).join(' / ')}
                   </p>
@@ -1589,7 +1602,11 @@ router.push(`/thank-you?orderId=${orderId}`);
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-gray-800 leading-tight truncate">{item.title}</p>
-                        {item.isOfferBenefit && <p className="text-[11px] font-semibold text-emerald-700 mt-1">{item.isFreeOfferBenefit ? "هدية مجانية من العرض" : "خصم العرض"}</p>}
+                        {item.isOfferBenefit ? (
+                    <p className="text-[11px] font-semibold text-emerald-700 mt-1">{item.isFreeOfferBenefit ? "هدية مجانية من العرض" : "خصم العرض"}</p>
+                  ) : item.isCustomerChoiceGiftSelection ? (
+                    <p className="text-[11px] font-semibold text-gray-500 mt-1">اختيار ضمن العرض</p>
+                  ) : null}
                         {(item.selectedSize || item.selectedColor) && (
                           <p className="text-xs text-gray-400">
                             {[item.selectedSize, item.selectedColor].filter(Boolean).join(' / ')}
@@ -1685,7 +1702,11 @@ router.push(`/thank-you?orderId=${orderId}`);
                   <div className="flex-1 min-w-0">
 
                     <h4 className="font-semibold text-gray-800 text-sm leading-tight truncate">{item.title}</h4>
-                    {item.isOfferBenefit && <p className="text-[11px] font-semibold text-emerald-700 mt-1">{item.isFreeOfferBenefit ? "هدية مجانية من العرض" : "خصم العرض"}</p>}
+                    {item.isOfferBenefit ? (
+                    <p className="text-[11px] font-semibold text-emerald-700 mt-1">{item.isFreeOfferBenefit ? "هدية مجانية من العرض" : "خصم العرض"}</p>
+                  ) : item.isCustomerChoiceGiftSelection ? (
+                    <p className="text-[11px] font-semibold text-gray-500 mt-1">اختيار ضمن العرض</p>
+                  ) : null}
 
                     {(item.selectedSize || item.selectedColor) && (
 
