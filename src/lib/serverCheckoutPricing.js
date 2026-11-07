@@ -62,11 +62,12 @@ async function getProductByIdentifier(db, item) {
     const direct = await getDoc(doc(db, "products", identifier));
     if (direct.exists()) {
       let product = { id: direct.id, ...direct.data() };
+      const resolvedIdentifiers = [direct.id];
       if (product.status === "Redirected" && product.redirectedTo) {
         const target = await getDoc(doc(db, "products", String(product.redirectedTo)));
         if (target.exists()) product = { id: target.id, ...target.data() };
       }
-      return product;
+      return { ...product, _resolvedIdentifiers: resolvedIdentifiers };
     }
 
     const byHandle = await getDocs(
@@ -79,7 +80,7 @@ async function getProductByIdentifier(db, item) {
         const target = await getDoc(doc(db, "products", String(product.redirectedTo)));
         if (target.exists()) product = { id: target.id, ...target.data() };
       }
-      return product;
+      return { ...product, _resolvedIdentifiers: [identifier] };
     }
   }
 
@@ -277,7 +278,7 @@ async function resolveCustomerChoiceGiftSelections(db, selections, offers, now, 
       productsByIdentifier.set(cacheKey, product);
     }
 
-    if (!isCustomerChoiceGiftAllowed(selection, product, liveChoiceOffers)) {
+    if (!isCustomerChoiceGiftAllowed(product, liveChoiceOffers)) {
       throw new CheckoutQuoteError("أحد المنتجات المختارة ليس ضمن مجموعة الهدايا المسموح بها لهذا العرض.", 409);
     }
     if (!matchesVariant(product, selection)) {
