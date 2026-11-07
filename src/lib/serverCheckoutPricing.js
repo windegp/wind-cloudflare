@@ -61,11 +61,11 @@ async function getProductByIdentifier(db, item) {
   for (const identifier of [...new Set(identifiers.map(String))]) {
     const direct = await getDoc(doc(db, "products", identifier));
     if (direct.exists()) {
-      let product = { id: direct.id, ...direct.data() };
+      let product = { ...direct.data(), id: direct.id };
       const resolvedIdentifiers = [direct.id];
       if (product.status === "Redirected" && product.redirectedTo) {
         const target = await getDoc(doc(db, "products", String(product.redirectedTo)));
-        if (target.exists()) product = { id: target.id, ...target.data() };
+        if (target.exists()) product = { ...target.data(), id: target.id };
       }
       return { ...product, _resolvedIdentifiers: resolvedIdentifiers };
     }
@@ -75,10 +75,10 @@ async function getProductByIdentifier(db, item) {
     );
     if (!byHandle.empty) {
       const found = byHandle.docs[0];
-      let product = { id: found.id, ...found.data() };
+      let product = { ...found.data(), id: found.id };
       if (product.status === "Redirected" && product.redirectedTo) {
         const target = await getDoc(doc(db, "products", String(product.redirectedTo)));
-        if (target.exists()) product = { id: target.id, ...target.data() };
+        if (target.exists()) product = { ...target.data(), id: target.id };
       }
       return { ...product, _resolvedIdentifiers: [identifier] };
     }
