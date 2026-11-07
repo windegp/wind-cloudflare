@@ -749,6 +749,7 @@ export default function CheckoutPage() {
             !identityMatches ||
             String(trustedSelection.selectedColor || "") !== String(selection.selectedColor || "") ||
             String(trustedSelection.selectedSize || "") !== String(selection.selectedSize || "") ||
+            (trustedSelection.image && selection.image && String(trustedSelection.image) !== String(selection.image)) ||
             Math.abs(Number(trustedSelection.price) - Number(selection.price)) > 0.01;
         })
       );
