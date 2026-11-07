@@ -717,13 +717,32 @@ export default function CheckoutPage() {
       quoteToken = quoteData.quoteToken;
       if (!quoteToken) throw new Error("تعذر تأمين تسعير الطلب. حاول مرة أخرى.");
 
-      // لا نبدأ الدفع إذا كان الإجمالي الموثوق مختلفاً عما راجعه العميل على الشاشة.
+      // لا نبدأ الدفع إذا كان الإجمالي أو سعر/اختيار أي هدية فائزة مختلفاً عما راجعه العميل.
+      const isCustomerChoiceGiftOfferApplied =
+        quote.appliedOffer?.type === "buy_x_get_y_select_gift";
+      const quotedCustomerChoiceGiftSelections = Array.isArray(quote.customerChoiceGiftSelections)
+        ? quote.customerChoiceGiftSelections
+        : [];
+      const customerChoiceGiftQuoteChanged = isCustomerChoiceGiftOfferApplied && (
+        quotedCustomerChoiceGiftSelections.length !== customerChoiceGiftSelections.length ||
+        customerChoiceGiftSelections.some((selection) => {
+          const trustedSelection = quotedCustomerChoiceGiftSelections.find(
+            (item) => item.selectionId === selection.selectionId
+          );
+          return !trustedSelection ||
+            String(trustedSelection.id) !== String(selection.id) ||
+            String(trustedSelection.selectedColor || "") !== String(selection.selectedColor || "") ||
+            String(trustedSelection.selectedSize || "") !== String(selection.selectedSize || "") ||
+            Math.abs(Number(trustedSelection.price) - Number(selection.price)) > 0.01;
+        })
+      );
       const quoteChanged =
         Math.abs(Number(quote.subtotal) - Number(subtotal)) > 0.01 ||
         Math.abs(Number(quote.discount) - Number(discount)) > 0.01 ||
         Math.abs(Number(quote.shipping) - Number(shipping)) > 0.01 ||
         Math.abs(Number(quote.total) - Number(finalTotal)) > 0.01 ||
-        quote.discountSource !== discountSource;
+        quote.discountSource !== discountSource ||
+        customerChoiceGiftQuoteChanged;
 
       if (quoteChanged) {
         setSubmitError("تم تحديث سعر منتج أو عرض في سلتك. لم يتم إنشاء الطلب أو بدء الدفع. راجع السلة والإجمالي الجديد ثم حاول مرة أخرى.");
