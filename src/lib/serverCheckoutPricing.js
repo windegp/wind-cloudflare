@@ -11,6 +11,7 @@ import {
 import { computeBestOffer, getOfferGiftSelectionKey, isFreeShippingRuleEligible, isOfferLive } from "@/lib/offerEngine";
 import {
   buildTrustedCustomerChoiceGiftSelection,
+  hasPotentiallyCompleteCustomerChoiceGiftOffer,
   isCustomerChoiceGiftAllowed,
 } from "@/lib/customerChoiceGiftPricing";
 import { FREE_SHIPPING_THRESHOLD, SHIPPING_COST } from "@/lib/constants";
@@ -228,6 +229,7 @@ async function resolveCartItems(db, cartItems) {
       bundleGroupId: item.bundleGroupId ? String(item.bundleGroupId) : "",
       bundleParentId: item.bundleParentId ? String(item.bundleParentId) : "",
       bundleRole: item.bundleRole || "",
+      requestedProductId: product._resolvedIdentifiers?.[0] || product.id,
       _product: product,
     });
   }
@@ -236,7 +238,7 @@ async function resolveCartItems(db, cartItems) {
   return resolved;
 }
 
-async function resolveCustomerChoiceGiftSelections(db, selections, offers, now, maxUnits = MAX_TOTAL_UNITS) {
+async function resolveCustomerChoiceGiftSelections(db, purchaseItems, selections, offers, now, maxUnits = MAX_TOTAL_UNITS) {
   if (selections === undefined || selections === null || selections.length === 0) return [];
   if (!Array.isArray(selections) || selections.length > MAX_TOTAL_UNITS) {
     throw new CheckoutQuoteError("اختيارات الهدايا غير صالحة. حدّث السلة وحاول مرة أخرى.");
@@ -247,6 +249,9 @@ async function resolveCustomerChoiceGiftSelections(db, selections, offers, now, 
   );
   // Expired/disabled choice-gift offers must not block an ordinary checkout.
   if (!liveChoiceOffers.length) return [];
+  if (!hasPotentiallyCompleteCustomerChoiceGiftOffer(
+    purchaseItems, selections, liveChoiceOffers, now
+  )) return [];
   if (selections.length > maxUnits) {
     throw new CheckoutQuoteError("عدد الهدايا المختارة يتجاوز الحد المسموح.");
   }
@@ -507,6 +512,7 @@ export async function createServerCheckoutQuote(input = {}) {
 
   const customerChoiceGiftSelections = await resolveCustomerChoiceGiftSelections(
     db,
+    items,
     input.customerChoiceGiftSelections,
     offers,
     now,
