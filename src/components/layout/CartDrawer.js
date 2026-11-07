@@ -32,6 +32,8 @@ export default function CartDrawer() {
   const [suggestedProducts, setSuggestedProducts] = useState([]);
   const [customerChoiceGiftProducts, setCustomerChoiceGiftProducts] = useState([]);
   const [isLoadingCustomerChoiceGiftProducts, setIsLoadingCustomerChoiceGiftProducts] = useState(false);
+  const [customerChoicePurchaseProducts, setCustomerChoicePurchaseProducts] = useState([]);
+  const [isLoadingCustomerChoicePurchaseProducts, setIsLoadingCustomerChoicePurchaseProducts] = useState(false);
   const [giftProductToAdd, setGiftProductToAdd] = useState(null);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [quickViewProduct, setQuickViewProduct] = useState(null);
@@ -102,6 +104,40 @@ export default function CartDrawer() {
   const canSelectMoreCustomerChoiceGifts =
     requiredCustomerChoiceGiftQty > selectedCustomerChoiceGiftQty;
 
+  const customerChoicePurchaseProductIds = Array.isArray(customerChoiceOffer?.purchaseProductIds)
+    ? customerChoiceOffer.purchaseProductIds.map(String).filter(Boolean)
+    : [];
+  const customerChoicePurchaseProductIdsKey = JSON.stringify(customerChoicePurchaseProductIds);
+
+  const customerChoiceBuyQty = Math.max(
+    1,
+    Math.floor(Number(customerChoiceOffer?.config?.buyQty) || 1)
+  );
+
+  const totalCartQty = cartItems.reduce(
+    (sum, item) => sum + Math.max(0, parseInt(item?.qty, 10) || 0),
+    0
+  );
+
+  const eligiblePurchaseQty = Math.max(
+    0,
+    Number(customerChoiceGiftStatus?.eligiblePurchaseQty) || 0
+  );
+
+  const nextEligiblePurchaseThreshold =
+    (Math.floor(eligiblePurchaseQty / customerChoiceBuyQty) + 1) * customerChoiceBuyQty;
+
+  const remainingEligiblePurchaseQty = Math.max(
+    0,
+    nextEligiblePurchaseThreshold - eligiblePurchaseQty
+  );
+
+  const shouldShowEligiblePurchasePrompt = Boolean(
+    customerChoiceOffer &&
+    totalCartQty >= nextEligiblePurchaseThreshold &&
+    eligiblePurchaseQty < nextEligiblePurchaseThreshold
+  );
+
   // جلب منتجات مجموعة الهدايا المختارة فقط، بدفعات صغيرة لتفادي حدود استعلام Firestore.
   useEffect(() => {
     if (!isCartOpen || !customerChoiceGiftProductIdsKey || customerChoiceGiftProductIdsKey === "[]") {
@@ -146,6 +182,74 @@ export default function CartDrawer() {
     fetchGiftProducts();
     return () => { cancelled = true; };
   }, [isCartOpen, customerChoiceGiftProductIdsKey]);
+
+  // جلب المنتجات المؤهلة للشراء عند الحاجة إلى استكمال شرط العرض فقط.
+  useEffect(() => {
+    if (
+      !isCartOpen ||
+      !shouldShowEligiblePurchasePrompt ||
+      !customerChoicePurchaseProductIdsKey ||
+      customerChoicePurchaseProductIdsKey === "[]"
+    ) {
+      setCustomerChoicePurchaseProducts([]);
+      setIsLoadingCustomerChoicePurchaseProducts(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const fetchPurchaseProducts = async () => {
+      setIsLoadingCustomerChoicePurchaseProducts(true);
+
+      try {
+        const ids = JSON.parse(customerChoicePurchaseProductIdsKey);
+        const db = getDb();
+        const batches = [];
+
+        for (let index = 0; index < ids.length; index += 10) {
+          batches.push(ids.slice(index, index + 10));
+        }
+
+        const snapshots = await Promise.all(
+          batches.map((batch) =>
+            getDocs(query(collection(db, "products"), where(documentId(), "in", batch)))
+          )
+        );
+
+        if (cancelled) return;
+
+        const productById = new Map();
+
+        snapshots.forEach((snapshot) => {
+          snapshot.docs.forEach((productDoc) => {
+            productById.set(productDoc.id, {
+              ...productDoc.data(),
+              id: productDoc.id,
+            });
+          });
+        });
+
+        setCustomerChoicePurchaseProducts(
+          ids.map((id) => productById.get(id)).filter(Boolean)
+        );
+      } catch (error) {
+        console.error("WIND Error: Eligible purchase products fetch failed", error);
+        if (!cancelled) setCustomerChoicePurchaseProducts([]);
+      } finally {
+        if (!cancelled) setIsLoadingCustomerChoicePurchaseProducts(false);
+      }
+    };
+
+    fetchPurchaseProducts();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isCartOpen,
+    shouldShowEligiblePurchasePrompt,
+    customerChoicePurchaseProductIdsKey,
+  ]);
 
   // جلب المنتجات المقترحة (المنطق الأصلي مع تحسين الأداء)
   useEffect(() => {
@@ -550,8 +654,61 @@ export default function CartDrawer() {
                   })
                 )}
               </div>
+              {cartItems.length > 0 && shouldShowEligiblePurchasePrompt && (
+                <div className="mx-5 my-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-bold text-[#1A1A1A]">
+                      أكمل شرط العرض لتحصل على هديتك
+                    </h3>
+                    <span className="shrink-0 rounded-full bg-white px-3 py-1 text-xs font-bold text-[#1A1A1A] border border-amber-200">
+                      {eligiblePurchaseQty} / {nextEligiblePurchaseThreshold}
+                    </span>
+                  </div>
 
-              {cartItems.length > 0 && customerChoiceOffer && (
+                  <p className="mt-2 text-xs leading-6 text-gray-700">
+                    لديك منتجات غير مؤهلة ضمن السلة. أضف {remainingEligiblePurchaseQty} قطعة من المنتجات المؤهلة لإكمال شرط العرض وفتح اختيار هديتك.
+                  </p>
+
+                  {isLoadingCustomerChoicePurchaseProducts ? (
+                    <div className="flex justify-center py-5">
+                      <Loader2 className="animate-spin text-gray-400" size={22} />
+                    </div>
+                  ) : customerChoicePurchaseProducts.length > 0 ? (
+                    <div className="mt-3 flex gap-3 overflow-x-auto cart-scroll pb-2">
+                      {customerChoicePurchaseProducts.map((product) => (
+                        <button
+                          key={product.id}
+                          type="button"
+                          onClick={() => openQuickView(product)}
+                          className="w-[104px] shrink-0 text-right"
+                        >
+                          <span className="block w-full h-[126px] rounded-lg overflow-hidden bg-white border border-gray-200">
+                            <img
+                              src={getImageUrl(product)}
+                              alt={product.title || "منتج مؤهل"}
+                              className="w-full h-full object-cover"
+                            />
+                          </span>
+                          <span className="block mt-2 text-[11px] font-bold text-gray-800 line-clamp-2 min-h-[32px]">
+                            {formatVariable(product.title)}
+                          </span>
+                          <span className="block mt-1 text-[11px] text-gray-500">
+                            {product.price} ج.م
+                          </span>
+                          <span className="block mt-1 text-[10px] font-bold text-amber-700">
+                            إضافة المنتج المؤهل
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-xs text-gray-500">
+                      لا توجد منتجات مؤهلة متاحة حاليًا.
+                    </p>
+                  )}
+                </div>
+              )}
+              {cartItems.length > 0 && customerChoiceOffer && canSelectMoreCustomerChoiceGifts && (
                 <div className="mx-5 my-3 rounded-xl border border-gray-200 bg-[#FAF9F6] p-4">
                   <div className="flex items-center justify-between gap-3">
                     <h3 className="text-sm font-bold text-[#1A1A1A]">اختر هداياك بنفسك</h3>
