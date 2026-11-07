@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildTrustedCustomerChoiceGiftSelection,
   getCustomerChoiceGiftIdentityKeys,
+  hasPotentiallyCompleteCustomerChoiceGiftOffer,
   isCustomerChoiceGiftAllowed,
 } from "@/lib/customerChoiceGiftPricing";
 
@@ -11,6 +12,50 @@ const offer = {
 };
 
 describe("trusted customer-choice gift resolution helpers", () => {
+  it("skips Firestore gift resolution when the selected count is incomplete", () => {
+    const offer = {
+      type: "buy_x_get_y_select_gift",
+      active: true,
+      config: { buyQty: 2, getQty: 2 },
+      purchaseProductIds: ["A", "B"],
+      giftProductIds: ["G"],
+    };
+    const purchases = [
+      { id: "A", price: 500, qty: 1 },
+      { id: "B", price: 400, qty: 1 },
+    ];
+    expect(hasPotentiallyCompleteCustomerChoiceGiftOffer(
+      purchases,
+      [{ selectionId: "gift-1" }],
+      [offer]
+    )).toBe(false);
+  });
+
+  it("preflights mixed purchase products and the exact required gift count", () => {
+    const offer = {
+      type: "buy_x_get_y_select_gift",
+      active: true,
+      config: { buyQty: 2, getQty: 1 },
+      purchaseProductIds: ["A", "B"],
+      giftProductIds: ["G"],
+    };
+    const purchases = [
+      { id: "A", price: 500, qty: 1 },
+      { id: "B", price: 400, qty: 1 },
+      { id: "OUTSIDE", price: 900, qty: 4 },
+    ];
+    expect(hasPotentiallyCompleteCustomerChoiceGiftOffer(
+      purchases,
+      [{ selectionId: "gift-1" }],
+      [offer]
+    )).toBe(true);
+    expect(hasPotentiallyCompleteCustomerChoiceGiftOffer(
+      purchases,
+      [{ selectionId: "gift-1" }, { selectionId: "gift-2" }],
+      [offer]
+    )).toBe(false);
+  });
+
   it("matches the gift allowlist by Firestore product ID", () => {
     expect(isCustomerChoiceGiftAllowed(
       { id: "gift-product-id", handle: "gift-shirt" },
