@@ -107,6 +107,28 @@ describe("customer-choice multi-product gift offer", () => {
     expect(result.discountedUnits.every((unit) => unit.free && unit.finalPrice === 0)).toBe(true);
   });
 
+  it("matches redirected gift products using their verified requested ID", () => {
+    const result = computeCustomerChoiceGiftOffer(
+      [product("A", 500, 2)],
+      [
+        {
+          id: "resolved-gift-id",
+          productId: "resolved-gift-id",
+          handle: "resolved-gift",
+          requestedProductId: "legacy-gift-id",
+          price: 100,
+          qty: 1,
+        },
+        product("G", 120),
+      ],
+      offer({ giftProductIds: ["legacy-gift-id", "G"] })
+    );
+
+    expect(result.complete).toBe(true);
+    expect(result.selectedGiftQty).toBe(2);
+    expect(result.discount).toBe(220);
+  });
+
   it("rejects invalid offer configuration", () => {
     expect(computeCustomerChoiceGiftOffer([product("A", 500, 2)], [], offer({ config: { buyQty: 0, getQty: 1 } })).discount).toBe(0);
     expect(computeCustomerChoiceGiftOffer([product("A", 500, 2)], [], offer({ purchaseProductIds: [] })).discount).toBe(0);
