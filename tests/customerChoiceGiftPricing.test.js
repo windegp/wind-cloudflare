@@ -195,6 +195,29 @@ describe("trusted customer-choice gift resolution helpers", () => {
     expect(result.requestedProductId).toBe("firestore-product-id");
   });
 
+  it("uses the selected color image from Firestore and ignores a client-supplied image", () => {
+    const result = buildTrustedCustomerChoiceGiftSelection(
+      {
+        selectionId: "gift-image",
+        selectedColor: "نبيتي",
+        image: 'https://evil.example/fake.jpg" onerror="alert(1)',
+      },
+      {
+        id: "gift-product-id",
+        handle: "gift-shirt",
+        title: "Gift Shirt",
+        price: 250,
+        folderName: "gift-shirt",
+        colorSwatches: { "نبيتي": "burgundy.webp" },
+        mainImage: "main.webp",
+      },
+      250
+    );
+
+    expect(result.image).toBe("/images/products/gift-shirt/burgundy.webp");
+    expect(result.image).not.toContain("evil.example");
+  });
+
   it("rejects incomplete or invalid trusted product data", () => {
     expect(buildTrustedCustomerChoiceGiftSelection({}, null, 200)).toBeNull();
     expect(buildTrustedCustomerChoiceGiftSelection({ selectionId: "x" }, { id: "a" }, NaN)).toBeNull();
