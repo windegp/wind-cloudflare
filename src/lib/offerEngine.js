@@ -295,6 +295,11 @@ export function computeBestOffer(cartItems, offers, now = new Date(), giftSelect
   const best = candidates[0];
   if (!best) return { ...none, customerChoiceGiftStatus };
 
+  const winningCustomerChoiceGiftStatus =
+    best.type === OFFER_TYPES.BUY_X_GET_Y_SELECT_GIFT
+      ? best.offerBenefits.customerChoiceGiftStatus
+      : customerChoiceGiftStatus;
+
   return {
     discount: best.discount,
     offer: { id: best.id, name: best.name, type: best.type },
@@ -302,7 +307,7 @@ export function computeBestOffer(cartItems, offers, now = new Date(), giftSelect
     offerBenefits: best.offerBenefits,
     candidates: candidates.map(({ id, name, type, discount, priority }) => ({ id, name, type, discount, priority })),
     freeShipping: false,
-    customerChoiceGiftStatus,
+    customerChoiceGiftStatus: winningCustomerChoiceGiftStatus,
   };
 }
 
