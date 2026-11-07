@@ -9,6 +9,10 @@ import {
   where,
 } from "firebase/firestore/lite";
 import { computeBestOffer, getOfferGiftSelectionKey, isFreeShippingRuleEligible, isOfferLive } from "@/lib/offerEngine";
+import {
+  buildTrustedCustomerChoiceGiftSelection,
+  isCustomerChoiceGiftAllowed,
+} from "@/lib/customerChoiceGiftPricing";
 import { FREE_SHIPPING_THRESHOLD, SHIPPING_COST } from "@/lib/constants";
 import { isFreeShippingThresholdMet } from "@/lib/shippingCalculations";
 
@@ -231,6 +235,79 @@ async function resolveCartItems(db, cartItems) {
   return resolved;
 }
 
+async function resolveCustomerChoiceGiftSelections(db, selections, offers, now, maxUnits = MAX_TOTAL_UNITS) {
+  if (selections === undefined || selections === null || selections.length === 0) return [];
+  if (!Array.isArray(selections) || selections.length > MAX_TOTAL_UNITS) {
+    throw new CheckoutQuoteError("اختيارات الهدايا غير صالحة. حدّث السلة وحاول مرة أخرى.");
+  }
+
+  const liveChoiceOffers = (Array.isArray(offers) ? offers : []).filter(
+    (offer) => offer?.type === "buy_x_get_y_select_gift" && isOfferLive(offer, now)
+  );
+  // Expired/disabled choice-gift offers must not block an ordinary checkout.
+  if (!liveChoiceOffers.length) return [];
+  if (selections.length > maxUnits) {
+    throw new CheckoutQuoteError("عدد الهدايا المختارة يتجاوز الحد المسموح.");
+  }
+
+  const seenSelectionIds = new Set();
+  const productsByIdentifier = new Map();
+  const resolved = [];
+
+  for (const selection of selections) {
+    if (!selection || typeof selection !== "object" || Array.isArray(selection)) {
+      throw new CheckoutQuoteError("إحدى اختيارات الهدايا غير صالحة.");
+    }
+
+    const selectionId = String(selection.selectionId || "").trim();
+    if (!selectionId || selectionId.length > 128 || seenSelectionIds.has(selectionId)) {
+      throw new CheckoutQuoteError("تعذر التحقق من اختيارات الهدايا. أعد اختيار الهدايا وحاول مرة أخرى.");
+    }
+    seenSelectionIds.add(selectionId);
+
+    const cacheKey = [
+      selection.id,
+      selection.productId,
+      selection.handle,
+      selection.productHandle,
+    ].filter(Boolean).map(String).join("|");
+    let product = productsByIdentifier.get(cacheKey);
+    if (!product) {
+      product = await getProductByIdentifier(db, selection);
+      productsByIdentifier.set(cacheKey, product);
+    }
+
+    if (!isCustomerChoiceGiftAllowed(selection, product, liveChoiceOffers)) {
+      throw new CheckoutQuoteError("أحد المنتجات المختارة ليس ضمن مجموعة الهدايا المسموح بها لهذا العرض.", 409);
+    }
+    if (!matchesVariant(product, selection)) {
+      throw new CheckoutQuoteError("لون أو مقاس إحدى الهدايا لم يعد متاحاً. اختر خياراً آخر.", 409);
+    }
+
+    const trustedPrice = money(product.price);
+    if (!Number.isFinite(trustedPrice) || trustedPrice <= 0) {
+      throw new CheckoutQuoteError("تعذر تأكيد سعر إحدى الهدايا. اختر منتجاً آخر.", 409);
+    }
+
+    const trustedSelection = buildTrustedCustomerChoiceGiftSelection(
+      { ...selection, selectionId },
+      product,
+      trustedPrice
+    );
+    if (!trustedSelection) {
+      throw new CheckoutQuoteError("تعذر تأكيد إحدى الهدايا. أعد اختيارها وحاول مرة أخرى.", 409);
+    }
+
+    const compareAtValue = money(product.compareAtPrice);
+    trustedSelection.compareAtPrice =
+      Number.isFinite(compareAtValue) && compareAtValue > trustedPrice ? compareAtValue : null;
+    trustedSelection._product = product;
+    resolved.push(trustedSelection);
+  }
+
+  return resolved;
+}
+
 async function checkFirstOrder(db, email, phone) {
   const normalizedEmail = String(email || "").trim().toLowerCase();
   const normalizedPhone = normalizePhone(phone);
@@ -387,6 +464,7 @@ export async function createServerCheckoutQuote(input = {}) {
 
   const items = await resolveCartItems(db, input.cartItems);
   const paidSubtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
+  const paidUnitCount = items.reduce((sum, item) => sum + item.qty, 0);
   const offersEnvironment = input.offersEnvironment === "preview" ? "preview" : "production";
   const [settingsSnap, offersSnap, shippingRulesSnap] = await Promise.all([
     getDoc(doc(db, "settings", "siteSettings")),
@@ -432,7 +510,14 @@ export async function createServerCheckoutQuote(input = {}) {
       ? Math.round((paidSubtotal * Number(promotions.firstOrderDiscount)) / 100)
       : 0;
 
-  const offerResult = computeBestOffer(items, offers, now);
+  const customerChoiceGiftSelections = await resolveCustomerChoiceGiftSelections(
+    db,
+    input.customerChoiceGiftSelections,
+    offers,
+    now,
+    Math.max(0, MAX_TOTAL_UNITS - paidUnitCount)
+  );
+  const offerResult = computeBestOffer(items, offers, now, customerChoiceGiftSelections);
   const winner = chooseBestDiscount({ offerResult, promo, firstOrderDiscount });
 
   // A qualifying buy-X-get-Y gift is an additional line, so its original
@@ -447,7 +532,17 @@ export async function createServerCheckoutQuote(input = {}) {
           0
         )
       : 0;
-  const subtotal = paidSubtotal + autoGiftSubtotal;
+  const customerChoiceGiftSubtotal =
+    winner.source === "offer" && offerResult.offer?.type === "buy_x_get_y_select_gift"
+      ? (offerResult.offerBenefits?.giftLines || []).reduce(
+          (sum, line) =>
+            sum +
+            (Number(line.item?.price) || 0) *
+              (Math.max(0, Number(line.regularQty) || 0) + (line.discountedUnits?.length || 0)),
+          0
+        )
+      : 0;
+  const subtotal = paidSubtotal + autoGiftSubtotal + customerChoiceGiftSubtotal;
   const discount = Math.min(subtotal, Math.max(0, Math.round(winner.discount)));
 
   const shippingCostByGovernorate = promotions.shippingCostByGovernorate || {};
@@ -481,7 +576,7 @@ export async function createServerCheckoutQuote(input = {}) {
   const benefitsByCartIndex = new Map(
     (offerBenefits?.lines || []).map((line) => [line.cartIndex, line])
   );
-  const lineItems = items.flatMap((item, cartIndex) => {
+  const paidLineItems = items.flatMap((item, cartIndex) => {
     const baseLine = {
       productId: item.productId,
       productHandle: item.productHandle,
@@ -556,13 +651,62 @@ export async function createServerCheckoutQuote(input = {}) {
     return lines;
   });
 
+  const customerChoiceGiftLineItems =
+    winner.source === "offer" && offerResult.offer?.type === "buy_x_get_y_select_gift"
+      ? (offerBenefits?.giftLines || []).flatMap((giftLine) => {
+          const giftItem = customerChoiceGiftSelections[giftLine.selectionIndex];
+          if (!giftItem) return [];
+
+          const baseLine = {
+            productId: giftItem.id,
+            productHandle: giftItem.handle,
+            productTitle: giftItem.title,
+            name: `${giftItem.title}${giftItem.selectedSize ? " - " + giftItem.selectedSize : ""}`,
+            compareAtPrice: giftItem.compareAtPrice,
+            selectedSize: giftItem.selectedSize,
+            selectedColor: giftItem.selectedColor,
+            image: giftItem.image,
+            isCustomerChoiceGiftSelection: true,
+            giftSelectionId: giftItem.selectionId,
+            offerId: offerBenefits.offerId,
+            offerIds: offerBenefits.offerIds,
+            offerType: offerBenefits.offers.map((offer) => offer.type).join("+"),
+            offerTypes: offerBenefits.offers.map((offer) => offer.type),
+            offerNames: offerBenefits.offers.map((offer) => offer.name),
+          };
+
+          const lines = [];
+          if (giftLine.regularQty > 0) {
+            lines.push({
+              ...baseLine,
+              price: giftItem.price,
+              quantity: giftLine.regularQty,
+            });
+          }
+
+          giftLine.discountedUnits.forEach((unit) => {
+            lines.push({
+              ...baseLine,
+              price: unit.finalPrice,
+              originalPrice: unit.originalPrice,
+              unitDiscount: unit.discount,
+              quantity: 1,
+              isOfferBenefit: true,
+              isFree: unit.free,
+            });
+          });
+          return lines;
+        })
+      : [];
+  const lineItems = [...paidLineItems, ...customerChoiceGiftLineItems];
+
   const originalSubtotal = items.reduce(
     (sum, item) => sum + (item.compareAtPrice ?? item.price) * item.qty,
-    autoGiftSubtotal
+    autoGiftSubtotal + customerChoiceGiftSubtotal
   );
   const productDiscountTotal = items.reduce(
     (sum, item) => sum + Math.max(0, (item.compareAtPrice ?? item.price) - item.price) * item.qty,
-    autoGiftSubtotal
+    autoGiftSubtotal + customerChoiceGiftSubtotal
   );
 
   return {
@@ -574,6 +718,10 @@ export async function createServerCheckoutQuote(input = {}) {
     appliedOffer,
     appliedOffers,
     offerBenefits,
+    customerChoiceGiftStatus: offerResult.customerChoiceGiftStatus || null,
+    customerChoiceGiftSelections: customerChoiceGiftSubtotal > 0
+      ? customerChoiceGiftSelections.map(({ _product, ...item }) => item)
+      : [],
     appliedPromo,
     isFirstOrder,
     lineItems,
