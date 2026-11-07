@@ -159,6 +159,46 @@ describe("customer-choice gift offer integration", () => {
     expect(result.offerBenefits.giftLines.every((line) => line.regularQty === 1)).toBe(true);
   });
 
+  it("shows the gift offer matching selected gifts when another discount wins", () => {
+    const purchases = [item("A", 500, 2)];
+    const selections = [item("G2", 600, 1, { selectionId: "gift-b" })];
+    const firstChoice = choiceOffer({
+      id: "first-choice",
+      priority: 1,
+      config: { buyQty: 1, getQty: 2 },
+      giftProductIds: ["G1"],
+    });
+    const matchingChoice = choiceOffer({
+      id: "matching-choice",
+      priority: 2,
+      config: { buyQty: 2, getQty: 1 },
+      giftProductIds: ["G2"],
+    });
+    const strongerCartOffer = {
+      id: "cart-winner",
+      active: true,
+      type: "cart_percent",
+      config: { percent: 80 },
+      productScope: "all",
+      priority: 100,
+    };
+
+    const result = computeBestOffer(
+      purchases,
+      [firstChoice, matchingChoice, strongerCartOffer],
+      new Date(),
+      selections
+    );
+
+    expect(result.offer.id).toBe("cart-winner");
+    expect(result.customerChoiceGiftStatus).toMatchObject({
+      offerId: "matching-choice",
+      requiredGiftQty: 1,
+      selectedGiftQty: 1,
+      complete: true,
+    });
+  });
+
   it("does not charge selected gifts when a stronger promo wins", () => {
     const purchases = [item("A", 500), item("B", 400)];
     const selections = [
