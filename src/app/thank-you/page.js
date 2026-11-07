@@ -62,17 +62,21 @@ function SuccessContent() {
       const autoGiftLineItems = (parsed.lineItems || []).filter(
         (item) => item.isAutoAddedOfferGift === true
       );
+      const customerChoiceGiftLineItems = (parsed.lineItems || []).filter(
+        (item) => item.isCustomerChoiceGiftSelection === true
+      );
+      const additionalGiftLineItems = [...autoGiftLineItems, ...customerChoiceGiftLineItems];
       const purchaseContentIds = [
         ...(parsed.cartItems || [])
           .filter(it => it.handle || it.id)
           .map(it => getCatalogId(it.handle || it.id, it.selectedColor)),
-        ...autoGiftLineItems
+        ...additionalGiftLineItems
           .filter(item => item.productHandle || item.productId)
           .map(item => getCatalogId(item.productHandle || item.productId, item.selectedColor)),
       ];
       const purchaseNumItems =
         (parsed.cartItems || []).reduce((sum, item) => sum + (Number(item.qty) || 0), 0) +
-        autoGiftLineItems.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
+        additionalGiftLineItems.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
       const purchaseItems = [
         ...(parsed.cartItems || []).map((item) => ({
           id: item.handle || item.id || item.title,
@@ -80,7 +84,7 @@ function SuccessContent() {
           price: item.price,
           qty: item.qty,
         })),
-        ...autoGiftLineItems.map((item) => ({
+        ...additionalGiftLineItems.map((item) => ({
           id: item.productHandle || item.productId || item.productTitle,
           title: item.productTitle || item.name,
           price: item.price,
