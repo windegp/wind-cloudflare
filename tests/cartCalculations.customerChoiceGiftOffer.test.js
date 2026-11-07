@@ -131,6 +131,34 @@ describe("customer-choice gift offer integration", () => {
     });
   });
 
+  it("charges selected gift products when cheaper purchased units receive the free benefit", () => {
+    const purchases = [item("A", 100), item("B", 200)];
+    const selections = [
+      item("G", 500, 1, { selectionId: "gift-1" }),
+      item("A", 600, 1, { selectionId: "gift-2" }),
+    ];
+
+    const result = calculateAllTotals(
+      purchases,
+      null,
+      zeroShipping,
+      false,
+      [choiceOffer()],
+      null,
+      selections
+    );
+
+    expect(result).toMatchObject({
+      subtotal: 1400,
+      discount: 300,
+      total: 1100,
+      discountSource: "offer",
+    });
+    expect(result.offerBenefits.lines.flatMap((line) => line.discountedUnits)
+      .map((unit) => unit.originalPrice)).toEqual([100, 200]);
+    expect(result.offerBenefits.giftLines.every((line) => line.regularQty === 1)).toBe(true);
+  });
+
   it("does not charge selected gifts when a stronger promo wins", () => {
     const purchases = [item("A", 500), item("B", 400)];
     const selections = [
