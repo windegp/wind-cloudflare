@@ -31,6 +31,24 @@ describe("trusted customer-choice gift resolution helpers", () => {
     )).toBe(false);
   });
 
+  it("recognizes a redirected purchase product through its server-verified original ID", () => {
+    const offer = {
+      type: "buy_x_get_y_select_gift",
+      active: true,
+      config: { buyQty: 2, getQty: 1 },
+      purchaseProductIds: ["old-product-id"],
+      giftProductIds: ["G"],
+    };
+    const purchases = [
+      { id: "new-product-id", handle: "new-handle", requestedProductId: "old-product-id", price: 500, qty: 2 },
+    ];
+    expect(hasPotentiallyCompleteCustomerChoiceGiftOffer(
+      purchases,
+      [{ selectionId: "gift-1" }],
+      [offer]
+    )).toBe(true);
+  });
+
   it("preflights mixed purchase products and the exact required gift count", () => {
     const offer = {
       type: "buy_x_get_y_select_gift",
