@@ -43,7 +43,7 @@ export function buildTrustedCustomerChoiceGiftSelection(selection, product, trus
     productHandle: String(product.handle || product.id),
     title: String(product.title || "منتج"),
     price,
-    image: stringValue(selection?.image, 2048) || String(product.images?.[0] || product.mainImage || ""),
+    image: stringValue(selection?.image, 2048) || String(product.images?.[0] || product.mainImage || product.mainImageUrl || ""),
     selectedColor: stringValue(selection?.selectedColor),
     selectedSize: stringValue(selection?.selectedSize),
     qty: 1,
