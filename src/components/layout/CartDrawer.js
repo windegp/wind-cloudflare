@@ -225,7 +225,7 @@ export default function CartDrawer() {
   };
 
   const getImageUrl = (product) => {
-    let img = product?.image || product?.mainImage || product?.images?.[0];
+    let img = product?.image || product?.mainImage || product?.mainImageUrl || product?.images?.[0];
     if (!img) return "https://placehold.co/150x200";
     if (img.startsWith("http")) return img;
     if (product?.folderName) return `/images/products/${product.folderName}/${img}`;
@@ -350,6 +350,7 @@ export default function CartDrawer() {
       isCustomerChoiceGift: true,
       isPendingCustomerChoiceGift: !isApplied,
       selectionId: selection.selectionId,
+      selection,
     };
   });
   const cartDisplayRows = [...paidCartDisplayRows, ...customerChoiceGiftDisplayRows];
@@ -459,7 +460,12 @@ export default function CartDrawer() {
                     const { item, benefit } = row;
                     return (
                     <div key={row.key} className="flex gap-4 py-5 border-b border-gray-100 last:border-0">
-                      <div className="relative w-20 h-28 bg-gray-50 rounded-xl overflow-hidden shrink-0 cursor-pointer" onClick={() => openQuickView(item)}>
+                      <div
+                        className="relative w-20 h-28 bg-gray-50 rounded-xl overflow-hidden shrink-0 cursor-pointer"
+                        onClick={() => row.isCustomerChoiceGift
+                          ? openCustomerChoiceGiftEditor(row.selection)
+                          : openQuickView(item)}
+                      >
                         <img src={getImageUrl(item)} alt={item.title} className="w-full h-full object-cover" />
                         <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"><ZoomIn className="text-white" size={24} /></div>
                       </div>
@@ -507,7 +513,7 @@ export default function CartDrawer() {
                           <div className="flex items-center gap-3">
                             <button
                               onClick={() => row.isCustomerChoiceGift
-                                ? openCustomerChoiceGiftEditor(item)
+                                ? openCustomerChoiceGiftEditor(row.selection)
                                 : openCartItemEditor(item, row.cartIndex, benefit)}
                               title="تعديل اللون والمقاس"
                               aria-label="تعديل اللون والمقاس"
