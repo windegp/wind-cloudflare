@@ -77,6 +77,24 @@ describe("trusted customer-choice gift resolution helpers", () => {
     )).toEqual(["client-id", "gift-handle", "firestore-id"]);
   });
 
+  it("preserves a requested ID alias when Firestore resolves a redirected product", () => {
+    const result = buildTrustedCustomerChoiceGiftSelection(
+      { selectionId: "redirected-1", id: "gift-old-id" },
+      { id: "gift-new-id", handle: "gift-new-handle", title: "Gift", price: 180 },
+      180
+    );
+
+    expect(result).toMatchObject({
+      id: "gift-new-id",
+      requestedProductId: "gift-old-id",
+    });
+    expect(isCustomerChoiceGiftAllowed(
+      { id: "gift-old-id" },
+      { id: result.id, handle: result.handle },
+      [{ ...offer, giftProductIds: ["gift-old-id"] }]
+    )).toBe(true);
+  });
+
   it("rejects incomplete or invalid trusted product data", () => {
     expect(buildTrustedCustomerChoiceGiftSelection({}, null, 200)).toBeNull();
     expect(buildTrustedCustomerChoiceGiftSelection({ selectionId: "x" }, { id: "a" }, NaN)).toBeNull();
