@@ -301,7 +301,6 @@ async function resolveCustomerChoiceGiftSelections(db, selections, offers, now, 
     const compareAtValue = money(product.compareAtPrice);
     trustedSelection.compareAtPrice =
       Number.isFinite(compareAtValue) && compareAtValue > trustedPrice ? compareAtValue : null;
-    trustedSelection._product = product;
     resolved.push(trustedSelection);
   }
 
