@@ -531,15 +531,28 @@ export async function createServerCheckoutQuote(input = {}) {
           0
         )
       : 0;
-  const customerChoiceGiftSubtotal =
+  const customerChoiceGiftFinancials =
     winner.source === "offer" && offerResult.offer?.type === "buy_x_get_y_select_gift"
       ? (offerResult.offerBenefits?.giftLines || []).reduce(
-          (sum, line) =>
-            sum +
-            (Number(line.item?.price) || 0) *
-              (Math.max(0, Number(line.regularQty) || 0) + (line.discountedUnits?.length || 0)),
-          0
+          (totals, line) => {
+            const itemPrice = Math.max(0, Number(line.item?.price) || 0);
+            const compareAt = Number(line.item?.compareAtPrice);
+            const originalUnitPrice =
+              Number.isFinite(compareAt) && compareAt > itemPrice ? compareAt : itemPrice;
+            const quantity =
+              Math.max(0, Number(line.regularQty) || 0) + (line.discountedUnits?.length || 0);
+            totals.subtotal += itemPrice * quantity;
+            totals.originalSubtotal += originalUnitPrice * quantity;
+            totals.productMarkdown += (originalUnitPrice - itemPrice) * quantity;
+            return totals;
+          },
+          { subtotal: 0, originalSubtotal: 0, productMarkdown: 0 }
         )
+      : { subtotal: 0, originalSubtotal: 0, productMarkdown: 0 };
+  const customerChoiceGiftSubtotal = customerChoiceGiftFinancials.subtotal;
+  const customerChoiceGiftOfferDiscount =
+    winner.source === "offer" && offerResult.offer?.type === "buy_x_get_y_select_gift"
+      ? Math.max(0, Number(offerResult.offerBenefits?.discount) || 0)
       : 0;
   const subtotal = paidSubtotal + autoGiftSubtotal + customerChoiceGiftSubtotal;
   const discount = Math.min(subtotal, Math.max(0, Math.round(winner.discount)));
@@ -701,11 +714,11 @@ export async function createServerCheckoutQuote(input = {}) {
 
   const originalSubtotal = items.reduce(
     (sum, item) => sum + (item.compareAtPrice ?? item.price) * item.qty,
-    autoGiftSubtotal + customerChoiceGiftSubtotal
+    autoGiftSubtotal + customerChoiceGiftFinancials.originalSubtotal
   );
   const productDiscountTotal = items.reduce(
     (sum, item) => sum + Math.max(0, (item.compareAtPrice ?? item.price) - item.price) * item.qty,
-    autoGiftSubtotal + customerChoiceGiftSubtotal
+    autoGiftSubtotal + customerChoiceGiftFinancials.productMarkdown + customerChoiceGiftOfferDiscount
   );
 
   return {
