@@ -8,9 +8,7 @@ function stringValue(value, maxLength = MAX_VARIANT_VALUE_LENGTH) {
 export function getCustomerChoiceGiftIdentityKeys(...items) {
   return [...new Set(items.flatMap((item) => [
     item?.id,
-    item?.productId,
     item?.handle,
-    item?.productHandle,
     ...(Array.isArray(item?._resolvedIdentifiers) ? item._resolvedIdentifiers : []),
   ])
     .filter((value) => value !== undefined && value !== null && String(value).trim() !== "")
