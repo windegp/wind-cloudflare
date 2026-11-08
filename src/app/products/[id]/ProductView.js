@@ -776,34 +776,44 @@ const { data: swrRelated, isLoading: relatedLoading } = useRelatedProducts(activ
               ) : null;
             })()}
           </div>
-                    {/* Product Offers */}
-          {productOffers.length > 0 && (
-            <div className="mt-4 mb-5 space-y-3">
-              {productOffers.map((offer, index) => (
-                <div
-                  key={offer.id || index}
-                  className="border border-[#E8E8E8] rounded-sm p-4 bg-[#FAFAFA]"
-                  dir="rtl"
-                >
-                  {offer.campaignLabel && (
-                    <p className="text-[10px] text-[#999] mb-2">
-                      {offer.campaignLabel}
-                    </p>
-                  )}
+                   {/* Product Offers */}
+{productOffers.length > 0 && (
+  <div
+    className="mt-5 mb-6 border border-[#DDDDDD] rounded-lg bg-white p-4 sm:p-5 space-y-4"
+    dir="rtl"
+  >
+    {productOffers.map((offer, index) => (
+      <div key={offer.id || index} className="space-y-2 text-right">
+        <div
+          className={`inline-block w-fit max-w-full border-r-[4px] px-3 py-1.5 text-right break-words ${
+            [
+              "border-r-[#71502F] bg-[#F5EEE5] text-[#71502F]",
+              "border-r-[#75445F] bg-[#F7EFF4] text-[#75445F]",
+              "border-r-[#315F51] bg-[#EAF4F0] text-[#315F51]",
+            ][index % 3]
+          }`}
+        >
+          <p className="text-[16px] sm:text-[18px] font-bold leading-relaxed">
+            {offer.displayText || offer.name || "عرض خاص"}
+          </p>
+        </div>
 
-                  <p className="text-[14px] font-semibold text-[#111] leading-relaxed">
-                    {offer.displayText || offer.name || "عرض خاص"}
-                  </p>
+        {offer.description && (
+          <p className="text-[15px] sm:text-[17px] text-[#315F51] leading-[1.8] text-right break-words">
+            {offer.description}
+          </p>
+        )}
+      </div>
+    ))}
 
-                  {offer.description && (
-                    <p className="text-[12px] text-[#777] mt-2 leading-relaxed">
-                      {offer.description}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+    {productOffers.some((offer) => offer.campaignLabel) && (
+      <p className="pt-2 text-[15px] sm:text-[17px] font-bold text-[#888888] text-right">
+        {productOffers.find((offer) => offer.campaignLabel)?.campaignLabel}
+      </p>
+    )}
+  </div>
+)}
+
           {/* Short Desc */}
           {product.description && (
             <div className="mb-10">
@@ -1169,34 +1179,44 @@ const { data: swrRelated, isLoading: relatedLoading } = useRelatedProducts(activ
               <span className={`w-1.5 h-1.5 rounded-full ${badgeColors.dot}`}></span>
               <span className="text-xs text-[#888]">{presentation.badgeText}</span>
             </div>
-                      {/* Product Offers */}
-          {productOffers.length > 0 && (
-            <div className="mt-4 mb-5 space-y-3">
-              {productOffers.map((offer, index) => (
-                <div
-                  key={offer.id || index}
-                  className="border border-[#E8E8E8] rounded-sm p-4 bg-[#FAFAFA]"
-                  dir="rtl"
-                >
-                  {offer.campaignLabel && (
-                    <p className="text-[10px] text-[#999] mb-2">
-                      {offer.campaignLabel}
-                    </p>
-                  )}
+            {/* Product Offers */}
+{productOffers.length > 0 && (
+  <div
+    className="mt-5 mb-6 border border-[#DDDDDD] rounded-lg bg-white p-4 sm:p-5 space-y-4"
+    dir="rtl"
+  >
+    {productOffers.map((offer, index) => (
+      <div key={offer.id || index} className="space-y-2 text-right">
+        <div
+          className={`inline-block w-fit max-w-full border-r-[4px] px-3 py-1.5 text-right break-words ${
+            [
+              "border-r-[#71502F] bg-[#F5EEE5] text-[#71502F]",
+              "border-r-[#75445F] bg-[#F7EFF4] text-[#75445F]",
+              "border-r-[#315F51] bg-[#EAF4F0] text-[#315F51]",
+            ][index % 3]
+          }`}
+        >
+          <p className="text-[16px] sm:text-[18px] font-bold leading-relaxed">
+            {offer.displayText || offer.name || "عرض خاص"}
+          </p>
+        </div>
 
-                  <p className="text-[14px] font-semibold text-[#111] leading-relaxed">
-                    {offer.displayText || offer.name || "عرض خاص"}
-                  </p>
+        {offer.description && (
+          <p className="text-[15px] sm:text-[17px] text-[#315F51] leading-[1.8] text-right break-words">
+            {offer.description}
+          </p>
+        )}
+      </div>
+    ))}
 
-                  {offer.description && (
-                    <p className="text-[12px] text-[#777] mt-2 leading-relaxed">
-                      {offer.description}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+    {productOffers.some((offer) => offer.campaignLabel) && (
+      <p className="pt-2 text-[15px] sm:text-[17px] font-bold text-[#888888] text-right">
+        {productOffers.find((offer) => offer.campaignLabel)?.campaignLabel}
+      </p>
+    )}
+  </div>
+)}
+
 
             {/* Short Desc */}
             {product.description && (
