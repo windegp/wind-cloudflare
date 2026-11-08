@@ -785,7 +785,7 @@ const { data: swrRelated, isLoading: relatedLoading } = useRelatedProducts(activ
     {productOffers.map((offer, index) => (
       <div key={offer.id || index} className="space-y-2 text-right">
         <div
-          className={`inline-block w-fit max-w-full border-r-[4px] px-3 py-1.5 text-right break-words ${
+          className={`block w-full max-w-full border-r-[3px] pl-3 pr-3 py-1.5 text-right break-words ${
             [
               "border-r-[#71502F] bg-[#F5EEE5] text-[#71502F]",
               "border-r-[#75445F] bg-[#F7EFF4] text-[#75445F]",
@@ -793,13 +793,13 @@ const { data: swrRelated, isLoading: relatedLoading } = useRelatedProducts(activ
             ][index % 3]
           }`}
         >
-          <p className="text-[16px] sm:text-[18px] font-bold leading-relaxed">
+          <p className="text-[14px] sm:text-[15px] font-bold leading-relaxed">
             {offer.displayText || offer.name || "عرض خاص"}
           </p>
         </div>
 
         {offer.description && (
-          <p className="text-[15px] sm:text-[17px] text-[#315F51] leading-[1.8] text-right break-words">
+          <p className="text-[13px] sm:text-[14px] text-[#315F51] leading-[1.8] text-right break-words">
             {offer.description}
           </p>
         )}
@@ -807,7 +807,7 @@ const { data: swrRelated, isLoading: relatedLoading } = useRelatedProducts(activ
     ))}
 
     {productOffers.some((offer) => offer.campaignLabel) && (
-      <p className="pt-2 text-[15px] sm:text-[17px] font-bold text-[#888888] text-right">
+      <p className="pt-2 text-[13px] sm:text-[14px] font-bold text-[#888888] text-right">
         {productOffers.find((offer) => offer.campaignLabel)?.campaignLabel}
       </p>
     )}
@@ -1188,7 +1188,7 @@ const { data: swrRelated, isLoading: relatedLoading } = useRelatedProducts(activ
     {productOffers.map((offer, index) => (
       <div key={offer.id || index} className="space-y-2 text-right">
         <div
-          className={`inline-block w-fit max-w-full border-r-[4px] px-3 py-1.5 text-right break-words ${
+          className={`block w-full max-w-full border-r-[3px] pl-3 pr-3 py-1.5 text-right break-words ${
             [
               "border-r-[#71502F] bg-[#F5EEE5] text-[#71502F]",
               "border-r-[#75445F] bg-[#F7EFF4] text-[#75445F]",
@@ -1196,13 +1196,13 @@ const { data: swrRelated, isLoading: relatedLoading } = useRelatedProducts(activ
             ][index % 3]
           }`}
         >
-          <p className="text-[16px] sm:text-[18px] font-bold leading-relaxed">
+          <p className="text-[14px] sm:text-[15px] font-bold leading-relaxed">
             {offer.displayText || offer.name || "عرض خاص"}
           </p>
         </div>
 
         {offer.description && (
-          <p className="text-[15px] sm:text-[17px] text-[#315F51] leading-[1.8] text-right break-words">
+          <p className="text-[13px] sm:text-[14px] text-[#315F51] leading-[1.8] text-right break-words">
             {offer.description}
           </p>
         )}
@@ -1210,7 +1210,7 @@ const { data: swrRelated, isLoading: relatedLoading } = useRelatedProducts(activ
     ))}
 
     {productOffers.some((offer) => offer.campaignLabel) && (
-      <p className="pt-2 text-[15px] sm:text-[17px] font-bold text-[#888888] text-right">
+      <p className="pt-2 text-[13px] sm:text-[14px] font-bold text-[#888888] text-right">
         {productOffers.find((offer) => offer.campaignLabel)?.campaignLabel}
       </p>
     )}
