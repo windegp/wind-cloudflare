@@ -41,6 +41,9 @@ const TYPE_OPTIONS = [
 
 const emptyForm = () => ({
   name: "",
+  displayText: "",
+  campaignLabel: "",
+  description: "",
   type: "buy_x_get_y",
   couponCode: "",
   config: { buyQty: "2", getQty: "1", nth: "2", percent: "40", amount: "100" },
@@ -307,6 +310,9 @@ export default function AdminOffersPage() {
     setForm({
       ...emptyForm(),
       ...offer,
+      displayText: String(offer.displayText || ""),
+      campaignLabel: String(offer.campaignLabel || ""),
+      description: String(offer.description || ""),
       couponCode: String(offer.couponCode || ""),
       config: {
         buyQty: String(offer.config?.buyQty ?? 2),
@@ -426,6 +432,9 @@ export default function AdminOffersPage() {
       const data = {
         name: form.name.trim(),
         type: form.type,
+        displayText: String(form.displayText || "").trim(),
+        campaignLabel: String(form.campaignLabel || "").trim(),
+        description: String(form.description || "").trim(),
         ...(form.type === "coupon_fixed" ? { couponCode: form.couponCode.trim().toUpperCase() } : { couponCode: "" }),
         config: numericConfig,
         minCart: form.type === "buy_x_get_y_select_gift" ? 0 : Number(form.minCart) || 0,
@@ -774,6 +783,42 @@ export default function AdminOffersPage() {
                   <label className={labelClass}>اسم العرض *</label>
                   <input value={form.name} onChange={(event) => updateField("name", event.target.value)} placeholder="مثال: الجمعة البيضاء - 40% على أرخص قطعة عند شراء قطعتين" className={fieldClass} />
                 </div>
+                <div className="sm:col-span-2 border-t border-gray-100 pt-4 space-y-4">
+  <div className="font-black text-sm text-gray-800">
+    معلومات العرض التي تظهر في صفحة المنتج
+  </div>
+
+  <div>
+    <label className={labelClass}>نص العرض للعميل</label>
+    <input
+      value={form.displayText}
+      onChange={(event) => updateField("displayText", event.target.value)}
+      placeholder="مثال: اشتري 3 والرابعة مجانًا"
+      className={fieldClass}
+    />
+  </div>
+
+  <div>
+    <label className={labelClass}>اسم الحملة</label>
+    <input
+      value={form.campaignLabel}
+      onChange={(event) => updateField("campaignLabel", event.target.value)}
+      placeholder="مثال: عروض الجمعة البيضاء"
+      className={fieldClass}
+    />
+  </div>
+
+  <div>
+    <label className={labelClass}>وصف إضافي (اختياري)</label>
+    <textarea
+      value={form.description}
+      onChange={(event) => updateField("description", event.target.value)}
+      placeholder="مثال: العرض ساري حتى نفاد الكمية"
+      className={fieldClass}
+      rows={2}
+    />
+  </div>
+</div>
 
                 <div className="sm:col-span-2">
                   <label className={labelClass}>نوع العرض *</label>

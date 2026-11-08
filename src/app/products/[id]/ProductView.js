@@ -18,6 +18,7 @@ import { ttTrack } from "@/lib/ttTrack";
 import { getCatalogId } from "@/lib/catalogId";
 import { gaViewItem, gaAddToCart } from "@/lib/gaTrack";
 import { getInventoryPresentation, INVENTORY_STATUS } from "@/lib/inventoryHelpers";
+import { isOfferLive } from "@/lib/offerDates";
 
 export default function ProductView({ initialProduct, sourceCategory }) {
   const { id } = useParams();
@@ -37,7 +38,7 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   // لنفس المنتج، ويسمح بالإرسال الصحيح عند تغيّر المنتج فعلياً (SPA nav).
     const lastViewContentHandleRef = useRef(null);
   const lastInitializedProductKeyRef = useRef(null);
-  const { addToCart }                       = useCart();
+  const { addToCart, offers }                       = useCart();
   const [activeImage, setActiveImage]       = useState(initialProduct?.images?.[0] || initialProduct?.mainImage || "");
   const [activeIdx, setActiveIdx]           = useState(0);
   const [selectedSize, setSelectedSize]     = useState("");
@@ -173,8 +174,61 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   }, [isGalleryOpen, isImageZoomModalOpen, isDescModalOpen]);
 
   const { data: fbProduct, isLoading: productLoading } = useProduct(id);
-  const activeProduct = fbProduct || initialProduct;
-  const { data: swrRelated, isLoading: relatedLoading } = useRelatedProducts(activeProduct);
+const activeProduct = fbProduct || initialProduct;
+
+const productOffers = useMemo(() => {
+  if (!activeProduct || !Array.isArray(offers) || offers.length === 0) {
+    return [];
+  }
+
+  const productKeys = new Set(
+    [activeProduct.id, activeProduct.handle, id]
+      .filter((value) => value !== undefined && value !== null && String(value).trim())
+      .map(String)
+  );
+
+  return offers.filter((offer) => {
+    if (!isOfferLive(offer)) return false;
+
+    // عروض الشحن ليست عروضًا مرتبطة بمنتج بعينه.
+    if (offer.type === "free_shipping") return false;
+
+    // عروض اختيار الهدية ترتبط بمنتجات الشراء، لا منتجات الهدية.
+    if (offer.type === "buy_x_get_y_select_gift") {
+      const purchaseIds = new Set(
+        Array.isArray(offer.purchaseProductIds)
+          ? offer.purchaseProductIds.map(String)
+          : []
+      );
+
+      return [...productKeys].some((key) => purchaseIds.has(key));
+    }
+
+    const excludedIds = new Set(
+      Array.isArray(offer.excludedProductIds)
+        ? offer.excludedProductIds.map(String)
+        : []
+    );
+
+    if ([...productKeys].some((key) => excludedIds.has(key))) {
+      return false;
+    }
+
+    if (offer.productScope === "selected") {
+      const selectedIds = new Set(
+        Array.isArray(offer.productIds)
+          ? offer.productIds.map(String)
+          : []
+      );
+
+      return [...productKeys].some((key) => selectedIds.has(key));
+    }
+
+    return true;
+  });
+}, [activeProduct, id, offers]);
+
+const { data: swrRelated, isLoading: relatedLoading } = useRelatedProducts(activeProduct);
 
     useEffect(() => {
     if (!activeProduct) return;
@@ -722,6 +776,34 @@ export default function ProductView({ initialProduct, sourceCategory }) {
               ) : null;
             })()}
           </div>
+                    {/* Product Offers */}
+          {productOffers.length > 0 && (
+            <div className="mt-4 mb-5 space-y-3">
+              {productOffers.map((offer, index) => (
+                <div
+                  key={offer.id || index}
+                  className="border border-[#E8E8E8] rounded-sm p-4 bg-[#FAFAFA]"
+                  dir="rtl"
+                >
+                  {offer.campaignLabel && (
+                    <p className="text-[10px] text-[#999] mb-2">
+                      {offer.campaignLabel}
+                    </p>
+                  )}
+
+                  <p className="text-[14px] font-semibold text-[#111] leading-relaxed">
+                    {offer.displayText || offer.name || "عرض خاص"}
+                  </p>
+
+                  {offer.description && (
+                    <p className="text-[12px] text-[#777] mt-2 leading-relaxed">
+                      {offer.description}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
           {/* Short Desc */}
           {product.description && (
             <div className="mb-10">
@@ -1087,6 +1169,34 @@ export default function ProductView({ initialProduct, sourceCategory }) {
               <span className={`w-1.5 h-1.5 rounded-full ${badgeColors.dot}`}></span>
               <span className="text-xs text-[#888]">{presentation.badgeText}</span>
             </div>
+                      {/* Product Offers */}
+          {productOffers.length > 0 && (
+            <div className="mt-4 mb-5 space-y-3">
+              {productOffers.map((offer, index) => (
+                <div
+                  key={offer.id || index}
+                  className="border border-[#E8E8E8] rounded-sm p-4 bg-[#FAFAFA]"
+                  dir="rtl"
+                >
+                  {offer.campaignLabel && (
+                    <p className="text-[10px] text-[#999] mb-2">
+                      {offer.campaignLabel}
+                    </p>
+                  )}
+
+                  <p className="text-[14px] font-semibold text-[#111] leading-relaxed">
+                    {offer.displayText || offer.name || "عرض خاص"}
+                  </p>
+
+                  {offer.description && (
+                    <p className="text-[12px] text-[#777] mt-2 leading-relaxed">
+                      {offer.description}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
 
             {/* Short Desc */}
             {product.description && (
