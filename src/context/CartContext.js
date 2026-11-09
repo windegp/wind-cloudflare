@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 // ============================================
 // 🛒 CART CONTEXT
 // ============================================
@@ -66,6 +66,11 @@ const [customerChoiceGiftSelections, setCustomerChoiceGiftSelections] = useState
   const [appliedPromo,  setAppliedPromo]  = useState(null);   // { code, type, freeShipping, discountAmount, message, ... }
   const [discountError, setDiscountError] = useState("");
   const [promoLoading,  setPromoLoading]  = useState(false);
+  // Keep the last validated code and customer identity so cart changes can be rechecked server-side.
+  const promoValidationRef = useRef(null);
+  const promoValidationSequenceRef = useRef(0);
+  const promoManualRequestRef = useRef(0);
+  const promoCartSnapshotRef = useRef(null);
 
   // العروض النشطة (من /api/offers) — لو فشل التحميل بنكمل بدون عروض والسلة تشتغل زي ما هي
   const [offers, setOffers] = useState([]);
@@ -91,6 +96,10 @@ const [customerChoiceGiftSelections, setCustomerChoiceGiftSelections] = useState
   const closeCart  = useCallback(() => setIsCartOpen(false),   []);
 
   const clearCart = useCallback(() => {
+    promoValidationSequenceRef.current += 1;
+    promoValidationRef.current = null;
+    promoManualRequestRef.current = 0;
+    setPromoLoading(false);
     setCartItems([]);
     setCustomerChoiceGiftSelections([]);
     setOfferGiftSelections({});
@@ -397,43 +406,136 @@ const [customerChoiceGiftSelections, setCustomerChoiceGiftSelections] = useState
       setDiscountError("الرجاء إدخال كود الخصم");
       return { success: false };
     }
+
+    const normalizedCode = String(code).trim().toUpperCase();
+    const requestId = ++promoValidationSequenceRef.current;
+    promoValidationRef.current = { code: normalizedCode, customerEmail, customerPhone };
+    promoManualRequestRef.current = requestId;
     setPromoLoading(true);
     setDiscountError("");
+
     try {
       const res = await fetch("/api/validate-promo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          code,
+          code: normalizedCode,
           customerEmail,
           customerPhone,
           cartItems,
-          subtotal,
+          customerChoiceGiftSelections,
+          offerGiftSelections,
+          governorate: selectedGovernorate,
         }),
       });
       const result = await res.json();
+
+      if (requestId !== promoValidationSequenceRef.current) {
+        return { success: false, message: "تم تحديث السلة؛ أعد التحقق من القسيمة." };
+      }
 
       if (result.valid) {
         setAppliedPromo({ ...result, valid: true });
         setDiscountError("");
         return { success: true, message: result.message };
-      } else {
-        setAppliedPromo(null);
-        setDiscountError(result.message || "كود غير صالح");
-        return { success: false, message: result.message };
       }
+
+      promoValidationRef.current = null;
+      setAppliedPromo(null);
+      setDiscountError(result.message || "كود غير صالح");
+      return { success: false, message: result.message };
     } catch (err) {
+      if (requestId !== promoValidationSequenceRef.current) {
+        return { success: false, message: "تم تحديث السلة؛ أعد التحقق من القسيمة." };
+      }
+      promoValidationRef.current = null;
+      setAppliedPromo(null);
       setDiscountError("حدث خطأ، حاول مرة أخرى");
       return { success: false };
     } finally {
-      setPromoLoading(false);
+      if (promoManualRequestRef.current === requestId) {
+        promoManualRequestRef.current = 0;
+        setPromoLoading(false);
+      }
     }
-  }, [cartItems, subtotal]);
-
+  }, [cartItems, customerChoiceGiftSelections, offerGiftSelections, selectedGovernorate]);
   const removePromoCode = useCallback(() => {
+    promoValidationSequenceRef.current += 1;
+    promoValidationRef.current = null;
+    promoManualRequestRef.current = 0;
+    setPromoLoading(false);
     setAppliedPromo(null);
     setDiscountError("");
   }, []);
+
+  // Revalidate an applied promo after cart, gift, or shipping selection changes.
+  // The server quote is authoritative; stale in-flight responses are ignored.
+  useEffect(() => {
+    const nextSnapshot = JSON.stringify({
+      cartItems,
+      customerChoiceGiftSelections,
+      offerGiftSelections,
+      selectedGovernorate,
+      offers,
+    });
+    const previousSnapshot = promoCartSnapshotRef.current;
+    promoCartSnapshotRef.current = nextSnapshot;
+
+    if (previousSnapshot === null || previousSnapshot === nextSnapshot) return;
+
+    const validation = promoValidationRef.current;
+    if (!validation?.code) return;
+
+    const requestId = ++promoValidationSequenceRef.current;
+    if (promoManualRequestRef.current !== 0) {
+      promoManualRequestRef.current = 0;
+      setPromoLoading(false);
+    }
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/validate-promo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            code: validation.code,
+            customerEmail: validation.customerEmail,
+            customerPhone: validation.customerPhone,
+            cartItems,
+            customerChoiceGiftSelections,
+            offerGiftSelections,
+            governorate: selectedGovernorate,
+          }),
+        });
+        const result = await res.json();
+
+        if (cancelled || requestId !== promoValidationSequenceRef.current) return;
+
+        if (result.valid) {
+          setAppliedPromo({ ...result, valid: true });
+          setDiscountError("");
+        } else {
+          promoValidationRef.current = null;
+          setAppliedPromo(null);
+          setDiscountError(result.message || "لم تعد القسيمة تنطبق على السلة الحالية.");
+        }
+      } catch (error) {
+        if (cancelled || requestId !== promoValidationSequenceRef.current) return;
+        promoValidationRef.current = null;
+        setAppliedPromo(null);
+        setDiscountError("تعذر إعادة التحقق من القسيمة بعد تغيير السلة. أعد تطبيقها.");
+      }
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      if (promoValidationSequenceRef.current === requestId) {
+        promoValidationSequenceRef.current += 1;
+      }
+    };
+  }, [cartItems, customerChoiceGiftSelections, offerGiftSelections, selectedGovernorate, offers]);
 
   // ── Persistence ────────────────────────────────────────────────
   useEffect(() => {
@@ -525,6 +627,10 @@ useEffect(() => {
 
     setCustomerChoiceGiftSelections([]);
     setOfferGiftSelections({});
+    promoValidationSequenceRef.current += 1;
+    promoValidationRef.current = null;
+    promoManualRequestRef.current = 0;
+    setPromoLoading(false);
     setAppliedPromo(null);
 
     localStorage.removeItem('wind_customer_choice_gifts');

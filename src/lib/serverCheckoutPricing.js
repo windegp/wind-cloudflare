@@ -113,6 +113,7 @@ function getBundleProductHandles(product) {
 
 function applyVerifiedBundlePricing(items) {
   const groups = new Map();
+  let bundleDiscountTotal = 0;
   for (const item of items) {
     if (!item.bundleGroupId && (item.bundleRole || item.bundleParentId)) {
       throw new CheckoutQuoteError("بيانات الباقة غير مكتملة. احذف منتجات الباقة وأضفها مرة أخرى.", 409);
@@ -154,6 +155,9 @@ function applyVerifiedBundlePricing(items) {
       const basePrice = item.price;
       item.price = Math.round(basePrice * (1 - discountPercent / 100));
       item.compareAtPrice = discountPercent > 0 ? basePrice : item.compareAtPrice;
+      if (discountPercent > 0) {
+        bundleDiscountTotal += Math.max(0, basePrice - item.price) * item.qty;
+      }
       bundleSubtotal += item.price * item.qty;
     }
 
@@ -162,6 +166,7 @@ function applyVerifiedBundlePricing(items) {
     const bundleFreeShipping = freeShippingLimit > 0 && bundleSubtotal >= freeShippingLimit;
     for (const item of group) item.bundleFreeShipping = bundleFreeShipping;
   }
+  return bundleDiscountTotal;
 }
 
 async function resolveCartItems(db, cartItems) {
@@ -234,8 +239,8 @@ async function resolveCartItems(db, cartItems) {
     });
   }
 
-  applyVerifiedBundlePricing(resolved);
-  return resolved;
+  const bundleDiscount = applyVerifiedBundlePricing(resolved);
+  return { items: resolved, bundleDiscount };
 }
 
 async function resolveCustomerChoiceGiftSelections(db, purchaseItems, selections, offers, now, maxUnits = MAX_TOTAL_UNITS) {
@@ -354,7 +359,28 @@ async function validatePromo(db, code, customer, cartItems, isFirstOrder, now, o
     const amount = Number(coupon.config?.amount);
     if (!Number.isFinite(amount) || amount <= 0) throw new CheckoutQuoteError("إعداد مبلغ القسيمة غير صالح.", 409);
     const discountAmount = Math.min(amount, eligibleSubtotal, Number(coupon.maxDiscount) > 0 ? Number(coupon.maxDiscount) : amount);
-    return { valid: true, code: normalizedCode, type: "coupon_fixed", value: amount, usageType: "unlimited", firstOrderOnly: false, freeShipping: false, discountAmount, message: "تم تفعيل قسيمة " + normalizedCode + " بخصم " + discountAmount + " ج.م.", couponOfferId: coupon.id, couponOfferName: coupon.name };
+    return {
+      valid: true,
+      code: normalizedCode,
+      type: "coupon_fixed",
+      value: amount,
+      usageType: "unlimited",
+      firstOrderOnly: false,
+      freeShipping: false,
+      discountAmount,
+      scope: coupon.productScope === "selected"
+        ? (Array.isArray(coupon.productIds) ? coupon.productIds.map(String) : [])
+        : "all",
+      excludedProductIds: Array.isArray(coupon.excludedProductIds)
+        ? coupon.excludedProductIds.map(String)
+        : [],
+      excludeDiscounted: coupon.excludeDiscounted === true,
+      minCart: Number(coupon.minCart) || 0,
+      maxDiscount: Number(coupon.maxDiscount) || 0,
+      message: "تم تفعيل قسيمة " + normalizedCode + " بخصم " + discountAmount + " ج.م.",
+      couponOfferId: coupon.id,
+      couponOfferName: coupon.name,
+    };
   }
 
   const snap = await getDoc(doc(db, "promoCodes", normalizedCode));
@@ -425,6 +451,8 @@ async function validatePromo(db, code, customer, cartItems, isFirstOrder, now, o
     code: normalizedCode,
     type: promo.type,
     value: Number(promo.value) || 0,
+    // Preserve the server-validated product scope for accurate cart recalculation.
+    scope: Array.isArray(promo.scope) ? promo.scope.map(String) : "all",
     usageType: promo.usageType || "unlimited",
     firstOrderOnly: Boolean(promo.firstOrderOnly),
     freeShipping,
@@ -433,6 +461,27 @@ async function validatePromo(db, code, customer, cartItems, isFirstOrder, now, o
       ? "تم تفعيل الشحن المجاني."
       : `تم التحقق من كود الخصم ${normalizedCode}.`,
   };
+}
+
+function assertPromoDoesNotConflict({ promo, firstOrderDiscount, offerResult, bundleDiscount }) {
+  const hasCashPromo =
+    promo?.valid === true &&
+    promo.type !== "free_shipping" &&
+    Number(promo.discountAmount) > 0;
+  if (!hasCashPromo) return;
+
+  const hasQualifyingOffer = (offerResult?.candidates || []).some(
+    (candidate) => Number(candidate.discount) > 0
+  );
+  const hasFirstOrderDiscount = Number(firstOrderDiscount) > 0;
+  const hasBundleDiscount = Number(bundleDiscount) > 0;
+
+  if (hasQualifyingOffer || hasFirstOrderDiscount || hasBundleDiscount) {
+    throw new CheckoutQuoteError(
+      "لا يمكن استخدام قسيمة الخصم مع خصم آخر مستحق على السلة. أزل القسيمة أو استمر بالعرض الآخر.",
+      409
+    );
+  }
 }
 
 function chooseBestDiscount({ offerResult, promo, firstOrderDiscount }) {
@@ -464,7 +513,7 @@ export async function createServerCheckoutQuote(input = {}) {
     phone: String(input.customerPhone || "").trim(),
   };
 
-  const items = await resolveCartItems(db, input.cartItems);
+  const { items, bundleDiscount } = await resolveCartItems(db, input.cartItems);
   const paidSubtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
   const paidUnitCount = items.reduce((sum, item) => sum + item.qty, 0);
   const offersEnvironment = input.offersEnvironment === "preview" ? "preview" : "production";
@@ -521,6 +570,7 @@ export async function createServerCheckoutQuote(input = {}) {
     Math.max(0, MAX_TOTAL_UNITS - paidUnitCount)
   );
   const offerResult = computeBestOffer(items, offers, now, customerChoiceGiftSelections);
+  assertPromoDoesNotConflict({ promo, firstOrderDiscount, offerResult, bundleDiscount });
   const winner = chooseBestDiscount({ offerResult, promo, firstOrderDiscount });
 
   // A qualifying buy-X-get-Y gift is an additional line, so its original
