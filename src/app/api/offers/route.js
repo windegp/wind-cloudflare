@@ -26,10 +26,35 @@ export async function GET(request) {
       getDoc(doc(db, "settings", `offerShippingRules_${environment}`)),
     ]);
     const offers = snap.docs
-      .map((d) => ({ id: d.id, ...d.data() }))
-      .filter((o) => o.active === true && o.type !== "coupon_fixed" && (environment === "preview"
-        ? o.environment === "preview"
-        : o.environment !== "preview"));
+  .map((d) => ({ id: d.id, ...d.data() }))
+  .filter((o) => o.active === true && (environment === "preview"
+    ? o.environment === "preview"
+    : o.environment !== "preview"))
+  .map((offer) => {
+    // قسائم الشراء: نرسل بيانات العرض اللازمة للبانر فقط.
+    // لا نرسل couponCode أو config أو أي بيانات داخلية.
+    if (offer.type === "coupon_fixed") {
+      return {
+        id: offer.id,
+        type: offer.type,
+        active: offer.active,
+        startsAt: offer.startsAt || null,
+        endsAt: offer.endsAt || null,
+        displayText: offer.displayText || "",
+        campaignLabel: offer.campaignLabel || "",
+        description: offer.description || "",
+        productScope: offer.productScope === "selected" ? "selected" : "all",
+        productIds: Array.isArray(offer.productIds) ? offer.productIds : [],
+        excludedProductIds: Array.isArray(offer.excludedProductIds)
+          ? offer.excludedProductIds
+          : [],
+        excludeDiscounted: offer.excludeDiscounted === true,
+      };
+    }
+
+    // باقي العروض تحتفظ بسلوكها الحالي دون تغيير.
+    return offer;
+  });
 
     const shippingRules = shippingRuleSnap.exists() ? shippingRuleSnap.data() : null;
     return NextResponse.json(

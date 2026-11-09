@@ -193,7 +193,31 @@ const productOffers = useMemo(() => {
     // عروض الشحن ليست عروضًا مرتبطة بمنتج بعينه.
     if (offer.type === "free_shipping") return false;
 
-    // عروض اختيار الهدية ترتبط بمنتجات الشراء، لا منتجات الهدية.
+    // Fixed coupons are displayed according to their product scope.
+    if (offer.type === "coupon_fixed") {
+      const excludedIds = new Set(
+        Array.isArray(offer.excludedProductIds)
+          ? offer.excludedProductIds.map(String)
+          : []
+      );
+
+      if ([...productKeys].some((key) => excludedIds.has(key))) {
+        return false;
+      }
+
+      if (offer.productScope === "selected") {
+        const selectedIds = new Set(
+          Array.isArray(offer.productIds)
+            ? offer.productIds.map(String)
+            : []
+        );
+
+        return [...productKeys].some((key) => selectedIds.has(key));
+      }
+
+      return true;
+    }
+    // Gift-choice offers are matched against purchase products.
     if (offer.type === "buy_x_get_y_select_gift") {
       const purchaseIds = new Set(
         Array.isArray(offer.purchaseProductIds)
