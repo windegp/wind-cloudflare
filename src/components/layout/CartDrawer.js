@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useCart } from "../../context/CartContext";
 import Link from "next/link";
-import { ShoppingBag, Trash2, X, Plus, ZoomIn, Loader2, Minus, Eye, Edit2 } from '@/components/icons-extra';
+import { ShoppingBag, Trash2, X, Plus, ZoomIn, Loader2, Minus, Eye, Edit2, Tag } from '@/components/icons-extra';
 import { getDb } from "../../lib/firebase";
 import { doc, getDoc, collection, query, where, getDocs, documentId } from "firebase/firestore/lite";
 import QuickViewModal from "@/components/QuickViewModal"; 
@@ -40,6 +40,8 @@ export default function CartDrawer() {
   const [editingCartItem, setEditingCartItem] = useState(null);
   const [offerCelebration, setOfferCelebration] = useState(false);
   const previousOfferBenefitRef = useRef(false);
+  const cartScrollRef = useRef(null);
+  const previousCartDisplayRowKeysRef = useRef(null);
   const hasOfferBenefit = Boolean(
     offerBenefits?.lines?.some((line) => line.discountedUnits?.length) ||
     offerBenefits?.giftLines?.some((line) => line.discountedUnits?.length)
@@ -53,7 +55,7 @@ export default function CartDrawer() {
 
   useEffect(() => {
     if (!offerCelebration) return;
-    const timer = window.setTimeout(() => setOfferCelebration(false), 1800);
+    const timer = window.setTimeout(() => setOfferCelebration(false), 5400);
     return () => window.clearTimeout(timer);
   }, [offerCelebration]);
 
@@ -393,6 +395,10 @@ export default function CartDrawer() {
     return labels.length ? labels.join(" + ") : "خصم العرض";
   };
 
+  const getBenefitDiscountTypeLabel = (benefit) => {
+    return getBenefitLabel(benefit).replace(/هدية مجانية/g, "خصم 100%");
+  };
+
   const paidCartDisplayRows = cartItems.flatMap((item, cartIndex) => {
     const benefitLine = offerBenefits?.lines?.find((line) => line.cartIndex === cartIndex);
     if (!benefitLine) {
@@ -458,18 +464,65 @@ export default function CartDrawer() {
     };
   });
   const regularPaidCartDisplayRows = paidCartDisplayRows.filter(
-  (row) => !row.isAutoAddedGift
-);
+    (row) => !row.isAutoAddedGift
+  );
 
-const autoAddedGiftDisplayRows = paidCartDisplayRows.filter(
-  (row) => row.isAutoAddedGift
-);
+  const autoAddedGiftDisplayRows = paidCartDisplayRows.filter(
+    (row) => row.isAutoAddedGift
+  );
 
-const cartDisplayRows = [
-  ...regularPaidCartDisplayRows,
-  ...customerChoiceGiftDisplayRows,
-  ...autoAddedGiftDisplayRows,
-];
+  const cartDisplayRows = [
+    ...regularPaidCartDisplayRows,
+    ...customerChoiceGiftDisplayRows,
+    ...autoAddedGiftDisplayRows,
+  ];
+
+  useEffect(() => {
+    const currentRowKeys = cartDisplayRows.map((row) => row.key);
+    const previousRowKeys = previousCartDisplayRowKeysRef.current;
+
+    if (previousRowKeys === null || !isCartOpen) {
+      previousCartDisplayRowKeysRef.current = currentRowKeys;
+      return;
+    }
+
+    const fourthRow = cartDisplayRows[3];
+
+    const fourthRowWasAdded = Boolean(
+      fourthRow &&
+      currentRowKeys.length > previousRowKeys.length &&
+      !previousRowKeys.includes(fourthRow.key)
+    );
+
+    const fourthRowHasOffer = Boolean(
+      fourthRow && (fourthRow.isAutoAddedGift || fourthRow.benefit)
+    );
+
+    previousCartDisplayRowKeysRef.current = currentRowKeys;
+
+    if (!fourthRowWasAdded || !fourthRowHasOffer) return;
+
+    window.requestAnimationFrame(() => {
+      const scrollContainer = cartScrollRef.current;
+      const fourthRowElement = scrollContainer?.querySelector(
+        '[data-cart-row-index="3"]'
+      );
+
+      if (!scrollContainer || !fourthRowElement) return;
+
+      const containerRect = scrollContainer.getBoundingClientRect();
+      const rowRect = fourthRowElement.getBoundingClientRect();
+      const hiddenBelow = rowRect.bottom - containerRect.bottom;
+
+      // لا نمرر السلة إلا إذا كانت القطعة الرابعة مخفية أسفلها.
+      if (hiddenBelow <= 4) return;
+
+      scrollContainer.scrollTo({
+        top: scrollContainer.scrollTop + hiddenBelow + 16,
+        behavior: "smooth",
+      });
+    });
+  }, [cartDisplayRows, isCartOpen]);
 
 
   if (!isCartOpen) return null;
@@ -485,8 +538,10 @@ const cartDisplayRows = [
         style={{
           left: `${(index * 37) % 100}%`,
           backgroundColor: ["#E11D48", "#F59E0B", "#10B981", "#3B82F6", "#A855F7"][index % 5],
-          animationDelay: `${(index % 12) * 70}ms`,
-          transform: `rotate(${index * 31}deg)`,
+          animationDelay: `${(index % 12) * 55}ms`,
+          "--confetti-drift-a": `${((index * 17) % 121) - 60}px`,
+          "--confetti-drift-b": `${((index * 29) % 101) - 50}px`,
+          "--confetti-drift-c": `${((index * 43) % 141) - 70}px`,
         }}
       />
     ))}
@@ -496,11 +551,41 @@ const cartDisplayRows = [
 
 <style>{`
   @keyframes offerConfettiFall {
-    0% { opacity: 1; translate: 0 -20px; rotate: 0deg; }
-    100% { opacity: 0; translate: 0 105vh; rotate: 720deg; }
+    0% {
+      opacity: 0;
+      transform: translate3d(0, -28px, 0) rotate(0deg) scale(0.75);
+    }
+    12% {
+      opacity: 1;
+    }
+    35% {
+      transform: translate3d(var(--confetti-drift-a), 34vh, 0) rotate(300deg) scale(1);
+    }
+    68% {
+      opacity: 0.9;
+      transform: translate3d(var(--confetti-drift-b), 70vh, 0) rotate(620deg) scale(0.85);
+    }
+    100% {
+      opacity: 0;
+      transform: translate3d(var(--confetti-drift-c), 112vh, 0) rotate(980deg) scale(0.55);
+    }
   }
-  .offer-confetti-layer { position: fixed; inset: 0; z-index: 1100; overflow: hidden; pointer-events: none; }
-  .offer-confetti-piece { position: absolute; top: -18px; width: 8px; height: 13px; border-radius: 2px; animation: offerConfettiFall 3.2s ease-in-out forwards; }
+  .offer-confetti-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 1100;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .offer-confetti-piece {
+    position: absolute;
+    top: -18px;
+    width: 8px;
+    height: 13px;
+    border-radius: 2px;
+    animation: offerConfettiFall 4.2s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+    will-change: transform, opacity;
+  }
   @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;900&family=Tajawal:wght@400;500;700&display=swap');
   .cart-drawer * { font-family: 'Cairo', sans-serif; }
   @keyframes slideInLeft { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
@@ -568,7 +653,7 @@ const cartDisplayRows = [
               <button onClick={toggleCart} className="w-8 h-8 rounded-full bg-gray-50 hover:bg-gray-100 flex items-center justify-center border border-gray-100"><X size={16} /></button>
             </div>
 
-            <div className="flex-1 overflow-y-auto cart-scroll bg-white">
+            <div ref={cartScrollRef} className="flex-1 overflow-y-auto cart-scroll bg-white">
               <div className="px-5 py-2">
                 {cartItems.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -577,10 +662,14 @@ const cartDisplayRows = [
                     <button onClick={toggleCart} className="bg-[#1A1A1A] text-white px-8 py-3 rounded-full font-bold text-sm mt-6">مواصلة التسوق</button>
                   </div>
                 ) : (
-                  cartDisplayRows.map((row) => {
+                  cartDisplayRows.map((row, rowIndex) => {
                     const { item, benefit } = row;
                     return (
-                    <div key={row.key} className="flex gap-4 py-5 border-b border-gray-100 last:border-0">
+                    <div
+                      key={row.key}
+                      data-cart-row-index={rowIndex}
+                      className="flex gap-4 py-5 border-b border-gray-100 last:border-0"
+                    >
                       <div
                         className="relative w-20 h-28 bg-gray-50 rounded-xl overflow-hidden shrink-0 cursor-pointer"
                         onClick={() => row.isCustomerChoiceGift
@@ -622,10 +711,18 @@ const cartDisplayRows = [
 <div className="flex items-center justify-between mt-3">
   {row.isCustomerChoiceGift ? (
     <span className={`text-[10px] font-bold rounded-full px-2 py-1 ${row.isPendingCustomerChoiceGift ? "text-amber-700 bg-amber-50 border border-amber-100" : benefit?.free ? "text-emerald-700 bg-emerald-50 border border-emerald-100" : "text-gray-600 bg-gray-100 border border-gray-200"}`}>
-      {row.isPendingCustomerChoiceGift ? "اختيار هدية" : benefit?.free ? "هدية مجانية" : "اختيار ضمن العرض"}
+      {row.isPendingCustomerChoiceGift ? "اختيار هدية" : benefit?.free ? (
+        <span className="inline-flex items-center gap-1">
+          <Tag size={11} className="shrink-0" />
+          {getBenefitDiscountTypeLabel(benefit)}
+        </span>
+      ) : "اختيار ضمن العرض"}
     </span>
   ) : row.isAutoAddedGift ? (
-    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-2 py-1">هدية مجانية</span>
+    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-2 py-1">
+      <Tag size={11} className="shrink-0" />
+      {getBenefitDiscountTypeLabel(benefit)}
+    </span>
   ) : (
     <div className="flex items-center border border-gray-200 rounded-md bg-white h-8">
       <button onClick={() => updateQty(item.id, item.selectedSize, 1, item.selectedColor, item.bundleGroupId || "", row.cartIndex)} className="w-8 h-full flex items-center justify-center text-gray-500 hover:text-black">+</button>
