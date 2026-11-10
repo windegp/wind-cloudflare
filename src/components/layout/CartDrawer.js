@@ -570,7 +570,7 @@ export default function CartDrawer() {
                         className="relative w-20 h-28 bg-gray-50 rounded-xl overflow-hidden shrink-0 cursor-pointer"
                         onClick={() => row.isCustomerChoiceGift
                           ? openCustomerChoiceGiftEditor(row.selection)
-                          : openQuickView(item)}
+                          : openCartItemEditor(item, row.cartIndex, benefit)}
                       >
                         <img src={getImageUrl(item)} alt={item.title} className="w-full h-full object-cover" />
                         <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"><ZoomIn className="text-white" size={24} /></div>
