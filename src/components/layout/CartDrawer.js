@@ -286,11 +286,11 @@ export default function CartDrawer() {
 
         if (missingHandles.length > 0) {
           const db = getDb();
-          
+
           // أ. البحث عن طريق الـ ID (العملية الأسرع)
           const qById = query(collection(db, "products"), where(documentId(), "in", missingHandles));
           const snapById = await getDocs(qById);
-          
+
           snapById.docs.forEach(ds => {
             if (!cartIdsAndHandles.includes(ds.id)) {
               fetchedProducts.push({ id: ds.id, ...ds.data() });
@@ -300,7 +300,7 @@ export default function CartDrawer() {
           // ب. البحث عن طريق خانة الـ Handle للمنتجات اللي لسه مجاتش
           const foundIds = snapById.docs.map(d => d.id);
           const stillMissing = missingHandles.filter(h => !foundIds.includes(h));
-          
+
           if (stillMissing.length > 0) {
             const qByField = query(collection(db, "products"), where("handle", "in", stillMissing));
             const snapByField = await getDocs(qByField);
@@ -457,50 +457,65 @@ export default function CartDrawer() {
       selection,
     };
   });
-  const cartDisplayRows = [...paidCartDisplayRows, ...customerChoiceGiftDisplayRows];
+  const regularPaidCartDisplayRows = paidCartDisplayRows.filter(
+  (row) => !row.isAutoAddedGift
+);
+
+const autoAddedGiftDisplayRows = paidCartDisplayRows.filter(
+  (row) => row.isAutoAddedGift
+);
+
+const cartDisplayRows = [
+  ...regularPaidCartDisplayRows,
+  ...customerChoiceGiftDisplayRows,
+  ...autoAddedGiftDisplayRows,
+];
 
 
   if (!isCartOpen) return null;
 
   return (
     <>
-      {offerCelebration && (
-        <div className="offer-confetti-layer" aria-hidden="true">
-          {Array.from({ length: 28 }, (_, index) => (
-            <span
-              key={index}
-              className="offer-confetti-piece"
-              style={{
-                left: `${(index * 37) % 100}%`,
-                backgroundColor: ["#E11D48", "#F59E0B", "#10B981", "#3B82F6", "#A855F7"][index % 5],
-                animationDelay: `${(index % 7) * 45}ms`,
-                transform: `rotate(${index * 31}deg)`,
-              }}
-            />
-          ))}
-        </div>
-      )}
-      <style>{`
-        @keyframes offerConfettiFall {
-          0% { opacity: 1; translate: 0 -20px; rotate: 0deg; }
-          100% { opacity: 0; translate: 0 105vh; rotate: 720deg; }
-        }
-        .offer-confetti-layer { position: fixed; inset: 0; z-index: 100; overflow: hidden; pointer-events: none; }
-        .offer-confetti-piece { position: absolute; top: -18px; width: 8px; height: 13px; border-radius: 2px; animation: offerConfettiFall 1.55s ease-out forwards; }
-        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;900&family=Tajawal:wght@400;500;700&display=swap');
-        .cart-drawer * { font-family: 'Cairo', sans-serif; }
-        @keyframes slideInLeft { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-        .cart-panel { animation: slideInLeft 0.28s cubic-bezier(0.22,1,0.36,1) forwards; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        .cart-overlay { animation: fadeIn 0.2s ease forwards; }
-        .cart-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
-        .cart-scroll::-webkit-scrollbar-track { background: transparent; }
-        .cart-scroll::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 4px; }
-        .checkout-btn { background-color: #1A1A1A !important; color: #FFFFFF !important; transition: all 0.3s; }
-        .checkout-btn:hover { background-color: #333333 !important; transform: translateY(-2px); }
-        .suggested-item img { transition: transform 0.5s ease; }
-        .suggested-item:hover img { transform: scale(1.05); }
-      `}</style>
+{offerCelebration && (
+  <div className="offer-confetti-layer" aria-hidden="true">
+    {Array.from({ length: 84 }, (_, index) => (
+      <span
+        key={index}
+        className="offer-confetti-piece"
+        style={{
+          left: `${(index * 37) % 100}%`,
+          backgroundColor: ["#E11D48", "#F59E0B", "#10B981", "#3B82F6", "#A855F7"][index % 5],
+          animationDelay: `${(index % 12) * 70}ms`,
+          transform: `rotate(${index * 31}deg)`,
+        }}
+      />
+    ))}
+  </div>
+)}
+
+
+<style>{`
+  @keyframes offerConfettiFall {
+    0% { opacity: 1; translate: 0 -20px; rotate: 0deg; }
+    100% { opacity: 0; translate: 0 105vh; rotate: 720deg; }
+  }
+  .offer-confetti-layer { position: fixed; inset: 0; z-index: 1100; overflow: hidden; pointer-events: none; }
+  .offer-confetti-piece { position: absolute; top: -18px; width: 8px; height: 13px; border-radius: 2px; animation: offerConfettiFall 3.2s ease-in-out forwards; }
+  @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;900&family=Tajawal:wght@400;500;700&display=swap');
+  .cart-drawer * { font-family: 'Cairo', sans-serif; }
+  @keyframes slideInLeft { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  .cart-panel { animation: slideInLeft 0.28s cubic-bezier(0.22,1,0.36,1) forwards; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .cart-overlay { animation: fadeIn 0.2s ease forwards; }
+  .cart-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
+  .cart-scroll::-webkit-scrollbar-track { background: transparent; }
+  .cart-scroll::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 4px; }
+  .checkout-btn { background-color: #1A1A1A !important; color: #FFFFFF !important; transition: all 0.3s; }
+  .checkout-btn:hover { background-color: #333333 !important; transform: translateY(-2px); }
+  .suggested-item img { transition: transform 0.5s ease; }
+  .suggested-item:hover img { transform: scale(1.05); }
+`}</style>
+
 
       {/* المودال الموحد - يقرأ الداتا بذكاء */}
       <QuickViewModal
@@ -530,7 +545,7 @@ export default function CartDrawer() {
         <div className="cart-overlay absolute inset-0" style={{ background: 'rgba(0,0,0,0.4)' }} onClick={toggleCart} />
         <div className="absolute inset-y-0 left-0 flex max-w-full">
           <div className="cart-panel w-[85vw] max-w-[390px] bg-white flex flex-col shadow-2xl">
-            
+
             <div className="bg-white px-5 py-4 flex items-center justify-between border-b border-gray-100 z-10">
               <div className="flex items-center gap-3">
                 <div className="relative">
@@ -602,53 +617,57 @@ export default function CartDrawer() {
                             </div>
                           )}
                         </div>
-                        <div className="flex items-center justify-between mt-3">
-                          {row.isCustomerChoiceGift ? (
-                            <span className={`text-[10px] font-bold rounded-full px-2 py-1 ${row.isPendingCustomerChoiceGift ? "text-amber-700 bg-amber-50 border border-amber-100" : benefit?.free ? "text-emerald-700 bg-emerald-50 border border-emerald-100" : "text-gray-600 bg-gray-100 border border-gray-200"}`}>
-                              {row.isPendingCustomerChoiceGift ? "اختيار هدية" : benefit?.free ? "هدية مجانية" : "اختيار ضمن العرض"}
-                            </span>
-                          ) : row.isAutoAddedGift ? (
-                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-2 py-1">تُضاف تلقائيًا</span>
-                          ) : (
-                            <div className="flex items-center border border-gray-200 rounded-md bg-white h-8">
-                              <button onClick={() => updateQty(item.id, item.selectedSize, 1, item.selectedColor, item.bundleGroupId || "", row.cartIndex)} className="w-8 h-full flex items-center justify-center text-gray-500 hover:text-black">+</button>
-                              <span className="w-8 text-center text-sm font-bold text-[#1A1A1A]">{row.qty}</span>
-                              <button onClick={() => updateQty(item.id, item.selectedSize, -1, item.selectedColor, item.bundleGroupId || "", row.cartIndex)} className="w-8 h-full flex items-center justify-center text-gray-500 hover:text-black">−</button>
-                            </div>
-                          )}
-                          <div className="flex items-center gap-3">
-                            <button
-                              onClick={() => row.isCustomerChoiceGift
-                                ? openCustomerChoiceGiftEditor(row.selection)
-                                : openCartItemEditor(item, row.cartIndex, benefit)}
-                              title="تعديل اللون والمقاس"
-                              aria-label="تعديل اللون والمقاس"
-                              className="text-red-400 hover:text-red-500 flex items-center gap-1.5 group"
-                            >
-                              <span className="text-sm font-medium underline decoration-red-200 group-hover:decoration-red-500 underline-offset-4">تعديل</span>
-                              <Edit2 size={15} />
-                            </button>
-                            {row.isCustomerChoiceGift ? (
-                              <button
-                                onClick={() => removeCustomerChoiceGift(row.selectionId)}
-                                className="text-red-400 hover:text-red-500 flex items-center gap-1.5 group"
-                              >
-                                <span className="text-sm font-medium underline decoration-red-200 group-hover:decoration-red-500 underline-offset-4">إزالة</span>
-                                <Trash2 size={15} />
-                              </button>
-                            ) : !row.isAutoAddedGift ? (
-                              <button
-                                onClick={() => benefit
-                                  ? updateQty(item.id, item.selectedSize, -1, item.selectedColor, item.bundleGroupId || "", row.cartIndex)
-                                  : removeFromCart(item.id, item.selectedSize, item.selectedColor, item.bundleGroupId || "", row.cartIndex)}
-                                className="text-red-400 hover:text-red-500 flex items-center gap-1.5 group"
-                              >
-                                <span className="text-sm font-medium underline decoration-red-200 group-hover:decoration-red-500 underline-offset-4">إزالة</span>
-                                <Trash2 size={15} />
-                              </button>
-                            ) : null}
-                          </div>
-                        </div>
+
+
+<div className="flex items-center justify-between mt-3">
+  {row.isCustomerChoiceGift ? (
+    <span className={`text-[10px] font-bold rounded-full px-2 py-1 ${row.isPendingCustomerChoiceGift ? "text-amber-700 bg-amber-50 border border-amber-100" : benefit?.free ? "text-emerald-700 bg-emerald-50 border border-emerald-100" : "text-gray-600 bg-gray-100 border border-gray-200"}`}>
+      {row.isPendingCustomerChoiceGift ? "اختيار هدية" : benefit?.free ? "هدية مجانية" : "اختيار ضمن العرض"}
+    </span>
+  ) : row.isAutoAddedGift ? (
+    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-2 py-1">هدية مجانية</span>
+  ) : (
+    <div className="flex items-center border border-gray-200 rounded-md bg-white h-8">
+      <button onClick={() => updateQty(item.id, item.selectedSize, 1, item.selectedColor, item.bundleGroupId || "", row.cartIndex)} className="w-8 h-full flex items-center justify-center text-gray-500 hover:text-black">+</button>
+      <span className="w-8 text-center text-sm font-bold text-[#1A1A1A]">{row.qty}</span>
+      <button onClick={() => updateQty(item.id, item.selectedSize, -1, item.selectedColor, item.bundleGroupId || "", row.cartIndex)} className="w-8 h-full flex items-center justify-center text-gray-500 hover:text-black">−</button>
+    </div>
+  )}
+  <div className="flex items-center gap-3">
+    <button
+      onClick={() => row.isCustomerChoiceGift
+        ? openCustomerChoiceGiftEditor(row.selection)
+        : openCartItemEditor(item, row.cartIndex, benefit)}
+      title="تعديل اللون والمقاس"
+      aria-label="تعديل اللون والمقاس"
+      className="text-red-400 hover:text-red-500 flex items-center gap-1.5 group"
+    >
+      <span className="text-sm font-medium underline decoration-red-200 group-hover:decoration-red-500 underline-offset-4">تعديل</span>
+      <Edit2 size={15} />
+    </button>
+    {row.isCustomerChoiceGift ? (
+      <button
+        onClick={() => removeCustomerChoiceGift(row.selectionId)}
+        className="text-red-400 hover:text-red-500 flex items-center gap-1.5 group"
+      >
+        <span className="text-sm font-medium underline decoration-red-200 group-hover:decoration-red-500 underline-offset-4">إزالة</span>
+        <Trash2 size={15} />
+      </button>
+    ) : !row.isAutoAddedGift ? (
+      <button
+        onClick={() => benefit
+          ? updateQty(item.id, item.selectedSize, -1, item.selectedColor, item.bundleGroupId || "", row.cartIndex)
+          : removeFromCart(item.id, item.selectedSize, item.selectedColor, item.bundleGroupId || "", row.cartIndex)}
+        className="text-red-400 hover:text-red-500 flex items-center gap-1.5 group"
+      >
+        <span className="text-sm font-medium underline decoration-red-200 group-hover:decoration-red-500 underline-offset-4">إزالة</span>
+        <Trash2 size={15} />
+      </button>
+    ) : null}
+  </div>
+</div>
+
+
                       </div>
                     </div>
                     );
