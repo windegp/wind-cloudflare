@@ -318,10 +318,10 @@ mergedProduct;
           </div>
 
           {productDisplayOffers.length > 0 && (
-            <div className="mt-2.5 mb-3 space-y-1.5" dir="rtl">
+            <div className="mt-1 mb-3 space-y-1.5" dir="rtl">
               {productDisplayOffers.map((offer, index) => (
                 <div key={offer.id || index} className="space-y-1 text-right">
-                  <div className={`block w-full border-r-[2px] px-2 py-1 text-right break-words ${
+                  <div className={`inline-block max-w-full border-r-[2px] px-2 py-1 text-right break-words ${
                     [
                       "border-r-[#71502F] bg-[#F5EEE5] text-[#71502F]",
                       "border-r-[#75445F] bg-[#F7EFF4] text-[#75445F]",
@@ -332,18 +332,8 @@ mergedProduct;
                       {offer.displayText || offer.name || "عرض خاص"}
                     </p>
                   </div>
-                  {offer.description && (
-                    <p className="text-[9px] md:text-[10px] text-[#315F51] leading-[1.6] text-right break-words">
-                      {offer.description}
-                    </p>
-                  )}
                 </div>
               ))}
-              {productDisplayOffers.some((offer) => offer.campaignLabel) && (
-                <p className="text-[9px] md:text-[10px] font-bold text-[#888888] text-right">
-                  {productDisplayOffers.find((offer) => offer.campaignLabel)?.campaignLabel}
-                </p>
-              )}
             </div>
           )}
           {cardColors.length > 0 && (
