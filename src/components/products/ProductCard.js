@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { createPortal } from "react-dom";
 import { ShoppingBag, Eye, Heart, Star, X } from '@/components/icons-extra';
@@ -9,9 +9,16 @@ import { mutate } from 'swr';
 
 import QuickViewModal from "@/components/QuickViewModal";
 import ProductReviews from "@/components/products/ProductReviews";
+import { useCart } from "@/context/CartContext";
+import { getProductDisplayOffers } from "@/lib/productOfferDisplay";
 
 export default function ProductCard(props) {
   const [mergedProduct, setMergedProduct] = useState(props);
+  const { offers } = useCart();
+  const productDisplayOffers = useMemo(
+    () => getProductDisplayOffers(mergedProduct, offers),
+    [mergedProduct, offers]
+  );
   const [reviewsData, setReviewsData] = useState({ 
     count: props.reviewsCount || 0, 
     rating: props.rating || 0 
@@ -310,6 +317,35 @@ mergedProduct;
             {displayOldPrice && discount && <span className="text-gray-400 text-[14px] line-through font-normal font-cairo">{displayOldPrice} ج.م</span>}
           </div>
 
+          {productDisplayOffers.length > 0 && (
+            <div className="mt-2.5 mb-3 space-y-1.5" dir="rtl">
+              {productDisplayOffers.map((offer, index) => (
+                <div key={offer.id || index} className="space-y-1 text-right">
+                  <div className={`block w-full border-r-[2px] px-2 py-1 text-right break-words ${
+                    [
+                      "border-r-[#71502F] bg-[#F5EEE5] text-[#71502F]",
+                      "border-r-[#75445F] bg-[#F7EFF4] text-[#75445F]",
+                      "border-r-[#315F51] bg-[#EAF4F0] text-[#315F51]",
+                    ][index % 3]
+                  }`}>
+                    <p className="text-[10px] md:text-[11px] font-bold leading-relaxed">
+                      {offer.displayText || offer.name || "عرض خاص"}
+                    </p>
+                  </div>
+                  {offer.description && (
+                    <p className="text-[9px] md:text-[10px] text-[#315F51] leading-[1.6] text-right break-words">
+                      {offer.description}
+                    </p>
+                  )}
+                </div>
+              ))}
+              {productDisplayOffers.some((offer) => offer.campaignLabel) && (
+                <p className="text-[9px] md:text-[10px] font-bold text-[#888888] text-right">
+                  {productDisplayOffers.find((offer) => offer.campaignLabel)?.campaignLabel}
+                </p>
+              )}
+            </div>
+          )}
           {cardColors.length > 0 && (
             <div className="flex items-center gap-2.5">
               {displayColorsList.map((colorName, idx) => {

@@ -18,7 +18,7 @@ import { ttTrack } from "@/lib/ttTrack";
 import { getCatalogId } from "@/lib/catalogId";
 import { gaViewItem, gaAddToCart } from "@/lib/gaTrack";
 import { getInventoryPresentation, INVENTORY_STATUS } from "@/lib/inventoryHelpers";
-import { isOfferLive } from "@/lib/offerDates";
+import { getProductDisplayOffers } from "@/lib/productOfferDisplay";
 
 export default function ProductView({ initialProduct, sourceCategory }) {
   const { id } = useParams();
@@ -176,81 +176,10 @@ export default function ProductView({ initialProduct, sourceCategory }) {
   const { data: fbProduct, isLoading: productLoading } = useProduct(id);
 const activeProduct = fbProduct || initialProduct;
 
-const productOffers = useMemo(() => {
-  if (!activeProduct || !Array.isArray(offers) || offers.length === 0) {
-    return [];
-  }
-
-  const productKeys = new Set(
-    [activeProduct.id, activeProduct.handle, id]
-      .filter((value) => value !== undefined && value !== null && String(value).trim())
-      .map(String)
-  );
-
-  return offers.filter((offer) => {
-    if (!isOfferLive(offer)) return false;
-
-    // عروض الشحن ليست عروضًا مرتبطة بمنتج بعينه.
-    if (offer.type === "free_shipping") return false;
-
-    // Fixed coupons are displayed according to their product scope.
-    if (offer.type === "coupon_fixed") {
-      const excludedIds = new Set(
-        Array.isArray(offer.excludedProductIds)
-          ? offer.excludedProductIds.map(String)
-          : []
-      );
-
-      if ([...productKeys].some((key) => excludedIds.has(key))) {
-        return false;
-      }
-
-      if (offer.productScope === "selected") {
-        const selectedIds = new Set(
-          Array.isArray(offer.productIds)
-            ? offer.productIds.map(String)
-            : []
-        );
-
-        return [...productKeys].some((key) => selectedIds.has(key));
-      }
-
-      return true;
-    }
-    // Gift-choice offers are matched against purchase products.
-    if (offer.type === "buy_x_get_y_select_gift") {
-      const purchaseIds = new Set(
-        Array.isArray(offer.purchaseProductIds)
-          ? offer.purchaseProductIds.map(String)
-          : []
-      );
-
-      return [...productKeys].some((key) => purchaseIds.has(key));
-    }
-
-    const excludedIds = new Set(
-      Array.isArray(offer.excludedProductIds)
-        ? offer.excludedProductIds.map(String)
-        : []
-    );
-
-    if ([...productKeys].some((key) => excludedIds.has(key))) {
-      return false;
-    }
-
-    if (offer.productScope === "selected") {
-      const selectedIds = new Set(
-        Array.isArray(offer.productIds)
-          ? offer.productIds.map(String)
-          : []
-      );
-
-      return [...productKeys].some((key) => selectedIds.has(key));
-    }
-
-    return true;
-  });
-}, [activeProduct, id, offers]);
+const productOffers = useMemo(
+  () => getProductDisplayOffers(activeProduct, offers, id),
+  [activeProduct, id, offers]
+);
 
 const { data: swrRelated, isLoading: relatedLoading } = useRelatedProducts(activeProduct);
 
