@@ -623,16 +623,17 @@ export default function CartDrawer() {
                                 : openCartItemEditor(item, row.cartIndex, benefit)}
                               title="تعديل اللون والمقاس"
                               aria-label="تعديل اللون والمقاس"
-                              className="text-gray-400 hover:text-[#1A1A1A] flex items-center"
+                              className="text-red-400 hover:text-red-500 flex items-center gap-1.5 group"
                             >
+                              <span className="text-sm font-medium underline decoration-red-200 group-hover:decoration-red-500 underline-offset-4">تعديل</span>
                               <Edit2 size={15} />
                             </button>
                             {row.isCustomerChoiceGift ? (
                               <button
                                 onClick={() => removeCustomerChoiceGift(row.selectionId)}
-                                className="text-gray-400 hover:text-red-500 flex items-center gap-1.5 group"
+                                className="text-red-400 hover:text-red-500 flex items-center gap-1.5 group"
                               >
-                                <span className="text-sm font-medium underline decoration-gray-300 group-hover:decoration-red-500 underline-offset-4">إزالة</span>
+                                <span className="text-sm font-medium underline decoration-red-200 group-hover:decoration-red-500 underline-offset-4">إزالة</span>
                                 <Trash2 size={15} />
                               </button>
                             ) : !row.isAutoAddedGift ? (
@@ -640,9 +641,9 @@ export default function CartDrawer() {
                                 onClick={() => benefit
                                   ? updateQty(item.id, item.selectedSize, -1, item.selectedColor, item.bundleGroupId || "", row.cartIndex)
                                   : removeFromCart(item.id, item.selectedSize, item.selectedColor, item.bundleGroupId || "", row.cartIndex)}
-                                className="text-gray-400 hover:text-red-500 flex items-center gap-1.5 group"
+                                className="text-red-400 hover:text-red-500 flex items-center gap-1.5 group"
                               >
-                                <span className="text-sm font-medium underline decoration-gray-300 group-hover:decoration-red-500 underline-offset-4">إزالة</span>
+                                <span className="text-sm font-medium underline decoration-red-200 group-hover:decoration-red-500 underline-offset-4">إزالة</span>
                                 <Trash2 size={15} />
                               </button>
                             ) : null}
