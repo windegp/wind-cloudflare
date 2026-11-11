@@ -529,19 +529,31 @@ export default function CartDrawer() {
 
   return (
     <>
+
 {offerCelebration && (
   <div className="offer-confetti-layer" aria-hidden="true">
-    {Array.from({ length: 84 }, (_, index) => (
+    {Array.from({ length: 64 }, (_, index) => (
       <span
         key={index}
         className="offer-confetti-piece"
         style={{
-          left: `${(index * 37) % 100}%`,
-          backgroundColor: ["#E11D48", "#F59E0B", "#10B981", "#3B82F6", "#A855F7"][index % 5],
-          animationDelay: `${(index % 12) * 55}ms`,
-          "--confetti-drift-a": `${((index * 17) % 121) - 60}px`,
-          "--confetti-drift-b": `${((index * 29) % 101) - 50}px`,
-          "--confetti-drift-c": `${((index * 43) % 141) - 70}px`,
+          left: `${(index * 43) % 100}%`,
+          backgroundColor: [
+            "#171717",
+            "#D4AF37",
+            "#FFFFFF",
+            "#B88A2B",
+          ][index % 4],
+          width: `${5 + (index % 4)}px`,
+          height: `${9 + (index % 6) * 2}px`,
+          clipPath:
+            index % 3 === 0
+              ? "polygon(8% 0, 100% 0, 92% 100%, 0 100%)"
+              : "none",
+          animationDelay: `${(index % 13) * 42}ms`,
+          "--confetti-drift-a": `${((index * 17) % 161) - 80}px`,
+          "--confetti-drift-b": `${((index * 29) % 181) - 90}px`,
+          "--confetti-drift-c": `${((index * 43) % 201) - 100}px`,
         }}
       />
     ))}
@@ -549,27 +561,45 @@ export default function CartDrawer() {
 )}
 
 
+
 <style>{`
   @keyframes offerConfettiFall {
     0% {
       opacity: 0;
-      transform: translate3d(0, -28px, 0) rotate(0deg) scale(0.75);
+      transform: translate3d(0, -24px, 0) rotate(0deg) scale(0.65);
     }
-    12% {
+
+    10% {
       opacity: 1;
     }
+
     35% {
-      transform: translate3d(var(--confetti-drift-a), 34vh, 0) rotate(300deg) scale(1);
+      transform: translate3d(
+        var(--confetti-drift-a),
+        30vh,
+        0
+      ) rotate(260deg) scale(1);
     }
-    68% {
+
+    70% {
       opacity: 0.9;
-      transform: translate3d(var(--confetti-drift-b), 70vh, 0) rotate(620deg) scale(0.85);
+      transform: translate3d(
+        var(--confetti-drift-b),
+        72vh,
+        0
+      ) rotate(560deg) scale(0.9);
     }
+
     100% {
       opacity: 0;
-      transform: translate3d(var(--confetti-drift-c), 112vh, 0) rotate(980deg) scale(0.55);
+      transform: translate3d(
+        var(--confetti-drift-c),
+        108vh,
+        0
+      ) rotate(900deg) scale(0.7);
     }
   }
+
   .offer-confetti-layer {
     position: fixed;
     inset: 0;
@@ -577,15 +607,16 @@ export default function CartDrawer() {
     overflow: hidden;
     pointer-events: none;
   }
+
   .offer-confetti-piece {
     position: absolute;
-    top: -18px;
-    width: 8px;
-    height: 13px;
-    border-radius: 2px;
-    animation: offerConfettiFall 4.2s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+    top: -20px;
+    border-radius: 1px;
+    animation: offerConfettiFall 4.5s cubic-bezier(0.18, 0.65, 0.32, 1) both;
     will-change: transform, opacity;
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.12));
   }
+
   @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;900&family=Tajawal:wght@400;500;700&display=swap');
   .cart-drawer * { font-family: 'Cairo', sans-serif; }
   @keyframes slideInLeft { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
