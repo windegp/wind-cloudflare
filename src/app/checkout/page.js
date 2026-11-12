@@ -173,6 +173,7 @@ export default function CheckoutPage() {
 
     const SHIPPING_COST = shipping;
   const finalTotal    = total;
+  const productsAfterDiscount = Math.max(0, Number(subtotal || 0) - Number(discount || 0));
 
   // عرض كل قطعة مستفيدة كسطر مستقل في ملخص الدفع.
   const paidCheckoutDisplayRows = cartItems.flatMap((item, cartIndex) => {
@@ -1239,7 +1240,10 @@ router.push(`/thank-you?orderId=${orderId}`);
             <span>{summaryOpen ? 'إخفاء تفاصيل الطلب' : 'عرض تفاصيل الطلب'}</span>
             <ChevronDown size={15} className={`transition-transform ${summaryOpen ? 'rotate-180' : ''}`} style={{ color: '#2563eb' }} />
           </div>
-          <span className="font-black text-xl text-gray-900">ج.م {finalTotal}.00</span>
+          <div className="text-left">
+            <span className="block text-[10px] text-gray-500 font-medium">قيمة المنتجات بعد الخصم</span>
+            <span className="font-black text-xl text-gray-900">ج.م {productsAfterDiscount}.00</span>
+          </div>
         </div>
 
         {summaryOpen && (
@@ -1289,14 +1293,15 @@ router.push(`/thank-you?orderId=${orderId}`);
             </div>
 
             <div className="border-t border-gray-100 pt-3 space-y-1.5 text-base">
-              <div className="flex justify-between text-gray-500"><span>سعر المنتج</span><span className="text-gray-800 font-medium">ج.م {subtotal}.00</span></div>
+              {discount > 0 && <div className="flex justify-between text-gray-500"><span>قيمة المنتجات قبل الخصم</span><span className="text-gray-800 font-medium">ج.م {subtotal}.00</span></div>}
               {discount > 0 && (
                 <div className="flex justify-between text-emerald-600">
                   <span>{discountLabel}</span>
                   <span className="font-bold">- ج.م {discount}.00</span>
                 </div>
               )}
-              <div className="flex justify-between text-gray-500"><span>سعر الشحن</span><span className={`font-medium ${SHIPPING_COST === 0 ? 'text-green-600' : 'text-gray-800'}`}>{SHIPPING_COST === 0 ? 'مجاناً' : `ج.م ${SHIPPING_COST}.00`}</span></div>
+              <div className="flex justify-between text-gray-700 font-semibold"><span>قيمة المنتجات بعد الخصم</span><span>ج.م {productsAfterDiscount}.00</span></div>
+              <div className="flex justify-between text-gray-500"><span>الشحن لمحافظتك</span><span className={`font-medium ${SHIPPING_COST === 0 ? 'text-green-600' : 'text-gray-800'}`}>{SHIPPING_COST === 0 ? 'مجاناً' : `ج.م ${SHIPPING_COST}.00`}</span></div>
               <div className="flex justify-between font-black text-lg pt-2 border-t border-gray-100">
                 <span>الإجمالي</span>
                 <span>ج.م {finalTotal}.00</span>
@@ -1651,13 +1656,18 @@ router.push(`/thank-you?orderId=${orderId}`);
                   </span>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-gray-700 text-sm leading-tight">الإجمالي</p>
+                  <p className="font-medium text-gray-700 text-sm leading-tight">قيمة المنتجات بعد الخصم</p>
                   <p className="text-sm text-gray-400 mt-0.5 font-normal">
                     {cartItems.reduce((s, it) => s + it.qty, 0)} {cartItems.reduce((s, it) => s + it.qty, 0) === 1 ? 'منتج' : 'منتجات'}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className="font-black text-xl text-gray-900">ج.م {finalTotal}.00</span>
+                  <div className="text-left">
+                    <span className="block font-black text-xl text-gray-900">ج.م {productsAfterDiscount}.00</span>
+                    <span className="block text-[10px] text-gray-500">
+                      الشحن لمحافظتك: {SHIPPING_COST === 0 ? 'مجاناً' : `ج.م ${SHIPPING_COST}.00`}
+                    </span>
+                  </div>
                   <span className="bg-gray-100 text-gray-500 text-[11px] font-bold px-2 py-1 rounded-full">EGP</span>
                   <ChevronDown size={18} className={`text-gray-900 transition-transform ${payAreaSummaryOpen ? 'rotate-180' : ''}`} />
                 </div>
@@ -1711,15 +1721,16 @@ router.push(`/thank-you?orderId=${orderId}`);
                   </div>
 
                   <div className="border-t border-gray-100 pt-3 space-y-1.5 text-sm">
-                    <div className="flex justify-between text-gray-500"><span>سعر المنتج</span><span className="text-gray-800 font-medium">ج.م {subtotal}.00</span></div>
+                    {discount > 0 && <div className="flex justify-between text-gray-500"><span>قيمة المنتجات قبل الخصم</span><span className="text-gray-800 font-medium">ج.م {subtotal}.00</span></div>}
                     {discount > 0 && (
                       <div className="flex justify-between text-emerald-600">
                         <span>{discountLabel}</span>
                         <span className="font-bold">- ج.م {discount}.00</span>
                       </div>
                     )}
+                    <div className="flex justify-between text-gray-700 font-semibold"><span>قيمة المنتجات بعد الخصم</span><span>ج.م {productsAfterDiscount}.00</span></div>
                     <div className="flex justify-between text-gray-500">
-                      <span>سعر الشحن</span>
+                      <span>الشحن لمحافظتك</span>
                       <span className={`font-medium ${SHIPPING_COST === 0 ? 'text-green-600' : 'text-gray-800'}`}>{SHIPPING_COST === 0 ? 'مجاناً' : `ج.م ${SHIPPING_COST}.00`}</span>
                     </div>
                     <div className="flex justify-between font-black text-base pt-2 border-t border-gray-100">
@@ -1818,18 +1829,24 @@ router.push(`/thank-you?orderId=${orderId}`);
             </div>
 
             <div className="space-y-3">
-              <div className="flex justify-between items-center text-base">
-                <span className="text-gray-500">سعر المنتج</span>
-                <span className="font-semibold text-gray-800">ج.م {subtotal}.00</span>
-              </div>
+              {discount > 0 && (
+                <div className="flex justify-between items-center text-base">
+                  <span className="text-gray-500">قيمة المنتجات قبل الخصم</span>
+                  <span className="font-semibold text-gray-800">ج.م {subtotal}.00</span>
+                </div>
+              )}
               {discount > 0 && (
                 <div className="flex justify-between items-center text-base text-emerald-600">
                   <span>{discountLabel}</span>
                   <span className="font-semibold">- ج.م {discount}.00</span>
                 </div>
               )}
+              <div className="flex justify-between items-center text-base font-semibold text-gray-700">
+                <span>قيمة المنتجات بعد الخصم</span>
+                <span>ج.م {productsAfterDiscount}.00</span>
+              </div>
               <div className="flex justify-between items-center text-base">
-                <span className="text-gray-500">سعر الشحن</span>
+                <span className="text-gray-500">الشحن لمحافظتك</span>
                 <span className={`font-semibold ${SHIPPING_COST === 0 ? 'text-green-600' : 'text-gray-800'}`}>
                   {SHIPPING_COST === 0 ? 'مجاناً' : `ج.م ${SHIPPING_COST}.00`}
                 </span>
