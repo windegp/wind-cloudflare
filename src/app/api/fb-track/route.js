@@ -57,6 +57,7 @@ export async function POST(request) {
       value,
       currency = "EGP",
       content_ids = [],
+      contents = [],
       content_name,
       content_type = "product",
       num_items,
@@ -144,6 +145,21 @@ const fbc = fbcCandidates.find(isValidMetaFbc);
     if (value !== undefined) customData.value = Number(value);
     if (Array.isArray(content_ids) && content_ids.length > 0) {
       customData.content_ids = content_ids.map(String);
+    }
+    if (Array.isArray(contents) && contents.length > 0) {
+      const normalizedContents = contents.slice(0, 100).flatMap((item) => {
+        const id = String(item?.id ?? "").trim();
+        const quantity = Number(item?.quantity);
+        if (!id || !Number.isFinite(quantity) || quantity <= 0) return [];
+
+        const normalizedItem = { id, quantity };
+        const itemPrice = Number(item?.item_price);
+        if (Number.isFinite(itemPrice) && itemPrice >= 0) {
+          normalizedItem.item_price = itemPrice;
+        }
+        return [normalizedItem];
+      });
+      if (normalizedContents.length > 0) customData.contents = normalizedContents;
     }
     if (content_name) customData.content_name = content_name;
     if (content_type) customData.content_type = content_type;

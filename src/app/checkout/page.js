@@ -483,6 +483,14 @@ export default function CheckoutPage() {
       content_ids: cartItems
         .filter(it => it.handle || it.id)
         .map(it => getCatalogId(it.handle || it.id, it.selectedColor)),
+      content_type: "product",
+      contents: cartItems
+        .filter(it => it.handle || it.id)
+        .map((it) => ({
+          id: getCatalogId(it.handle || it.id, it.selectedColor),
+          quantity: Number(it.qty) || 1,
+          item_price: Number(it.price) || 0,
+        })),
     });
     ttTrack("InitiateCheckout", {
       value: finalTotal,
@@ -1063,6 +1071,13 @@ export default function CheckoutPage() {
         const purchaseContentIds = purchaseLineItems
           .filter((item) => item.productHandle || item.productId)
           .map((item) => getCatalogId(item.productHandle || item.productId, item.selectedColor));
+        const purchaseContents = purchaseLineItems
+          .filter((item) => item.productHandle || item.productId)
+          .map((item) => ({
+            id: getCatalogId(item.productHandle || item.productId, item.selectedColor),
+            quantity: Number(item.quantity) || 1,
+            item_price: Number(item.price) || 0,
+          }));
         const purchaseNumItems = purchaseLineItems.reduce(
           (sum, item) => sum + (Number(item.quantity) || 1),
           0
@@ -1101,6 +1116,8 @@ export default function CheckoutPage() {
           value: quote.total,
           currency: "EGP",
           content_ids: purchaseContentIds,
+          content_type: "product",
+          contents: purchaseContents,
           num_items: purchaseNumItems,
           order_id: orderId,
           ...buildCheckoutMetaUserData(formData),

@@ -73,6 +73,13 @@ function SuccessContent() {
       const purchaseContentIds = purchaseLineItems
         .filter(item => item.productHandle || item.productId)
         .map(item => getCatalogId(item.productHandle || item.productId, item.selectedColor));
+      const purchaseContents = purchaseLineItems
+        .filter(item => item.productHandle || item.productId)
+        .map((item) => ({
+          id: getCatalogId(item.productHandle || item.productId, item.selectedColor),
+          quantity: Number(item.quantity) || 1,
+          item_price: Number(item.price) || 0,
+        }));
       const purchaseNumItems = purchaseLineItems.reduce(
         (sum, item) => sum + (Number(item.quantity) || 1),
         0
@@ -92,6 +99,8 @@ function SuccessContent() {
         value: parsed.total || 0,
         currency: "EGP",
         content_ids: purchaseContentIds,
+        content_type: "product",
+        contents: purchaseContents,
         num_items: purchaseNumItems,
         order_id: parsed.orderId || "",
         ...buildCheckoutMetaUserData(parsed.formData, {

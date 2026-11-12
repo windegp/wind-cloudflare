@@ -289,6 +289,11 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
     const trackedContentIds = [
       getCatalogId(product.handle || product.id, selectedMainVariant?.color || product.selectedColor || ""),
     ];
+    const trackedContents = [{
+      id: trackedContentIds[0],
+      quantity: mainQty,
+      item_price: Math.round(applyDiscount(mainPrice, effectiveDiscount)),
+    }];
     let trackedNumItems = mainQty;
 
     upsells.forEach((up, i) => {
@@ -297,6 +302,11 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
       const variant = up.variants[st.variantIdx];
       if (!variant?.available) return;
       trackedContentIds.push(getCatalogId(up.id, variant.color || ""));
+      trackedContents.push({
+        id: trackedContentIds[trackedContentIds.length - 1],
+        quantity: st.qty || 1,
+        item_price: Math.round(applyDiscount(variant.price, effectiveDiscount)),
+      });
       trackedNumItems += st.qty || 1;
     });
 
@@ -304,6 +314,7 @@ function BundleWidgetInner({ product, handles, discount, limit, title, subtitle 
       value: total,
       currency: "EGP",
       content_ids: trackedContentIds,
+      contents: trackedContents,
       content_type: "product",
       num_items: trackedNumItems,
     });

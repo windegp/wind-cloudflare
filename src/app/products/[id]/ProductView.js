@@ -295,6 +295,11 @@ const { data: swrRelated, isLoading: relatedLoading } = useRelatedProducts(activ
         // مصدر واحد، فيضمن تطابق content_ids مع g:id للون الفعلي المعروض،
         // بدل الـ handle الخام دائماً (كان يطابق فقط لأول لون بالصدفة).
         content_ids: [getCatalogId(productHandle, selectedColor)],
+        contents: [{
+          id: getCatalogId(productHandle, selectedColor),
+          quantity: 1,
+          item_price: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
+        }],
         content_name: product.title || "",
         content_type: "product",
       });
@@ -861,17 +866,27 @@ const { data: swrRelated, isLoading: relatedLoading } = useRelatedProducts(activ
   setIsAddingToCart(true);
   await addToCart({...product, selectedSize, selectedColor, image: getSelectedColorCartImage(), qty: quantity});
   fbTrack("AddToCart", {
-    value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
+    value: (parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0) * quantity,
     currency: "EGP",
     content_ids: [getCatalogId(product.handle || id || product.id, selectedColor)],
+    contents: [{
+      id: getCatalogId(product.handle || id || product.id, selectedColor),
+      quantity,
+      item_price: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
+    }],
     content_name: product.title || "",
     content_type: "product",
     num_items: quantity,
   });
   ttTrack("AddToCart", {
-    value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
+    value: (parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0) * quantity,
     currency: "EGP",
     content_ids: [getCatalogId(product.handle || id || product.id, selectedColor)],
+    contents: [{
+      id: getCatalogId(product.handle || id || product.id, selectedColor),
+      quantity,
+      item_price: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
+    }],
     content_name: product.title || "",
     content_type: "product",
     num_items: quantity,
@@ -1249,16 +1264,21 @@ const { data: swrRelated, isLoading: relatedLoading } = useRelatedProducts(activ
                     });
 
                     fbTrack("AddToCart", {
-                      value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
+                      value: (parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0) * quantity,
                       currency: "EGP",
                       content_ids: [getCatalogId(product.handle || id || product.id, selectedColor)],
+                      contents: [{
+                        id: getCatalogId(product.handle || id || product.id, selectedColor),
+                        quantity,
+                        item_price: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
+                      }],
                       content_name: product.title || "",
                       content_type: "product",
                       num_items: quantity,
                     });
 
                     ttTrack("AddToCart", {
-                      value: parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0,
+                      value: (parseFloat(String(product.price).replace(/[^0-9.]/g, "")) || 0) * quantity,
                       currency: "EGP",
                       content_ids: [getCatalogId(product.handle || id || product.id, selectedColor)],
                       content_name: product.title || "",

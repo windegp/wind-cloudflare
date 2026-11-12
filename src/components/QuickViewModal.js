@@ -261,6 +261,11 @@ export default function QuickViewModal({
       // نفس القيمة الخام المرسَلة لـ addToCart أعلاه (selectedColor)، فهذا
       // القياس الخامس والأخير لـ AddToCart أصبح متسقاً مع الأربعة الباقية.
       content_ids:  [getCatalogId(handle, qvSelectedColor)],
+      contents: [{
+        id: getCatalogId(handle, qvSelectedColor),
+        quantity: qvQuantity,
+        item_price: price,
+      }],
       content_name: product.title || "",
       content_type: "product",
       num_items:    qvQuantity,
