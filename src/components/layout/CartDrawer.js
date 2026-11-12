@@ -532,26 +532,32 @@ export default function CartDrawer() {
 
 {offerCelebration && (
   <div className="offer-confetti-layer" aria-hidden="true">
-    {Array.from({ length: 64 }, (_, index) => (
+    {Array.from({ length: 84 }, (_, index) => (
       <span
         key={index}
         className="offer-confetti-piece"
         style={{
-          left: `${(index * 43) % 100}%`,
+          left: `${(index * 73 + index * index * 17) % 100}%`,
+          "--confetti-start-y": `${(index * 47 + index * index * 13) % 92}vh`,
           backgroundColor: [
-            "#171717",
-            "#D4AF37",
-            "#FFFFFF",
-            "#B88A2B",
-          ][index % 4],
-          width: `${5 + (index % 4)}px`,
-          height: `${9 + (index % 6) * 2}px`,
+            "#19D5E5",
+            "#F252C4",
+            "#F8E943",
+            "#8E4DE8",
+            "#43D99B",
+            "#FF7185",
+            "#F6F2FF",
+            "#FF9D45",
+          ][(index * 5 + Math.floor(index / 3)) % 8],
+          width: `${4 + ((index * 7) % 5)}px`,
+          height: `${5 + ((index * 11) % 8)}px`,
           clipPath:
-            index % 3 === 0
+            index % 4 === 0
               ? "polygon(8% 0, 100% 0, 92% 100%, 0 100%)"
               : "none",
-          "--confetti-drift": `${((index * 37) % 161) - 80}px`,
-          "--confetti-sway": `${((index * 19) % 45) + 22}px`,
+          rotate: `${((index * 47) % 150) - 75}deg`,
+          "--confetti-sway": `${((index * 19) % 35) + 18}px`,
+          "--confetti-sway-duration": `${1.25 + (index % 6) * 0.12}s`,
         }}
       />
     ))}
@@ -564,12 +570,20 @@ export default function CartDrawer() {
   @keyframes offerConfettiFall {
     0% {
       opacity: 1;
-      transform: translate3d(0, -20px, 0);
+      transform: translate3d(0, 0, 0);
+    }
+
+    76% {
+      opacity: 0.95;
     }
 
     100% {
       opacity: 0;
-      transform: translate3d(var(--confetti-drift), 108vh, 0);
+      transform: translate3d(
+        0,
+        calc(108vh - var(--confetti-start-y)),
+        0
+      );
     }
   }
 
@@ -578,8 +592,12 @@ export default function CartDrawer() {
       translate: 0 0;
     }
 
-    50% {
+    25% {
       translate: var(--confetti-sway) 0;
+    }
+
+    75% {
+      translate: calc(0px - var(--confetti-sway)) 0;
     }
   }
 
@@ -593,13 +611,12 @@ export default function CartDrawer() {
 
   .offer-confetti-piece {
     position: absolute;
-    top: -20px;
+    top: var(--confetti-start-y);
     border-radius: 1px;
     animation:
       offerConfettiFall 3.25s linear both,
-      offerConfettiSway 1.35s ease-in-out infinite;
+      offerConfettiSway var(--confetti-sway-duration) ease-in-out infinite;
     will-change: transform, translate, opacity;
-    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.12));
   }
 
   @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;900&family=Tajawal:wght@400;500;700&display=swap');
