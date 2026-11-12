@@ -1239,7 +1239,7 @@ router.push(`/thank-you?orderId=${orderId}`);
             <span>{summaryOpen ? 'إخفاء تفاصيل الطلب' : 'عرض تفاصيل الطلب'}</span>
             <ChevronDown size={15} className={`transition-transform ${summaryOpen ? 'rotate-180' : ''}`} style={{ color: '#2563eb' }} />
           </div>
-          <span className="font-black text-xl text-gray-900">ج.م {subtotal}.00</span>
+          <span className="font-black text-xl text-gray-900">ج.م {finalTotal}.00</span>
         </div>
 
         {summaryOpen && (
