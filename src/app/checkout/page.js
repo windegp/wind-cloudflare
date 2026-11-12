@@ -1662,7 +1662,7 @@ router.push(`/thank-you?orderId=${orderId}`);
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <div className="text-left">
+                  <div className="text-right">
                     <span className="block font-black text-xl text-gray-900">ج.م {productsAfterDiscount}.00</span>
                     <span className="block text-[11px] font-semibold text-red-700">
                       تكلفة الشحن: {SHIPPING_COST === 0 ? 'مجاناً' : `ج.م ${SHIPPING_COST}.00`}
