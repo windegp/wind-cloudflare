@@ -1,4 +1,4 @@
-﻿import { ADMIN_UID } from "@/lib/constants";
+import { ADMIN_UID } from "@/lib/constants";
 
 export async function verifyAdminIdToken(request) {
   const authorization = request.headers.get("authorization") || "";
@@ -6,13 +6,11 @@ export async function verifyAdminIdToken(request) {
   const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
 
   if (!match) {
-    console.warn("[admin-auth] missing_bearer_token");
-    return false;
+    return { ok: false, reason: "missing_bearer_token" };
   }
 
   if (!apiKey) {
-    console.error("[admin-auth] missing_firebase_api_key");
-    return false;
+    return { ok: false, reason: "missing_firebase_api_key" };
   }
 
   try {
@@ -28,35 +26,36 @@ export async function verifyAdminIdToken(request) {
     const payload = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      console.warn("[admin-auth] firebase_lookup_failed", {
-        status: response.status,
-        errorCode: payload.error?.message || "UNKNOWN",
-      });
-      return false;
+      const rawCode = payload.error?.message || "UNKNOWN";
+      const safeCode = /^[A-Z0-9_]+$/.test(rawCode)
+        ? rawCode
+        : "UNKNOWN";
+
+      return {
+        ok: false,
+        reason: `firebase_lookup_failed_${response.status}_${safeCode}`,
+      };
     }
 
     const user = payload.users?.[0];
 
     if (!user) {
-      console.warn("[admin-auth] firebase_user_missing");
-      return false;
+      return { ok: false, reason: "firebase_user_missing" };
     }
 
     if (user.localId !== ADMIN_UID) {
-      console.warn("[admin-auth] admin_uid_mismatch");
-      return false;
+      return { ok: false, reason: "admin_uid_mismatch" };
     }
 
     if (user.disabled === true) {
-      console.warn("[admin-auth] admin_account_disabled");
-      return false;
+      return { ok: false, reason: "admin_account_disabled" };
     }
 
-    return true;
+    return { ok: true };
   } catch (error) {
-    console.error("[admin-auth] firebase_request_failed", {
-      errorName: error?.name || "UnknownError",
-    });
-    return false;
+    return {
+      ok: false,
+      reason: `firebase_request_failed_${error?.name || "UnknownError"}`,
+    };
   }
 }

@@ -30,11 +30,18 @@ export async function POST(request) {
       );
     }
 
-    if (purpose === "product" && !(await verifyAdminIdToken(request))) {
-      return NextResponse.json(
-        { error: "unauthorized" },
-        { status: 401 },
-      );
+    if (purpose === "product") {
+      const authResult = await verifyAdminIdToken(request);
+
+      if (!authResult.ok) {
+        return NextResponse.json(
+          {
+            error: "unauthorized",
+            diagnostic: authResult.reason,
+          },
+          { status: 401 },
+        );
+      }
     }
 
     if (purpose === "review") {

@@ -36,7 +36,7 @@ function uploadRequest({ purpose = "review", bytes = pngBytes, origin = "https:/
 describe("R2 media routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    verifyAdminMock.mockResolvedValue(false);
+    verifyAdminMock.mockResolvedValue({ ok: false, reason: "admin_uid_mismatch" });
   });
 
   it("keeps public review uploads working and writes verified PNG bytes to the reviews prefix", async () => {
@@ -64,7 +64,7 @@ describe("R2 media routes", () => {
     expect(denied.status).toBe(401);
     expect(putMock).not.toHaveBeenCalled();
 
-    verifyAdminMock.mockResolvedValue(true);
+    verifyAdminMock.mockResolvedValue({ ok: true });
     const accepted = await upload(uploadRequest({ purpose: "product" }));
     expect(accepted.status).toBe(200);
     expect(putMock.mock.calls.at(-1)[0]).toMatch(/^uploads\/products\//);
@@ -79,7 +79,7 @@ describe("R2 media routes", () => {
     expect((await legacy.json()).skipped).toBe(true);
     expect(deleteMock).not.toHaveBeenCalled();
 
-    verifyAdminMock.mockResolvedValue(true);
+    verifyAdminMock.mockResolvedValue({ ok: true });
     const id = "123e4567-e89b-42d3-a456-426614174000";
     const managed = await remove(new Request("https://windeg.com/api/delete-image", {
       method: "POST",
