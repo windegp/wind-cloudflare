@@ -35,10 +35,7 @@ export async function POST(request) {
 
       if (!authResult.ok) {
         return NextResponse.json(
-          {
-            error: "unauthorized",
-            diagnostic: authResult.reason,
-          },
+          { error: "unauthorized" },
           { status: 401 },
         );
       }
