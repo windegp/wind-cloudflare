@@ -1,12 +1,19 @@
-
-import { ADMIN_UID } from "@/lib/constants";
+﻿import { ADMIN_UID } from "@/lib/constants";
 
 export async function verifyAdminIdToken(request) {
   const authorization = request.headers.get("authorization") || "";
   const match = authorization.match(/^Bearer\s+(.+)$/i);
   const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
 
-  if (!match || !apiKey) return false;
+  if (!match) {
+    console.warn("[admin-auth] missing_bearer_token");
+    return false;
+  }
+
+  if (!apiKey) {
+    console.error("[admin-auth] missing_firebase_api_key");
+    return false;
+  }
 
   try {
     const response = await fetch(
@@ -18,13 +25,38 @@ export async function verifyAdminIdToken(request) {
       },
     );
 
-    if (!response.ok) return false;
+    const payload = await response.json().catch(() => ({}));
 
-    const payload = await response.json();
+    if (!response.ok) {
+      console.warn("[admin-auth] firebase_lookup_failed", {
+        status: response.status,
+        errorCode: payload.error?.message || "UNKNOWN",
+      });
+      return false;
+    }
+
     const user = payload.users?.[0];
 
-    return user?.localId === ADMIN_UID && user.disabled !== true;
-  } catch {
+    if (!user) {
+      console.warn("[admin-auth] firebase_user_missing");
+      return false;
+    }
+
+    if (user.localId !== ADMIN_UID) {
+      console.warn("[admin-auth] admin_uid_mismatch");
+      return false;
+    }
+
+    if (user.disabled === true) {
+      console.warn("[admin-auth] admin_account_disabled");
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("[admin-auth] firebase_request_failed", {
+      errorName: error?.name || "UnknownError",
+    });
     return false;
   }
 }
