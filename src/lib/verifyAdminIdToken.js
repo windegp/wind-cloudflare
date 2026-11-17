@@ -3,7 +3,7 @@ import { ADMIN_UID } from "@/lib/constants";
 export async function verifyAdminIdToken(request) {
   const authorization = request.headers.get("authorization") || "";
   const match = authorization.match(/^Bearer\s+(.+)$/i);
-  const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+  const apiKey = process.env.FIREBASE_SERVER_API_KEY;
 
   if (!match) {
     return { ok: false, reason: "missing_bearer_token" };
