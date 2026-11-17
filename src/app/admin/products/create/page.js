@@ -6,6 +6,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { getDb } from "@/lib/firebase";
 import { doc, getDoc, setDoc, serverTimestamp, collection, getDocs, updateDoc, increment, query, where, limit } from "firebase/firestore/lite";
 import ImageUploader from "@/components/ImageUploader";
+import { uploadStoreImage, deleteStoreImage } from "@/lib/storeMedia";
 import { buildVariantsFromOptions, validateVariants } from "@/lib/inventoryHelpers";
 import { GENERIC_COLLECTIONS } from "@/lib/constants";
 import { Loader2, Save, Plus, Minus, Star, Info, Share2, Heart, ImageIcon, X, Truck, Eye, ShieldCheck, ChevronLeft, Search, ChevronRight, ShoppingBag, CreditCard, Banknote, Smartphone, Lock, Edit2, ExternalLink, CheckSquare, Square, FolderTree, CheckCircle2, Globe, Box, Settings, Tag, AlertCircle, Database, Layout, Trash2, Monitor, Archive, Layers, ChevronDown, ChevronUp, Menu, Target, Mail, Crown, UserMinus, MonitorSmartphone, LinkIcon, Paintbrush, ListFilter, PackageSearch, ArrowRight } from '@/components/icons-extra';
@@ -315,7 +316,7 @@ function CreateProductForm() {
     setMetafields(prev => ({ ...prev, [targetMetafield]: currentHandles.join(', ') }));
   };
 
-  const handleImageKitSuccess = (urls) => {
+  const handleUploadSuccess = (urls) => {
     if (Array.isArray(urls)) {
       setImages((prev) => [...prev, ...urls]);
     } else {
@@ -324,7 +325,7 @@ function CreateProductForm() {
   };
 
   // 🔥 استبدال صورة الغلاف (images[0]) بالكامل بصورة جديدة — رفع + استبدال الموضع
-  // نفسه في المصفوفة (مش إضافة في الآخر)، مع حذف الصورة القديمة فعلياً من ImageKit
+  // نفسه في المصفوفة. Deletion is deferred until the product save succeeds.
   const [isReplacingCover, setIsReplacingCover] = useState(false);
   const [pendingDeletedUrls, setPendingDeletedUrls] = useState([]);
   const handleReplaceCoverImage = async (e) => {
@@ -335,31 +336,12 @@ function CreateProductForm() {
     setIsReplacingCover(true);
     const oldCoverUrl = images[0];
     try {
-      const authRes = await fetch('/api/upload');
-      if (!authRes.ok) throw new Error("Auth Failed");
-      const authData = await authRes.json();
-
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("fileName", `wind_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`);
-      formData.append("publicKey", process.env.NEXT_PUBLIC_IMAGEKIT_PUBLIC_KEY);
-      formData.append("signature", authData.signature);
-      formData.append("expire", authData.expire);
-      formData.append("token", authData.token);
-      formData.append("folder", "/WIND-Shopping");
-
-      const uploadRes = await fetch("https://upload.imagekit.io/api/v1/files/upload", {
-        method: "POST",
-        body: formData,
-      });
-      if (!uploadRes.ok) throw new Error("Upload failed");
-      const data = await uploadRes.json();
-      if (!data.url) throw new Error("No URL returned");
+      const newUrl = await uploadStoreImage(file, "product");
 
       // استبدال حقيقي للموضع الأول، مش إضافة صورة جديدة
       setImages((prev) => {
         const next = [...prev];
-        next[0] = data.url;
+        next[0] = newUrl;
         return next;
       });
 
@@ -385,7 +367,7 @@ function CreateProductForm() {
   const removeImage = (indexToRemove) => {
     const removedUrl = images[indexToRemove];
     setImages(images.filter((_, index) => index !== indexToRemove));
-    // لا نحذف من ImageKit الآن — نحتفظ بالرابط معلّقاً لحد ما الحفظ ينجح فعلياً
+    // Defer deletion until the product save succeeds; legacy ImageKit URLs are retained.
     if (removedUrl) {
       setPendingDeletedUrls((prev) => [...prev, removedUrl]);
     }
@@ -587,22 +569,32 @@ function CreateProductForm() {
       );
 
       if (urlsToDelete.length > 0) {
-        await Promise.all(
-          urlsToDelete.map((url) =>
-            fetch('/api/delete-image', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ url }),
-            }).catch((err) =>
-              console.error('ImageKit delete failed (non-blocking):', url, err)
-            )
-          )
-        );
+  const deletionResults = await Promise.all(
+    urlsToDelete.map(async (url) => ({
+      url,
+      result: await deleteStoreImage(url),
+    }))
+  );
 
-        setPendingDeletedUrls((prev) =>
-          prev.filter((url) => images.includes(url))
-        );
-      }
+  const failedUrls = deletionResults
+    .filter(({ result }) => result?.success === false)
+    .map(({ url }) => url);
+
+  // Keep failed deletions pending so they are not silently forgotten.
+  setPendingDeletedUrls((prev) =>
+    prev.filter(
+      (url) => images.includes(url) || failedUrls.includes(url)
+    )
+  );
+
+  if (failedUrls.length > 0) {
+    console.error("Some old R2 images could not be deleted:", failedUrls);
+
+    alert(
+      `تم حفظ المنتج بنجاح، لكن تعذر حذف ${failedUrls.length} من الصور القديمة. الصور الجديدة محفوظة، ويمكن مراجعة الصور القديمة وحذفها لاحقًا.`
+    );
+  }
+}
 
       // 🔥 الخطوة الأخيرة من الترحيل الآمن: تحويل المستند القديم لمستند Redirect
       // (بدون حذفه نهائياً — يحافظ على أي بيانات/مراجع قديمة، فقط يصبح غير نشط ويوجّه الزوار)
@@ -806,7 +798,7 @@ if (collectionsToRevalidate.length > 0) {
               </div>
               
               <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center bg-gray-50 hover:bg-gray-100 transition-colors group relative">
-                <ImageUploader onUploadSuccess={handleImageKitSuccess} folder="/WIND-Shopping" />
+                <ImageUploader onUploadSuccess={handleUploadSuccess} purpose="product" />
                 
                 <div className="mt-6 pt-6 border-t border-gray-200 flex flex-col sm:flex-row gap-3">
                   <input 

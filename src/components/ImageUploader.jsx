@@ -1,8 +1,9 @@
 "use client";
 import React, { useState } from 'react';
 import { ImageIcon, Loader2, CheckCircle2 } from '@/components/icons-extra';
+import { uploadStoreImage } from '@/lib/storeMedia';
 
-export default function ImageUploader({ onUploadSuccess, folder = "/WIND_Shopping/Reviews" }) {
+export default function ImageUploader({ onUploadSuccess, purpose = "review" }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [uploadCount, setUploadCount] = useState(0);
@@ -11,46 +12,25 @@ export default function ImageUploader({ onUploadSuccess, folder = "/WIND_Shoppin
     const files = Array.from(e.target.files);
     if (!files || files.length === 0) return;
 
+    if (files.length > 5) {
+      setError("يمكنك رفع 5 صور كحد أقصى في المرة الواحدة.");
+      e.target.value = null;
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setUploadCount(files.length);
 
     try {
-      // 1. جلب التوكن (مرة واحدة للكل الملفات)
-      const authRes = await fetch('/api/upload'); 
-      if (!authRes.ok) throw new Error("Auth Failed");
-      const authData = await authRes.json();
-
-      // 2. تجهيز عمليات الرفع لكل صورة
       const uploadPromises = files.map(async (file) => {
         try {
-          const formData = new FormData();
-          formData.append("file", file);
-          formData.append("fileName", `wind_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`);
-          formData.append("publicKey", process.env.NEXT_PUBLIC_IMAGEKIT_PUBLIC_KEY);
-          formData.append("signature", authData.signature);
-          formData.append("expire", authData.expire);
-          formData.append("token", authData.token);
-          formData.append("folder", folder);
-
-          const uploadRes = await fetch("https://upload.imagekit.io/api/v1/files/upload", {
-            method: "POST",
-            body: formData,
-          });
-
-          if (!uploadRes.ok) {
-            const errorData = await uploadRes.text();
-            console.error("ImageKit upload failed:", uploadRes.status, errorData);
-            return null;
-          }
-
-          const data = await uploadRes.json();
-          return data.url || null;
-         } catch (err) {
+          return await uploadStoreImage(file, purpose);
+        } catch (err) {
           console.error("Error uploading file:", file.name, err);
           return null;
-         }
-       });
+        }
+      });
 
       const results = await Promise.all(uploadPromises);
       const successfulUrls = results.filter(url => url !== null);
@@ -80,7 +60,7 @@ export default function ImageUploader({ onUploadSuccess, folder = "/WIND_Shoppin
           ${loading ? 'bg-gray-50 border-gray-200 cursor-wait' : 'bg-white border-[#EAEAEA] hover:border-[#1A1A1A] cursor-pointer'}
         `}
       >
-        <input 
+        <input
           type="file" 
           accept="image/*" 
           multiple 

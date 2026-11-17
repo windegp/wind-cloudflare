@@ -1,3 +1,8 @@
+if (process.argv.includes("dev")) {
+  const { initOpenNextCloudflareForDev } = await import("@opennextjs/cloudflare");
+  initOpenNextCloudflareForDev();
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // ============================================
@@ -17,6 +22,10 @@ const nextConfig = {
       {
         protocol: 'https',
         hostname: '**.imagekit.io',
+      },
+      {
+        protocol: 'https',
+        hostname: 'media.windeg.com',
       },
       {
         protocol: 'https',

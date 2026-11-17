@@ -24,3 +24,4 @@ firestore-export/
 Thumbs.db
 # Wrangler local state
 .wrangler/
+work/imagekit-r2-migration/

@@ -1,14 +1,37 @@
-{
-	"name": "wind-shopping",
-	"pages_build_output_dir": ".open-next",
-	"compatibility_date": "2025-05-05",
-	"compatibility_flags": [
-		"nodejs_compat_v2"
-	],
-	"kv_namespaces": [
+﻿{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "windeg",
+  "pages_build_output_dir": ".open-next",
+  "compatibility_date": "2025-05-05",
+  "compatibility_flags": [
+    "nodejs_compat_v2"
+  ],
+  "kv_namespaces": [
     {
       "binding": "WIND_KV",
       "id": "47cfb937f6354b88819be29386215889"
     }
-  ]
+  ],
+  "r2_buckets": [
+    {
+      "binding": "WIND_MEDIA",
+      "bucket_name": "wind-shopping-media"
+    }
+  ],
+  "env": {
+    "production": {
+      "kv_namespaces": [
+        {
+          "binding": "WIND_KV",
+          "id": "47cfb937f6354b88819be29386215889"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "WIND_MEDIA",
+          "bucket_name": "wind-shopping-media"
+        }
+      ]
+    }
+  }
 }

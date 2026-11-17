@@ -2,6 +2,7 @@
 // Final Production Icon Fix - v2.1
 import { useEffect, useState } from 'react';
 import { getDb } from "@/lib/firebase";
+import { deleteStoreImage } from "@/lib/storeMedia";
 import { collection, getDocs, query, orderBy, limit, startAfter, doc, deleteDoc, updateDoc, increment, documentId } from "firebase/firestore/lite";
 // 🔥 1. أضفنا useRouter بدل Link لقتل الـ Prefetch
 import { useRouter } from 'next/navigation'; 
@@ -110,19 +111,30 @@ export default function ProductsList() {
 
       await deleteDoc(doc(db, "products", product.id));
 
-      // 🔥 حذف المستند نجح فعلاً — دلوقتي بس نحذف كل صور المنتج من ImageKit
-      // (لو رتبناها قبل حذف المستند وفشل الحذف، كان هيفضل منتج نشط بصور مكسورة)
-      if (Array.isArray(product.images) && product.images.length > 0) {
-        await Promise.all(
-          product.images.map((url) =>
-            fetch('/api/delete-image', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ url }),
-            }).catch((err) => console.error('ImageKit delete failed (non-blocking):', url, err))
-          )
-        );
-      }
+      // Delete managed R2 product uploads only after the Firestore document is gone.
+if (Array.isArray(product.images) && product.images.length > 0) {
+  const deletionResults = await Promise.all(
+    product.images.map(async (url) => ({
+      url,
+      result: await deleteStoreImage(url),
+    }))
+  );
+
+  const failedUrls = deletionResults
+    .filter(({ result }) => result?.success === false)
+    .map(({ url }) => url);
+
+  if (failedUrls.length > 0) {
+    console.error(
+      "[R2] Product deleted, but some images could not be removed:",
+      failedUrls
+    );
+
+    alert(
+      `تم حذف المنتج بنجاح، لكن تعذر حذف ${failedUrls.length} من الصور القديمة من التخزين.`
+    );
+  }
+}
       
       try {
         const settingsRef = doc(db, "settings", "siteSettings");

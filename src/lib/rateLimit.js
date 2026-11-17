@@ -32,6 +32,13 @@ const RATE_LIMITS = {
     window: 300,      // per 5 minutes
     blockDuration: 900 // Block for 15 minutes
   },
+
+  // Public customer image uploads
+  REVIEW_UPLOAD: {
+    requests: 12,
+    window: 60,
+    blockDuration: 300
+  },
   
   // Relaxed for read-only endpoints
   READ: {
