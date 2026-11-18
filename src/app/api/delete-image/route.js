@@ -5,7 +5,7 @@ import { verifyAdminIdToken } from "@/lib/verifyAdminIdToken";
 
 export const dynamic = "force-dynamic";
 
-const PRODUCT_UPLOAD_KEY = /^uploads\/products\/([0-9a-f-]{36})\.(jpg|png|webp|gif)$/i;
+const PRODUCT_UPLOAD_KEY = /^(?:uploads\/)?products\/[0-9a-f-]{36}\.(jpg|png|webp|gif)$/i;
 
 export async function POST(request) {
   try {

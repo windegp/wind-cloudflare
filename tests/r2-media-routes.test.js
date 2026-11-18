@@ -67,8 +67,9 @@ describe("R2 media routes", () => {
     verifyAdminMock.mockResolvedValue({ ok: true });
     const accepted = await upload(uploadRequest({ purpose: "product" }));
     expect(accepted.status).toBe(200);
-    expect(putMock.mock.calls.at(-1)[0]).toMatch(/^uploads\/products\//);
+    expect(putMock.mock.calls.at(-1)[0]).toMatch(/^products\//);
   });
+
 
   it("preserves ImageKit originals and only deletes managed product upload keys", async () => {
     const legacy = await remove(new Request("https://windeg.com/api/delete-image", {
@@ -88,5 +89,23 @@ describe("R2 media routes", () => {
     }));
     expect(managed.status).toBe(200);
     expect(deleteMock).toHaveBeenCalledWith(`uploads/products/${id}.png`);
+  });
+
+  it("deletes new product uploads from the products prefix", async () => {
+    verifyAdminMock.mockResolvedValue({ ok: true });
+
+    const id = "123e4567-e89b-42d3-a456-426614174001";
+
+    const response = await remove(new Request("https://windeg.com/api/delete-image", {
+      method: "POST",
+      body: JSON.stringify({ url: `https://media.windeg.com/products/${id}.png` }),
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer test-token",
+      },
+    }));
+
+    expect(response.status).toBe(200);
+    expect(deleteMock).toHaveBeenCalledWith(`products/${id}.png`);
   });
 });

@@ -44,7 +44,10 @@ export async function deleteStoreImage(url) {
 
     if (
       parsed.origin !== STORE_MEDIA_ORIGIN ||
-      !parsed.pathname.startsWith("/uploads/products/")
+      !(
+        parsed.pathname.startsWith("/products/") ||
+        parsed.pathname.startsWith("/uploads/products/")
+      )
     ) {
       return { success: true, skipped: true };
     }

@@ -101,8 +101,8 @@ export async function POST(request) {
       throw new Error("WIND_MEDIA binding is unavailable");
     }
 
-    const mediaFolder = purpose === "product" ? "products" : "reviews";
-    const key = `uploads/${mediaFolder}/${crypto.randomUUID()}.${detected.extension}`;
+    const mediaFolder = purpose === "product" ? "products" : "uploads/reviews";
+    const key = `${mediaFolder}/${crypto.randomUUID()}.${detected.extension}`;
 
     await env.WIND_MEDIA.put(key, bytes, {
       httpMetadata: {
