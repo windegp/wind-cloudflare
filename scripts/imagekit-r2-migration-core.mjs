@@ -1,4 +1,112 @@
+import { createHash } from "node:crypto";
 import { normalizeImageKitPath } from "../src/lib/media-utils.js";
+
+export const MIGRATION_LAYOUT_VERSION = "products-migrated-v1";
+const progressKey = (sourcePath, layoutVersion) => `${layoutVersion}:${sourcePath}`;
+
+export function classifyImageUsage(sourcePath, references = [], localUsages = []) {
+  const categories = new Set();
+  const sourceSegments = sourcePath.split("/").filter(Boolean).map((segment) => segment.toLowerCase());
+  const explicitlyReviewMedia = sourceSegments.includes("reviews");
+
+  for (const reference of references) {
+    const path = reference.documentPath || reference.collectionName || "";
+    const parts = path.split("/");
+
+    if (parts[0] === "products" && parts.length === 2) {
+      categories.add(explicitlyReviewMedia ? "review" : "product");
+    } else if (
+      parts[0]?.toLowerCase() === "reviews" ||
+      parts.at(-2)?.toLowerCase() === "reviews"
+    ) {
+      categories.add("review");
+    } else if (
+      ["collections", "categories"].includes(parts[0]?.toLowerCase())
+    ) {
+      categories.add("collection");
+    } else if (
+      ["settings", "homepage", "policies"].includes(parts[0]?.toLowerCase())
+    ) {
+      categories.add("site");
+    }
+  }
+
+  for (const usage of localUsages) {
+    if (explicitlyReviewMedia && usage.category === "product" && usage.source === "catalog_feed") {
+      categories.add("review");
+    } else if (usage.category) {
+      categories.add(usage.category);
+    }
+  }
+
+  // Homepage may reuse collection artwork; the collection record is its owner.
+  if (categories.size === 2 && categories.has("collection") && categories.has("site")) {
+    return { category: "collection", reason: null };
+  }
+
+  if (categories.size === 1) return { category: [...categories][0], reason: null };
+  if (categories.size === 0) return { category: null, reason: "usage_not_identified" };
+
+  return { category: null, reason: "conflicting_usage_categories" };
+}
+
+export function destinationObjectKey(sourcePath, category, filePath = sourcePath) {
+  if (!["product", "review", "collection", "site"].includes(category)) throw new Error("Unresolved image usage category");
+  const extension = String(filePath).match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase();
+  if (!extension || !["jpg", "jpeg", "png", "webp", "gif", "avif", "svg"].includes(extension)) throw new Error("Unresolved or unsupported image extension");
+  const digest = createSourceDigest(sourcePath);
+  const prefix = category === "product" ? "products/migrated" : category === "review" ? "uploads/reviews/migrated" : category === "collection" ? "collections/migrated" : "site-media/migrated";
+  return `${prefix}/${digest}.${extension}`;
+}
+
+function createSourceDigest(sourcePath) {
+  return createHash("sha256").update(sourcePath).digest("hex");
+}
+
+export function legacyObjectKey(sourcePath) {
+  const segments = sourcePath.split("/").filter(Boolean);
+  if (!segments.length || segments.some((segment) => segment === "." || segment === "..")) throw new Error(`Unsafe ImageKit file path: ${sourcePath}`);
+  return `legacy/imagekit/${segments.join("/")}`;
+}
+
+export function sha256ForBytes(bytes) {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+export function verifyCopiedBytes(expectedBytes, actualBytes, label = "copied image") {
+  if (actualBytes.byteLength !== expectedBytes.byteLength) {
+    throw new Error(`${label} size mismatch`);
+  }
+  const expectedSha256 = sha256ForBytes(expectedBytes);
+  const actualSha256 = sha256ForBytes(actualBytes);
+  if (actualSha256 !== expectedSha256) throw new Error(`${label} SHA-256 mismatch`);
+  return expectedSha256;
+}
+
+function isCopyVerified(state, sourcePath, targetKey, layoutVersion = MIGRATION_LAYOUT_VERSION) {
+  const record = state.copied?.[sourcePath];
+  const copy = record?.destinations?.[layoutVersion];
+  return Boolean(copy?.url && copy?.key === targetKey && copy?.sha256 && copy.status === "verified" && copy.layoutVersion === layoutVersion);
+}
+
+function referenceProgressKey(sourcePath, layoutVersion) {
+  return progressKey(sourcePath, layoutVersion);
+}
+
+export function recordVerifiedDestination(state, sourcePath, copied, layoutVersion = MIGRATION_LAYOUT_VERSION) {
+  state.copied ||= {};
+  const prior = state.copied[sourcePath] || {};
+  const legacy = prior.legacy || (prior.key?.startsWith("legacy/imagekit/") ? { ...prior } : undefined);
+  state.copied[sourcePath] = {
+    ...prior,
+    ...(legacy ? { legacy } : {}),
+    destinations: {
+      ...(prior.destinations || {}),
+      [layoutVersion]: { ...copied, status: "verified", layoutVersion },
+    },
+  };
+  return state.copied[sourcePath].destinations[layoutVersion];
+}
 
 /** Walk every reachable Firestore collection recursively, reading each document once. */
 export async function scanFirestoreRecursively(db, { collectPaths, countLinks }) {
@@ -135,19 +243,11 @@ export function sourcePathForFile(file) {
   return normalizeImageKitPath(`https://ik.imagekit.io/windeg${candidate}`);
 }
 
-function isCopyVerified(state, sourcePath) {
-  const copy = state.copied?.[sourcePath];
-  // Prior script versions only wrote this record after public byte verification.
-  return Boolean(copy?.url && copy?.key && copy?.sha256 && (copy.status === undefined || copy.status === "verified"));
-}
-
-
 /** Refresh reference progress while preserving completed work for the same scan. */
-export function refreshReferenceProgress(referencesByPath, state, scanId) {
+export function refreshReferenceProgress(referencesByPath, state, scanId, layoutVersion = MIGRATION_LAYOUT_VERSION) {
   state.firestoreUpdated ||= {};
 
   const sourcePaths = new Set([
-    ...Object.keys(state.firestoreUpdated),
     ...referencesByPath.keys(),
   ]);
 
@@ -156,7 +256,8 @@ export function refreshReferenceProgress(referencesByPath, state, scanId) {
       ...(referencesByPath.get(sourcePath)?.values() || []),
     ].map(({ documentPath }) => documentPath);
 
-    const progress = state.firestoreUpdated[sourcePath] ||= {
+    const key = referenceProgressKey(sourcePath, layoutVersion);
+    const progress = state.firestoreUpdated[key] ||= {
       documentPaths: [],
       processedDocumentPaths: [],
       updatedDocs: 0,
@@ -187,9 +288,9 @@ export function refreshReferenceProgress(referencesByPath, state, scanId) {
 
 
 
-export function haveNoPendingCurrentReferences(referencesByPath, state, scanId) {
+export function haveNoPendingCurrentReferences(referencesByPath, state, scanId, layoutVersion = MIGRATION_LAYOUT_VERSION) {
   for (const [sourcePath, references] of referencesByPath) {
-    const progress = state.firestoreUpdated?.[sourcePath];
+    const progress = state.firestoreUpdated?.[referenceProgressKey(sourcePath, layoutVersion)];
     const currentDocumentPaths = [...references.values()].map(
       ({ documentPath }) => documentPath,
     );
@@ -219,14 +320,35 @@ export function haveNoPendingCurrentReferences(referencesByPath, state, scanId) 
 
 
 /** Select the next bounded batch of files that need copying or reference reconciliation. */
-export function selectPendingFiles(files, referencesByPath, state, limit = Infinity) {
+export function selectPendingFiles(files, referencesByPath, state, limit = Infinity, layoutVersion = MIGRATION_LAYOUT_VERSION) {
   const pending = files.filter((file) => {
     const sourcePath = sourcePathForFile(file);
-    if (!isCopyVerified(state, sourcePath)) return true;
-    // A previously checked document may acquire another ImageKit link later.
-    // The current scan, rather than an old completed-document list, is authoritative.
-    return (referencesByPath.get(sourcePath)?.size || 0) > 0;
+
+    if (!isCopyVerified(state, sourcePath, file.targetKey, layoutVersion)) return true;
+
+    const references = referencesByPath.get(sourcePath);
+    if (!references?.size) return false;
+
+    const progress = state.firestoreUpdated?.[referenceProgressKey(sourcePath, layoutVersion)];
+
+    if (
+      !progress ||
+      progress.status !== "complete" ||
+      (progress.pendingDocumentPaths?.length || 0) > 0
+    ) {
+      return true;
+    }
+
+    const processed = new Set(progress.processedDocumentPaths || []);
+    const currentDocumentPaths = [...references.values()].map(
+      ({ documentPath }) => documentPath,
+    );
+
+    return currentDocumentPaths.some(
+      (documentPath) => !processed.has(documentPath),
+    );
   });
+
   return pending.slice(0, limit);
 }
 
@@ -239,23 +361,20 @@ export async function processFileWithCheckpoint({
   copyAndVerify,
   updateReferences,
   saveState,
+  layoutVersion = MIGRATION_LAYOUT_VERSION,
 }) {
   const sourcePath = sourcePathForFile(file);
-  let copied = state.copied?.[sourcePath];
+  let copied = state.copied?.[sourcePath]?.destinations?.[layoutVersion];
 
-  if (!isCopyVerified(state, sourcePath)) {
+  if (!isCopyVerified(state, sourcePath, file.targetKey, layoutVersion)) {
     copied = await copyAndVerify(file);
-    state.copied ||= {};
-    state.copied[sourcePath] = { ...copied, status: "verified" };
-    copied = state.copied[sourcePath];
-    await saveState();
-  } else if (state.copied[sourcePath].status !== "verified") {
-    state.copied[sourcePath].status = "verified";
+    copied = recordVerifiedDestination(state, sourcePath, copied, layoutVersion);
     await saveState();
   }
 
   state.firestoreUpdated ||= {};
-  const progress = state.firestoreUpdated[sourcePath] ||= {
+  const key = referenceProgressKey(sourcePath, layoutVersion);
+  const progress = state.firestoreUpdated[key] ||= {
     documentPaths: [],
     processedDocumentPaths: [],
     updatedDocs: 0,
@@ -294,4 +413,6 @@ export async function processFileWithCheckpoint({
   return { sourcePath, copied, progress };
 }
 
-export { isCopyVerified as hasVerifiedCopy };
+export function hasVerifiedCopy(state, sourcePath, targetKey, layoutVersion = MIGRATION_LAYOUT_VERSION) {
+  return isCopyVerified(state, sourcePath, targetKey, layoutVersion);
+}

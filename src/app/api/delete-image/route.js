@@ -33,6 +33,10 @@ export async function POST(request) {
       return NextResponse.json({ error: "invalid_url_path" }, { status: 400 });
     }
 
+    if (key.startsWith("products/migrated/")) {
+      return NextResponse.json({ success: true, skipped: true, reason: "migration_archive_is_immutable" });
+    }
+
     if (!PRODUCT_UPLOAD_KEY.test(key)) {
       return NextResponse.json({ success: true, skipped: true, reason: "not_a_product_upload" });
     }

@@ -42,6 +42,15 @@ export async function deleteStoreImage(url) {
   try {
     const parsed = new URL(url);
 
+    let decodedPath;
+    try { decodedPath = decodeURIComponent(parsed.pathname.slice(1)); } catch {
+      return { success: true, skipped: true };
+    }
+
+    if (decodedPath.startsWith("products/migrated/")) {
+      return { success: true, skipped: true, reason: "migration_archive_is_immutable" };
+    }
+
     if (
       parsed.origin !== STORE_MEDIA_ORIGIN ||
       !(

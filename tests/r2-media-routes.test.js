@@ -108,4 +108,16 @@ describe("R2 media routes", () => {
     expect(response.status).toBe(200);
     expect(deleteMock).toHaveBeenCalledWith(`products/${id}.png`);
   });
+
+  it("never deletes migrated archive objects through the product delete endpoint", async () => {
+    verifyAdminMock.mockResolvedValue({ ok: true });
+    const response = await remove(new Request("https://windeg.com/api/delete-image", {
+      method: "POST",
+      body: JSON.stringify({ url: "https://media.windeg.com/products/migrated/abc123.jpg" }),
+      headers: { "Content-Type": "application/json", Authorization: "Bearer test-token" },
+    }));
+    expect(response.status).toBe(200);
+    expect((await response.json()).reason).toBe("migration_archive_is_immutable");
+    expect(deleteMock).not.toHaveBeenCalled();
+  });
 });
