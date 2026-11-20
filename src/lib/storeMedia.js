@@ -2,7 +2,7 @@
 "use client";
 
 import { getAuthInstance } from "@/lib/firebase";
-import { STORE_MEDIA_ORIGIN } from "@/lib/media-utils";
+import { STORE_MEDIA_ORIGIN, classifyManagedMediaKey } from "@/lib/media-utils";
 
 async function adminHeaders() {
   const user = getAuthInstance().currentUser;
@@ -47,18 +47,14 @@ export async function deleteStoreImage(url) {
       return { success: true, skipped: true };
     }
 
-    if (decodedPath.startsWith("products/migrated/")) {
-      return { success: true, skipped: true, reason: "migration_archive_is_immutable" };
+    if (parsed.origin !== STORE_MEDIA_ORIGIN) {
+      return { success: true, skipped: true };
     }
 
-    if (
-      parsed.origin !== STORE_MEDIA_ORIGIN ||
-      !(
-        parsed.pathname.startsWith("/products/") ||
-        parsed.pathname.startsWith("/uploads/products/")
-      )
-    ) {
-      return { success: true, skipped: true };
+    // The server re-checks everything; this only avoids a pointless round trip for protected files.
+    const classification = classifyManagedMediaKey(decodedPath);
+    if (!classification.deletable) {
+      return { success: true, skipped: true, reason: classification.reason };
     }
 
     const headers = await adminHeaders();

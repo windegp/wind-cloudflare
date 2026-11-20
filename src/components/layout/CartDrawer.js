@@ -1002,10 +1002,10 @@ export default function CartDrawer() {
                 <button onClick={toggleCart} className="block w-full text-center text-[13px] font-normal text-[#555] hover:text-[#1A1A1A] mt-4">متابعة التسوق</button>
                 <div className="flex items-center justify-center gap-3 mt-4 pt-4 border-t border-gray-100">
                   {[
-                    { name: "Mastercard", url: "https://ik.imagekit.io/windeg/WIND_Shopping/mastercard.svg" },
-                    { name: "Visa",       url: "https://ik.imagekit.io/windeg/WIND_Shopping/visa.svg" },
-                    { name: "Meeza",      url: "https://ik.imagekit.io/windeg/WIND_Shopping/Meeza.svg" },
-                    { name: "Amex",       url: "https://ik.imagekit.io/windeg/WIND_Shopping/amex-svgrepo-com.svg" },
+                    { name: "Mastercard", url: "https://media.windeg.com/site-media/mastercard.svg" },
+                    { name: "Visa",       url: "https://media.windeg.com/site-media/visa.svg" },
+                    { name: "Meeza",      url: "https://media.windeg.com/site-media/Meeza.svg" },
+                    { name: "Amex",       url: "https://media.windeg.com/site-media/amex-svgrepo-com.svg" },
                   ].map((p) => (
                     <img key={p.name} src={p.url} alt={p.name} className="h-6 w-auto object-contain opacity-80" />
                   ))}

@@ -1023,8 +1023,8 @@ const { data: swrRelated, isLoading: relatedLoading } = useRelatedProducts(activ
               Guaranteed <span className="font-semibold text-[#1a1a1a]">secure & safe</span> checkout
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <img src="https://ik.imagekit.io/windeg/WIND_Shopping/visa.svg" alt="Visa" className="h-10 w-auto" />
-              <img src="https://ik.imagekit.io/windeg/WIND_Shopping/mastercard.svg" alt="Mastercard" className="h-8 w-auto" />
+              <img src="https://media.windeg.com/site-media/visa.svg" alt="Visa" className="h-10 w-auto" />
+              <img src="https://media.windeg.com/site-media/mastercard.svg" alt="Mastercard" className="h-8 w-auto" />
             </div>
           </div>
 

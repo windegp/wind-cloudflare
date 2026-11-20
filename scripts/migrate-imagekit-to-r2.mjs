@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 
 import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
@@ -9,6 +8,7 @@ import ImageKit from "imagekit";
 import {
   GetObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -21,7 +21,9 @@ import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
 import { normalizeImageKitPath, replaceImageKitUrlsDeep, STORE_MEDIA_ORIGIN } from "../src/lib/media-utils.js";
 import {
   classifyImageUsage,
-  destinationObjectKey,
+  assignDestinationKeys,
+  FINAL_PREFIX_BY_CATEGORY,
+  isFinalMediaKey,
   deserializeFirestoreManifest,
   hasVerifiedCopy,
   haveNoPendingCurrentReferences,
@@ -35,11 +37,21 @@ import {
   serializeFirestoreManifest,
   sourcePathForFile,
   verifyCopiedBytes,
+  buildMigrationPlan,
+  describeStateCompatibility,
+  digestForSourcePath,
+  foldRetiredLayoutReferences,
+  loadSourceBytes,
+  retiredLayoutDigest,
+  retiredLayoutPseudoPath,
 } from "./imagekit-r2-migration-core.mjs";
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_STATE_DIR = path.join(PROJECT_ROOT, "work", "imagekit-r2-migration");
-const CATALOG_FEED_FILES = ["fb.xml", "google.xml", "tt.xml"];
+// Root-level catalog exports. The live feeds (/api/fb-catalog, /api/google-catalog, /api/tiktok-catalog) are
+// generated from Firestore at request time; these static files are never served or imported, so they are
+// neither scanned as usage nor rewritten. They are only counted so the report can show what is left in them.
+const STATIC_FEED_EXPORTS = ["fb.xml", "google.xml", "tt.xml"];
 const SITE_MEDIA_SOURCE_FILES = new Set([
   "src/app/checkout/page.js",
   "src/app/products/[id]/ProductView.js",
@@ -149,6 +161,7 @@ export function collectImageKitPaths(value, found = new Set()) {
         if (url.origin !== STORE_MEDIA_ORIGIN) continue;
         const key = decodeURIComponent(url.pathname.slice(1));
         if (key.startsWith("legacy/imagekit/")) found.add(`/${key.slice("legacy/imagekit/".length)}`);
+        else if (retiredLayoutDigest(key)) found.add(retiredLayoutPseudoPath(retiredLayoutDigest(key)));
       } catch { /* Ignore non-URL text. */ }
     }
   } else if (Array.isArray(value)) {
@@ -171,6 +184,7 @@ function countImageKitLinks(value, wantedPath = null) {
           if (url.origin === STORE_MEDIA_ORIGIN) {
             const key = decodeURIComponent(url.pathname.slice(1));
             if (key.startsWith("legacy/imagekit/")) normalizedPath = `/${key.slice("legacy/imagekit/".length)}`;
+            else if (retiredLayoutDigest(key)) normalizedPath = retiredLayoutPseudoPath(retiredLayoutDigest(key));
           }
         } catch { /* Ignore non-URL text. */ }
       }
@@ -276,7 +290,7 @@ async function verifyPublicObject(key, expectedBytes) {
 async function copyAndVerify(file, { s3, bucket, state }) {
   const sourcePath = file.filePath.startsWith("/") ? file.filePath : `/${file.filePath}`;
   const key = file.targetKey;
-  if (!key || !key.startsWith("products/migrated/") && !key.startsWith("uploads/reviews/migrated/") && !key.startsWith("collections/migrated/") && !key.startsWith("site-media/migrated/")) {
+  if (!isFinalMediaKey(key)) {
     throw new Error(`Missing or unsafe ${MIGRATION_LAYOUT_VERSION} destination for ${sourcePath}`);
   }
   const pathHash = hashBytes(new TextEncoder().encode(sourcePath));
@@ -284,12 +298,26 @@ async function copyAndVerify(file, { s3, bucket, state }) {
     "/windeg/",
     "/windeg/tr:orig-true/"
   );
-  const sourceResponse = await fetch(originalUrl, { cache: "no-store" });
-  const sourceBytes = await responseBytes(sourceResponse, "ImageKit source download");
-  const sourceHash = hashBytes(sourceBytes);
-  if (Number(file.size) && sourceBytes.byteLength !== Number(file.size)) {
-    throw new Error(`ImageKit byte count mismatch for ${sourcePath}`);
-  }
+  // Prefer the verified legacy R2 copy; fall back to ImageKit when it is missing or fails verification.
+  const source = await loadSourceBytes({
+    sourcePath: sourcePathForFile(file),
+    state,
+    expectedSize: file.size,
+    readLegacyObject: async (legacyKey) => {
+      const object = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: legacyKey }));
+      return { bytes: new Uint8Array(await object.Body.transformToByteArray()), contentType: object.ContentType };
+    },
+    downloadImageKit: async () => {
+      const response = await fetch(originalUrl, { cache: "no-store" });
+      const bytes = await responseBytes(response, "ImageKit source download");
+      if (Number(file.size) && bytes.byteLength !== Number(file.size)) {
+        throw new Error(`ImageKit byte count mismatch for ${sourcePath}`);
+      }
+      return { bytes, contentType: response.headers.get("content-type") };
+    },
+  });
+  const sourceBytes = source.bytes;
+  const sourceHash = source.sha256;
 
   let existing = null;
   try {
@@ -311,9 +339,9 @@ async function copyAndVerify(file, { s3, bucket, state }) {
       Key: key,
       Body: sourceBytes,
       ContentLength: sourceBytes.byteLength,
-      ContentType: file.mime || sourceResponse.headers.get("content-type") || "application/octet-stream",
+      ContentType: file.mime || source.contentType || "application/octet-stream",
       CacheControl: "public, max-age=31536000, immutable",
-      Metadata: { sourcepathhash: pathHash, sourcefileid: file.fileId, sourcebytesha256: sourceHash },
+      Metadata: { sourcepathhash: pathHash, sourcefileid: file.fileId, sourcebytesha256: sourceHash, sourceorigin: source.origin },
     }));
   }
 
@@ -330,6 +358,9 @@ async function copyAndVerify(file, { s3, bucket, state }) {
     url: publicUrlForKey(key),
     size: sourceBytes.byteLength,
     sha256: sourceHash,
+    sourceOrigin: source.origin,
+    ...(source.legacyKey ? { legacySourceKey: source.legacyKey } : {}),
+    ...(source.fallbackReason ? { legacyFallbackReason: source.fallbackReason } : {}),
     verifiedAt: new Date().toISOString(),
   };
   return result;
@@ -344,6 +375,7 @@ function mediaUrlIdentity(candidate) {
     const url = new URL(candidate);
     if (url.origin !== STORE_MEDIA_ORIGIN) return null;
     const key = decodeURIComponent(url.pathname.slice(1));
+    if (retiredLayoutDigest(key)) return `retired:${retiredLayoutDigest(key)}`;
     if (!key.startsWith("legacy/imagekit/")) return null;
     return `legacy:${key.slice("legacy/imagekit".length)}`;
   } catch { return null; }
@@ -351,7 +383,7 @@ function mediaUrlIdentity(candidate) {
 
 function replaceMigrationUrlsDeep(value, sourcePath, oldLegacyKey, newUrl) {
   let count = 0;
-  const oldIdentities = new Set([`imagekit:${sourcePath}`, `legacy:${sourcePath}`]);
+  const oldIdentities = new Set([`imagekit:${sourcePath}`, `legacy:${sourcePath}`, `retired:${digestForSourcePath(sourcePath)}`]);
   if (oldLegacyKey) oldIdentities.add(`legacy:${oldLegacyKey.slice("legacy/imagekit".length)}`);
   function visit(item) {
     if (typeof item === "string") return item.replace(URL_PATTERN, (candidate) => {
@@ -500,13 +532,6 @@ export async function verifyAndReconcileFirestoreReferences(
         const destination =
           state.copied?.[sourcePath]?.destinations?.[layoutVersion];
 
-        const validPrefixes = [
-          "products/migrated/",
-          "uploads/reviews/migrated/",
-          "collections/migrated/",
-          "site-media/migrated/",
-        ];
-
         let destinationUrl;
         try {
           destinationUrl = new URL(destination?.url);
@@ -521,7 +546,7 @@ export async function verifyAndReconcileFirestoreReferences(
           destination?.layoutVersion !== layoutVersion ||
           !destination?.key ||
           !destination?.sha256 ||
-          !validPrefixes.some((prefix) => destination.key.startsWith(prefix)) ||
+          !isFinalMediaKey(destination.key) ||
           destinationUrl.origin !== STORE_MEDIA_ORIGIN ||
           decodeURIComponent(destinationUrl.pathname.slice(1)) !== destination.key
         ) {
@@ -610,9 +635,6 @@ async function listSourceFiles(root) {
 async function rewriteLocalSource(pathToNewUrl) {
   let filesChanged = 0;
   const targets = await listSourceFiles(path.join(PROJECT_ROOT, "src"));
-  for (const relativePath of CATALOG_FEED_FILES) {
-    targets.push(path.join(PROJECT_ROOT, relativePath));
-  }
   for (const filePath of targets) {
     try { await readFile(filePath, "utf8"); } catch { continue; }
     const original = await readFile(filePath, "utf8");
@@ -628,7 +650,7 @@ async function rewriteLocalSource(pathToNewUrl) {
 
 async function scanLocalSourceReferences() {
   const sourceFiles = await listSourceFiles(path.join(PROJECT_ROOT, "src"));
-  const targets = [...sourceFiles, ...CATALOG_FEED_FILES.map((name) => path.join(PROJECT_ROOT, name))];
+  const targets = sourceFiles;
   const paths = new Set();
   const usagesByPath = new Map();
   let scannedFiles = 0;
@@ -637,15 +659,53 @@ async function scanLocalSourceReferences() {
     try { text = await readFile(filePath, "utf8"); } catch { continue; }
     scannedFiles += 1;
     const relativeFile = path.relative(PROJECT_ROOT, filePath).replaceAll("\\", "/");
-    const isCatalogFeed = CATALOG_FEED_FILES.includes(relativeFile);
-    const category = isCatalogFeed ? "product" : SITE_MEDIA_SOURCE_FILES.has(relativeFile) ? "site" : null;
+    const category = SITE_MEDIA_SOURCE_FILES.has(relativeFile) ? "site" : null;
     for (const sourcePath of collectImageKitPaths(text)) {
       paths.add(sourcePath);
       if (!usagesByPath.has(sourcePath)) usagesByPath.set(sourcePath, []);
-      usagesByPath.get(sourcePath).push({ file: relativeFile, category, source: isCatalogFeed ? "catalog_feed" : "source_code" });
+      usagesByPath.get(sourcePath).push({ file: relativeFile, category, source: "source_code" });
     }
   }
   return { sourceFiles: scannedFiles, paths, usagesByPath };
+}
+
+async function countStaticFeedImageKitLinks() {
+  let total = 0;
+  const perFile = {};
+  for (const name of STATIC_FEED_EXPORTS) {
+    try {
+      const text = await readFile(path.join(PROJECT_ROOT, name), "utf8");
+      perFile[name] = (text.match(/https?:\/\/[^\s"'<>]+/g) || []).filter((candidate) => normalizeImageKitPath(candidate)).length;
+      total += perFile[name];
+    } catch { perFile[name] = 0; }
+  }
+  return { total, perFile };
+}
+
+/** Read-only: list the managed prefixes so the dry run can tell which destinations already exist. */
+async function readBucketObjects(eligibleFiles) {
+  if (!process.env.R2_ACCESS_KEY_ID || !process.env.R2_SECRET_ACCESS_KEY || !process.env.CLOUDFLARE_ACCOUNT_ID) return null;
+  const s3 = createR2Client();
+  const bucket = process.env.R2_BUCKET_NAME || "wind-shopping-media";
+  try {
+    const wanted = new Map(eligibleFiles.map((file) => [file.targetKey, file]));
+    const found = new Map();
+    for (const prefix of ["products/", "uploads/reviews/", "collections/", "site-media/"]) {
+      let token;
+      do {
+        const page = await s3.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken: token }));
+        for (const object of page.Contents || []) if (wanted.has(object.Key)) found.set(object.Key, { size: object.Size });
+        token = page.IsTruncated ? page.NextContinuationToken : undefined;
+      } while (token);
+    }
+    for (const [key, info] of found) {
+      const file = wanted.get(key);
+      const head = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+      const pathHash = hashBytes(new TextEncoder().encode(file.filePath.startsWith("/") ? file.filePath : `/${file.filePath}`));
+      info.reusable = head.Metadata?.sourcepathhash === pathHash && (!Number(file.size) || info.size === Number(file.size));
+    }
+    return found;
+  } finally { s3.destroy(); }
 }
 
 let logFile = "";
@@ -773,8 +833,6 @@ console.log("Default creates or reuses a local Firestore manifest without changi
   const firestore = manifestResult.firestore;
   const scanId = manifestResult.scanId;
 
-  refreshReferenceProgress(firestore.referencesByPath, state, scanId, MIGRATION_LAYOUT_VERSION);
-
   const imagekit = imageKitClient();
 
   const [files, localSource] = await Promise.all([
@@ -790,11 +848,15 @@ console.log("Default creates or reuses a local Firestore manifest without changi
     else if (distinctPaths.get(sourcePath).fileId !== file.fileId) duplicateLibraryPaths.add(sourcePath);
   }
   const listedPaths = new Set(distinctPaths.keys());
+  // References written under the retired "migrated" layout are mapped back to their real source path.
+  const foldedRetiredReferences = foldRetiredLayoutReferences(firestore.referencesByPath, listedPaths);
+  refreshReferenceProgress(firestore.referencesByPath, state, scanId, MIGRATION_LAYOUT_VERSION);
   const missingFirestorePaths = [...firestore.referencesByPath.keys()].filter((sourcePath) => !listedPaths.has(sourcePath));
   const missingSourcePaths = [...localSource.paths].filter((sourcePath) => !listedPaths.has(sourcePath));
   const unresolvedReasons = new Map([...missingFirestorePaths, ...missingSourcePaths].map((sourcePath) => [sourcePath, "not_found_in_imagekit_library"]));
   for (const sourcePath of duplicateLibraryPaths) unresolvedReasons.set(sourcePath, "duplicate_imagekit_path_with_different_file_ids");
   const eligibleFiles = [];
+  const classified = [];
   for (const [sourcePath, file] of distinctPaths) {
     if (duplicateLibraryPaths.has(sourcePath)) continue;
     const references = [...(firestore.referencesByPath.get(sourcePath)?.values() || [])];
@@ -804,13 +866,20 @@ console.log("Default creates or reuses a local Firestore manifest without changi
       unresolvedReasons.set(sourcePath, classification.reason);
       continue;
     }
-    try {
-      file.migrationCategory = classification.category;
-      file.targetKey = destinationObjectKey(sourcePath, classification.category, file.filePath);
-      eligibleFiles.push(file);
-    } catch (error) {
-      unresolvedReasons.set(sourcePath, error?.message || "unsupported_destination");
+    classified.push({ sourcePath, file, category: classification.category });
+  }
+  // Keys are assigned for the whole library at once so name collisions are resolved deterministically.
+  const { keys: finalKeys, errors: keyErrors, disambiguated } = assignDestinationKeys(
+    classified.map(({ sourcePath, file, category }) => ({ sourcePath, category, filePath: file.filePath })),
+  );
+  for (const { sourcePath, file, category } of classified) {
+    if (!finalKeys.has(sourcePath)) {
+      unresolvedReasons.set(sourcePath, keyErrors.get(sourcePath) || "unsupported_destination");
+      continue;
     }
+    file.migrationCategory = category;
+    file.targetKey = finalKeys.get(sourcePath);
+    eligibleFiles.push(file);
   }
   const unresolvedPaths = [...unresolvedReasons.keys()];
   const selectedFiles = selectPendingFiles(eligibleFiles, firestore.referencesByPath, state, options.limit, MIGRATION_LAYOUT_VERSION);
@@ -828,6 +897,37 @@ console.log("Default creates or reuses a local Firestore manifest without changi
     hasVerifiedCopy(state, sourcePathForFile(file), file.targetKey, MIGRATION_LAYOUT_VERSION) && !selectedPaths.has(sourcePathForFile(file)),
   ).length;
 
+  const staticFeeds = await countStaticFeedImageKitLinks();
+  let bucketObjects = null;
+  let bucketReadError = null;
+  try { bucketObjects = await readBucketObjects(eligibleFiles); } catch (error) { bucketReadError = error?.message || String(error); }
+  const localSourceLinks = new Map([...localSource.usagesByPath].map(([sourcePath, usages]) => [sourcePath, usages.length]));
+  const plan = buildMigrationPlan({
+    eligibleFiles,
+    state,
+    referencesByPath: firestore.referencesByPath,
+    layoutVersion: MIGRATION_LAYOUT_VERSION,
+    bucketObjects,
+    unresolvedReasons,
+    keyErrors,
+    disambiguatedKeys: disambiguated,
+    localSourceLinks,
+    staticFeedLinkCount: staticFeeds.total,
+  });
+  const stateCompatibility = describeStateCompatibility(state, MIGRATION_LAYOUT_VERSION);
+  const dryRunReport = {
+    plan,
+    stateCompatibility,
+    retiredLayoutReferencesFolded: foldedRetiredReferences.length,
+    staticFeedExports: { ...staticFeeds, note: "Static root exports; not served or imported, so not rewritten." },
+    r2Check: bucketObjects ? "read_only_listing_done" : bucketReadError ? `failed: ${bucketReadError}` : "skipped_no_r2_credentials",
+    legacyCopiesDeleted: 0,
+    imageKitOriginalsDeleted: 0,
+  };
+  if (!options.apply) {
+    await writeFile(path.join(options.stateDir, "final-dry-run-report.json"), JSON.stringify(dryRunReport, null, 2), "utf8");
+  }
+
   console.log(JSON.stringify({
     mode: options.apply ? "apply" : "dry-run",
     project: projectId,
@@ -842,7 +942,7 @@ console.log("Default creates or reuses a local Firestore manifest without changi
     duplicateImageKitLibraryRows: files.length - distinctPaths.size,
     pathsWithConflictingImageKitFileIds: duplicateLibraryPaths.size,
     migrationLayoutVersion: MIGRATION_LAYOUT_VERSION,
-    destinationByCategory: { product: "products/migrated/", review: "uploads/reviews/migrated/", collection: "collections/migrated/", site: "site-media/migrated/" },
+    destinationByCategory: Object.fromEntries(Object.entries(FINAL_PREFIX_BY_CATEGORY).map(([category, prefix]) => [category, `${prefix}/`])),
     eligibleByUsageCategory: Object.fromEntries(["product", "review", "collection", "site"].map((category) => [category, eligibleFiles.filter((file) => file.migrationCategory === category).length])),
     unresolvedReasonCounts,
     firestoreCollections: firestore.counts,
@@ -861,7 +961,8 @@ console.log("Default creates or reuses a local Firestore manifest without changi
     filesVerifiedInNewLayout: newLayoutVerifiedCount,
     legacyCopiesPreservedButNotCountedForNewLayout: previousLegacyCopyCount,
     filesSkippedAsAlreadyCopiedAndReconciled: skippedVerifiedFiles,
-    r2Bucket: options.apply ? process.env.R2_BUCKET_NAME || "wind-shopping-media" : "not connected in dry-run",
+    r2Bucket: options.apply ? process.env.R2_BUCKET_NAME || "wind-shopping-media" : "read-only listing only when R2 credentials are present",
+    finalDryRun: dryRunReport,
     imageKitOriginalsDeleted: 0,
   }, null, 2));
 
@@ -900,13 +1001,20 @@ console.log("Default creates or reuses a local Firestore manifest without changi
   const allFilesCopied = eligibleFiles.every((file) => hasVerifiedCopy(state, sourcePathForFile(file), file.targetKey, MIGRATION_LAYOUT_VERSION));
   const noPendingReferences = haveNoPendingCurrentReferences(firestore.referencesByPath, state, scanId, MIGRATION_LAYOUT_VERSION);
   const libraryComplete = fileFailures === 0 && allFilesCopied && noPendingReferences && unresolvedPaths.length === 0;
-  if (options.rewriteSource && libraryComplete) {
-    const pathToNewUrl = new Map(eligibleFiles.map((file) => { const sourcePath = sourcePathForFile(file); return [sourcePath, state.copied[sourcePath].destinations[MIGRATION_LAYOUT_VERSION].url]; }));
-    const changedFiles = await rewriteLocalSource(pathToNewUrl);
-    await appendLog({ type: "local_source_rewrite_complete", filesChanged: changedFiles, at: new Date().toISOString() });
-    console.log(`Updated ${changedFiles} local source files after all ImageKit images were verified.`);
-  } else if (options.rewriteSource) {
-    console.log("Skipped local source rewrites: run without --limit and resolve all missing source paths and copy failures first.");
+  if (options.rewriteSource) {
+    // Each source-code link is rewritten only once its own destination is verified (size, SHA-256, public URL),
+    // so unrelated unresolved paths elsewhere in the library cannot block or unsafely trigger it.
+    const pathToNewUrl = new Map();
+    for (const file of eligibleFiles) {
+      const sourcePath = sourcePathForFile(file);
+      const destination = state.copied[sourcePath]?.destinations?.[MIGRATION_LAYOUT_VERSION];
+      if (localSource.paths.has(sourcePath) && destination?.status === "verified" && isFinalMediaKey(destination.key) && destination.sha256) {
+        pathToNewUrl.set(sourcePath, destination.url);
+      }
+    }
+    const changedFiles = pathToNewUrl.size ? await rewriteLocalSource(pathToNewUrl) : 0;
+    await appendLog({ type: "local_source_rewrite_complete", filesChanged: changedFiles, paths: pathToNewUrl.size, at: new Date().toISOString() });
+    console.log(`Updated ${changedFiles} local source files for ${pathToNewUrl.size} verified source-code images.`);
   }
 
   await saveState(stateFile, state);

@@ -1,11 +1,32 @@
 import { createHash } from "node:crypto";
 import { normalizeImageKitPath } from "../src/lib/media-utils.js";
 
-export const MIGRATION_LAYOUT_VERSION = "products-migrated-v1";
+// Progress/destination records are keyed by this version. It must not match the retired
+// "products-migrated-v1" layout, so records from that layout are never treated as final.
+export const MIGRATION_LAYOUT_VERSION = "final-paths-v1";
+export const RETIRED_LAYOUT_VERSIONS = Object.freeze(["products-migrated-v1"]);
+
+export const FINAL_PREFIX_BY_CATEGORY = Object.freeze({
+  product: "products",
+  review: "uploads/reviews",
+  collection: "collections",
+  site: "site-media",
+});
+const SUPPORTED_EXTENSIONS = ["jpg", "jpeg", "png", "webp", "gif", "avif", "svg"];
+
+/** True only for clean final keys: a known category prefix, no temporary or legacy segments. */
+export function isFinalMediaKey(key) {
+  if (typeof key !== "string" || !key || key.startsWith("/")) return false;
+  const segments = key.split("/");
+  if (segments.some((segment) => !segment || segment === "." || segment === ".." || /^(migrated|legacy)$/i.test(segment))) return false;
+  return Object.values(FINAL_PREFIX_BY_CATEGORY).some((prefix) => key.startsWith(`${prefix}/`) && key.length > prefix.length + 1);
+}
 const progressKey = (sourcePath, layoutVersion) => `${layoutVersion}:${sourcePath}`;
 
 export function classifyImageUsage(sourcePath, references = [], localUsages = []) {
   const categories = new Set();
+  let siteFromFirestore = false;
+  let siteFromCode = false;
   const sourceSegments = sourcePath.split("/").filter(Boolean).map((segment) => segment.toLowerCase());
   const explicitlyReviewMedia = sourceSegments.includes("reviews");
 
@@ -28,6 +49,7 @@ export function classifyImageUsage(sourcePath, references = [], localUsages = []
       ["settings", "homepage", "policies"].includes(parts[0]?.toLowerCase())
     ) {
       categories.add("site");
+      siteFromFirestore = true;
     }
   }
 
@@ -36,6 +58,7 @@ export function classifyImageUsage(sourcePath, references = [], localUsages = []
       categories.add("review");
     } else if (usage.category) {
       categories.add(usage.category);
+      if (usage.category === "site") siteFromCode = true;
     }
   }
 
@@ -44,19 +67,128 @@ export function classifyImageUsage(sourcePath, references = [], localUsages = []
     return { category: "collection", reason: null };
   }
 
+  // Likewise the homepage showcases product photos; the product record is their owner. This applies only when
+  // the "site" usage comes from Firestore homepage/settings, never from a hard-coded source-code link.
+  if (categories.size === 2 && categories.has("product") && categories.has("site") && siteFromFirestore && !siteFromCode) {
+    return { category: "product", reason: null };
+  }
+
   if (categories.size === 1) return { category: [...categories][0], reason: null };
   if (categories.size === 0) return { category: null, reason: "usage_not_identified" };
 
   return { category: null, reason: "conflicting_usage_categories" };
 }
 
-export function destinationObjectKey(sourcePath, category, filePath = sourcePath) {
-  if (!["product", "review", "collection", "site"].includes(category)) throw new Error("Unresolved image usage category");
-  const extension = String(filePath).match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase();
-  if (!extension || !["jpg", "jpeg", "png", "webp", "gif", "avif", "svg"].includes(extension)) throw new Error("Unresolved or unsupported image extension");
-  const digest = createSourceDigest(sourcePath);
-  const prefix = category === "product" ? "products/migrated" : category === "review" ? "uploads/reviews/migrated" : category === "collection" ? "collections/migrated" : "site-media/migrated";
-  return `${prefix}/${digest}.${extension}`;
+function finalFileName(sourcePath, filePath) {
+  const raw = String(filePath).split("/").filter(Boolean).pop() || "";
+  const name = raw.normalize("NFC");
+  const match = name.match(/^(.*)\.([a-z0-9]+)$/i);
+  const extension = match?.[2]?.toLowerCase();
+  const stem = match?.[1];
+  if (!extension || !SUPPORTED_EXTENSIONS.includes(extension)) throw new Error("Unresolved or unsupported image extension");
+  if (!stem || stem === "." || stem === ".." || /[\u0000-\u001f\u007f\\]/.test(stem)) throw new Error(`Unsafe image file name for ${sourcePath}`);
+  return { stem, extension };
+}
+
+/**
+ * Clean final key such as products/example.jpg. The original file name is kept; pass
+ * disambiguate: true only when another source would otherwise land on the same key.
+ */
+export function destinationObjectKey(sourcePath, category, filePath = sourcePath, { disambiguate = false } = {}) {
+  const prefix = FINAL_PREFIX_BY_CATEGORY[category];
+  if (!prefix) throw new Error("Unresolved image usage category");
+  const { stem, extension } = finalFileName(sourcePath, filePath);
+  const suffix = disambiguate ? `-${createSourceDigest(sourcePath).slice(0, 10)}` : "";
+  return `${prefix}/${stem}${suffix}.${extension}`;
+}
+
+const DIGEST_LENGTHS = Object.freeze([10, 16, 24, 40, 64]);
+
+/**
+ * Assign final keys to a whole batch at once. The result depends only on the SET of entries, never
+ * on their order:
+ *   1. A source whose natural key (prefix/original-name) is unique keeps it. Natural names always win,
+ *      even over a generated name that happens to be identical.
+ *   2. Sources that share a natural key (compared case-insensitively) first try a parent-folder-qualified
+ *      name, then a digest suffix of progressively longer length; at each level every candidate is decided simultaneously, and a
+ *      candidate is accepted only if no other source wants it and it is not already taken.
+ *   3. Anything still ambiguous after the longest digest is reported in `errors`, for every source involved.
+ * `digest` is injectable so tests can force collisions.
+ */
+export function assignDestinationKeys(entries, { digest = createSourceDigest } = {}) {
+  const errors = new Map();
+  const bySource = new Map();
+  for (const entry of entries) {
+    const prior = bySource.get(entry.sourcePath);
+    if (!prior) { bySource.set(entry.sourcePath, entry); continue; }
+    if (prior.category !== entry.category || prior.filePath !== entry.filePath) {
+      errors.set(entry.sourcePath, "conflicting_duplicate_source");
+    }
+  }
+  for (const sourcePath of errors.keys()) bySource.delete(sourcePath);
+
+  const natural = new Map();
+  for (const [sourcePath, { category, filePath }] of bySource) {
+    try { natural.set(sourcePath, destinationObjectKey(sourcePath, category, filePath)); }
+    catch (error) { errors.set(sourcePath, error?.message || "unsupported_destination"); }
+  }
+
+  const owners = new Map();
+  for (const [sourcePath, key] of natural) {
+    const id = key.toLowerCase();
+    owners.set(id, [...(owners.get(id) || []), sourcePath]);
+  }
+
+  const keys = new Map();
+  const disambiguated = [];
+  const taken = new Set();
+  let unresolved = [];
+  for (const [sourcePath, key] of natural) {
+    if (owners.get(key.toLowerCase()).length === 1) { keys.set(sourcePath, key); taken.add(key.toLowerCase()); }
+    else unresolved.push(sourcePath);
+  }
+
+  // Level 1 qualifies the name with its parent folder (RoverTshirt/1.webp -> RoverTshirt-1.webp); later
+  // levels append a digest of growing length.
+  const levels = [{ folder: true }, ...DIGEST_LENGTHS.map((length) => ({ length }))];
+  for (const level of levels) {
+    if (!unresolved.length) break;
+    const candidates = new Map();
+    const wanted = new Map();
+    for (const sourcePath of unresolved) {
+      const { category, filePath } = bySource.get(sourcePath);
+      const { stem, extension } = finalFileName(sourcePath, filePath);
+      const prefix = FINAL_PREFIX_BY_CATEGORY[category];
+      let candidate = null;
+      if (level.folder) {
+        const folder = String(filePath).split("/").filter(Boolean).slice(-2, -1)[0]?.normalize("NFC");
+        if (folder && !/[\u0000-\u001f\u007f\\]/.test(folder) && folder !== "." && folder !== "..") candidate = `${prefix}/${folder}-${stem}.${extension}`;
+      } else {
+        candidate = `${prefix}/${stem}-${digest(sourcePath).slice(0, level.length)}.${extension}`;
+      }
+      if (!candidate) continue;
+      candidates.set(sourcePath, candidate);
+      const id = candidate.toLowerCase();
+      wanted.set(id, (wanted.get(id) || 0) + 1);
+    }
+    const accepted = [];
+    const next = [];
+    for (const sourcePath of unresolved) {
+      if (!candidates.has(sourcePath)) { next.push(sourcePath); continue; }
+      const id = candidates.get(sourcePath).toLowerCase();
+      if (wanted.get(id) === 1 && !taken.has(id)) accepted.push(sourcePath);
+      else next.push(sourcePath);
+    }
+    for (const sourcePath of accepted) {
+      disambiguated.push({ sourcePath, key: candidates.get(sourcePath) });
+      keys.set(sourcePath, candidates.get(sourcePath));
+      taken.add(candidates.get(sourcePath).toLowerCase());
+    }
+    unresolved = next;
+  }
+  for (const sourcePath of unresolved) errors.set(sourcePath, "destination_key_collision");
+
+  return { keys, errors, disambiguated };
 }
 
 function createSourceDigest(sourcePath) {
@@ -415,4 +547,211 @@ export async function processFileWithCheckpoint({
 
 export function hasVerifiedCopy(state, sourcePath, targetKey, layoutVersion = MIGRATION_LAYOUT_VERSION) {
   return isCopyVerified(state, sourcePath, targetKey, layoutVersion);
+}
+
+/* ------------------------------------------------------------------------------------------------
+ * Legacy copies as a verified source for the final destinations
+ * ---------------------------------------------------------------------------------------------- */
+
+const SHA256_HEX = /^[a-f0-9]{64}$/;
+
+function legacyRecordFor(state, sourcePath) {
+  const record = state?.copied?.[sourcePath];
+  if (!record || typeof record !== "object") return null;
+  if (record.legacy && typeof record.legacy === "object") return record.legacy;
+  if (typeof record.key === "string" && record.key.startsWith("legacy/imagekit/")) return record;
+  return null;
+}
+
+/**
+ * Decide whether the legacy R2 copy of a file may be used as the byte source for its final key.
+ * It must be recorded at exactly the legacy key derived from the ImageKit path, carry a SHA-256 and a
+ * size, and (when ImageKit listed a size) agree with ImageKit's size. Anything else falls back to ImageKit.
+ */
+export function legacySourceDecision(state, sourcePath, { expectedSize } = {}) {
+  const record = legacyRecordFor(state, sourcePath);
+  if (!record) return { usable: false, reason: "no_legacy_record", record: null };
+  if (record.key !== legacyObjectKey(sourcePath)) return { usable: false, reason: "legacy_key_does_not_match_source_path", record };
+  if (!SHA256_HEX.test(String(record.sha256 || ""))) return { usable: false, reason: "legacy_record_missing_sha256", record };
+  if (!Number.isInteger(record.size) || record.size <= 0) return { usable: false, reason: "legacy_record_missing_size", record };
+  if (Number(expectedSize) && Number(expectedSize) !== record.size) return { usable: false, reason: "legacy_size_differs_from_imagekit", record };
+  return { usable: true, reason: null, record };
+}
+
+/**
+ * Load the bytes for a final destination. A legacy copy is used only after its bytes are re-read and match
+ * the recorded size and SHA-256; any mismatch or read failure falls back to ImageKit. Legacy copies are never
+ * modified or deleted here.
+ */
+export async function loadSourceBytes({ sourcePath, state, expectedSize, readLegacyObject, downloadImageKit }) {
+  const decision = legacySourceDecision(state, sourcePath, { expectedSize });
+  let fallbackReason = decision.reason;
+  if (decision.usable) {
+    try {
+      const legacy = await readLegacyObject(decision.record.key);
+      if (legacy.bytes.byteLength !== decision.record.size) throw new Error("size mismatch");
+      const sha256 = sha256ForBytes(legacy.bytes);
+      if (sha256 !== decision.record.sha256) throw new Error("SHA-256 mismatch");
+      return { bytes: legacy.bytes, sha256, contentType: legacy.contentType || null, origin: "legacy", legacyKey: decision.record.key, fallbackReason: null };
+    } catch (error) {
+      fallbackReason = `legacy_copy_unverified: ${error?.message || error}`;
+    }
+  }
+  const downloaded = await downloadImageKit();
+  return { bytes: downloaded.bytes, sha256: sha256ForBytes(downloaded.bytes), contentType: downloaded.contentType || null, origin: "imagekit", legacyKey: null, fallbackReason };
+}
+
+/* ------------------------------------------------------------------------------------------------
+ * Retired "…/migrated/<sha256(sourcePath)>.<ext>" layout
+ * ---------------------------------------------------------------------------------------------- */
+
+const RETIRED_KEY = /^(?:products|uploads\/reviews|collections|site-media)\/migrated\/([a-f0-9]{64})\.[a-z0-9]+$/i;
+
+/** Digest of a retired-layout key, or null. The digest is sha256(sourcePath), so it can be mapped back. */
+export function retiredLayoutDigest(key) {
+  return String(key || "").match(RETIRED_KEY)?.[1]?.toLowerCase() || null;
+}
+
+export function retiredLayoutPseudoPath(digest) {
+  return `retired-layout:${digest}`;
+}
+
+export function digestForSourcePath(sourcePath) {
+  return createSourceDigest(sourcePath);
+}
+
+/**
+ * Move Firestore references found under a retired-layout URL onto the real ImageKit source path they
+ * belong to. Pseudo paths that match no known source stay in the map so they are reported, not lost.
+ */
+export function foldRetiredLayoutReferences(referencesByPath, knownSourcePaths) {
+  const byDigest = new Map([...knownSourcePaths].map((sourcePath) => [createSourceDigest(sourcePath), sourcePath]));
+  const folded = [];
+  for (const pseudo of [...referencesByPath.keys()].filter((key) => key.startsWith("retired-layout:"))) {
+    const sourcePath = byDigest.get(pseudo.slice("retired-layout:".length));
+    if (!sourcePath) continue;
+    const target = referencesByPath.get(sourcePath) || new Map();
+    for (const [documentPath, reference] of referencesByPath.get(pseudo)) target.set(documentPath, reference);
+    referencesByPath.set(sourcePath, target);
+    referencesByPath.delete(pseudo);
+    folded.push({ pseudo, sourcePath });
+  }
+  return folded;
+}
+
+/* ------------------------------------------------------------------------------------------------
+ * State compatibility report
+ * ---------------------------------------------------------------------------------------------- */
+
+/** Read-only summary of how old state records relate to the current layout. Never mutates state. */
+export function describeStateCompatibility(state, layoutVersion = MIGRATION_LAYOUT_VERSION) {
+  const report = {
+    layoutVersion,
+    copiedRecords: 0,
+    legacyOnly: 0,
+    legacyUsableAsSource: 0,
+    legacyNotUsable: {},
+    verifiedInCurrentLayout: 0,
+    retiredLayoutDestinations: 0,
+    destinationsWithNonFinalKey: [],
+    progressKeys: { currentLayout: 0, retiredLayoutPrefix: 0, unprefixedLegacy: 0 },
+    unprefixedProgressCompleted: 0,
+  };
+  for (const [sourcePath, record] of Object.entries(state?.copied || {})) {
+    report.copiedRecords += 1;
+    const destinations = record?.destinations || {};
+    const current = destinations[layoutVersion];
+    if (current?.status === "verified" && isFinalMediaKey(current.key)) report.verifiedInCurrentLayout += 1;
+    if (current && !isFinalMediaKey(current.key)) report.destinationsWithNonFinalKey.push(sourcePath);
+    for (const retired of RETIRED_LAYOUT_VERSIONS) if (destinations[retired]) report.retiredLayoutDestinations += 1;
+    if (!current) {
+      const decision = legacySourceDecision(state, sourcePath);
+      if (decision.record) {
+        report.legacyOnly += 1;
+        if (decision.usable) report.legacyUsableAsSource += 1;
+        else report.legacyNotUsable[decision.reason] = (report.legacyNotUsable[decision.reason] || 0) + 1;
+      }
+    }
+  }
+  for (const [key, progress] of Object.entries(state?.firestoreUpdated || {})) {
+    if (key.startsWith(`${layoutVersion}:`)) report.progressKeys.currentLayout += 1;
+    else if (RETIRED_LAYOUT_VERSIONS.some((version) => key.startsWith(`${version}:`))) report.progressKeys.retiredLayoutPrefix += 1;
+    else {
+      report.progressKeys.unprefixedLegacy += 1;
+      if (progress?.status === "complete") report.unprefixedProgressCompleted += 1;
+    }
+  }
+  return report;
+}
+
+/* ------------------------------------------------------------------------------------------------
+ * Dry-run plan
+ * ---------------------------------------------------------------------------------------------- */
+
+/**
+ * Pure summary of what an --apply run would do. `bucketObjects` is an optional Map(key -> { size, reusable })
+ * read from R2; when absent, bucket-dependent figures are reported as null (unknown), never guessed.
+ */
+export function buildMigrationPlan({
+  eligibleFiles,
+  state,
+  referencesByPath,
+  layoutVersion = MIGRATION_LAYOUT_VERSION,
+  bucketObjects = null,
+  unresolvedReasons = new Map(),
+  keyErrors = new Map(),
+  disambiguatedKeys = [],
+  localSourceLinks = new Map(),
+  staticFeedLinkCount = 0,
+}) {
+  const plan = {
+    eligibleImages: eligibleFiles.length,
+    alreadyVerifiedAtFinalDestination: 0,
+    toCopy: 0,
+    toCopyFromLegacy: 0,
+    toCopyFromImageKit: 0,
+    legacyFallbacks: {},
+    alreadyInBucketReusable: bucketObjects ? 0 : null,
+    destinationConflicts: [],
+    firestore: { referencePairsToUpdate: 0, distinctDocumentsToUpdate: 0, pathsAffected: 0 },
+    remainingImageKitLinks: { firestoreReferencePairs: 0, sourceCodeLinks: 0, staticFeedExportsNotUpdated: staticFeedLinkCount },
+    unresolved: [...unresolvedReasons.entries()].map(([sourcePath, reason]) => ({ sourcePath, reason })),
+    keyErrors: [...keyErrors.entries()].map(([sourcePath, reason]) => ({ sourcePath, reason })),
+    disambiguatedKeys,
+  };
+  const documents = new Set();
+
+  for (const file of eligibleFiles) {
+    const sourcePath = sourcePathForFile(file);
+    const verified = isCopyVerified(state, sourcePath, file.targetKey, layoutVersion);
+    if (verified) plan.alreadyVerifiedAtFinalDestination += 1;
+    else {
+      plan.toCopy += 1;
+      const decision = legacySourceDecision(state, sourcePath, { expectedSize: file.size });
+      if (decision.usable) plan.toCopyFromLegacy += 1;
+      else {
+        plan.toCopyFromImageKit += 1;
+        if (decision.record) plan.legacyFallbacks[decision.reason] = (plan.legacyFallbacks[decision.reason] || 0) + 1;
+      }
+      const existing = bucketObjects?.get(file.targetKey);
+      if (existing) {
+        if (existing.reusable) plan.alreadyInBucketReusable += 1;
+        else plan.destinationConflicts.push({ sourcePath, key: file.targetKey, reason: "existing_object_does_not_match_source" });
+      }
+    }
+
+    const progress = state?.firestoreUpdated?.[`${layoutVersion}:${sourcePath}`];
+    const pending = progress?.scanId && progress.pendingDocumentPaths
+      ? progress.pendingDocumentPaths
+      : [...(referencesByPath.get(sourcePath)?.keys() || [])];
+    if (pending.length) plan.firestore.pathsAffected += 1;
+    for (const documentPath of pending) { plan.firestore.referencePairsToUpdate += 1; documents.add(documentPath); }
+  }
+  plan.firestore.distinctDocumentsToUpdate = documents.size;
+
+  for (const sourcePath of unresolvedReasons.keys()) {
+    plan.remainingImageKitLinks.firestoreReferencePairs += referencesByPath.get(sourcePath)?.size || 0;
+    plan.remainingImageKitLinks.sourceCodeLinks += localSourceLinks.get(sourcePath) || 0;
+  }
+  return plan;
 }

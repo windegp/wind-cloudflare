@@ -1,0 +1,1576 @@
+diff --git a/scripts/imagekit-r2-migration-core.mjs b/scripts/imagekit-r2-migration-core.mjs
+index f51e407..e59a21f 100644
+--- a/scripts/imagekit-r2-migration-core.mjs
++++ b/scripts/imagekit-r2-migration-core.mjs
+@@ -1,11 +1,32 @@
+ import { createHash } from "node:crypto";
+ import { normalizeImageKitPath } from "../src/lib/media-utils.js";
+ 
+-export const MIGRATION_LAYOUT_VERSION = "products-migrated-v1";
++// Progress/destination records are keyed by this version. It must not match the retired
++// "products-migrated-v1" layout, so records from that layout are never treated as final.
++export const MIGRATION_LAYOUT_VERSION = "final-paths-v1";
++export const RETIRED_LAYOUT_VERSIONS = Object.freeze(["products-migrated-v1"]);
++
++export const FINAL_PREFIX_BY_CATEGORY = Object.freeze({
++  product: "products",
++  review: "uploads/reviews",
++  collection: "collections",
++  site: "site-media",
++});
++const SUPPORTED_EXTENSIONS = ["jpg", "jpeg", "png", "webp", "gif", "avif", "svg"];
++
++/** True only for clean final keys: a known category prefix, no temporary or legacy segments. */
++export function isFinalMediaKey(key) {
++  if (typeof key !== "string" || !key || key.startsWith("/")) return false;
++  const segments = key.split("/");
++  if (segments.some((segment) => !segment || segment === "." || segment === ".." || /^(migrated|legacy)$/i.test(segment))) return false;
++  return Object.values(FINAL_PREFIX_BY_CATEGORY).some((prefix) => key.startsWith(`${prefix}/`) && key.length > prefix.length + 1);
++}
+ const progressKey = (sourcePath, layoutVersion) => `${layoutVersion}:${sourcePath}`;
+ 
+ export function classifyImageUsage(sourcePath, references = [], localUsages = []) {
+   const categories = new Set();
++  let siteFromFirestore = false;
++  let siteFromCode = false;
+   const sourceSegments = sourcePath.split("/").filter(Boolean).map((segment) => segment.toLowerCase());
+   const explicitlyReviewMedia = sourceSegments.includes("reviews");
+ 
+@@ -28,6 +49,7 @@ export function classifyImageUsage(sourcePath, references = [], localUsages = []
+       ["settings", "homepage", "policies"].includes(parts[0]?.toLowerCase())
+     ) {
+       categories.add("site");
++      siteFromFirestore = true;
+     }
+   }
+ 
+@@ -36,6 +58,7 @@ export function classifyImageUsage(sourcePath, references = [], localUsages = []
+       categories.add("review");
+     } else if (usage.category) {
+       categories.add(usage.category);
++      if (usage.category === "site") siteFromCode = true;
+     }
+   }
+ 
+@@ -44,19 +67,128 @@ export function classifyImageUsage(sourcePath, references = [], localUsages = []
+     return { category: "collection", reason: null };
+   }
+ 
++  // Likewise the homepage showcases product photos; the product record is their owner. This applies only when
++  // the "site" usage comes from Firestore homepage/settings, never from a hard-coded source-code link.
++  if (categories.size === 2 && categories.has("product") && categories.has("site") && siteFromFirestore && !siteFromCode) {
++    return { category: "product", reason: null };
++  }
++
+   if (categories.size === 1) return { category: [...categories][0], reason: null };
+   if (categories.size === 0) return { category: null, reason: "usage_not_identified" };
+ 
+   return { category: null, reason: "conflicting_usage_categories" };
+ }
+ 
+-export function destinationObjectKey(sourcePath, category, filePath = sourcePath) {
+-  if (!["product", "review", "collection", "site"].includes(category)) throw new Error("Unresolved image usage category");
+-  const extension = String(filePath).match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase();
+-  if (!extension || !["jpg", "jpeg", "png", "webp", "gif", "avif", "svg"].includes(extension)) throw new Error("Unresolved or unsupported image extension");
+-  const digest = createSourceDigest(sourcePath);
+-  const prefix = category === "product" ? "products/migrated" : category === "review" ? "uploads/reviews/migrated" : category === "collection" ? "collections/migrated" : "site-media/migrated";
+-  return `${prefix}/${digest}.${extension}`;
++function finalFileName(sourcePath, filePath) {
++  const raw = String(filePath).split("/").filter(Boolean).pop() || "";
++  const name = raw.normalize("NFC");
++  const match = name.match(/^(.*)\.([a-z0-9]+)$/i);
++  const extension = match?.[2]?.toLowerCase();
++  const stem = match?.[1];
++  if (!extension || !SUPPORTED_EXTENSIONS.includes(extension)) throw new Error("Unresolved or unsupported image extension");
++  if (!stem || stem === "." || stem === ".." || /[\u0000-\u001f\u007f\\]/.test(stem)) throw new Error(`Unsafe image file name for ${sourcePath}`);
++  return { stem, extension };
++}
++
++/**
++ * Clean final key such as products/example.jpg. The original file name is kept; pass
++ * disambiguate: true only when another source would otherwise land on the same key.
++ */
++export function destinationObjectKey(sourcePath, category, filePath = sourcePath, { disambiguate = false } = {}) {
++  const prefix = FINAL_PREFIX_BY_CATEGORY[category];
++  if (!prefix) throw new Error("Unresolved image usage category");
++  const { stem, extension } = finalFileName(sourcePath, filePath);
++  const suffix = disambiguate ? `-${createSourceDigest(sourcePath).slice(0, 10)}` : "";
++  return `${prefix}/${stem}${suffix}.${extension}`;
++}
++
++const DIGEST_LENGTHS = Object.freeze([10, 16, 24, 40, 64]);
++
++/**
++ * Assign final keys to a whole batch at once. The result depends only on the SET of entries, never
++ * on their order:
++ *   1. A source whose natural key (prefix/original-name) is unique keeps it. Natural names always win,
++ *      even over a generated name that happens to be identical.
++ *   2. Sources that share a natural key (compared case-insensitively) first try a parent-folder-qualified
++ *      name, then a digest suffix of progressively longer length; at each level every candidate is decided simultaneously, and a
++ *      candidate is accepted only if no other source wants it and it is not already taken.
++ *   3. Anything still ambiguous after the longest digest is reported in `errors`, for every source involved.
++ * `digest` is injectable so tests can force collisions.
++ */
++export function assignDestinationKeys(entries, { digest = createSourceDigest } = {}) {
++  const errors = new Map();
++  const bySource = new Map();
++  for (const entry of entries) {
++    const prior = bySource.get(entry.sourcePath);
++    if (!prior) { bySource.set(entry.sourcePath, entry); continue; }
++    if (prior.category !== entry.category || prior.filePath !== entry.filePath) {
++      errors.set(entry.sourcePath, "conflicting_duplicate_source");
++    }
++  }
++  for (const sourcePath of errors.keys()) bySource.delete(sourcePath);
++
++  const natural = new Map();
++  for (const [sourcePath, { category, filePath }] of bySource) {
++    try { natural.set(sourcePath, destinationObjectKey(sourcePath, category, filePath)); }
++    catch (error) { errors.set(sourcePath, error?.message || "unsupported_destination"); }
++  }
++
++  const owners = new Map();
++  for (const [sourcePath, key] of natural) {
++    const id = key.toLowerCase();
++    owners.set(id, [...(owners.get(id) || []), sourcePath]);
++  }
++
++  const keys = new Map();
++  const disambiguated = [];
++  const taken = new Set();
++  let unresolved = [];
++  for (const [sourcePath, key] of natural) {
++    if (owners.get(key.toLowerCase()).length === 1) { keys.set(sourcePath, key); taken.add(key.toLowerCase()); }
++    else unresolved.push(sourcePath);
++  }
++
++  // Level 1 qualifies the name with its parent folder (RoverTshirt/1.webp -> RoverTshirt-1.webp); later
++  // levels append a digest of growing length.
++  const levels = [{ folder: true }, ...DIGEST_LENGTHS.map((length) => ({ length }))];
++  for (const level of levels) {
++    if (!unresolved.length) break;
++    const candidates = new Map();
++    const wanted = new Map();
++    for (const sourcePath of unresolved) {
++      const { category, filePath } = bySource.get(sourcePath);
++      const { stem, extension } = finalFileName(sourcePath, filePath);
++      const prefix = FINAL_PREFIX_BY_CATEGORY[category];
++      let candidate = null;
++      if (level.folder) {
++        const folder = String(filePath).split("/").filter(Boolean).slice(-2, -1)[0]?.normalize("NFC");
++        if (folder && !/[\u0000-\u001f\u007f\\]/.test(folder) && folder !== "." && folder !== "..") candidate = `${prefix}/${folder}-${stem}.${extension}`;
++      } else {
++        candidate = `${prefix}/${stem}-${digest(sourcePath).slice(0, level.length)}.${extension}`;
++      }
++      if (!candidate) continue;
++      candidates.set(sourcePath, candidate);
++      const id = candidate.toLowerCase();
++      wanted.set(id, (wanted.get(id) || 0) + 1);
++    }
++    const accepted = [];
++    const next = [];
++    for (const sourcePath of unresolved) {
++      if (!candidates.has(sourcePath)) { next.push(sourcePath); continue; }
++      const id = candidates.get(sourcePath).toLowerCase();
++      if (wanted.get(id) === 1 && !taken.has(id)) accepted.push(sourcePath);
++      else next.push(sourcePath);
++    }
++    for (const sourcePath of accepted) {
++      disambiguated.push({ sourcePath, key: candidates.get(sourcePath) });
++      keys.set(sourcePath, candidates.get(sourcePath));
++      taken.add(candidates.get(sourcePath).toLowerCase());
++    }
++    unresolved = next;
++  }
++  for (const sourcePath of unresolved) errors.set(sourcePath, "destination_key_collision");
++
++  return { keys, errors, disambiguated };
+ }
+ 
+ function createSourceDigest(sourcePath) {
+@@ -416,3 +548,210 @@ export async function processFileWithCheckpoint({
+ export function hasVerifiedCopy(state, sourcePath, targetKey, layoutVersion = MIGRATION_LAYOUT_VERSION) {
+   return isCopyVerified(state, sourcePath, targetKey, layoutVersion);
+ }
++
++/* ------------------------------------------------------------------------------------------------
++ * Legacy copies as a verified source for the final destinations
++ * ---------------------------------------------------------------------------------------------- */
++
++const SHA256_HEX = /^[a-f0-9]{64}$/;
++
++function legacyRecordFor(state, sourcePath) {
++  const record = state?.copied?.[sourcePath];
++  if (!record || typeof record !== "object") return null;
++  if (record.legacy && typeof record.legacy === "object") return record.legacy;
++  if (typeof record.key === "string" && record.key.startsWith("legacy/imagekit/")) return record;
++  return null;
++}
++
++/**
++ * Decide whether the legacy R2 copy of a file may be used as the byte source for its final key.
++ * It must be recorded at exactly the legacy key derived from the ImageKit path, carry a SHA-256 and a
++ * size, and (when ImageKit listed a size) agree with ImageKit's size. Anything else falls back to ImageKit.
++ */
++export function legacySourceDecision(state, sourcePath, { expectedSize } = {}) {
++  const record = legacyRecordFor(state, sourcePath);
++  if (!record) return { usable: false, reason: "no_legacy_record", record: null };
++  if (record.key !== legacyObjectKey(sourcePath)) return { usable: false, reason: "legacy_key_does_not_match_source_path", record };
++  if (!SHA256_HEX.test(String(record.sha256 || ""))) return { usable: false, reason: "legacy_record_missing_sha256", record };
++  if (!Number.isInteger(record.size) || record.size <= 0) return { usable: false, reason: "legacy_record_missing_size", record };
++  if (Number(expectedSize) && Number(expectedSize) !== record.size) return { usable: false, reason: "legacy_size_differs_from_imagekit", record };
++  return { usable: true, reason: null, record };
++}
++
++/**
++ * Load the bytes for a final destination. A legacy copy is used only after its bytes are re-read and match
++ * the recorded size and SHA-256; any mismatch or read failure falls back to ImageKit. Legacy copies are never
++ * modified or deleted here.
++ */
++export async function loadSourceBytes({ sourcePath, state, expectedSize, readLegacyObject, downloadImageKit }) {
++  const decision = legacySourceDecision(state, sourcePath, { expectedSize });
++  let fallbackReason = decision.reason;
++  if (decision.usable) {
++    try {
++      const legacy = await readLegacyObject(decision.record.key);
++      if (legacy.bytes.byteLength !== decision.record.size) throw new Error("size mismatch");
++      const sha256 = sha256ForBytes(legacy.bytes);
++      if (sha256 !== decision.record.sha256) throw new Error("SHA-256 mismatch");
++      return { bytes: legacy.bytes, sha256, contentType: legacy.contentType || null, origin: "legacy", legacyKey: decision.record.key, fallbackReason: null };
++    } catch (error) {
++      fallbackReason = `legacy_copy_unverified: ${error?.message || error}`;
++    }
++  }
++  const downloaded = await downloadImageKit();
++  return { bytes: downloaded.bytes, sha256: sha256ForBytes(downloaded.bytes), contentType: downloaded.contentType || null, origin: "imagekit", legacyKey: null, fallbackReason };
++}
++
++/* ------------------------------------------------------------------------------------------------
++ * Retired "…/migrated/<sha256(sourcePath)>.<ext>" layout
++ * ---------------------------------------------------------------------------------------------- */
++
++const RETIRED_KEY = /^(?:products|uploads\/reviews|collections|site-media)\/migrated\/([a-f0-9]{64})\.[a-z0-9]+$/i;
++
++/** Digest of a retired-layout key, or null. The digest is sha256(sourcePath), so it can be mapped back. */
++export function retiredLayoutDigest(key) {
++  return String(key || "").match(RETIRED_KEY)?.[1]?.toLowerCase() || null;
++}
++
++export function retiredLayoutPseudoPath(digest) {
++  return `retired-layout:${digest}`;
++}
++
++export function digestForSourcePath(sourcePath) {
++  return createSourceDigest(sourcePath);
++}
++
++/**
++ * Move Firestore references found under a retired-layout URL onto the real ImageKit source path they
++ * belong to. Pseudo paths that match no known source stay in the map so they are reported, not lost.
++ */
++export function foldRetiredLayoutReferences(referencesByPath, knownSourcePaths) {
++  const byDigest = new Map([...knownSourcePaths].map((sourcePath) => [createSourceDigest(sourcePath), sourcePath]));
++  const folded = [];
++  for (const pseudo of [...referencesByPath.keys()].filter((key) => key.startsWith("retired-layout:"))) {
++    const sourcePath = byDigest.get(pseudo.slice("retired-layout:".length));
++    if (!sourcePath) continue;
++    const target = referencesByPath.get(sourcePath) || new Map();
++    for (const [documentPath, reference] of referencesByPath.get(pseudo)) target.set(documentPath, reference);
++    referencesByPath.set(sourcePath, target);
++    referencesByPath.delete(pseudo);
++    folded.push({ pseudo, sourcePath });
++  }
++  return folded;
++}
++
++/* ------------------------------------------------------------------------------------------------
++ * State compatibility report
++ * ---------------------------------------------------------------------------------------------- */
++
++/** Read-only summary of how old state records relate to the current layout. Never mutates state. */
++export function describeStateCompatibility(state, layoutVersion = MIGRATION_LAYOUT_VERSION) {
++  const report = {
++    layoutVersion,
++    copiedRecords: 0,
++    legacyOnly: 0,
++    legacyUsableAsSource: 0,
++    legacyNotUsable: {},
++    verifiedInCurrentLayout: 0,
++    retiredLayoutDestinations: 0,
++    destinationsWithNonFinalKey: [],
++    progressKeys: { currentLayout: 0, retiredLayoutPrefix: 0, unprefixedLegacy: 0 },
++    unprefixedProgressCompleted: 0,
++  };
++  for (const [sourcePath, record] of Object.entries(state?.copied || {})) {
++    report.copiedRecords += 1;
++    const destinations = record?.destinations || {};
++    const current = destinations[layoutVersion];
++    if (current?.status === "verified" && isFinalMediaKey(current.key)) report.verifiedInCurrentLayout += 1;
++    if (current && !isFinalMediaKey(current.key)) report.destinationsWithNonFinalKey.push(sourcePath);
++    for (const retired of RETIRED_LAYOUT_VERSIONS) if (destinations[retired]) report.retiredLayoutDestinations += 1;
++    if (!current) {
++      const decision = legacySourceDecision(state, sourcePath);
++      if (decision.record) {
++        report.legacyOnly += 1;
++        if (decision.usable) report.legacyUsableAsSource += 1;
++        else report.legacyNotUsable[decision.reason] = (report.legacyNotUsable[decision.reason] || 0) + 1;
++      }
++    }
++  }
++  for (const [key, progress] of Object.entries(state?.firestoreUpdated || {})) {
++    if (key.startsWith(`${layoutVersion}:`)) report.progressKeys.currentLayout += 1;
++    else if (RETIRED_LAYOUT_VERSIONS.some((version) => key.startsWith(`${version}:`))) report.progressKeys.retiredLayoutPrefix += 1;
++    else {
++      report.progressKeys.unprefixedLegacy += 1;
++      if (progress?.status === "complete") report.unprefixedProgressCompleted += 1;
++    }
++  }
++  return report;
++}
++
++/* ------------------------------------------------------------------------------------------------
++ * Dry-run plan
++ * ---------------------------------------------------------------------------------------------- */
++
++/**
++ * Pure summary of what an --apply run would do. `bucketObjects` is an optional Map(key -> { size, reusable })
++ * read from R2; when absent, bucket-dependent figures are reported as null (unknown), never guessed.
++ */
++export function buildMigrationPlan({
++  eligibleFiles,
++  state,
++  referencesByPath,
++  layoutVersion = MIGRATION_LAYOUT_VERSION,
++  bucketObjects = null,
++  unresolvedReasons = new Map(),
++  keyErrors = new Map(),
++  disambiguatedKeys = [],
++  localSourceLinks = new Map(),
++  staticFeedLinkCount = 0,
++}) {
++  const plan = {
++    eligibleImages: eligibleFiles.length,
++    alreadyVerifiedAtFinalDestination: 0,
++    toCopy: 0,
++    toCopyFromLegacy: 0,
++    toCopyFromImageKit: 0,
++    legacyFallbacks: {},
++    alreadyInBucketReusable: bucketObjects ? 0 : null,
++    destinationConflicts: [],
++    firestore: { referencePairsToUpdate: 0, distinctDocumentsToUpdate: 0, pathsAffected: 0 },
++    remainingImageKitLinks: { firestoreReferencePairs: 0, sourceCodeLinks: 0, staticFeedExportsNotUpdated: staticFeedLinkCount },
++    unresolved: [...unresolvedReasons.entries()].map(([sourcePath, reason]) => ({ sourcePath, reason })),
++    keyErrors: [...keyErrors.entries()].map(([sourcePath, reason]) => ({ sourcePath, reason })),
++    disambiguatedKeys,
++  };
++  const documents = new Set();
++
++  for (const file of eligibleFiles) {
++    const sourcePath = sourcePathForFile(file);
++    const verified = isCopyVerified(state, sourcePath, file.targetKey, layoutVersion);
++    if (verified) plan.alreadyVerifiedAtFinalDestination += 1;
++    else {
++      plan.toCopy += 1;
++      const decision = legacySourceDecision(state, sourcePath, { expectedSize: file.size });
++      if (decision.usable) plan.toCopyFromLegacy += 1;
++      else {
++        plan.toCopyFromImageKit += 1;
++        if (decision.record) plan.legacyFallbacks[decision.reason] = (plan.legacyFallbacks[decision.reason] || 0) + 1;
++      }
++      const existing = bucketObjects?.get(file.targetKey);
++      if (existing) {
++        if (existing.reusable) plan.alreadyInBucketReusable += 1;
++        else plan.destinationConflicts.push({ sourcePath, key: file.targetKey, reason: "existing_object_does_not_match_source" });
++      }
++    }
++
++    const progress = state?.firestoreUpdated?.[`${layoutVersion}:${sourcePath}`];
++    const pending = progress?.scanId && progress.pendingDocumentPaths
++      ? progress.pendingDocumentPaths
++      : [...(referencesByPath.get(sourcePath)?.keys() || [])];
++    if (pending.length) plan.firestore.pathsAffected += 1;
++    for (const documentPath of pending) { plan.firestore.referencePairsToUpdate += 1; documents.add(documentPath); }
++  }
++  plan.firestore.distinctDocumentsToUpdate = documents.size;
++
++  for (const sourcePath of unresolvedReasons.keys()) {
++    plan.remainingImageKitLinks.firestoreReferencePairs += referencesByPath.get(sourcePath)?.size || 0;
++    plan.remainingImageKitLinks.sourceCodeLinks += localSourceLinks.get(sourcePath) || 0;
++  }
++  return plan;
++}
+diff --git a/scripts/migrate-imagekit-to-r2.mjs b/scripts/migrate-imagekit-to-r2.mjs
+index c643270..c01e8fb 100644
+--- a/scripts/migrate-imagekit-to-r2.mjs
++++ b/scripts/migrate-imagekit-to-r2.mjs
+@@ -9,6 +9,7 @@ import ImageKit from "imagekit";
+ import {
+   GetObjectCommand,
+   HeadObjectCommand,
++  ListObjectsV2Command,
+   PutObjectCommand,
+   S3Client,
+ } from "@aws-sdk/client-s3";
+@@ -21,7 +22,9 @@ import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
+ import { normalizeImageKitPath, replaceImageKitUrlsDeep, STORE_MEDIA_ORIGIN } from "../src/lib/media-utils.js";
+ import {
+   classifyImageUsage,
+-  destinationObjectKey,
++  assignDestinationKeys,
++  FINAL_PREFIX_BY_CATEGORY,
++  isFinalMediaKey,
+   deserializeFirestoreManifest,
+   hasVerifiedCopy,
+   haveNoPendingCurrentReferences,
+@@ -35,11 +38,21 @@ import {
+   serializeFirestoreManifest,
+   sourcePathForFile,
+   verifyCopiedBytes,
++  buildMigrationPlan,
++  describeStateCompatibility,
++  digestForSourcePath,
++  foldRetiredLayoutReferences,
++  loadSourceBytes,
++  retiredLayoutDigest,
++  retiredLayoutPseudoPath,
+ } from "./imagekit-r2-migration-core.mjs";
+ 
+ const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+ const DEFAULT_STATE_DIR = path.join(PROJECT_ROOT, "work", "imagekit-r2-migration");
+-const CATALOG_FEED_FILES = ["fb.xml", "google.xml", "tt.xml"];
++// Root-level catalog exports. The live feeds (/api/fb-catalog, /api/google-catalog, /api/tiktok-catalog) are
++// generated from Firestore at request time; these static files are never served or imported, so they are
++// neither scanned as usage nor rewritten. They are only counted so the report can show what is left in them.
++const STATIC_FEED_EXPORTS = ["fb.xml", "google.xml", "tt.xml"];
+ const SITE_MEDIA_SOURCE_FILES = new Set([
+   "src/app/checkout/page.js",
+   "src/app/products/[id]/ProductView.js",
+@@ -149,6 +162,7 @@ export function collectImageKitPaths(value, found = new Set()) {
+         if (url.origin !== STORE_MEDIA_ORIGIN) continue;
+         const key = decodeURIComponent(url.pathname.slice(1));
+         if (key.startsWith("legacy/imagekit/")) found.add(`/${key.slice("legacy/imagekit/".length)}`);
++        else if (retiredLayoutDigest(key)) found.add(retiredLayoutPseudoPath(retiredLayoutDigest(key)));
+       } catch { /* Ignore non-URL text. */ }
+     }
+   } else if (Array.isArray(value)) {
+@@ -171,6 +185,7 @@ function countImageKitLinks(value, wantedPath = null) {
+           if (url.origin === STORE_MEDIA_ORIGIN) {
+             const key = decodeURIComponent(url.pathname.slice(1));
+             if (key.startsWith("legacy/imagekit/")) normalizedPath = `/${key.slice("legacy/imagekit/".length)}`;
++            else if (retiredLayoutDigest(key)) normalizedPath = retiredLayoutPseudoPath(retiredLayoutDigest(key));
+           }
+         } catch { /* Ignore non-URL text. */ }
+       }
+@@ -276,7 +291,7 @@ async function verifyPublicObject(key, expectedBytes) {
+ async function copyAndVerify(file, { s3, bucket, state }) {
+   const sourcePath = file.filePath.startsWith("/") ? file.filePath : `/${file.filePath}`;
+   const key = file.targetKey;
+-  if (!key || !key.startsWith("products/migrated/") && !key.startsWith("uploads/reviews/migrated/") && !key.startsWith("collections/migrated/") && !key.startsWith("site-media/migrated/")) {
++  if (!isFinalMediaKey(key)) {
+     throw new Error(`Missing or unsafe ${MIGRATION_LAYOUT_VERSION} destination for ${sourcePath}`);
+   }
+   const pathHash = hashBytes(new TextEncoder().encode(sourcePath));
+@@ -284,12 +299,26 @@ async function copyAndVerify(file, { s3, bucket, state }) {
+     "/windeg/",
+     "/windeg/tr:orig-true/"
+   );
+-  const sourceResponse = await fetch(originalUrl, { cache: "no-store" });
+-  const sourceBytes = await responseBytes(sourceResponse, "ImageKit source download");
+-  const sourceHash = hashBytes(sourceBytes);
+-  if (Number(file.size) && sourceBytes.byteLength !== Number(file.size)) {
+-    throw new Error(`ImageKit byte count mismatch for ${sourcePath}`);
+-  }
++  // Prefer the verified legacy R2 copy; fall back to ImageKit when it is missing or fails verification.
++  const source = await loadSourceBytes({
++    sourcePath: sourcePathForFile(file),
++    state,
++    expectedSize: file.size,
++    readLegacyObject: async (legacyKey) => {
++      const object = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: legacyKey }));
++      return { bytes: new Uint8Array(await object.Body.transformToByteArray()), contentType: object.ContentType };
++    },
++    downloadImageKit: async () => {
++      const response = await fetch(originalUrl, { cache: "no-store" });
++      const bytes = await responseBytes(response, "ImageKit source download");
++      if (Number(file.size) && bytes.byteLength !== Number(file.size)) {
++        throw new Error(`ImageKit byte count mismatch for ${sourcePath}`);
++      }
++      return { bytes, contentType: response.headers.get("content-type") };
++    },
++  });
++  const sourceBytes = source.bytes;
++  const sourceHash = source.sha256;
+ 
+   let existing = null;
+   try {
+@@ -311,9 +340,9 @@ async function copyAndVerify(file, { s3, bucket, state }) {
+       Key: key,
+       Body: sourceBytes,
+       ContentLength: sourceBytes.byteLength,
+-      ContentType: file.mime || sourceResponse.headers.get("content-type") || "application/octet-stream",
++      ContentType: file.mime || source.contentType || "application/octet-stream",
+       CacheControl: "public, max-age=31536000, immutable",
+-      Metadata: { sourcepathhash: pathHash, sourcefileid: file.fileId, sourcebytesha256: sourceHash },
++      Metadata: { sourcepathhash: pathHash, sourcefileid: file.fileId, sourcebytesha256: sourceHash, sourceorigin: source.origin },
+     }));
+   }
+ 
+@@ -330,6 +359,9 @@ async function copyAndVerify(file, { s3, bucket, state }) {
+     url: publicUrlForKey(key),
+     size: sourceBytes.byteLength,
+     sha256: sourceHash,
++    sourceOrigin: source.origin,
++    ...(source.legacyKey ? { legacySourceKey: source.legacyKey } : {}),
++    ...(source.fallbackReason ? { legacyFallbackReason: source.fallbackReason } : {}),
+     verifiedAt: new Date().toISOString(),
+   };
+   return result;
+@@ -344,6 +376,7 @@ function mediaUrlIdentity(candidate) {
+     const url = new URL(candidate);
+     if (url.origin !== STORE_MEDIA_ORIGIN) return null;
+     const key = decodeURIComponent(url.pathname.slice(1));
++    if (retiredLayoutDigest(key)) return `retired:${retiredLayoutDigest(key)}`;
+     if (!key.startsWith("legacy/imagekit/")) return null;
+     return `legacy:${key.slice("legacy/imagekit".length)}`;
+   } catch { return null; }
+@@ -351,7 +384,7 @@ function mediaUrlIdentity(candidate) {
+ 
+ function replaceMigrationUrlsDeep(value, sourcePath, oldLegacyKey, newUrl) {
+   let count = 0;
+-  const oldIdentities = new Set([`imagekit:${sourcePath}`, `legacy:${sourcePath}`]);
++  const oldIdentities = new Set([`imagekit:${sourcePath}`, `legacy:${sourcePath}`, `retired:${digestForSourcePath(sourcePath)}`]);
+   if (oldLegacyKey) oldIdentities.add(`legacy:${oldLegacyKey.slice("legacy/imagekit".length)}`);
+   function visit(item) {
+     if (typeof item === "string") return item.replace(URL_PATTERN, (candidate) => {
+@@ -500,13 +533,6 @@ export async function verifyAndReconcileFirestoreReferences(
+         const destination =
+           state.copied?.[sourcePath]?.destinations?.[layoutVersion];
+ 
+-        const validPrefixes = [
+-          "products/migrated/",
+-          "uploads/reviews/migrated/",
+-          "collections/migrated/",
+-          "site-media/migrated/",
+-        ];
+-
+         let destinationUrl;
+         try {
+           destinationUrl = new URL(destination?.url);
+@@ -521,7 +547,7 @@ export async function verifyAndReconcileFirestoreReferences(
+           destination?.layoutVersion !== layoutVersion ||
+           !destination?.key ||
+           !destination?.sha256 ||
+-          !validPrefixes.some((prefix) => destination.key.startsWith(prefix)) ||
++          !isFinalMediaKey(destination.key) ||
+           destinationUrl.origin !== STORE_MEDIA_ORIGIN ||
+           decodeURIComponent(destinationUrl.pathname.slice(1)) !== destination.key
+         ) {
+@@ -610,9 +636,6 @@ async function listSourceFiles(root) {
+ async function rewriteLocalSource(pathToNewUrl) {
+   let filesChanged = 0;
+   const targets = await listSourceFiles(path.join(PROJECT_ROOT, "src"));
+-  for (const relativePath of CATALOG_FEED_FILES) {
+-    targets.push(path.join(PROJECT_ROOT, relativePath));
+-  }
+   for (const filePath of targets) {
+     try { await readFile(filePath, "utf8"); } catch { continue; }
+     const original = await readFile(filePath, "utf8");
+@@ -628,7 +651,7 @@ async function rewriteLocalSource(pathToNewUrl) {
+ 
+ async function scanLocalSourceReferences() {
+   const sourceFiles = await listSourceFiles(path.join(PROJECT_ROOT, "src"));
+-  const targets = [...sourceFiles, ...CATALOG_FEED_FILES.map((name) => path.join(PROJECT_ROOT, name))];
++  const targets = sourceFiles;
+   const paths = new Set();
+   const usagesByPath = new Map();
+   let scannedFiles = 0;
+@@ -637,17 +660,55 @@ async function scanLocalSourceReferences() {
+     try { text = await readFile(filePath, "utf8"); } catch { continue; }
+     scannedFiles += 1;
+     const relativeFile = path.relative(PROJECT_ROOT, filePath).replaceAll("\\", "/");
+-    const isCatalogFeed = CATALOG_FEED_FILES.includes(relativeFile);
+-    const category = isCatalogFeed ? "product" : SITE_MEDIA_SOURCE_FILES.has(relativeFile) ? "site" : null;
++    const category = SITE_MEDIA_SOURCE_FILES.has(relativeFile) ? "site" : null;
+     for (const sourcePath of collectImageKitPaths(text)) {
+       paths.add(sourcePath);
+       if (!usagesByPath.has(sourcePath)) usagesByPath.set(sourcePath, []);
+-      usagesByPath.get(sourcePath).push({ file: relativeFile, category, source: isCatalogFeed ? "catalog_feed" : "source_code" });
++      usagesByPath.get(sourcePath).push({ file: relativeFile, category, source: "source_code" });
+     }
+   }
+   return { sourceFiles: scannedFiles, paths, usagesByPath };
+ }
+ 
++async function countStaticFeedImageKitLinks() {
++  let total = 0;
++  const perFile = {};
++  for (const name of STATIC_FEED_EXPORTS) {
++    try {
++      const text = await readFile(path.join(PROJECT_ROOT, name), "utf8");
++      perFile[name] = (text.match(/https?:\/\/[^\s"'<>]+/g) || []).filter((candidate) => normalizeImageKitPath(candidate)).length;
++      total += perFile[name];
++    } catch { perFile[name] = 0; }
++  }
++  return { total, perFile };
++}
++
++/** Read-only: list the managed prefixes so the dry run can tell which destinations already exist. */
++async function readBucketObjects(eligibleFiles) {
++  if (!process.env.R2_ACCESS_KEY_ID || !process.env.R2_SECRET_ACCESS_KEY || !process.env.CLOUDFLARE_ACCOUNT_ID) return null;
++  const s3 = createR2Client();
++  const bucket = process.env.R2_BUCKET_NAME || "wind-shopping-media";
++  try {
++    const wanted = new Map(eligibleFiles.map((file) => [file.targetKey, file]));
++    const found = new Map();
++    for (const prefix of ["products/", "uploads/reviews/", "collections/", "site-media/"]) {
++      let token;
++      do {
++        const page = await s3.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken: token }));
++        for (const object of page.Contents || []) if (wanted.has(object.Key)) found.set(object.Key, { size: object.Size });
++        token = page.IsTruncated ? page.NextContinuationToken : undefined;
++      } while (token);
++    }
++    for (const [key, info] of found) {
++      const file = wanted.get(key);
++      const head = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
++      const pathHash = hashBytes(new TextEncoder().encode(file.filePath.startsWith("/") ? file.filePath : `/${file.filePath}`));
++      info.reusable = head.Metadata?.sourcepathhash === pathHash && (!Number(file.size) || info.size === Number(file.size));
++    }
++    return found;
++  } finally { s3.destroy(); }
++}
++
+ let logFile = "";
+ async function appendLog(entry) {
+   await appendFile(logFile, `${JSON.stringify(entry)}\n`, "utf8");
+@@ -773,8 +834,6 @@ console.log("Default creates or reuses a local Firestore manifest without changi
+   const firestore = manifestResult.firestore;
+   const scanId = manifestResult.scanId;
+ 
+-  refreshReferenceProgress(firestore.referencesByPath, state, scanId, MIGRATION_LAYOUT_VERSION);
+-
+   const imagekit = imageKitClient();
+ 
+   const [files, localSource] = await Promise.all([
+@@ -790,11 +849,15 @@ console.log("Default creates or reuses a local Firestore manifest without changi
+     else if (distinctPaths.get(sourcePath).fileId !== file.fileId) duplicateLibraryPaths.add(sourcePath);
+   }
+   const listedPaths = new Set(distinctPaths.keys());
++  // References written under the retired "migrated" layout are mapped back to their real source path.
++  const foldedRetiredReferences = foldRetiredLayoutReferences(firestore.referencesByPath, listedPaths);
++  refreshReferenceProgress(firestore.referencesByPath, state, scanId, MIGRATION_LAYOUT_VERSION);
+   const missingFirestorePaths = [...firestore.referencesByPath.keys()].filter((sourcePath) => !listedPaths.has(sourcePath));
+   const missingSourcePaths = [...localSource.paths].filter((sourcePath) => !listedPaths.has(sourcePath));
+   const unresolvedReasons = new Map([...missingFirestorePaths, ...missingSourcePaths].map((sourcePath) => [sourcePath, "not_found_in_imagekit_library"]));
+   for (const sourcePath of duplicateLibraryPaths) unresolvedReasons.set(sourcePath, "duplicate_imagekit_path_with_different_file_ids");
+   const eligibleFiles = [];
++  const classified = [];
+   for (const [sourcePath, file] of distinctPaths) {
+     if (duplicateLibraryPaths.has(sourcePath)) continue;
+     const references = [...(firestore.referencesByPath.get(sourcePath)?.values() || [])];
+@@ -804,13 +867,20 @@ console.log("Default creates or reuses a local Firestore manifest without changi
+       unresolvedReasons.set(sourcePath, classification.reason);
+       continue;
+     }
+-    try {
+-      file.migrationCategory = classification.category;
+-      file.targetKey = destinationObjectKey(sourcePath, classification.category, file.filePath);
+-      eligibleFiles.push(file);
+-    } catch (error) {
+-      unresolvedReasons.set(sourcePath, error?.message || "unsupported_destination");
++    classified.push({ sourcePath, file, category: classification.category });
++  }
++  // Keys are assigned for the whole library at once so name collisions are resolved deterministically.
++  const { keys: finalKeys, errors: keyErrors, disambiguated } = assignDestinationKeys(
++    classified.map(({ sourcePath, file, category }) => ({ sourcePath, category, filePath: file.filePath })),
++  );
++  for (const { sourcePath, file, category } of classified) {
++    if (!finalKeys.has(sourcePath)) {
++      unresolvedReasons.set(sourcePath, keyErrors.get(sourcePath) || "unsupported_destination");
++      continue;
+     }
++    file.migrationCategory = category;
++    file.targetKey = finalKeys.get(sourcePath);
++    eligibleFiles.push(file);
+   }
+   const unresolvedPaths = [...unresolvedReasons.keys()];
+   const selectedFiles = selectPendingFiles(eligibleFiles, firestore.referencesByPath, state, options.limit, MIGRATION_LAYOUT_VERSION);
+@@ -828,6 +898,37 @@ console.log("Default creates or reuses a local Firestore manifest without changi
+     hasVerifiedCopy(state, sourcePathForFile(file), file.targetKey, MIGRATION_LAYOUT_VERSION) && !selectedPaths.has(sourcePathForFile(file)),
+   ).length;
+ 
++  const staticFeeds = await countStaticFeedImageKitLinks();
++  let bucketObjects = null;
++  let bucketReadError = null;
++  try { bucketObjects = await readBucketObjects(eligibleFiles); } catch (error) { bucketReadError = error?.message || String(error); }
++  const localSourceLinks = new Map([...localSource.usagesByPath].map(([sourcePath, usages]) => [sourcePath, usages.length]));
++  const plan = buildMigrationPlan({
++    eligibleFiles,
++    state,
++    referencesByPath: firestore.referencesByPath,
++    layoutVersion: MIGRATION_LAYOUT_VERSION,
++    bucketObjects,
++    unresolvedReasons,
++    keyErrors,
++    disambiguatedKeys: disambiguated,
++    localSourceLinks,
++    staticFeedLinkCount: staticFeeds.total,
++  });
++  const stateCompatibility = describeStateCompatibility(state, MIGRATION_LAYOUT_VERSION);
++  const dryRunReport = {
++    plan,
++    stateCompatibility,
++    retiredLayoutReferencesFolded: foldedRetiredReferences.length,
++    staticFeedExports: { ...staticFeeds, note: "Static root exports; not served or imported, so not rewritten." },
++    r2Check: bucketObjects ? "read_only_listing_done" : bucketReadError ? `failed: ${bucketReadError}` : "skipped_no_r2_credentials",
++    legacyCopiesDeleted: 0,
++    imageKitOriginalsDeleted: 0,
++  };
++  if (!options.apply) {
++    await writeFile(path.join(options.stateDir, "final-dry-run-report.json"), JSON.stringify(dryRunReport, null, 2), "utf8");
++  }
++
+   console.log(JSON.stringify({
+     mode: options.apply ? "apply" : "dry-run",
+     project: projectId,
+@@ -842,7 +943,7 @@ console.log("Default creates or reuses a local Firestore manifest without changi
+     duplicateImageKitLibraryRows: files.length - distinctPaths.size,
+     pathsWithConflictingImageKitFileIds: duplicateLibraryPaths.size,
+     migrationLayoutVersion: MIGRATION_LAYOUT_VERSION,
+-    destinationByCategory: { product: "products/migrated/", review: "uploads/reviews/migrated/", collection: "collections/migrated/", site: "site-media/migrated/" },
++    destinationByCategory: Object.fromEntries(Object.entries(FINAL_PREFIX_BY_CATEGORY).map(([category, prefix]) => [category, `${prefix}/`])),
+     eligibleByUsageCategory: Object.fromEntries(["product", "review", "collection", "site"].map((category) => [category, eligibleFiles.filter((file) => file.migrationCategory === category).length])),
+     unresolvedReasonCounts,
+     firestoreCollections: firestore.counts,
+@@ -861,7 +962,8 @@ console.log("Default creates or reuses a local Firestore manifest without changi
+     filesVerifiedInNewLayout: newLayoutVerifiedCount,
+     legacyCopiesPreservedButNotCountedForNewLayout: previousLegacyCopyCount,
+     filesSkippedAsAlreadyCopiedAndReconciled: skippedVerifiedFiles,
+-    r2Bucket: options.apply ? process.env.R2_BUCKET_NAME || "wind-shopping-media" : "not connected in dry-run",
++    r2Bucket: options.apply ? process.env.R2_BUCKET_NAME || "wind-shopping-media" : "read-only listing only when R2 credentials are present",
++    finalDryRun: dryRunReport,
+     imageKitOriginalsDeleted: 0,
+   }, null, 2));
+ 
+@@ -900,13 +1002,20 @@ console.log("Default creates or reuses a local Firestore manifest without changi
+   const allFilesCopied = eligibleFiles.every((file) => hasVerifiedCopy(state, sourcePathForFile(file), file.targetKey, MIGRATION_LAYOUT_VERSION));
+   const noPendingReferences = haveNoPendingCurrentReferences(firestore.referencesByPath, state, scanId, MIGRATION_LAYOUT_VERSION);
+   const libraryComplete = fileFailures === 0 && allFilesCopied && noPendingReferences && unresolvedPaths.length === 0;
+-  if (options.rewriteSource && libraryComplete) {
+-    const pathToNewUrl = new Map(eligibleFiles.map((file) => { const sourcePath = sourcePathForFile(file); return [sourcePath, state.copied[sourcePath].destinations[MIGRATION_LAYOUT_VERSION].url]; }));
+-    const changedFiles = await rewriteLocalSource(pathToNewUrl);
+-    await appendLog({ type: "local_source_rewrite_complete", filesChanged: changedFiles, at: new Date().toISOString() });
+-    console.log(`Updated ${changedFiles} local source files after all ImageKit images were verified.`);
+-  } else if (options.rewriteSource) {
+-    console.log("Skipped local source rewrites: run without --limit and resolve all missing source paths and copy failures first.");
++  if (options.rewriteSource) {
++    // Each source-code link is rewritten only once its own destination is verified (size, SHA-256, public URL),
++    // so unrelated unresolved paths elsewhere in the library cannot block or unsafely trigger it.
++    const pathToNewUrl = new Map();
++    for (const file of eligibleFiles) {
++      const sourcePath = sourcePathForFile(file);
++      const destination = state.copied[sourcePath]?.destinations?.[MIGRATION_LAYOUT_VERSION];
++      if (localSource.paths.has(sourcePath) && destination?.status === "verified" && isFinalMediaKey(destination.key) && destination.sha256) {
++        pathToNewUrl.set(sourcePath, destination.url);
++      }
++    }
++    const changedFiles = pathToNewUrl.size ? await rewriteLocalSource(pathToNewUrl) : 0;
++    await appendLog({ type: "local_source_rewrite_complete", filesChanged: changedFiles, paths: pathToNewUrl.size, at: new Date().toISOString() });
++    console.log(`Updated ${changedFiles} local source files for ${pathToNewUrl.size} verified source-code images.`);
+   }
+ 
+   await saveState(stateFile, state);
+diff --git a/src/app/api/delete-image/route.js b/src/app/api/delete-image/route.js
+index 82b4dde..9249ff0 100644
+--- a/src/app/api/delete-image/route.js
++++ b/src/app/api/delete-image/route.js
+@@ -1,12 +1,11 @@
+ import { NextResponse } from "next/server";
+ import { getCloudflareContext } from "@opennextjs/cloudflare";
+-import { STORE_MEDIA_ORIGIN } from "@/lib/media-utils";
++import { STORE_MEDIA_ORIGIN, classifyManagedMediaKey } from "@/lib/media-utils";
++import { findMediaReferences } from "@/lib/mediaReferences";
+ import { verifyAdminIdToken } from "@/lib/verifyAdminIdToken";
+ 
+ export const dynamic = "force-dynamic";
+ 
+-const PRODUCT_UPLOAD_KEY = /^(?:uploads\/)?products\/[0-9a-f-]{36}\.(jpg|png|webp|gif)$/i;
+-
+ export async function POST(request) {
+   try {
+     const { url } = await request.json();
+@@ -33,17 +32,34 @@ export async function POST(request) {
+       return NextResponse.json({ error: "invalid_url_path" }, { status: 400 });
+     }
+ 
+-    if (key.startsWith("products/migrated/")) {
+-      return NextResponse.json({ success: true, skipped: true, reason: "migration_archive_is_immutable" });
++    // Only random-UUID product uploads are ever deletable; migrated files keep their original names.
++    const classification = classifyManagedMediaKey(key);
++    if (!classification.deletable) {
++      return NextResponse.json({ success: true, skipped: true, reason: classification.reason });
+     }
+ 
+-    if (!PRODUCT_UPLOAD_KEY.test(key)) {
+-      return NextResponse.json({ success: true, skipped: true, reason: "not_a_product_upload" });
+-    }
+-    if (!(await verifyAdminIdToken(request))) {
++    const auth = await verifyAdminIdToken(request);
++    if (!auth?.ok) {
+       return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+     }
+ 
++    // Never delete an image that another document still uses, and never delete when that cannot be checked.
++    let references;
++    try {
++      references = await findMediaReferences(key);
++    } catch (error) {
++      console.error("R2 media reference check failed:", error?.message || error);
++      return NextResponse.json({ success: true, skipped: true, reason: "reference_check_unavailable" });
++    }
++    if (references.referenced) {
++      return NextResponse.json({
++        success: true,
++        skipped: true,
++        reason: "media_still_referenced",
++        referencedBy: [...new Set(references.locations.map(({ collection }) => collection))],
++      });
++    }
++
+     const { env } = await getCloudflareContext({ async: true });
+     if (!env.WIND_MEDIA) throw new Error("WIND_MEDIA binding is unavailable");
+     await env.WIND_MEDIA.delete(key);
+diff --git a/src/lib/media-utils.js b/src/lib/media-utils.js
+index 7bdc859..cf8a42e 100644
+--- a/src/lib/media-utils.js
++++ b/src/lib/media-utils.js
+@@ -3,6 +3,19 @@ export const STORE_MEDIA_ORIGIN = "https://media.windeg.com";
+ 
+ const URL_PATTERN = /https?:\/\/[^\s"'<>]+/g;
+ 
++// Only images uploaded through /api/media for products (random UUID names) may ever be deleted by the app.
++// Migrated ImageKit files keep their original names, so they can never match this pattern.
++const MANAGED_PRODUCT_UPLOAD_KEY = /^(?:uploads\/)?products\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:jpg|png|webp|gif)$/i;
++
++export function classifyManagedMediaKey(key) {
++  if (typeof key !== "string" || !key) return { deletable: false, reason: "invalid_key" };
++  if (key.split("/").some((segment) => /^(?:migrated|legacy)$/i.test(segment))) {
++    return { deletable: false, reason: "migration_archive_is_immutable" };
++  }
++  if (!MANAGED_PRODUCT_UPLOAD_KEY.test(key)) return { deletable: false, reason: "not_a_product_upload" };
++  return { deletable: true, reason: null };
++}
++
+ export function normalizeImageKitPath(value) {
+   try {
+     const url = new URL(value);
+diff --git a/src/lib/mediaReferences.js b/src/lib/mediaReferences.js
+new file mode 100644
+index 0000000..5d2fb9e
+--- /dev/null
++++ b/src/lib/mediaReferences.js
+@@ -0,0 +1,87 @@
++import { getGoogleAccessToken } from "./googleServiceAccount";
++import { STORE_MEDIA_ORIGIN } from "./media-utils";
++
++const FIRESTORE_SCOPE = "https://www.googleapis.com/auth/datastore";
++
++// Exact lookups: these collections can be large, so they are queried by field instead of scanned.
++export const MEDIA_REFERENCE_ARRAY_FIELDS = Object.freeze([{ collection: "products", field: "images" }]);
++
++// Small collections that hold images (collection cards, homepage, settings, policy HTML) are read
++// fully and searched for the file name, which also catches HTML text and nested maps.
++export const MEDIA_REFERENCE_SCANNED_COLLECTIONS = Object.freeze([
++  "collections",
++  "categories",
++  "homepage",
++  "settings",
++  "Policies",
++  "policies",
++]);
++
++const PAGE_SIZE = 300;
++const MAX_SCANNED_PAGES = 10;
++
++function documentsBase(projectId) {
++  return `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`;
++}
++
++async function readJson(response, label) {
++  if (!response.ok) throw new Error(`${label} failed (${response.status})`);
++  return response.json();
++}
++
++/**
++ * Looks for any Firestore document that still uses a managed media key.
++ * Resolves { referenced, locations } and THROWS if any lookup cannot be completed, so callers can
++ * fail closed instead of deleting on uncertainty.
++ */
++export async function findMediaReferences(key, {
++  projectId = process.env.FIREBASE_PROJECT_ID,
++  getToken = () => getGoogleAccessToken(FIRESTORE_SCOPE),
++  fetchImpl = fetch,
++} = {}) {
++  if (!projectId) throw new Error("FIREBASE_PROJECT_ID is not configured");
++  const fileName = key.split("/").pop();
++  const urls = [...new Set([
++    `${STORE_MEDIA_ORIGIN}/${key.split("/").map(encodeURIComponent).join("/")}`,
++    `${STORE_MEDIA_ORIGIN}/${key}`,
++  ])];
++  const token = await getToken();
++  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
++  const locations = [];
++
++  for (const { collection, field } of MEDIA_REFERENCE_ARRAY_FIELDS) {
++    for (const url of urls) {
++      const rows = await readJson(await fetchImpl(`${documentsBase(projectId)}:runQuery`, {
++        method: "POST",
++        headers,
++        body: JSON.stringify({
++          structuredQuery: {
++            from: [{ collectionId: collection }],
++            where: { fieldFilter: { field: { fieldPath: field }, op: "ARRAY_CONTAINS", value: { stringValue: url } } },
++            limit: 5,
++          },
++        }),
++      }), `${collection} reference query`);
++      if (!Array.isArray(rows)) throw new Error(`${collection} reference query returned an unexpected response`);
++      for (const row of rows) if (row?.document?.name) locations.push({ collection, document: row.document.name.split("/").pop() });
++    }
++  }
++
++  for (const collection of MEDIA_REFERENCE_SCANNED_COLLECTIONS) {
++    let pageToken = "";
++    for (let page = 0; ; page += 1) {
++      if (page >= MAX_SCANNED_PAGES) throw new Error(`${collection} is too large to scan for media references`);
++      const query = `pageSize=${PAGE_SIZE}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`;
++      const body = await readJson(await fetchImpl(`${documentsBase(projectId)}/${collection}?${query}`, { headers }), `${collection} reference scan`);
++      for (const document of body?.documents || []) {
++        if (JSON.stringify(document.fields || {}).includes(fileName)) {
++          locations.push({ collection, document: document.name.split("/").pop() });
++        }
++      }
++      pageToken = body?.nextPageToken || "";
++      if (!pageToken) break;
++    }
++  }
++
++  return { referenced: locations.length > 0, locations };
++}
+diff --git a/src/lib/storeMedia.js b/src/lib/storeMedia.js
+index 2890e45..03d0bf4 100644
+--- a/src/lib/storeMedia.js
++++ b/src/lib/storeMedia.js
+@@ -2,7 +2,7 @@
+ "use client";
+ 
+ import { getAuthInstance } from "@/lib/firebase";
+-import { STORE_MEDIA_ORIGIN } from "@/lib/media-utils";
++import { STORE_MEDIA_ORIGIN, classifyManagedMediaKey } from "@/lib/media-utils";
+ 
+ async function adminHeaders() {
+   const user = getAuthInstance().currentUser;
+@@ -47,18 +47,14 @@ export async function deleteStoreImage(url) {
+       return { success: true, skipped: true };
+     }
+ 
+-    if (decodedPath.startsWith("products/migrated/")) {
+-      return { success: true, skipped: true, reason: "migration_archive_is_immutable" };
++    if (parsed.origin !== STORE_MEDIA_ORIGIN) {
++      return { success: true, skipped: true };
+     }
+ 
+-    if (
+-      parsed.origin !== STORE_MEDIA_ORIGIN ||
+-      !(
+-        parsed.pathname.startsWith("/products/") ||
+-        parsed.pathname.startsWith("/uploads/products/")
+-      )
+-    ) {
+-      return { success: true, skipped: true };
++    // The server re-checks everything; this only avoids a pointless round trip for protected files.
++    const classification = classifyManagedMediaKey(decodedPath);
++    if (!classification.deletable) {
++      return { success: true, skipped: true, reason: classification.reason };
+     }
+ 
+     const headers = await adminHeaders();
+diff --git a/tests/imagekit-r2-migration.test.js b/tests/imagekit-r2-migration.test.js
+index 0733f1a..2c0eee7 100644
+--- a/tests/imagekit-r2-migration.test.js
++++ b/tests/imagekit-r2-migration.test.js
+@@ -1,8 +1,21 @@
+ 
++import { createHash } from "node:crypto";
+ import { describe, expect, it, vi } from "vitest";
+ import {
++  assignDestinationKeys,
++  buildMigrationPlan,
+   classifyImageUsage,
++  describeStateCompatibility,
++  digestForSourcePath,
++  foldRetiredLayoutReferences,
++  legacyObjectKey,
++  legacySourceDecision,
++  loadSourceBytes,
++  retiredLayoutDigest,
++  retiredLayoutPseudoPath,
++  sha256ForBytes,
+   destinationObjectKey,
++  isFinalMediaKey,
+   sourcePathForFile,
+   deserializeFirestoreManifest,
+   hasVerifiedCopy,
+@@ -302,13 +315,27 @@ describe("ImageKit R2 migration checkpoints", () => {
+       classifyImageUsage(imagePath, [{ documentPath: "products/p1" }]).category,
+     ).toBe("product");
+ 
++    // The homepage showcases product photos, so the product record owns them (Orders carry no usage).
+     expect(
+       classifyImageUsage(imagePath, [
+         { documentPath: "products/p1" },
+         { documentPath: "homepage/layout_config" },
+         { documentPath: "Orders/o1" },
+       ]).category,
+-    ).toBeNull();
++    ).toBe("product");
++
++    // A hard-coded source-code link next to a product reference is still a real conflict.
++    expect(
++      classifyImageUsage(
++        imagePath,
++        [{ documentPath: "products/p1" }],
++        [{ file: "src/components/Footer.js", category: "site", source: "source_code" }],
++      ),
++    ).toEqual({ category: null, reason: "conflicting_usage_categories" });
++
++    expect(
++      classifyImageUsage(imagePath, [{ documentPath: "products/p1" }, { documentPath: "collections/c1" }]).reason,
++    ).toBe("conflicting_usage_categories");
+ 
+     expect(
+       classifyImageUsage(imagePath, [
+@@ -352,13 +379,9 @@ describe("ImageKit R2 migration checkpoints", () => {
+       ]).category,
+     ).toBeNull();
+ 
+-    expect(destinationObjectKey(imagePath, "product", "/a.jpg")).toMatch(
+-      /^products\/migrated\/[a-f0-9]{64}\.jpg$/,
+-    );
+-
+-    expect(destinationObjectKey(imagePath, "review", "/a.png")).toMatch(
+-      /^uploads\/reviews\/migrated\//,
+-    );
++    expect(destinationObjectKey(imagePath, "product", "/a.jpg")).toBe("products/a.jpg");
++    expect(destinationObjectKey(imagePath, "review", "/a.png")).toBe("uploads/reviews/a.png");
++    expect(destinationObjectKey(imagePath, "collection", "/c.webp")).toBe("collections/c.webp");
+   });
+ 
+   it("classifies Review-namespace images in product docs and catalog feeds as reviews", () => {
+@@ -373,7 +396,7 @@ describe("ImageKit R2 migration checkpoints", () => {
+         { category: "product", source: "catalog_feed" },
+       ]);
+       expect(result).toEqual({ category: "review", reason: null });
+-      expect(destinationObjectKey(path, result.category, path)).toMatch(/^uploads\/reviews\/migrated\//);
++      expect(destinationObjectKey(path, result.category, path)).toBe(`uploads/reviews/${path.split("/").pop()}`);
+     }
+   });
+ 
+@@ -382,7 +405,7 @@ describe("ImageKit R2 migration checkpoints", () => {
+     for (const name of ["visa.svg", "mastercard.svg", "Meeza.svg", "icons8-apple-pay.svg", "amex-svgrepo-com.svg"]) {
+       const path = `/WIND_Shopping/${name}`;
+       expect(classifyImageUsage(path, [], usages)).toEqual({ category: "site", reason: null });
+-      expect(destinationObjectKey(path, "site", path)).toMatch(/^site-media\/migrated\//);
++      expect(destinationObjectKey(path, "site", path)).toBe(`site-media/${name}`);
+     }
+   });
+ 
+@@ -392,6 +415,292 @@ describe("ImageKit R2 migration checkpoints", () => {
+     expect(destinationObjectKey(imagePath, "review", "/WIND_Shopping/a.jpg")).not.toBe(first);
+   });
+ 
++  it("never produces migrated or legacy segments and keeps original names", () => {
++    for (const [category, prefix] of [["product", "products"], ["review", "uploads/reviews"], ["collection", "collections"], ["site", "site-media"]]) {
++      const key = destinationObjectKey("/WIND_Shopping/HeroS (3).webp", category, "/WIND_Shopping/HeroS (3).webp");
++      expect(key).toBe(`${prefix}/HeroS (3).webp`);
++      expect(isFinalMediaKey(key)).toBe(true);
++    }
++    expect(isFinalMediaKey("products/migrated/a.jpg")).toBe(false);
++    expect(isFinalMediaKey("uploads/reviews/migrated/a.jpg")).toBe(false);
++    expect(isFinalMediaKey("legacy/imagekit/WIND_Shopping/a.jpg")).toBe(false);
++    expect(isFinalMediaKey("products/legacy/a.jpg")).toBe(false);
++    expect(isFinalMediaKey("products/")).toBe(false);
++    expect(() => destinationObjectKey("/a/..", "product", "/a/..")).toThrow();
++    expect(() => destinationObjectKey("/a/x.exe", "product", "/a/x.exe")).toThrow(/extension/);
++  });
++
++  it("qualifies only colliding names with their parent folder, regardless of order", () => {
++    const entries = [
++      { sourcePath: "/A/same.jpg", category: "product", filePath: "/A/same.jpg" },
++      { sourcePath: "/B/Same.jpg", category: "product", filePath: "/B/Same.jpg" },
++      { sourcePath: "/A/unique.jpg", category: "product", filePath: "/A/unique.jpg" },
++      { sourcePath: "/Reviews/same.jpg", category: "review", filePath: "/Reviews/same.jpg" },
++    ];
++    const first = assignDestinationKeys(entries);
++    const second = assignDestinationKeys([...entries].reverse());
++    expect([...first.keys].sort()).toEqual([...second.keys].sort());
++    expect(first.keys.get("/A/unique.jpg")).toBe("products/unique.jpg");
++    expect(first.keys.get("/A/same.jpg")).toBe("products/A-same.jpg");
++    expect(first.keys.get("/B/Same.jpg")).toBe("products/B-Same.jpg");
++    expect(first.keys.get("/Reviews/same.jpg")).toBe("uploads/reviews/same.jpg");
++    expect(first.disambiguated.map((d) => d.sourcePath).sort()).toEqual(["/A/same.jpg", "/B/Same.jpg"]);
++    expect(first.errors.size).toBe(0);
++  });
++
++  it("falls back to digest suffixes, and a natural name always beats a generated one", () => {
++    const digestOf = (sourcePath) => createHash("sha256").update(sourcePath).digest("hex");
++    const natural = `/same-${digestOf("/same.jpg").slice(0, 10)}.jpg`;
++    const entries = [
++      { sourcePath: "/same.jpg", category: "product", filePath: "/same.jpg" },
++      { sourcePath: "/SAME.jpg", category: "product", filePath: "/SAME.jpg" },
++      { sourcePath: natural, category: "product", filePath: natural },
++      // Natural name equal to the folder-qualified name of /A/other.jpg
++      { sourcePath: "/A/other.jpg", category: "product", filePath: "/A/other.jpg" },
++      { sourcePath: "/B/other.jpg", category: "product", filePath: "/B/other.jpg" },
++      { sourcePath: "/A-other.jpg", category: "product", filePath: "/A-other.jpg" },
++    ];
++    const expected = assignDestinationKeys(entries);
++    expect(expected.errors.size).toBe(0);
++    expect(expected.keys.get(natural)).toBe(`products${natural}`);
++    expect(expected.keys.get("/same.jpg")).toBe(`products/same-${digestOf("/same.jpg").slice(0, 16)}.jpg`);
++    expect(expected.keys.get("/SAME.jpg")).toBe(`products/SAME-${digestOf("/SAME.jpg").slice(0, 10)}.jpg`);
++    expect(expected.keys.get("/A-other.jpg")).toBe("products/A-other.jpg");
++    expect(expected.keys.get("/A/other.jpg")).toBe(`products/other-${digestOf("/A/other.jpg").slice(0, 10)}.jpg`);
++    expect(expected.keys.get("/B/other.jpg")).toBe("products/B-other.jpg");
++    expect(new Set([...expected.keys.values()].map((k) => k.toLowerCase())).size).toBe(entries.length);
++
++    const orders = [[0, 1, 2, 3, 4, 5], [5, 4, 3, 2, 1, 0], [2, 0, 5, 1, 4, 3], [3, 5, 0, 4, 2, 1], [1, 3, 4, 0, 5, 2]];
++    for (const order of orders) {
++      const result = assignDestinationKeys(order.map((i) => entries[i]));
++      expect(Object.fromEntries(result.keys)).toEqual(Object.fromEntries(expected.keys));
++      expect(result.errors.size).toBe(0);
++    }
++  });
++
++  it("escalates digest length when two suffixed candidates collide and reports unresolvable ones for all involved", () => {
++    const entries = [
++      { sourcePath: "/x.jpg", category: "product", filePath: "/x.jpg" },
++      { sourcePath: "/X.jpg", category: "product", filePath: "/X.jpg" },
++    ];
++    // Both sources share the first 10 digest characters but differ afterwards.
++    const shortCollision = (sourcePath) => `abcdefghij${sourcePath === "/x.jpg" ? "1" : "2"}${"0".repeat(53)}`;
++    const resolved = assignDestinationKeys(entries, { digest: shortCollision });
++    expect(resolved.errors.size).toBe(0);
++    expect(resolved.keys.get("/x.jpg")).toBe(`products/x-${shortCollision("/x.jpg").slice(0, 16)}.jpg`);
++    expect(resolved.keys.get("/X.jpg")).toBe(`products/X-${shortCollision("/X.jpg").slice(0, 16)}.jpg`);
++    for (const order of [entries, [...entries].reverse()]) {
++      expect(Object.fromEntries(assignDestinationKeys(order, { digest: shortCollision }).keys)).toEqual(Object.fromEntries(resolved.keys));
++    }
++
++    const identical = assignDestinationKeys(entries, { digest: () => "f".repeat(64) });
++    expect(identical.keys.size).toBe(0);
++    expect(identical.errors.get("/x.jpg")).toBe("destination_key_collision");
++    expect(identical.errors.get("/X.jpg")).toBe("destination_key_collision");
++  });
++
++  it("rejects conflicting duplicates for the same source path without depending on order", () => {
++    const a = { sourcePath: "/A/y.jpg", category: "product", filePath: "/A/y.jpg" };
++    const b = { sourcePath: "/A/y.jpg", category: "review", filePath: "/A/y.jpg" };
++    for (const entries of [[a, b], [b, a]]) {
++      const result = assignDestinationKeys(entries);
++      expect(result.keys.has("/A/y.jpg")).toBe(false);
++      expect(result.errors.get("/A/y.jpg")).toBe("conflicting_duplicate_source");
++    }
++    expect(assignDestinationKeys([a, { ...a }]).keys.get("/A/y.jpg")).toBe("products/y.jpg");
++  });
++
++  it("keeps assigned keys unchanged when unrelated files are added", () => {
++    const base = [{ sourcePath: "/A/solo.jpg", category: "product", filePath: "/A/solo.jpg" }];
++    const more = [...base, { sourcePath: "/Z/other.jpg", category: "site", filePath: "/Z/other.jpg" }];
++    expect(assignDestinationKeys(more).keys.get("/A/solo.jpg")).toBe(assignDestinationKeys(base).keys.get("/A/solo.jpg"));
++  });
++
++  describe("legacy copies as the source for final destinations", () => {
++    const sourcePath = "/WIND_Shopping/legacy-one.jpg";
++    const bytes = Uint8Array.from([9, 8, 7, 6, 5]);
++    const sha256 = sha256ForBytes(bytes);
++    const goodRecord = { key: legacyObjectKey(sourcePath), url: "https://media.windeg.com/legacy/imagekit/WIND_Shopping/legacy-one.jpg", size: bytes.byteLength, sha256 };
++    const stateWith = (record) => ({ copied: { [sourcePath]: record } });
++
++    it("accepts flat and nested legacy records that match the derived key, SHA-256 and size", () => {
++      expect(legacySourceDecision(stateWith(goodRecord), sourcePath, { expectedSize: 5 }).usable).toBe(true);
++      expect(legacySourceDecision(stateWith({ legacy: goodRecord }), sourcePath).usable).toBe(true);
++    });
++
++    it("rejects legacy records that cannot be trusted", () => {
++      expect(legacySourceDecision({ copied: {} }, sourcePath).reason).toBe("no_legacy_record");
++      expect(legacySourceDecision(stateWith({ ...goodRecord, sha256: undefined }), sourcePath).reason).toBe("legacy_record_missing_sha256");
++      expect(legacySourceDecision(stateWith({ ...goodRecord, size: undefined }), sourcePath).reason).toBe("legacy_record_missing_size");
++      expect(legacySourceDecision(stateWith({ ...goodRecord, key: "legacy/imagekit/other.jpg" }), sourcePath).reason).toBe("legacy_key_does_not_match_source_path");
++      expect(legacySourceDecision(stateWith(goodRecord), sourcePath, { expectedSize: 6 }).reason).toBe("legacy_size_differs_from_imagekit");
++      expect(legacySourceDecision(stateWith({ key: "products/x.jpg", sha256, size: 5 }), sourcePath).reason).toBe("no_legacy_record");
++    });
++
++    it("uses the legacy bytes only after re-verifying them, and never touches ImageKit then", async () => {
++      const downloadImageKit = vi.fn();
++      const readLegacyObject = vi.fn(async () => ({ bytes, contentType: "image/jpeg" }));
++      const result = await loadSourceBytes({ sourcePath, state: stateWith(goodRecord), expectedSize: 5, readLegacyObject, downloadImageKit });
++      expect(result).toMatchObject({ origin: "legacy", sha256, legacyKey: goodRecord.key, fallbackReason: null });
++      expect(readLegacyObject).toHaveBeenCalledWith(goodRecord.key);
++      expect(downloadImageKit).not.toHaveBeenCalled();
++    });
++
++    it("falls back to ImageKit when the legacy object is missing, corrupted or the wrong size", async () => {
++      const imageKitBytes = Uint8Array.from([1, 1, 1]);
++      const downloadImageKit = vi.fn(async () => ({ bytes: imageKitBytes, contentType: "image/png" }));
++      const cases = {
++        missing: async () => { throw new Error("NoSuchKey"); },
++        corrupted: async () => ({ bytes: Uint8Array.from([9, 8, 7, 6, 0]) }),
++        wrongSize: async () => ({ bytes: Uint8Array.from([9, 8]) }),
++      };
++      for (const readLegacyObject of Object.values(cases)) {
++        const result = await loadSourceBytes({ sourcePath, state: stateWith(goodRecord), readLegacyObject, downloadImageKit });
++        expect(result.origin).toBe("imagekit");
++        expect(result.fallbackReason).toMatch(/^legacy_copy_unverified/);
++        expect(result.sha256).toBe(sha256ForBytes(imageKitBytes));
++      }
++      const noRecord = await loadSourceBytes({ sourcePath, state: { copied: {} }, readLegacyObject: vi.fn(), downloadImageKit });
++      expect(noRecord).toMatchObject({ origin: "imagekit", fallbackReason: "no_legacy_record" });
++    });
++  });
++
++  describe("compatibility with older state", () => {
++    const old = "/WIND_Shopping/old.jpg";
++    const flat = "/WIND_Shopping/flat.jpg";
++    const baseState = {
++      copied: {
++        [flat]: { key: legacyObjectKey(flat), size: 3, sha256: "a".repeat(64) },
++        [old]: { destinations: { "products-migrated-v1": { key: `products/migrated/${"b".repeat(64)}.jpg`, status: "verified", layoutVersion: "products-migrated-v1", url: "u", sha256: "b".repeat(64) } } },
++      },
++      firestoreUpdated: {
++        [flat]: { status: "complete", processedDocumentPaths: ["products/a"] },
++        [`products-migrated-v1:${old}`]: { status: "complete", processedDocumentPaths: ["products/b"] },
++      },
++    };
++
++    it("never treats retired-layout or unprefixed records as complete for the final layout", () => {
++      const stateOld = structuredClone(baseState);
++      for (const [path, key] of [[flat, "products/flat.jpg"], [old, "products/old.jpg"]]) {
++        expect(hasVerifiedCopy(stateOld, path, key)).toBe(false);
++      }
++      const file = { filePath: old, targetKey: "products/old.jpg" };
++      const references = new Map([[old, new Map([["products/b", { documentPath: "products/b", collectionName: "products", docId: "b" }]])]]);
++      expect(selectPendingFiles([file], references, stateOld, Infinity)).toHaveLength(1);
++      refreshReferenceProgress(references, stateOld, "scan-1");
++      expect(stateOld.firestoreUpdated[`${MIGRATION_LAYOUT_VERSION}:${old}`].pendingDocumentPaths).toEqual(["products/b"]);
++      // Old progress is left untouched, so nothing is lost.
++      expect(stateOld.firestoreUpdated[`products-migrated-v1:${old}`].status).toBe("complete");
++    });
++
++    it("keeps the legacy record when the final destination is recorded", () => {
++      const state = structuredClone(baseState);
++      recordVerifiedDestination(state, flat, { key: "products/flat.jpg", url: "https://media.windeg.com/products/flat.jpg", sha256: "a".repeat(64) });
++      expect(state.copied[flat].legacy.key).toBe(legacyObjectKey(flat));
++      expect(hasVerifiedCopy(state, flat, "products/flat.jpg")).toBe(true);
++    });
++
++    it("summarizes how old records relate to the final layout without mutating state", () => {
++      const stateOld = structuredClone(baseState);
++      const before = JSON.stringify(stateOld);
++      const report = describeStateCompatibility(stateOld);
++      expect(report).toMatchObject({
++        copiedRecords: 2,
++        legacyOnly: 1,
++        legacyUsableAsSource: 1,
++        retiredLayoutDestinations: 1,
++        verifiedInCurrentLayout: 0,
++        progressKeys: { currentLayout: 0, retiredLayoutPrefix: 1, unprefixedLegacy: 1 },
++        unprefixedProgressCompleted: 1,
++      });
++      expect(JSON.stringify(stateOld)).toBe(before);
++    });
++
++    it("maps references written under the retired migrated layout back to their source path", () => {
++      const sourcePathWithRef = "/WIND_Shopping/folded.jpg";
++      const digest = digestForSourcePath(sourcePathWithRef);
++      const url = `https://media.windeg.com/products/migrated/${digest}.jpg`;
++      expect(retiredLayoutDigest(`products/migrated/${digest}.jpg`)).toBe(digest);
++      expect(retiredLayoutDigest("products/example.jpg")).toBeNull();
++      expect([...collectImageKitPaths({ image: url })]).toEqual([retiredLayoutPseudoPath(digest)]);
++
++      const map = new Map([
++        [retiredLayoutPseudoPath(digest), new Map([["products/p", { documentPath: "products/p" }]])],
++        [retiredLayoutPseudoPath("c".repeat(64)), new Map([["products/q", { documentPath: "products/q" }]])],
++      ]);
++      const folded = foldRetiredLayoutReferences(map, [sourcePathWithRef]);
++      expect(folded).toEqual([{ pseudo: retiredLayoutPseudoPath(digest), sourcePath: sourcePathWithRef }]);
++      expect([...map.get(sourcePathWithRef).keys()]).toEqual(["products/p"]);
++      expect(map.has(retiredLayoutPseudoPath("c".repeat(64)))).toBe(true);
++    });
++
++    it("rewrites a document that still holds a retired-layout URL to the final URL", async () => {
++      const digest = digestForSourcePath(imagePath);
++      const retiredUrl = `https://media.windeg.com/products/migrated/${digest}.jpg`;
++      let stored = { images: [retiredUrl, "https://media.windeg.com/products/other.jpg"] };
++      const ref = { path: "products/p1" };
++      const db = {
++        doc: () => ref,
++        runTransaction: async (callback) => callback({ get: async () => ({ exists: true, data: () => stored }), set: (_ref, next) => { stored = next; } }),
++      };
++      const progress = { documentPaths: [], processedDocumentPaths: [], pendingDocumentPaths: [], updatedDocs: 0, replacedLinks: 0 };
++      await updateReferencesForPath(db, imagePath, { url: targetUrl }, [{ documentPath: "products/p1", collectionName: "products", docId: "p1" }], progress, async () => {}, null);
++      expect(stored.images).toEqual([targetUrl, "https://media.windeg.com/products/other.jpg"]);
++    });
++  });
++
++  describe("dry-run plan", () => {
++    const mk = (name, size = 4) => ({ filePath: `/WIND_Shopping/${name}`, targetKey: `products/${name}`, size, fileId: name });
++    const refs = (...docs) => new Map(docs.map((d) => [d, { documentPath: d, collectionName: d.split("/")[0], docId: d.split("/")[1] }]));
++    const legacyRecord = (name, size = 4) => ({ key: legacyObjectKey(`/WIND_Shopping/${name}`), size, sha256: "d".repeat(64) });
++
++    it("counts copies from legacy, ImageKit fallbacks, existing objects, Firestore updates and remaining links", () => {
++      const files = [mk("done.jpg"), mk("fromlegacy.jpg"), mk("badlegacy.jpg"), mk("fresh.jpg"), mk("inbucket.jpg")];
++      const state = {
++        copied: {
++          "/WIND_Shopping/done.jpg": { destinations: { [MIGRATION_LAYOUT_VERSION]: { key: "products/done.jpg", url: "https://media.windeg.com/products/done.jpg", sha256: "e".repeat(64), status: "verified", layoutVersion: MIGRATION_LAYOUT_VERSION } } },
++          "/WIND_Shopping/fromlegacy.jpg": legacyRecord("fromlegacy.jpg"),
++          "/WIND_Shopping/badlegacy.jpg": { ...legacyRecord("badlegacy.jpg"), sha256: undefined },
++        },
++        firestoreUpdated: {},
++      };
++      const referencesByPath = new Map([
++        ["/WIND_Shopping/fromlegacy.jpg", refs("products/p1", "collections/c1")],
++        ["/WIND_Shopping/fresh.jpg", refs("products/p1")],
++        ["/WIND_Shopping/missing.jpg", refs("products/p9")],
++      ]);
++      const bucketObjects = new Map([["products/inbucket.jpg", { size: 4, reusable: true }], ["products/fresh.jpg", { size: 9, reusable: false }]]);
++      const plan = buildMigrationPlan({
++        eligibleFiles: files,
++        state,
++        referencesByPath,
++        bucketObjects,
++        unresolvedReasons: new Map([["/WIND_Shopping/missing.jpg", "not_found_in_imagekit_library"]]),
++        localSourceLinks: new Map([["/WIND_Shopping/missing.jpg", 2]]),
++        staticFeedLinkCount: 100,
++      });
++      expect(plan).toMatchObject({
++        eligibleImages: 5,
++        alreadyVerifiedAtFinalDestination: 1,
++        toCopy: 4,
++        toCopyFromLegacy: 1,
++        toCopyFromImageKit: 3,
++        legacyFallbacks: { legacy_record_missing_sha256: 1 },
++        alreadyInBucketReusable: 1,
++        firestore: { referencePairsToUpdate: 3, distinctDocumentsToUpdate: 2, pathsAffected: 2 },
++        remainingImageKitLinks: { firestoreReferencePairs: 1, sourceCodeLinks: 2, staticFeedExportsNotUpdated: 100 },
++      });
++      expect(plan.destinationConflicts).toEqual([{ sourcePath: "/WIND_Shopping/fresh.jpg", key: "products/fresh.jpg", reason: "existing_object_does_not_match_source" }]);
++      expect(plan.unresolved).toEqual([{ sourcePath: "/WIND_Shopping/missing.jpg", reason: "not_found_in_imagekit_library" }]);
++    });
++
++    it("reports bucket-dependent figures as unknown rather than guessing when R2 was not read", () => {
++      const plan = buildMigrationPlan({ eligibleFiles: [mk("a.jpg")], state: { copied: {} }, referencesByPath: new Map() });
++      expect(plan.alreadyInBucketReusable).toBeNull();
++      expect(plan.toCopyFromImageKit).toBe(1);
++    });
++  });
++
+   it("verifies copied bytes by both size and SHA-256", () => {
+     const source = Uint8Array.from([1, 2, 3, 4]);
+     expect(verifyCopiedBytes(source, Uint8Array.from([1, 2, 3, 4]))).toMatch(/^[a-f0-9]{64}$/);
+diff --git a/tests/media-references.test.js b/tests/media-references.test.js
+new file mode 100644
+index 0000000..d7a91eb
+--- /dev/null
++++ b/tests/media-references.test.js
+@@ -0,0 +1,64 @@
++import { describe, expect, it, vi } from "vitest";
++
++vi.mock("../src/lib/googleServiceAccount.js", () => ({ getGoogleAccessToken: vi.fn(async () => "token") }));
++
++import { findMediaReferences } from "../src/lib/mediaReferences.js";
++
++const key = "products/123e4567-e89b-42d3-a456-426614174000.png";
++const ok = (body) => ({ ok: true, status: 200, json: async () => body });
++
++function fakeFirestore({ queryRows = [{ readTime: "t" }], collections = {} } = {}) {
++  return vi.fn(async (url) => {
++    if (String(url).endsWith(":runQuery")) return ok(queryRows);
++    const name = String(url).split("/documents/")[1].split("?")[0];
++    return ok(collections[name] || {});
++  });
++}
++const options = (fetchImpl) => ({ projectId: "demo", getToken: async () => "token", fetchImpl });
++
++describe("findMediaReferences", () => {
++  it("reports nothing when no document uses the image", async () => {
++    const result = await findMediaReferences(key, options(fakeFirestore()));
++    expect(result).toEqual({ referenced: false, locations: [] });
++  });
++
++  it("finds an image shared through a product images array", async () => {
++    const fetchImpl = fakeFirestore({ queryRows: [{ document: { name: "projects/demo/databases/(default)/documents/products/other" } }] });
++    const result = await findMediaReferences(key, options(fetchImpl));
++    expect(result.referenced).toBe(true);
++    expect(result.locations[0]).toEqual({ collection: "products", document: "other" });
++    const body = JSON.parse(fetchImpl.mock.calls[0][1].body);
++    expect(body.structuredQuery.where.fieldFilter).toMatchObject({ op: "ARRAY_CONTAINS", field: { fieldPath: "images" } });
++  });
++
++  it("finds the file name inside small collections, including nested maps and policy HTML", async () => {
++    const fetchImpl = fakeFirestore({
++      collections: {
++        homepage: { documents: [{ name: "x/homepage/hero", fields: { slides: { arrayValue: { values: [{ mapValue: { fields: { src: { stringValue: `https://media.windeg.com/${key}` } } } }] } } } }] },
++        Policies: { documents: [{ name: "x/Policies/returns", fields: { html: { stringValue: `<img src="/${key}">` } } }] },
++      },
++    });
++    const result = await findMediaReferences(key, options(fetchImpl));
++    expect(result.locations.map((l) => `${l.collection}/${l.document}`).sort()).toEqual(["Policies/returns", "homepage/hero"]);
++  });
++
++  it("follows page tokens when scanning a collection", async () => {
++    const calls = [];
++    const fetchImpl = vi.fn(async (url) => {
++      if (String(url).endsWith(":runQuery")) return ok([]);
++      calls.push(String(url));
++      if (String(url).includes("/collections?") && !String(url).includes("pageToken")) return ok({ documents: [], nextPageToken: "p2" });
++      if (String(url).includes("/collections?")) return ok({ documents: [{ name: "x/collections/c1", fields: { image: { stringValue: key } } }] });
++      return ok({});
++    });
++    const result = await findMediaReferences(key, options(fetchImpl));
++    expect(result.referenced).toBe(true);
++    expect(calls.some((url) => url.includes("pageToken=p2"))).toBe(true);
++  });
++
++  it("throws instead of reporting 'unused' when a lookup fails", async () => {
++    const failing = vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}) }));
++    await expect(findMediaReferences(key, options(failing))).rejects.toThrow(/failed \(503\)/);
++    await expect(findMediaReferences(key, { projectId: "", getToken: async () => "t", fetchImpl: failing })).rejects.toThrow(/FIREBASE_PROJECT_ID/);
++  });
++});
+diff --git a/tests/media-utils.test.js b/tests/media-utils.test.js
+index 1596886..4f9e464 100644
+--- a/tests/media-utils.test.js
++++ b/tests/media-utils.test.js
+@@ -1,5 +1,6 @@
+ import { describe, expect, it } from "vitest";
+ import {
++  classifyManagedMediaKey,
+   normalizeImageKitPath,
+   replaceImageKitUrlsDeep,
+   sniffImageType,
+@@ -37,4 +38,16 @@ describe("ImageKit and R2 media helpers", () => {
+     expect(sniffImageType(Uint8Array.from([0x47, 0x49, 0x46, 0x38, 0x39, 0x61])).mime).toBe("image/gif");
+     expect(sniffImageType(Uint8Array.from([0, 1, 2, 3]))).toBeNull();
+   });
++
++  it("treats only random-UUID product uploads as deletable", () => {
++    const id = "123e4567-e89b-42d3-a456-426614174000";
++    expect(classifyManagedMediaKey(`products/${id}.webp`)).toEqual({ deletable: true, reason: null });
++    expect(classifyManagedMediaKey(`uploads/products/${id}.jpg`).deletable).toBe(true);
++    expect(classifyManagedMediaKey("products/example.jpg").reason).toBe("not_a_product_upload");
++    expect(classifyManagedMediaKey("products/not-a-uuid-but-36-chars-long-aaaaaaa.jpg").deletable).toBe(false);
++    expect(classifyManagedMediaKey(`uploads/reviews/${id}.png`).deletable).toBe(false);
++    expect(classifyManagedMediaKey("products/migrated/a.jpg").reason).toBe("migration_archive_is_immutable");
++    expect(classifyManagedMediaKey("legacy/imagekit/a.jpg").reason).toBe("migration_archive_is_immutable");
++    expect(classifyManagedMediaKey("").reason).toBe("invalid_key");
++  });
+ });
+diff --git a/tests/r2-media-routes.test.js b/tests/r2-media-routes.test.js
+index 6eb7d88..765b12c 100644
+--- a/tests/r2-media-routes.test.js
++++ b/tests/r2-media-routes.test.js
+@@ -1,9 +1,10 @@
+ import { beforeEach, describe, expect, it, vi } from "vitest";
+ 
+-const { putMock, deleteMock, verifyAdminMock } = vi.hoisted(() => ({
++const { putMock, deleteMock, verifyAdminMock, findReferencesMock } = vi.hoisted(() => ({
+   putMock: vi.fn(),
+   deleteMock: vi.fn(),
+   verifyAdminMock: vi.fn(),
++  findReferencesMock: vi.fn(),
+ }));
+ 
+ vi.mock("@opennextjs/cloudflare", () => ({
+@@ -16,6 +17,7 @@ vi.mock("@/lib/rateLimit", () => ({
+   getClientIP: vi.fn(() => "203.0.113.8"),
+ }));
+ vi.mock("@/lib/verifyAdminIdToken", () => ({ verifyAdminIdToken: verifyAdminMock }));
++vi.mock("@/lib/mediaReferences", () => ({ findMediaReferences: findReferencesMock }));
+ 
+ import { POST as upload } from "../src/app/api/media/route.js";
+ import { POST as remove } from "../src/app/api/delete-image/route.js";
+@@ -37,6 +39,7 @@ describe("R2 media routes", () => {
+   beforeEach(() => {
+     vi.clearAllMocks();
+     verifyAdminMock.mockResolvedValue({ ok: false, reason: "admin_uid_mismatch" });
++    findReferencesMock.mockResolvedValue({ referenced: false, locations: [] });
+   });
+ 
+   it("keeps public review uploads working and writes verified PNG bytes to the reviews prefix", async () => {
+@@ -120,4 +123,65 @@ describe("R2 media routes", () => {
+     expect((await response.json()).reason).toBe("migration_archive_is_immutable");
+     expect(deleteMock).not.toHaveBeenCalled();
+   });
++
++  const deleteRequest = (url, withAuth = true) => new Request("https://windeg.com/api/delete-image", {
++    method: "POST",
++    body: JSON.stringify({ url }),
++    headers: { "Content-Type": "application/json", ...(withAuth ? { Authorization: "Bearer test-token" } : {}) },
++  });
++  const managedId = "123e4567-e89b-42d3-a456-426614174099";
++
++  it("rejects deletion of a managed upload when the caller is not the verified admin", async () => {
++    // verifyAdminMock resolves { ok: false } by default; the object itself is truthy, so .ok must be checked.
++    const response = await remove(deleteRequest(`https://media.windeg.com/products/${managedId}.png`, false));
++    expect(response.status).toBe(401);
++    expect(deleteMock).not.toHaveBeenCalled();
++    expect(findReferencesMock).not.toHaveBeenCalled();
++  });
++
++  it("keeps an image that another document still references", async () => {
++    verifyAdminMock.mockResolvedValue({ ok: true });
++    findReferencesMock.mockResolvedValue({ referenced: true, locations: [{ collection: "products", document: "other-product" }] });
++    const response = await remove(deleteRequest(`https://media.windeg.com/products/${managedId}.png`));
++    const body = await response.json();
++    expect(response.status).toBe(200);
++    expect(body).toMatchObject({ success: true, skipped: true, reason: "media_still_referenced", referencedBy: ["products"] });
++    expect(deleteMock).not.toHaveBeenCalled();
++  });
++
++  it("fails closed when the reference check cannot run", async () => {
++    verifyAdminMock.mockResolvedValue({ ok: true });
++    findReferencesMock.mockRejectedValue(new Error("firestore unavailable"));
++    const response = await remove(deleteRequest(`https://media.windeg.com/products/${managedId}.png`));
++    expect((await response.json()).reason).toBe("reference_check_unavailable");
++    expect(deleteMock).not.toHaveBeenCalled();
++  });
++
++  it("deletes an unused managed upload only after the reference check passes", async () => {
++    verifyAdminMock.mockResolvedValue({ ok: true });
++    const response = await remove(deleteRequest(`https://media.windeg.com/products/${managedId}.png`));
++    expect(response.status).toBe(200);
++    expect(findReferencesMock).toHaveBeenCalledWith(`products/${managedId}.png`);
++    expect(deleteMock).toHaveBeenCalledWith(`products/${managedId}.png`);
++  });
++
++  it("never deletes migrated files at final paths, retired migrated paths, legacy copies, reviews or site media", async () => {
++    verifyAdminMock.mockResolvedValue({ ok: true });
++    const protectedUrls = [
++      ["https://media.windeg.com/products/example.jpg", "not_a_product_upload"],
++      ["https://media.windeg.com/products/wind_1781436494312_HasheraWF_vSXW2l8jB.png", "not_a_product_upload"],
++      ["https://media.windeg.com/uploads/reviews/example.jpg", "not_a_product_upload"],
++      ["https://media.windeg.com/uploads/reviews/" + managedId + ".png", "not_a_product_upload"],
++      ["https://media.windeg.com/collections/example.webp", "not_a_product_upload"],
++      ["https://media.windeg.com/site-media/visa.svg", "not_a_product_upload"],
++      ["https://media.windeg.com/products/migrated/" + "a".repeat(64) + ".jpg", "migration_archive_is_immutable"],
++      ["https://media.windeg.com/legacy/imagekit/WIND_Shopping/a.jpg", "migration_archive_is_immutable"],
++    ];
++    for (const [url, reason] of protectedUrls) {
++      const response = await remove(deleteRequest(url));
++      expect((await response.json()).reason, url).toBe(reason);
++    }
++    expect(deleteMock).not.toHaveBeenCalled();
++    expect(findReferencesMock).not.toHaveBeenCalled();
++  });
+ });

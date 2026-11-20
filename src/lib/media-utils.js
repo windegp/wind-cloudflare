@@ -3,6 +3,19 @@ export const STORE_MEDIA_ORIGIN = "https://media.windeg.com";
 
 const URL_PATTERN = /https?:\/\/[^\s"'<>]+/g;
 
+// Only images uploaded through /api/media for products (random UUID names) may ever be deleted by the app.
+// Migrated ImageKit files keep their original names, so they can never match this pattern.
+const MANAGED_PRODUCT_UPLOAD_KEY = /^(?:uploads\/)?products\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:jpg|png|webp|gif)$/i;
+
+export function classifyManagedMediaKey(key) {
+  if (typeof key !== "string" || !key) return { deletable: false, reason: "invalid_key" };
+  if (key.split("/").some((segment) => /^(?:migrated|legacy)$/i.test(segment))) {
+    return { deletable: false, reason: "migration_archive_is_immutable" };
+  }
+  if (!MANAGED_PRODUCT_UPLOAD_KEY.test(key)) return { deletable: false, reason: "not_a_product_upload" };
+  return { deletable: true, reason: null };
+}
+
 export function normalizeImageKitPath(value) {
   try {
     const url = new URL(value);

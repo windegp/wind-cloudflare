@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  classifyManagedMediaKey,
   normalizeImageKitPath,
   replaceImageKitUrlsDeep,
   sniffImageType,
@@ -36,5 +37,17 @@ describe("ImageKit and R2 media helpers", () => {
     expect(sniffImageType(Uint8Array.from([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50])).mime).toBe("image/webp");
     expect(sniffImageType(Uint8Array.from([0x47, 0x49, 0x46, 0x38, 0x39, 0x61])).mime).toBe("image/gif");
     expect(sniffImageType(Uint8Array.from([0, 1, 2, 3]))).toBeNull();
+  });
+
+  it("treats only random-UUID product uploads as deletable", () => {
+    const id = "123e4567-e89b-42d3-a456-426614174000";
+    expect(classifyManagedMediaKey(`products/${id}.webp`)).toEqual({ deletable: true, reason: null });
+    expect(classifyManagedMediaKey(`uploads/products/${id}.jpg`).deletable).toBe(true);
+    expect(classifyManagedMediaKey("products/example.jpg").reason).toBe("not_a_product_upload");
+    expect(classifyManagedMediaKey("products/not-a-uuid-but-36-chars-long-aaaaaaa.jpg").deletable).toBe(false);
+    expect(classifyManagedMediaKey(`uploads/reviews/${id}.png`).deletable).toBe(false);
+    expect(classifyManagedMediaKey("products/migrated/a.jpg").reason).toBe("migration_archive_is_immutable");
+    expect(classifyManagedMediaKey("legacy/imagekit/a.jpg").reason).toBe("migration_archive_is_immutable");
+    expect(classifyManagedMediaKey("").reason).toBe("invalid_key");
   });
 });

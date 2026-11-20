@@ -4,10 +4,10 @@ import { useState } from "react";
 import styles from "./Footer.module.css";
 
 const paymentIcons = [
-  { name: "Mastercard",      url: "https://ik.imagekit.io/windeg/WIND_Shopping/mastercard.svg" },
-  { name: "Visa",            url: "https://ik.imagekit.io/windeg/WIND_Shopping/visa.svg" },
-  { name: "Meeza",           url: "https://ik.imagekit.io/windeg/WIND_Shopping/Meeza.svg" },
-  { name: "American Express",url: "https://ik.imagekit.io/windeg/WIND_Shopping/amex-svgrepo-com.svg" },
+  { name: "Mastercard",      url: "https://media.windeg.com/site-media/mastercard.svg" },
+  { name: "Visa",            url: "https://media.windeg.com/site-media/visa.svg" },
+  { name: "Meeza",           url: "https://media.windeg.com/site-media/Meeza.svg" },
+  { name: "American Express",url: "https://media.windeg.com/site-media/amex-svgrepo-com.svg" },
 ];
 
 const quickLinks = [

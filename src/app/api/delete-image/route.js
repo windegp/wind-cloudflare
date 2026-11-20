@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
-import { STORE_MEDIA_ORIGIN } from "@/lib/media-utils";
+import { STORE_MEDIA_ORIGIN, classifyManagedMediaKey } from "@/lib/media-utils";
+import { findMediaReferences } from "@/lib/mediaReferences";
 import { verifyAdminIdToken } from "@/lib/verifyAdminIdToken";
 
 export const dynamic = "force-dynamic";
-
-const PRODUCT_UPLOAD_KEY = /^(?:uploads\/)?products\/[0-9a-f-]{36}\.(jpg|png|webp|gif)$/i;
 
 export async function POST(request) {
   try {
@@ -33,15 +32,32 @@ export async function POST(request) {
       return NextResponse.json({ error: "invalid_url_path" }, { status: 400 });
     }
 
-    if (key.startsWith("products/migrated/")) {
-      return NextResponse.json({ success: true, skipped: true, reason: "migration_archive_is_immutable" });
+    // Only random-UUID product uploads are ever deletable; migrated files keep their original names.
+    const classification = classifyManagedMediaKey(key);
+    if (!classification.deletable) {
+      return NextResponse.json({ success: true, skipped: true, reason: classification.reason });
     }
 
-    if (!PRODUCT_UPLOAD_KEY.test(key)) {
-      return NextResponse.json({ success: true, skipped: true, reason: "not_a_product_upload" });
-    }
-    if (!(await verifyAdminIdToken(request))) {
+    const auth = await verifyAdminIdToken(request);
+    if (!auth?.ok) {
       return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    }
+
+    // Never delete an image that another document still uses, and never delete when that cannot be checked.
+    let references;
+    try {
+      references = await findMediaReferences(key);
+    } catch (error) {
+      console.error("R2 media reference check failed:", error?.message || error);
+      return NextResponse.json({ success: true, skipped: true, reason: "reference_check_unavailable" });
+    }
+    if (references.referenced) {
+      return NextResponse.json({
+        success: true,
+        skipped: true,
+        reason: "media_still_referenced",
+        referencedBy: [...new Set(references.locations.map(({ collection }) => collection))],
+      });
     }
 
     const { env } = await getCloudflareContext({ async: true });
