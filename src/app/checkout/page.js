@@ -1538,11 +1538,11 @@ router.push(`/thank-you?orderId=${orderId}`);
                     </div>
 {(() => {
   const paymentIcons = [
-    { name: "Apple Pay", url: "https://ik.imagekit.io/windeg/WIND_Shopping/icons8-apple-pay.svg" },
-    { name: "Mastercard", url: "https://ik.imagekit.io/windeg/WIND_Shopping/mastercard.svg" },
-    { name: "Visa", url: "https://ik.imagekit.io/windeg/WIND_Shopping/visa.svg" },
-    { name: "Meeza", url: "https://ik.imagekit.io/windeg/WIND_Shopping/Meeza.svg" },
-    { name: "American Express", url: "https://ik.imagekit.io/windeg/WIND_Shopping/amex-svgrepo-com.svg" },
+    { name: "Apple Pay", url: "https://media.windeg.com/site-media/icons8-apple-pay.svg" },
+    { name: "Mastercard", url: "https://media.windeg.com/site-media/mastercard.svg" },
+    { name: "Visa", url: "https://media.windeg.com/site-media/visa.svg" },
+    { name: "Meeza", url: "https://media.windeg.com/site-media/Meeza.svg" },
+    { name: "American Express", url: "https://media.windeg.com/site-media/amex-svgrepo-com.svg" },
   ];
 
   const maxVisible = 3;

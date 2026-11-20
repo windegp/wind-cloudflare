@@ -132,7 +132,7 @@ export default function PoliciesHub() {
       `}</style>
 
       <header>
-        <img src="https://ik.imagekit.io/windeg/WIND_Shopping/logo_0WuyNIRzi.jpg?updatedAt=1772130133302" alt="WIND" className="logo" />
+        <img src="https://media.windeg.com/site-media/logo_0WuyNIRzi.jpg" alt="WIND" className="logo" />
         <h1>مركز السياسات</h1>
         <p className="subtitle">كل ما تود معرفته حول حقوقك وواجباتنا تجاهك في مكان واحد.</p>
       </header>
