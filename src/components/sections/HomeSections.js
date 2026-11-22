@@ -185,6 +185,14 @@ export const EditorialCenteredHero = ({ data }) => {
   const slides = data?.slides || [];
   
   const [isMounted, setIsMounted] = useState(false);
+  const frameRef = useRef(null);
+  const [firstLoaded, setFirstLoaded] = useState(false);
+
+  // التعامل مع الصورة المحمّلة مسبقًا من الكاش قبل hydration
+  useEffect(() => {
+    const img = frameRef.current?.querySelector('img');
+    if (img && img.complete && img.naturalWidth > 0) setFirstLoaded(true);
+  }, [slides.length]);
 
   useEffect(() => {
     setIsMounted(true);
@@ -200,13 +208,17 @@ export const EditorialCenteredHero = ({ data }) => {
   return (
     <div className="relative w-full bg-white text-black pb-14" dir="rtl">
       
-      <div className="relative w-full aspect-4-5 md:aspect-21-9 bg-[#EAEAEA] overflow-hidden rounded-none">
+      <div ref={frameRef} className={`hero-frame w-full bg-[#EAEAEA] rounded-none ${firstLoaded ? '' : 'hero-frame-reserve'}`}>
         {slides.map((slide, index) => (
           <img 
             key={index}
             src={slide.image} 
             alt={slide.title}
-            className={`absolute inset-0 w-full h-full object-cover origin-center rounded-none transition-all duration-[1500ms] ease-[cubic-bezier(0.25,1,0.5,1)] ${(isMounted && index === current) ? 'opacity-100 scale-100 z-10' : 'opacity-0 scale-105 z-0'}`} 
+            fetchPriority={index === 0 ? "high" : "low"}
+            loading={index === 0 ? "eager" : "lazy"}
+            decoding="async"
+            onLoad={index === 0 ? () => setFirstLoaded(true) : undefined}
+            className={`hero-slide origin-center rounded-none transition-opacity duration-[1500ms] ease-[cubic-bezier(0.25,1,0.5,1)] ${(isMounted && index === current) ? 'is-active opacity-100 z-10' : 'opacity-0 z-0'}`}
             style={{ willChange: 'opacity, transform' }}
           />
         ))}

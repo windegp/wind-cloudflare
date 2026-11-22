@@ -8,6 +8,8 @@ import React, { useState, useEffect, useRef } from 'react';
 export default function HeroSection({ data }) {
   const [current, setCurrent] = useState(0);
   const scrollContainerRef = useRef(null);
+  const frameRef = useRef(null);
+  const [firstLoaded, setFirstLoaded] = useState(false);
 
   const slides = data?.slides || [];
   const categories = data?.categories || [];
@@ -19,6 +21,12 @@ export default function HeroSection({ data }) {
       setCurrent((prev) => (prev === slides.length - 1 ? 0 : prev + 1));
     }, 6000);
     return () => clearInterval(timer);
+  }, [slides.length]);
+
+  // التعامل مع الصورة المحمّلة مسبقًا من الكاش قبل hydration
+  useEffect(() => {
+    const img = frameRef.current?.querySelector('img');
+    if (img && img.complete && img.naturalWidth > 0) setFirstLoaded(true);
   }, [slides.length]);
 
   const scrollLeft = () => {
@@ -76,15 +84,19 @@ export default function HeroSection({ data }) {
       {/* المساحات البيضاء حول الصورة مضبوطة لتعطي إحساس المرجع الإنجليزي */}
       <div className="relative w-full bg-white px-4 pt-4 md:px-6 md:pt-6 z-20">
         
-        {/* حاوية الصورة بحواف دائرية واضحة aspect-[21/9] للديسكتوب و [4/5] للموبايل */}
-        <div className="relative w-full aspect-4-5 md:aspect-21-9 overflow-hidden rounded-2xl shadow-sm bg-[#F0EEE6]">
+        {/* ارتفاع الحاوية يتحدد من الصور نفسها (بدون نسبة ثابتة) فلا يحدث قص */}
+        <div ref={frameRef} className={`hero-frame w-full rounded-2xl shadow-sm bg-[#F0EEE6] ${firstLoaded ? '' : 'hero-frame-reserve'}`}>
           {slides.map((slide, index) => (
             <img 
               key={index}
               src={slide.image} 
               alt={slide.title}
+              fetchPriority={index === 0 ? "high" : "low"}
+              loading={index === 0 ? "eager" : "lazy"}
+              decoding="async"
+              onLoad={index === 0 ? () => setFirstLoaded(true) : undefined}
               // أنيميشن ناعم جداً عند انتقال الصور (Cross-fade)
-              className={`absolute inset-0 w-full h-full object-cover origin-center transition-opacity duration-1500 ease-in-out ${index === current ? 'opacity-100 z-10 scale-100' : 'opacity-0 z-0 scale-102'}`} 
+              className={`hero-slide origin-center transition-opacity duration-1500 ease-in-out ${index === current ? 'is-active opacity-100 z-10' : 'opacity-0 z-0'}`}
             />
           ))}
         </div>

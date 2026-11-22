@@ -226,6 +226,46 @@ html {
   }
 }
 
+/* ── Hero banner frame ──
+   The active image stays in normal flow and determines the frame height.
+   Other slides are layered over it. This preserves each image's intrinsic
+   ratio without object-cover cropping or stretching. The temporary ratio is
+   only a loading placeholder and is removed after the first image loads. ── */
+.hero-frame {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+}
+.hero-frame > .hero-slide {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+}
+.hero-frame > .hero-slide.is-active {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+.hero-frame-reserve > .hero-slide.is-active {
+  position: absolute;
+}
+@supports (aspect-ratio: 4 / 5) {
+  .hero-frame-reserve {
+    aspect-ratio: 4 / 5;
+  }
+  @media (min-width: 768px) {
+    .hero-frame-reserve {
+      aspect-ratio: 21 / 9;
+    }
+  }
+}
+
 /* ── aspect-[16/6] → padding-bottom 37.5% (6/16 * 100) ── */
 .aspect-16-6 {
   position: relative;
