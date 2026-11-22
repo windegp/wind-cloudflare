@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
+import { HERO_MOBILE_MEDIA, getHeroMobileImage } from '@/lib/heroSlides';
 
 // ==========================================================================
 // مكون الهيرو الرئيسي (The Masterpiece Hero) - تطابق تام مع المرجع 100%
@@ -84,21 +85,28 @@ export default function HeroSection({ data }) {
       {/* المساحات البيضاء حول الصورة مضبوطة لتعطي إحساس المرجع الإنجليزي */}
       <div className="relative w-full bg-white px-4 pt-4 md:px-6 md:pt-6 z-20">
         
-        {/* ارتفاع الحاوية يتحدد من الصور نفسها (بدون نسبة ثابتة) فلا يحدث قص */}
-        <div ref={frameRef} className={`hero-frame w-full rounded-2xl shadow-sm bg-[#F0EEE6] ${firstLoaded ? '' : 'hero-frame-reserve'}`}>
-          {slides.map((slide, index) => (
-            <img 
-              key={index}
-              src={slide.image} 
-              alt={slide.title}
-              fetchPriority={index === 0 ? "high" : "low"}
-              loading={index === 0 ? "eager" : "lazy"}
-              decoding="async"
-              onLoad={index === 0 ? () => setFirstLoaded(true) : undefined}
+        {/* الصورة تحافظ على نسبتها ويُحدّ ارتفاعها فقط حسب الشاشة (انظر .hero-frame في globals.css) */}
+        <div ref={frameRef} className={`hero-frame w-full rounded-2xl shadow-sm bg-[#F0EEE6] ${firstLoaded ? '' : `hero-frame-reserve${getHeroMobileImage(slides[0]) ? ' hero-frame-reserve-art' : ''}`}`}>
+          {slides.map((slide, index) => {
+            const mobileSrc = getHeroMobileImage(slide);
+            return (
               // أنيميشن ناعم جداً عند انتقال الصور (Cross-fade)
-              className={`hero-slide origin-center transition-opacity duration-1500 ease-in-out ${index === current ? 'is-active opacity-100 z-10' : 'opacity-0 z-0'}`}
-            />
-          ))}
+              <picture
+                key={index}
+                className={`hero-slide origin-center transition-opacity duration-1500 ease-in-out ${index === current ? 'opacity-100 z-10 scale-100' : 'opacity-0 z-0 scale-102'}`}
+              >
+                {mobileSrc && <source media={HERO_MOBILE_MEDIA} srcSet={mobileSrc} />}
+                <img
+                  src={slide.image}
+                  alt={slide.title}
+                  fetchPriority={index === 0 ? "high" : "low"}
+                  loading={index === 0 ? "eager" : "lazy"}
+                  decoding="async"
+                  onLoad={index === 0 ? () => setFirstLoaded(true) : undefined}
+                />
+              </picture>
+            );
+          })}
         </div>
       </div>
 

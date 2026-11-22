@@ -3,6 +3,7 @@ import React, { useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { usePageReady } from "@/context/GlobalLoaderContext";
 import { DESIGN_REGISTRY } from "@/lib/designRegistry";
+import { HERO_MOBILE_MEDIA, pickHeroImage } from "@/lib/heroSlides";
 // استيراد الهوكات الأسطورية اللي جهزناها
 import { useHomepageProductsSections, useHomepageReviews, useSiteSettings } from '@/hooks/useFirestore';
 import useSWR from 'swr';
@@ -42,7 +43,10 @@ export default function HomeSectionsMainContent() {
       const preloadHeroImage = async () => {
         if (heroData?.slides?.[0]?.image) {
           const img = new window.Image();
-          img.src = heroData.slides[0].image;
+          // نفس الصورة التي سيختارها <picture> (حتى لا تُحمَّل صورة الديسكتوب على الهاتف دون داعٍ)
+          let isMobileViewport = false;
+          try { isMobileViewport = window.matchMedia(HERO_MOBILE_MEDIA).matches; } catch (e) {}
+          img.src = pickHeroImage(heroData.slides[0], isMobileViewport);
           img.onload = () => signalPageReady();
           img.onerror = () => signalPageReady();
         } else {

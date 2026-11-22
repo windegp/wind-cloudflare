@@ -4,6 +4,9 @@ import { getDb } from "@/lib/firebase";
 import { doc, getDoc, setDoc, collection, getDocs, query, limit } from "firebase/firestore/lite";
 // 🔥 1. استيراد SWR السحري
 import useSWR, { mutate } from 'swr';
+import { uploadStoreImage } from "@/lib/storeMedia";
+import { MAX_STORE_IMAGE_BYTES, STORE_IMAGE_MIME_TYPES } from "@/lib/media-utils";
+import { getHeroMobileImage } from "@/lib/heroSlides";
 
 export const dynamic = 'force-dynamic';
 
@@ -167,6 +170,7 @@ export default function HomeManagerPage() {
   const [expandedOverrides, setExpandedOverrides] = useState({});
   
   const [saving, setSaving] = useState(false);
+  const [uploadingMobileIndex, setUploadingMobileIndex] = useState(null); // index الشريحة التي يتم رفع صورة هاتفها الآن
   // متغير للتحكم في تهيئة البيانات مرة واحدة فقط من الـ Cache إلى الـ State
   const [isInitialized, setIsInitialized] = useState(false);
 
@@ -226,7 +230,7 @@ export default function HomeManagerPage() {
         setSlides(configData.hero.slides);
         setCategories(configData.hero.categories || []);
       } else {
-        setSlides([{ image: "", tag: "", title: "", desc: "", thumbnail: "", productLink: "", buttonText: "" }]);
+        setSlides([{ image: "", tag: "", title: "", desc: "", thumbnail: "", productLink: "", buttonText: "", mobileImage: "" }]);
         setCategories([{ title: "", link: "" }]);
       }
       
@@ -332,8 +336,35 @@ export default function HomeManagerPage() {
   const toggleOverride = (sIdx, iIdx) => setExpandedOverrides(p => ({ ...p, [`${sIdx}-${iIdx}`]: !p[`${sIdx}-${iIdx}`] }));
 
   const handleSlideChange = (i, f, v) => { const u = [...slides]; u[i][f] = v; setSlides(u); };
-  const addNewSlide = () => setSlides([...slides, { image: "", tag: "", title: "", desc: "", thumbnail: "", productLink: "", buttonText: "" }]);
+  const addNewSlide = () => setSlides([...slides, { image: "", tag: "", title: "", desc: "", thumbnail: "", productLink: "", buttonText: "", mobileImage: "" }]);
   const removeSlide = (i) => setSlides(slides.filter((_, idx) => idx !== i));
+
+  // رفع صورة الهاتف لشريحة: نفس مسار الرفع الحالي (/api/media عبر uploadStoreImage) ونفس حدوده
+  const handleMobileImageUpload = async (index, file) => {
+    if (!file) return;
+    if (!STORE_IMAGE_MIME_TYPES.includes(file.type)) {
+      alert("نوع الملف غير مدعوم. استخدم JPG أو PNG أو WebP أو GIF.");
+      return;
+    }
+    if (file.size > MAX_STORE_IMAGE_BYTES) {
+      alert("حجم الصورة أكبر من 5MB. قلّل الحجم ثم أعد المحاولة.");
+      return;
+    }
+    const target = slides[index];
+    setUploadingMobileIndex(index);
+    try {
+      const url = await uploadStoreImage(file, "product");
+      // نحدّث نفس الشريحة حتى لو تغيّر ترتيبها أثناء الرفع
+      setSlides((prev) => prev.map((s) => (s === target ? { ...s, mobileImage: url } : s)));
+    } catch (error) {
+      console.error("Hero mobile image upload failed:", error);
+      alert("فشل رفع صورة الهاتف. تأكد من تسجيل الدخول وحاول مرة أخرى.");
+    } finally {
+      setUploadingMobileIndex(null);
+    }
+  };
+  // حذف صورة الهاتف = إزالة الربط فقط (الشريحة ترجع تلقائياً للصورة الأساسية). الملف المرفوع لا يُحذف من التخزين.
+  const removeMobileImage = (index) => handleSlideChange(index, 'mobileImage', "");
   const handleCategoryChange = (i, f, v) => { const u = [...categories]; u[i][f] = v; setCategories(u); };
   const addNewCategory = () => setCategories([...categories, { title: "", link: "" }]);
   const removeCategory = (i) => setCategories(categories.filter((_, idx) => idx !== i));
@@ -551,6 +582,48 @@ export default function HomeManagerPage() {
                   
                   <div className="grid grid-cols-2 gap-4">
                     <div className="col-span-2"><label className="block text-xs font-bold mb-1.5">رابط الصورة (الرئيسية)</label><input type="text" value={slide.image} onChange={(e) => handleSlideChange(index, 'image', e.target.value)} className="w-full p-2.5 border rounded-lg font-mono text-sm outline-none focus:border-[#1A1A1A]" dir="ltr" /></div>
+
+                    {/* معاينة الصورتين: الأساسية (ديسكتوب/تابلت) وصورة الهاتف الاختيارية */}
+                    <div className="col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                        <p className="text-xs font-bold mb-2">الصورة الأساسية <span className="text-gray-500 font-normal">(ديسكتوب + تابلت، وتُستخدم للهاتف عند غياب صورة الهاتف)</span></p>
+                        <div className="h-40 flex items-center justify-center bg-white border rounded-md overflow-hidden">
+                          {slide.image ? (
+                            <img src={slide.image} alt="معاينة الصورة الأساسية" className="max-h-full max-w-full object-contain" />
+                          ) : (
+                            <span className="text-xs text-gray-400">لا توجد صورة</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="border border-dashed border-blue-300 rounded-lg p-3 bg-blue-50/40">
+                        <p className="text-xs font-bold mb-2 text-blue-700">صورة الهاتف <span className="text-gray-500 font-normal">(اختيارية)</span></p>
+                        <div className="h-40 flex items-center justify-center bg-white border rounded-md overflow-hidden">
+                          {getHeroMobileImage(slide) ? (
+                            <img src={getHeroMobileImage(slide)} alt="معاينة صورة الهاتف" className="max-h-full max-w-full object-contain" />
+                          ) : (
+                            <span className="text-xs text-gray-400 text-center px-3">لا توجد صورة هاتف — سيستخدم الهاتف الصورة الأساسية</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-2">
+                          <label className={`text-xs font-bold px-3 py-1.5 rounded-md border bg-white ${uploadingMobileIndex === index ? 'opacity-60 cursor-wait' : 'cursor-pointer hover:bg-gray-50'}`}>
+                            {uploadingMobileIndex === index ? 'جاري الرفع...' : (getHeroMobileImage(slide) ? 'تغيير الصورة' : 'رفع صورة')}
+                            <input
+                              type="file"
+                              accept={STORE_IMAGE_MIME_TYPES.join(",")}
+                              className="hidden"
+                              disabled={uploadingMobileIndex !== null}
+                              onChange={(e) => { const file = e.target.files && e.target.files[0]; e.target.value = ""; handleMobileImageUpload(index, file); }}
+                            />
+                          </label>
+                          {getHeroMobileImage(slide) && (
+                            <button type="button" onClick={() => removeMobileImage(index)} disabled={uploadingMobileIndex === index} className="text-red-500 text-xs font-bold bg-red-50 px-3 py-1.5 rounded-md hover:bg-red-100">حذف صورة الهاتف</button>
+                          )}
+                        </div>
+                        <input type="text" value={slide.mobileImage || ""} onChange={(e) => handleSlideChange(index, 'mobileImage', e.target.value)} placeholder="أو الصق رابط صورة الهاتف" className="w-full mt-2 p-2 border rounded-lg font-mono text-xs outline-none focus:border-[#1A1A1A]" dir="ltr" />
+                        <p className="text-[11px] text-gray-500 mt-2 leading-relaxed">المقاس المقترح للهاتف 4:5 (مثل 1080×1350) أو 2:3. JPG / PNG / WebP / GIF حتى 5MB. يفضّل إضافتها لكل الشرائح ليبقى ارتفاع البانر موحداً.</p>
+                      </div>
+                    </div>
                     
                     <div><label className="block text-xs font-bold mb-1.5 text-gray-600">العنوان الصغير (Tag)</label><input type="text" value={slide.tag} onChange={(e) => handleSlideChange(index, 'tag', e.target.value)} className="w-full p-2.5 border rounded-lg text-sm outline-none focus:border-[#1A1A1A]" placeholder="LIMITED EDITION" /></div>
                     <div><label className="block text-xs font-bold mb-1.5 text-gray-600">النص الرئيسي العريض</label><input type="text" value={slide.title} onChange={(e) => handleSlideChange(index, 'title', e.target.value)} className="w-full p-2.5 border rounded-lg text-sm outline-none focus:border-[#1A1A1A]" placeholder="WINTER COLLECTION" /></div>

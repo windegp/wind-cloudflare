@@ -226,42 +226,68 @@ html {
   }
 }
 
-/* ── Hero banner frame ──
-   The active image stays in normal flow and determines the frame height.
-   Other slides are layered over it. This preserves each image's intrinsic
-   ratio without object-cover cropping or stretching. The temporary ratio is
-   only a loading placeholder and is removed after the first image loads. ── */
+/* ── Hero banner frame (Responsive Art Direction) ──
+   Each slide is a <picture class="hero-slide"> stacked in one grid cell (cross-fade).
+   The slide image keeps its own aspect ratio (width:100%, height:auto) and is only
+   CAPPED in height per screen class, with object-fit: contain: an image that fits the
+   cap is shown whole and edge-to-edge, a taller one is shown whole with side bars -
+   never cropped, never stretched, never allowed to fill the screen.
+     mobile  (<768px)   : max 600px   (min(600px, 78svh))
+     tablet  (768-1279) : max 550px   (min(550px, 70svh))
+     desktop (>=1280px) : max 700px   (min(700px, 78svh))
+   Each cap is declared px -> vh -> svh so a browser that does not understand
+   min()/svh keeps the previous valid declaration.
+   .hero-frame-reserve only holds space until the first image has loaded
+   (16:9, or 4:5 on phones when the first slide has a mobile image) and is skipped by
+   browsers without aspect-ratio. Keep the 767px limit in sync with HERO_MOBILE_MEDIA
+   in src/lib/heroSlides.js. ── */
 .hero-frame {
   position: relative;
-  width: 100%;
   overflow: hidden;
+  display: grid;
 }
 .hero-frame > .hero-slide {
-  position: absolute;
-  inset: 0;
+  grid-area: 1 / 1;
   display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  object-position: center;
+  min-width: 0;
+  align-self: center;
 }
-.hero-frame > .hero-slide.is-active {
-  position: relative;
-  inset: auto;
+.hero-slide > img {
+  display: block;
   width: 100%;
   height: auto;
   object-fit: contain;
+  object-position: center;
 }
-.hero-frame-reserve > .hero-slide.is-active {
-  position: absolute;
+.hero-slide > img,
+.hero-frame-reserve {
+  max-height: 600px;
+  max-height: min(600px, 78vh);
+  max-height: min(600px, 78svh);
 }
-@supports (aspect-ratio: 4 / 5) {
+@media (min-width: 768px) {
+  .hero-slide > img,
   .hero-frame-reserve {
-    aspect-ratio: 4 / 5;
+    max-height: 550px;
+    max-height: min(550px, 70vh);
+    max-height: min(550px, 70svh);
   }
-  @media (min-width: 768px) {
-    .hero-frame-reserve {
-      aspect-ratio: 21 / 9;
+}
+@media (min-width: 1280px) {
+  .hero-slide > img,
+  .hero-frame-reserve {
+    max-height: 700px;
+    max-height: min(700px, 78vh);
+    max-height: min(700px, 78svh);
+  }
+}
+@supports (aspect-ratio: 2/3) {
+  .hero-frame-reserve {
+    aspect-ratio: 16 / 9;
+  }
+  @media (max-width: 767px) {
+    .hero-frame-reserve.hero-frame-reserve-art {
+      aspect-ratio: 4 / 5;
     }
   }
 }

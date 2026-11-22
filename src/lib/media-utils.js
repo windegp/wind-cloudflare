@@ -1,6 +1,10 @@
 export const IMAGEKIT_HOST = "ik.imagekit.io";
 export const STORE_MEDIA_ORIGIN = "https://media.windeg.com";
 
+// حدود رفع الصور في /api/media (يستخدمها السيرفر والأدمن معاً)
+export const MAX_STORE_IMAGE_BYTES = 5 * 1024 * 1024;
+export const STORE_IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+
 const URL_PATTERN = /https?:\/\/[^\s"'<>]+/g;
 
 // Only images uploaded through /api/media for products (random UUID names) may ever be deleted by the app.

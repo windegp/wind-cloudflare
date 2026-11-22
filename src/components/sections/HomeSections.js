@@ -4,6 +4,7 @@ import Link from 'next/link';
 import QuickViewModal from "@/components/QuickViewModal";
 import { Star, ChevronRight, ChevronLeft, Eye, Plus } from '@/components/icons-extra';
 import ProductCard from '../products/ProductCard';
+import { HERO_MOBILE_MEDIA, getHeroMobileImage } from '@/lib/heroSlides';
 
 // الهوكات المجمعة اللي عملناها مع بعض للـ SWR
 // تم إزالة الاستدعاءات الداخلية - البيانات تمرر عبر props الآن
@@ -208,20 +209,27 @@ export const EditorialCenteredHero = ({ data }) => {
   return (
     <div className="relative w-full bg-white text-black pb-14" dir="rtl">
       
-      <div ref={frameRef} className={`hero-frame w-full bg-[#EAEAEA] rounded-none ${firstLoaded ? '' : 'hero-frame-reserve'}`}>
-        {slides.map((slide, index) => (
-          <img 
-            key={index}
-            src={slide.image} 
-            alt={slide.title}
-            fetchPriority={index === 0 ? "high" : "low"}
-            loading={index === 0 ? "eager" : "lazy"}
-            decoding="async"
-            onLoad={index === 0 ? () => setFirstLoaded(true) : undefined}
-            className={`hero-slide origin-center rounded-none transition-opacity duration-[1500ms] ease-[cubic-bezier(0.25,1,0.5,1)] ${(isMounted && index === current) ? 'is-active opacity-100 z-10' : 'opacity-0 z-0'}`}
-            style={{ willChange: 'opacity, transform' }}
-          />
-        ))}
+      <div ref={frameRef} className={`hero-frame w-full bg-[#EAEAEA] rounded-none ${firstLoaded ? '' : `hero-frame-reserve${getHeroMobileImage(slides[0]) ? ' hero-frame-reserve-art' : ''}`}`}>
+        {slides.map((slide, index) => {
+          const mobileSrc = getHeroMobileImage(slide);
+          return (
+            <picture
+              key={index}
+              className={`hero-slide origin-center rounded-none transition-all duration-[1500ms] ease-[cubic-bezier(0.25,1,0.5,1)] ${(isMounted && index === current) ? 'opacity-100 scale-100 z-10' : 'opacity-0 scale-105 z-0'}`}
+              style={{ willChange: 'opacity, transform' }}
+            >
+              {mobileSrc && <source media={HERO_MOBILE_MEDIA} srcSet={mobileSrc} />}
+              <img
+                src={slide.image}
+                alt={slide.title}
+                fetchPriority={index === 0 ? "high" : "low"}
+                loading={index === 0 ? "eager" : "lazy"}
+                decoding="async"
+                onLoad={index === 0 ? () => setFirstLoaded(true) : undefined}
+              />
+            </picture>
+          );
+        })}
       </div>
 
       <div className="relative w-full bg-white px-6 pt-10 flex flex-col items-center">

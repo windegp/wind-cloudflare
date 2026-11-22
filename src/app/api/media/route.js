@@ -2,12 +2,12 @@
 import { NextResponse } from "next/server";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { checkRateLimit, getClientIP } from "@/lib/rateLimit";
-import { sniffImageType } from "@/lib/media-utils";
+import { sniffImageType, MAX_STORE_IMAGE_BYTES } from "@/lib/media-utils";
 import { verifyAdminIdToken } from "@/lib/verifyAdminIdToken";
 
 export const dynamic = "force-dynamic";
 
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_IMAGE_BYTES = MAX_STORE_IMAGE_BYTES;
 
 export async function POST(request) {
   try {
