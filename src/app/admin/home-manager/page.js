@@ -594,6 +594,7 @@ export default function HomeManagerPage() {
                             <span className="text-xs text-gray-400">لا توجد صورة</span>
                           )}
                         </div>
+                      <p className="text-[11px] text-gray-500 mt-2">المقاس الموصى به للديسكتوب والتابلت: 1920 × 700 px.</p>
                       </div>
 
                       <div className="border border-dashed border-blue-300 rounded-lg p-3 bg-blue-50/40">
@@ -621,7 +622,7 @@ export default function HomeManagerPage() {
                           )}
                         </div>
                         <input type="text" value={slide.mobileImage || ""} onChange={(e) => handleSlideChange(index, 'mobileImage', e.target.value)} placeholder="أو الصق رابط صورة الهاتف" className="w-full mt-2 p-2 border rounded-lg font-mono text-xs outline-none focus:border-[#1A1A1A]" dir="ltr" />
-                        <p className="text-[11px] text-gray-500 mt-2 leading-relaxed">المقاس المقترح للهاتف 4:5 (مثل 1080×1350) أو 2:3. JPG / PNG / WebP / GIF حتى 5MB. يفضّل إضافتها لكل الشرائح ليبقى ارتفاع البانر موحداً.</p>
+                        <p className="text-[11px] text-gray-500 mt-2 leading-relaxed">المقاس الموصى به للهاتف 1300 × 1500 px (نسبة 13:15). JPG / PNG / WebP / GIF حتى 5MB. يفضّل إضافتها لكل الشرائح ليبقى ارتفاع البانر موحداً.</p>
                       </div>
                     </div>
                     
