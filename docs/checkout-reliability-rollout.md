@@ -44,3 +44,13 @@ Missing service-account configuration, failed auth, permission/network errors an
 - Firestore atomic commit: https://cloud.google.com/firestore/docs/reference/rest/v1/projects.databases.documents/commit
 - Firestore transactions and contention: https://firebase.google.com/docs/firestore/manage-data/transactions
 - Resend idempotency window is 24 hours, not an unlimited exactly-once guarantee: https://resend.com/docs/dashboard/emails/idempotency-keys
+
+## Durable processing layer
+
+`durablePayments.js` accepts authenticated provider facts only. It must never be called before checking the Kashier signature and merchant context. It writes `WindPaymentReceipts` before attempting a CAS atomic paid transition plus outbox jobs. Missing orders remain `awaiting_order`; amount/currency mismatch, non-payable orders and a second successful transaction remain `review`. Pending/failure observations never downgrade paid status. No paid decision uses quote expiry.
+
+`checkoutOutbox.js` claims jobs with a five-minute lease and random execution token. The runner must enumerate due pending/retry jobs and expired processing leases, and recover nonterminal payment receipts. Email handlers must use the supplied stable idempotency key and a network timeout shorter than the lease. The worker stops automatic email attempts at 23 hours from the first attempt (provider window is 24 hours) or 12 attempts. `sent` means accepted by provider, not delivered to inbox. Delivery/bounce status still needs authenticated provider events. Failed jobs retain safe codes, not raw provider messages. Review states must appear in an authenticated operator recovery page and alerting before activation.
+
+`checkoutCustomerEffects.js` atomically creates a private `WindCheckoutEffects` ledger with customer totals and site counters. It uses CAS on customer and settings documents, preserving unrelated fields and serializing concurrent purchases. A handler retry after a lost acknowledgement cannot count twice. The same private-rule requirements apply to receipts and effect ledgers.
+
+These modules have injected handlers and are still inactive: no scheduler, external email, push, live webhook, provider inquiry or database mutation is triggered merely by merging. Integrating them without an authenticated due-job runner and a review queue is unsupported.
