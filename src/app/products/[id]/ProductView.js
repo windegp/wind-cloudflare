@@ -1123,7 +1123,7 @@ const { data: swrRelated, isLoading: relatedLoading } = useRelatedProducts(activ
             )}
 
             {/* Title */}
-            <h1 className="text-[28px] font-medium text-[#111] tracking-tight leading-[1.15] mb-4">{product.title}</h1>
+            <div className="text-[28px] font-medium text-[#111] tracking-tight leading-[1.15] mb-4">{product.title}</div>
 
             {/* Stars */}
             <a href="#reviews-section" onClick={scrollToReviews} className="flex items-center gap-2 w-fit hover:opacity-75 transition-opacity mb-5">
