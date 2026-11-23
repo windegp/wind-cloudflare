@@ -17,6 +17,7 @@ import { fbTrack } from "@/lib/fbTrack";
 import { ttTrack, buildTtUserData } from "@/lib/ttTrack";
 import { getCatalogId } from "@/lib/catalogId";
 import { gaBeginCheckout, gaPurchase } from "@/lib/gaTrack";
+import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
 import { buildCheckoutMetaUserData } from "@/lib/metaEventData";
 import { getCairoTimestamp } from '@/lib/analytics-helpers';
 
@@ -517,6 +518,7 @@ export default function CheckoutPage() {
   // ============================================================
   // 🚀 رادار السلة المتروكة المطور (استراتيجية المستند الواحد)
   // ============================================================
+    const firstOrderCacheRef = useRef(new Map());
     const lastSavedDraftRef = useRef("");
   const lastSavedCustomerRef = useRef(""); 
 
@@ -534,6 +536,13 @@ export default function CheckoutPage() {
     const emailId = formData.email.toLowerCase().trim();
     const phoneId = formData.phone.replace(/\D/g,'');
 
+    // نفس الإيميل + التليفون اتفحصوا قبل كده في الجلسة؟ استخدم النتيجة بدل قراءات Firestore جديدة
+    const cacheKey = `${emailId}|${phoneId}`;
+    if (firstOrderCacheRef.current.has(cacheKey)) {
+      setIsFirstOrder(firstOrderCacheRef.current.get(cacheKey));
+      return;
+    }
+
     const checkFirstOrder = async () => {
       try {
         const db = getDb();
@@ -541,12 +550,12 @@ export default function CheckoutPage() {
         // 1. تحقق من الإيميل كـ document ID (الطريقة الأساسية للتخزين)
         const emailSnap = await getDoc(doc(db, "Customers", emailId));
         const emailOrders = emailSnap.exists() ? Number(emailSnap.data()['Total Orders'] || 0) : 0;
-        if (emailOrders > 0) { setIsFirstOrder(false); return; }
+        if (emailOrders > 0) { firstOrderCacheRef.current.set(cacheKey, false); setIsFirstOrder(false); return; }
 
         // 2. تحقق من التليفون كـ document ID (لو العميل اشترى بتليفون بدون إيميل)
         const phoneDocSnap = await getDoc(doc(db, "Customers", phoneId));
         const phoneDocOrders = phoneDocSnap.exists() ? Number(phoneDocSnap.data()['Total Orders'] || 0) : 0;
-        if (phoneDocOrders > 0) { setIsFirstOrder(false); return; }
+        if (phoneDocOrders > 0) { firstOrderCacheRef.current.set(cacheKey, false); setIsFirstOrder(false); return; }
 
         // 3. تحقق من التليفون كـ field في أي document (عميل اشترى بإيميل مختلف)
         const phoneQuery = query(
@@ -557,10 +566,11 @@ export default function CheckoutPage() {
         const phoneQuerySnap = await getDocs(phoneQuery);
         if (!phoneQuerySnap.empty) {
           const existingOrders = Number(phoneQuerySnap.docs[0].data()['Total Orders'] || 0);
-          if (existingOrders > 0) { setIsFirstOrder(false); return; }
+          if (existingOrders > 0) { firstOrderCacheRef.current.set(cacheKey, false); setIsFirstOrder(false); return; }
         }
 
         // الإيميل والتليفون كلاهم جديدان تماماً
+        firstOrderCacheRef.current.set(cacheKey, true);
         setIsFirstOrder(true);
       } catch { setIsFirstOrder(false); }
     };
@@ -730,7 +740,7 @@ export default function CheckoutPage() {
     let quote;
     let quoteToken;
     try {
-      const quoteResponse = await fetch("/api/checkout-quote", {
+      const quoteResponse = await fetchWithTimeout("/api/checkout-quote", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -752,7 +762,7 @@ export default function CheckoutPage() {
           customerPhone: formData.phone,
           governorate: formData.governorate,
         }),
-      });
+      }, 20000, "تأكيد الأسعار أخد وقت أطول من المعتاد. تأكد من الإنترنت وحاول تاني. سلتك محفوظة.");
       const quoteData = await quoteResponse.json();
       if (!quoteResponse.ok || !quoteData?.success || !quoteData?.quote) {
         throw new Error(quoteData?.message || "تعذر تأكيد أسعار السلة. راجع السلة وحاول مرة أخرى.");
@@ -994,7 +1004,7 @@ export default function CheckoutPage() {
       if (paymentMethod === 'card') {
         localStorage.setItem('pendingOrder', JSON.stringify(pendingOrder));
 
-        const res = await fetch('/api/create-order', {
+        const res = await fetchWithTimeout('/api/create-order', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1010,7 +1020,7 @@ export default function CheckoutPage() {
             phone: formData.phone,
             formData,
           }),
-        });
+        }, 25000);
 
         const data = await res.json();
         if (!res.ok || !data.iframeData) throw new Error(data.error || 'حدث خطأ');
@@ -1039,7 +1049,7 @@ export default function CheckoutPage() {
         setLoading(false);
 
       } else {
-        const res = await fetch('/api/create-order', {
+        const res = await fetchWithTimeout('/api/create-order', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1056,7 +1066,7 @@ export default function CheckoutPage() {
             appliedPromo: quote.appliedPromo,
             governorate: formData.governorate,
           }),
-        });
+        }, 25000, "الاتصال بطيء وقت تأكيد الطلب. حاول تاني، ومش هيتكرر الطلب لأن رقمه ثابت.");
 
         if (!res.ok) throw new Error('حدث خطأ في إنشاء الطلب');
 
