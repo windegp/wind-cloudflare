@@ -27,3 +27,23 @@ export function computeSubscriberDiscountAmount(cfg, subtotal) {
   const amount = cfg.type === "fixed" ? Number(cfg.value) : Math.round((s * Number(cfg.value)) / 100);
   return Math.min(s, Math.max(0, amount));
 }
+
+/**
+ * Display-only: decides what the checkout summary shows after a live quote.
+ * The submit-time quote stays authoritative; this never changes what is charged.
+ */
+export function resolveLiveSubscriberDisplay({ liveQuote, subtotal, discount, discountLabel, total }) {
+  const applies =
+    liveQuote?.discountSource === "subscriber" &&
+    Math.abs(Number(liveQuote.subtotal) - Number(subtotal)) < 0.01 &&
+    Number(liveQuote.discount) > Number(discount);
+  if (!applies) {
+    return { applies: false, discount, label: discountLabel, total };
+  }
+  return {
+    applies: true,
+    discount: Number(liveQuote.discount),
+    label: liveQuote.subscriberDiscount?.name || "خصم المشتركين",
+    total: Number(liveQuote.total),
+  };
+}
