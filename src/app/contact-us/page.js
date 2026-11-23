@@ -83,17 +83,8 @@ export default function ContactUsPage() {
         </aside>
       </div>
 
-      <section className="bg-[#1A1A1A] text-white" aria-labelledby="sub-title">
-        <div className="max-w-3xl mx-auto px-5 py-12 text-center">
-          <span className="inline-block text-[#F5C518] text-xs font-bold tracking-[0.25em] mb-3">NEWSLETTER</span>
-          <h2 id="sub-title" className="text-2xl md:text-3xl font-black mb-2">اشترك واستنى الخصومات</h2>
-          <p className="text-gray-300 mb-6">سيب بريدك وهتوصلك عروضنا وخصوماتنا الجديدة قبل أي حد.</p>
-          <SubscribeForm />
-        </div>
-      </section>
-
       {c.map && (
-        <section className="max-w-5xl mx-auto px-5 py-14" aria-labelledby="map-title">
+        <section className="max-w-5xl mx-auto px-5 pt-2 pb-14" aria-labelledby="map-title">
           <div className="flex items-end justify-between mb-4">
             <h2 id="map-title" className="text-xl md:text-2xl font-black text-[#1A1A1A]">موقعنا</h2>
             <a href={c.map.href} target="_blank" rel="noopener noreferrer" className="text-sm font-bold text-[#1A1A1A] underline">افتح في خرائط جوجل</a>
@@ -107,6 +98,14 @@ export default function ContactUsPage() {
           />
         </section>
       )}
+      <section className="bg-[#1A1A1A] text-white" aria-labelledby="sub-title">
+        <div className="max-w-3xl mx-auto px-5 py-12 text-center">
+          <span className="inline-block text-[#F5C518] text-xs font-bold tracking-[0.25em] mb-3">NEWSLETTER</span>
+          <h2 id="sub-title" className="text-2xl md:text-3xl font-black mb-2">اشترك واستنى الخصومات</h2>
+          <p className="text-gray-300 mb-6">سيب بريدك وهتوصلك عروضنا وخصوماتنا الجديدة قبل أي حد.</p>
+          <SubscribeForm />
+        </div>
+      </section>
     </main>
   );
 }
