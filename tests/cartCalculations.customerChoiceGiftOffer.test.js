@@ -210,7 +210,7 @@ describe("customer-choice gift offer integration", () => {
     const result = calculateAllTotals(
       purchases,
       promo,
-      zeroShipping,
+      { ...zeroShipping, freeShippingThreshold: 0 },
       false,
       [choiceOffer()],
       null,

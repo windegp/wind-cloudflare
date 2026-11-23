@@ -3,8 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useCart } from "../../context/CartContext";
 import { usePathname } from 'next/navigation';
-import { useSettings } from "@/context/SettingsContext";
-import { normalizeSubscriberSettings, resolveLiveSubscriberDisplay } from "@/lib/subscriberDiscount";
+import { resolveLiveSubscriberDisplay } from "@/lib/subscriberDiscount";
 import { usePageReady, useGlobalLoader } from "../../context/GlobalLoaderContext";
 import { useRouter } from 'next/navigation';
 import Link from "next/link";
@@ -165,6 +164,7 @@ export default function CheckoutPage() {
     shippingSettings,
     setSelectedGovernorate,
     discountSource,
+    discountLines,
     promoAmount,
     stackedFirstOrderAmount,
     appliedOffer,
@@ -518,19 +518,24 @@ export default function CheckoutPage() {
 
   // ── عرض خصم المشتركين قبل تأكيد الطلب ─────────────────────────
   // للعرض فقط: السيرفر بيحسب الخصم الحقيقي عند التأكيد، وده اللي بيتعتمد دايماً.
-  const { settings: liveSettings } = useSettings() || {};
-  const subscriberLiveEnabled = normalizeSubscriberSettings(liveSettings?.promotions?.subscriberDiscount).enabled;
+  const [subscriptionRevision, setSubscriptionRevision] = useState(0);
+  useEffect(() => {
+    const refresh = () => setSubscriptionRevision(value => value + 1);
+    window.addEventListener("wind:subscribed", refresh);
+    return () => window.removeEventListener("wind:subscribed", refresh);
+  }, []);
   const [liveQuote, setLiveQuote] = useState(null);
   const liveQuoteSeq = useRef(0);
   const liveEmail = String(formData.email || '').trim().toLowerCase();
   const livePhoneDigits = String(formData.phone || '').replace(/\D/g, '');
   const liveEligibleInput = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(liveEmail) && livePhoneDigits.length >= 11;
-  const liveCartKey = JSON.stringify(cartItems.map((i) => [i.id, i.qty, i.selectedSize, i.selectedColor]));
 
+  const quoteInputKey = JSON.stringify([liveEmail, formData.phone, formData.governorate, cartItems, customerChoiceGiftSelections, offerGiftSelections, appliedPromo?.code, pathname, subscriptionRevision]);
+  const currentLiveQuote = liveQuote?.inputKey === quoteInputKey ? liveQuote.quote : null;
   useEffect(() => {
     const seq = ++liveQuoteSeq.current;
     setLiveQuote(null);
-    if (!subscriberLiveEnabled || !liveEligibleInput || cartItems.length === 0) return undefined;
+    if (!liveEligibleInput || cartItems.length === 0) return undefined;
     const timer = setTimeout(async () => {
       try {
         const res = await fetchWithTimeout("/api/checkout-quote", {
@@ -558,27 +563,27 @@ export default function CheckoutPage() {
         }, 10000, "");
         const data = await res.json();
         if (seq !== liveQuoteSeq.current) return; // نتيجة قديمة
-        if (res.ok && data?.success && (data.quote?.discountSource === "subscriber" || data.quote?.stackedDiscount?.source === "subscriber")) {
-          setLiveQuote(data.quote);
+        if (res.ok && data?.success && data.quote) {
+          setLiveQuote({ inputKey: quoteInputKey, quote: data.quote });
         }
       } catch (_) {
         // فشل صامت: العميل مايشوفش خطأ، والخصم هيتحسب عند التأكيد.
       }
     }, 700);
-    return () => clearTimeout(timer);
+    return () => { clearTimeout(timer); ++liveQuoteSeq.current; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subscriberLiveEnabled, liveEligibleInput, liveEmail, livePhoneDigits, formData.governorate, liveCartKey, appliedPromo?.code, subtotal]);
+  }, [quoteInputKey, liveEligibleInput]);
 
   const promoLineLabel = appliedPromo?.type === 'coupon_fixed'
     ? `قسيمة شراء: ${appliedPromo.code || ''}`
     : 'خصم الكود';
-  const clientLines = discountSource === 'promo' && Number(stackedFirstOrderAmount) > 0
+  const clientLines = Array.isArray(discountLines) ? discountLines : discountSource === 'promo' && Number(stackedFirstOrderAmount) > 0
     ? [
         { label: promoLineLabel, amount: Number(promoAmount) || 0 },
         { label: 'خصم الطلب الأول 🎉', amount: Number(stackedFirstOrderAmount) || 0 },
       ]
     : [{ label: discountLabel, amount: discount }];
-  const liveDisplay = resolveLiveSubscriberDisplay({ liveQuote, subtotal, discount, discountLabel, total: finalTotal, shipping, promoLabel: promoLineLabel, clientLines });
+  const liveDisplay = resolveLiveSubscriberDisplay({ liveQuote: currentLiveQuote, subtotal, discount, discountLabel, total: finalTotal, shipping, promoLabel: promoLineLabel, clientLines });
   const shownLines = liveDisplay.lines;
   const shownDiscount = liveDisplay.discount;
   const shownTotal = liveDisplay.total;
@@ -880,28 +885,16 @@ export default function CheckoutPage() {
             Math.abs(Number(trustedSelection.price) - Number(selection.price)) > 0.01;
         })
       );
-      // خصم المشتركين بيتحسب على السيرفر بس (بيتأكد من الإيميل في Subscribers)،
-      // فلو السيرفر طبّقه بنقبل الفرق بشرط يكون الخصم أكبر من اللي العميل شايفه.
-      const serverAppliedSubscriber =
-        (quote.discountSource === "subscriber" || quote.stackedDiscount?.source === "subscriber") &&
-        Number(quote.discount) >= Number(discount) - 0.01;
-      const expectedDiscount = serverAppliedSubscriber ? Number(quote.discount) : Number(discount);
-      // Compare the fresh quote with the full total the customer reviewed, including shipping.
-      const reviewedShipping = liveDisplay.applies ? shownShipping : shipping;
-      const reviewedTotal = liveDisplay.applies ? shownTotal : finalTotal;
-      const expectedTotal = serverAppliedSubscriber && !liveDisplay.applies
-        ? Number(finalTotal) - (Number(quote.discount) - Number(discount))
-          + (Number(quote.shipping) - Number(shipping))
-        : Number(reviewedTotal);
+      // Compare the authoritative fresh quote with the complete price reviewed on screen.
       const quoteChanged =
         Math.abs(Number(quote.subtotal) - Number(subtotal)) > 0.01 ||
-        Math.abs(Number(quote.discount) - expectedDiscount) > 0.01 ||
-        Math.abs(Number(quote.shipping) - Number(reviewedShipping)) > 0.01 ||
-        Math.abs(Number(quote.total) - expectedTotal) > 0.01 ||
-        (quote.discountSource !== discountSource && !serverAppliedSubscriber) ||
+        Math.abs(Number(quote.discount) - Number(shownDiscount)) > 0.01 ||
+        Math.abs(Number(quote.shipping) - Number(shownShipping)) > 0.01 ||
+        Math.abs(Number(quote.total) - Number(shownTotal)) > 0.01 ||
         customerChoiceGiftQuoteChanged;
 
       if (quoteChanged) {
+        setLiveQuote({ inputKey: quoteInputKey, quote });
         setSubmitError("تم تحديث سعر منتج أو عرض في سلتك. لم يتم إنشاء الطلب أو بدء الدفع. راجع السلة والإجمالي الجديد ثم حاول مرة أخرى.");
         setLoading(false);
         window.scrollTo(0, 0);
@@ -944,7 +937,7 @@ export default function CheckoutPage() {
       "Discount Type": quote.discount > 0
         ? (quote.discountSource === "promo" ? (quote.appliedPromo?.type || "promo") : quote.discountSource)
         : (quote.appliedPromo?.freeShipping ? "free_shipping" : ""),
-      "Discount Label": quote.discountSource === "offer"
+      "Discount Label": Array.isArray(quote.discountLines) ? quote.discountLines.map(line => line.label).join(" + ") : quote.discountSource === "offer"
         ? `عرض: ${quote.appliedOffer?.name || ""}`.trim()
         : quote.discountSource === "promo"
           ? ((quote.appliedPromo?.type === "coupon_fixed" ? `قسيمة شراء ${quote.appliedPromo?.code || ""}`.trim() : `كود الخصم ${quote.appliedPromo?.code || ""}`.trim())
@@ -963,7 +956,8 @@ export default function CheckoutPage() {
           : quote.discountSource === "subscriber" && quote.subscriberDiscount?.type === "percent"
             ? Number(quote.subscriberDiscount.value) || 0
             : 0,
-      "Code Discount Amount": quote.stackedDiscount ? Number(quote.promoDiscountAmount) || 0 : 0,
+      "Discount Breakdown": quote.discountLines || [],
+      "Code Discount Amount": Number(quote.promoDiscountAmount) || 0,
       "Auto Discount Type": quote.stackedDiscount?.source || "",
       "Auto Discount Amount": quote.stackedDiscount ? Number(quote.stackedDiscount.amount) || 0 : 0,
       "Free Shipping Applied": Boolean(quote.freeShipping),

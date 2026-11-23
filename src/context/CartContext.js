@@ -44,6 +44,7 @@ export function CartProvider({ children }) {
                          ?? settings?.promotions?.shippingCostByGovernorate?.[selectedGovernorate]
                          ?? promoSettings?.shippingCost          ?? settings?.promotions?.shippingCost          ?? 70,
     freeShippingThreshold: promoSettings?.freeShippingThreshold ?? settings?.promotions?.freeShippingThreshold ?? 0,
+    subscriberDiscount: promoSettings?.subscriberDiscount ?? settings?.promotions?.subscriberDiscount,
     firstOrderEnabled:     promoSettings?.firstOrderEnabled     ?? settings?.promotions?.firstOrderEnabled     ?? false,
     firstOrderDiscount:    promoSettings?.firstOrderDiscount    ?? settings?.promotions?.firstOrderDiscount    ?? 0,
   }), [promoSettings, settings, selectedGovernorate]);
@@ -375,7 +376,7 @@ const [customerChoiceGiftSelections, setCustomerChoiceGiftSelections] = useState
 
   // ── Calculations ───────────────────────────────────────────────
   const {
-    subtotal, discount, shipping, total, discountSource, promoAmount, stackedFirstOrderAmount, appliedOffer, appliedOffers, offerBenefits, customerChoiceGiftStatus,
+    subtotal, discount, shipping, total, discountSource, discountLines, promoAmount, stackedFirstOrderAmount, appliedOffer, appliedOffers, offerBenefits, customerChoiceGiftStatus,
   } = useMemo(
     () => calculateAllTotals(cartItems, appliedPromo, shippingSettings, isFirstOrder, offers, freeShippingRule, customerChoiceGiftSelections),
     [cartItems, appliedPromo, shippingSettings, isFirstOrder, offers, freeShippingRule, customerChoiceGiftSelections]
@@ -384,21 +385,11 @@ const [customerChoiceGiftSelections, setCustomerChoiceGiftSelections] = useState
   // لو عرض تلقائي كسب على كود الخصم: نوضح للعميل إن الكود ما اتطبقش
   // (الحساب نفسه بيستخدم appliedPromo الأصلي — ده للعرض فقط)
   const appliedPromoView = useMemo(() => {
-    if (
-      (discountSource === 'offer' || discountSource === 'first_order') &&
-      appliedPromo?.valid &&
-      appliedPromo.type !== 'free_shipping'
-    ) {
-      const winnerLabel = discountSource === 'offer'
-        ? `عرض "${appliedOffer?.name || ''}"`
-        : "خصم الطلب الأول";
-      return {
-        ...appliedPromo,
-        message: `تم تطبيق ${winnerLabel} لأنه يوفّر لك خصماً أكبر — لم يتم تطبيق كود الخصم.`,
-      };
+    if (appliedPromo?.valid && appliedPromo.type !== 'free_shipping' && discountSource === 'offer') {
+      return { ...appliedPromo, message: `العرض أوفر من الكود، تم تطبيق العرض بدلاً منه. خصم الترحيب والشحن المجاني المفعّلان لا يتأثران.` };
     }
     return appliedPromo;
-  }, [appliedPromo, discountSource, appliedOffer]);
+  }, [appliedPromo, discountSource]);
 
   // ── Promo code — server-side validation ───────────────────────
   const applyPromoCode = useCallback(async (code, customerEmail = "", customerPhone = "") => {
@@ -657,7 +648,7 @@ useEffect(() => {
     addToCart, removeFromCart, updateQty, updateCartItemVariant, clearCart,
     isCartOpen, toggleCart, openCart, closeCart,
     subtotal, discount, shipping, total,
-    discountSource, promoAmount, stackedFirstOrderAmount, appliedOffer, appliedOffers, offers, offerBenefits, customerChoiceGiftStatus, freeShippingRule,
+    discountSource, discountLines, promoAmount, stackedFirstOrderAmount, appliedOffer, appliedOffers, offers, offerBenefits, customerChoiceGiftStatus, freeShippingRule,
     appliedPromo: appliedPromoView,
     applyPromoCode, removePromoCode,
     discountError, setDiscountError, promoLoading,
@@ -670,7 +661,7 @@ useEffect(() => {
     addToCart, removeFromCart, updateQty, updateCartItemVariant, clearCart,
     isCartOpen, toggleCart, openCart, closeCart,
     subtotal, discount, shipping, total,
-    discountSource, promoAmount, stackedFirstOrderAmount, appliedOffer, appliedOffers, offers, offerBenefits, customerChoiceGiftStatus, freeShippingRule,
+    discountSource, discountLines, promoAmount, stackedFirstOrderAmount, appliedOffer, appliedOffers, offers, offerBenefits, customerChoiceGiftStatus, freeShippingRule,
     appliedPromoView, applyPromoCode, removePromoCode,
     discountError, setDiscountError, promoLoading, shippingSettings,
     isFirstOrder, setIsFirstOrder,

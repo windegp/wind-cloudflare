@@ -52,17 +52,14 @@ export function computeSubscriberDiscountAmount(cfg, subtotal) {
  */
 export function resolveLiveSubscriberDisplay({ liveQuote, subtotal, discount, discountLabel, total, shipping, promoLabel, clientLines }) {
   const defaultLines = clientLines || [{ label: discountLabel, amount: discount }];
-  const hasSubscriber =
-    liveQuote?.discountSource === "subscriber" || liveQuote?.stackedDiscount?.source === "subscriber";
-  const applies =
-    hasSubscriber &&
+  const applies = Boolean(liveQuote) &&
     Math.abs(Number(liveQuote.subtotal) - Number(subtotal)) < 0.01 &&
-    Number(liveQuote.discount) > Number(discount);
+    [liveQuote.discount, liveQuote.total, liveQuote.shipping].every(value => Number.isFinite(Number(value))) ;
   if (!applies) {
     return { applies: false, discount, label: discountLabel, total, shipping, lines: defaultLines };
   }
   const stacked = liveQuote.stackedDiscount;
-  const lines = liveQuote.discountSource === "promo" && stacked
+  const lines = Array.isArray(liveQuote.discountLines) ? liveQuote.discountLines : liveQuote.discountSource === "promo" && stacked
     ? [
         { label: promoLabel || "خصم الكود", amount: Number(liveQuote.promoDiscountAmount) || 0 },
         { label: stacked.label, amount: Number(stacked.amount) || 0 },
@@ -71,7 +68,7 @@ export function resolveLiveSubscriberDisplay({ liveQuote, subtotal, discount, di
   return {
     applies: true,
     discount: Number(liveQuote.discount),
-    label: lines[0].label,
+    label: lines[0]?.label || "",
     total: Number(liveQuote.total),
     shipping: Number(liveQuote.shipping),
     lines,
