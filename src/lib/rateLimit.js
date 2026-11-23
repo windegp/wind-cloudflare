@@ -61,6 +61,13 @@ const RATE_LIMITS = {
     blockDuration: 600
   },
 
+  // Public order tracking lookups (order number + phone guessing protection)
+  TRACK_ORDER: {
+    requests: 8,
+    window: 300,
+    blockDuration: 900
+  },
+
   // Relaxed for read-only endpoints
   READ: {
     requests: 100,    // 100 requests
