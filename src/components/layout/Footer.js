@@ -1,6 +1,8 @@
 "use client";
 import Link from "next/link";
 import { useState } from "react";
+import { fbTrack } from "@/lib/fbTrack";
+import { ttTrack } from "@/lib/ttTrack";
 import styles from "./Footer.module.css";
 
 const paymentIcons = [
@@ -86,6 +88,11 @@ function Newsletter() {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.ok) {
+        // Lead / SubmitForm for Meta and TikTok (email is hashed by the server relays)
+        try {
+          fbTrack("Lead", { email, content_name: "newsletter" });
+          ttTrack("SubmitForm", { email, content_name: "newsletter" });
+        } catch (_) {}
         setStatus("sent");
         setEmail("");
       } else {
@@ -129,6 +136,7 @@ function Newsletter() {
             {status === "sending" ? "جاري الاشتراك..." : "اشترك الآن"}
           </button>
           {status === "error" && <p role="alert" className={styles.nlSub}>{error}</p>}
+          <p className={styles.nlSub} style={{ fontSize: "11px", opacity: 0.7 }}>بالاشتراك أنت توافق على استلام عروضنا وخصوماتنا على بريدك.</p>
         </>
       )}
     </form>

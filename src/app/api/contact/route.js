@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isSameOrigin, enforceRateLimit } from "@/lib/apiGuards";
 import { EMAIL_FROM } from "@/lib/constants";
+import { firestoreAdminSet } from "@/lib/firestoreAdmin";
 import {
   buildContactEmail,
   buildSubscriptionEmail,
@@ -39,29 +40,49 @@ export async function POST(request) {
     return NextResponse.json({ ok: false, error: result.error }, { status: 400, headers: HEADERS });
   }
 
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json({ ok: false, error: "تعذر إرسال الرسالة الآن. تواصل معانا على واتساب." }, { status: 500, headers: HEADERS });
-  }
-
   const { subject, html } = isSubscription ? buildSubscriptionEmail(result.data) : buildContactEmail(result.data);
-  try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from: EMAIL_FROM,
-        to: CONTACT_RECIPIENT,
-        reply_to: result.data.email,
-        subject,
-        html,
-      }),
-    });
-    if (!res.ok) {
-      return NextResponse.json({ ok: false, error: "تعذر إرسال الرسالة الآن. حاول تاني أو كلمنا على واتساب." }, { status: 502, headers: HEADERS });
+
+  const sendEmail = async () => {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) return false;
+    try {
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from: EMAIL_FROM,
+          to: CONTACT_RECIPIENT,
+          reply_to: result.data.email,
+          subject,
+          html,
+        }),
+      });
+      return res.ok;
+    } catch {
+      return false;
     }
-    return NextResponse.json({ ok: true }, { headers: HEADERS });
-  } catch {
+  };
+
+  // Subscribers are also saved (server-side, doc id = email, so repeats do not duplicate).
+  const saveSubscriber = async () => {
+    if (!isSubscription) return false;
+    try {
+      await firestoreAdminSet("Subscribers", result.data.email, {
+        email: result.data.email,
+        source: "footer",
+        status: "active",
+        subscribedAt: new Date().toISOString(),
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const [emailed, saved] = await Promise.all([sendEmail(), saveSubscriber()]);
+  // The owner is reachable through at least one path (email or saved list), so treat it as success.
+  if (!emailed && !saved) {
     return NextResponse.json({ ok: false, error: "تعذر إرسال الرسالة الآن. حاول تاني أو كلمنا على واتساب." }, { status: 502, headers: HEADERS });
   }
+  return NextResponse.json({ ok: true }, { headers: HEADERS });
 }
