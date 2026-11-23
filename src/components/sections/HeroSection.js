@@ -143,9 +143,7 @@ export default function HeroSection({ data }) {
               
               {/* ب-2. النص الرئيسي العريض جداً وضخم (استخدام Cairo ExtraBold) */}
               {/* حجم خط ضخم ومسافة بادئة ضيقة leading-[1.1] تطابق المرجع */}
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-black text-[#1A1A1A] mb-8 leading-[1.1] tracking-tighter" style={{fontFamily: "'Cairo', sans-serif"}}>
-                {slide.title}
-              </h1>
+              {React.createElement(index === 0 ? 'h1' : 'div', { className: "text-4xl md:text-5xl lg:text-6xl font-black text-[#1A1A1A] mb-8 leading-[1.1] tracking-tighter", style: {fontFamily: "'Cairo', sans-serif"} }, slide.title)}
               
               {/* ب-3. الـ 3 نقاط المتغيرة حسب كل صورة مع الدوائر الصغيرة */}
               <div className="flex flex-col gap-3.5 mb-12 pr-1">
