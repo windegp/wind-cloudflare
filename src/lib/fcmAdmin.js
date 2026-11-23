@@ -59,6 +59,8 @@ export async function sendNewOrderNotification({ title, body, orderId, strict = 
     const accessToken = await getGoogleAccessToken(FCM_SCOPE);
     const endpoint = `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`;
 
+    let accepted = 0;
+    let invalid = 0;
     const results = await Promise.allSettled(
       devices.map(async ({ token, platform }) => {
         const isNativeAndroid = platform === "android-native";
@@ -95,7 +97,7 @@ export async function sendNewOrderNotification({ title, body, orderId, strict = 
 
         const res = await fetch(endpoint, {
           method: "POST",
-          signal: AbortSignal.timeout(10000),
+          ...(strict ? { signal: AbortSignal.timeout(10000) } : {}),
           headers: {
             Authorization: `Bearer ${accessToken}`,
             "Content-Type": "application/json",
@@ -107,17 +109,21 @@ export async function sendNewOrderNotification({ title, body, orderId, strict = 
           const errData = await res.json().catch(() => ({}));
           const errorCode = errData?.error?.details?.[0]?.errorCode;
           if (errorCode === "UNREGISTERED" || res.status === 404) {
+            invalid++;
             await removeInvalidToken(token);
           } else {
             console.warn("FCM send failed:", res.status);
-            if (strict) throw new Error("FCM_PROVIDER_REJECTED");
+            throw new Error("FCM_PROVIDER_REJECTED");
           }
+        } else {
+          accepted++;
         }
       })
     );
 
-    if (strict && results.some(result => result.status === "rejected")) throw new Error("FCM_DISPATCH_INCOMPLETE");
-    console.log(`✅ Push notification dispatched to ${devices.length} admin device(s)`);
+    const failed = results.filter(result => result.status === "rejected").length;
+    console.log(JSON.stringify({ event: "order_push_result", orderId, devices: devices.length, accepted, invalid, failed }));
+    if (strict && failed) throw new Error("FCM_DISPATCH_INCOMPLETE");
   } catch (error) {
     // ⚠️ مقصود: أي فشل هنا ما يأثرش على إنشاء الأوردر أو إرسال الإيميل
     if (strict) throw new Error("FCM_DISPATCH_FAILED");
