@@ -1,5 +1,6 @@
 "use client";
 
+import { resolveThankYouState } from "@/lib/checkoutThankYouState";
 import { finishBrowserCheckoutAttempt } from "@/lib/checkoutAttemptBrowser";
 import { useEffect, Suspense, useState } from 'react';
 import { usePathname } from 'next/navigation';
@@ -29,16 +30,23 @@ function SuccessContent() {
   const searchParams = useSearchParams();
   const orderId = searchParams.get('orderId');
   const [orderData, setOrderData] = useState(null);
-  const [verification, setVerification] = useState("جاري التحقق من بيانات الطلب.");
+  const [verification, setVerification] = useState(orderId?.startsWith("WIND-D-") ? "جاري التحقق من بيانات الطلب." : null);
   const [statusRefresh, setStatusRefresh] = useState(0);
 
  useEffect(() => {
-    const pendingOrder = sessionStorage.getItem("wind_durable_request_v1") || localStorage.getItem('pendingOrder') || sessionStorage.getItem("wind_last_confirmed_order_v1");
-    if (!pendingOrder) { setVerification("للتأكد من حالة الطلب تواصل معنا برقم الطلب. لا تعتمد على صفحة الشكر وحدها كإثبات للدفع."); return; }
-
-    let parsed;
-    try { parsed = JSON.parse(pendingOrder); } catch (_) { setVerification("تعذر قراءة بيانات الطلب. تواصل معنا برقم الطلب قبل تكرار الدفع."); return; }
-    if (orderId && parsed.orderId !== orderId) { setVerification("بيانات الطلب المحفوظة لا تطابق الرابط. تواصل معنا قبل تكرار الدفع."); return; }
+    let records = [];
+    try {
+      records = [sessionStorage.getItem("wind_durable_request_v1"), localStorage.getItem('pendingOrder'), sessionStorage.getItem("wind_last_confirmed_order_v1")];
+    } catch (_) { /* Legacy confirmation never depends on browser receipt storage. */ }
+    const state = resolveThankYouState(orderId, records);
+    if (!state.durable) setVerification(null);
+    const parsed = state.receipt;
+    if (!parsed) {
+      if (state.durable) setVerification("للتأكد من حالة الطلب تواصل معنا برقم الطلب. لا تعتمد على صفحة الشكر وحدها كإثبات للدفع.");
+      return;
+    }
+    // Namespace, not a stale local flag, determines whether canonical payment verification applies.
+    parsed.durable = state.durable;
 
     // ── حماية مزدوجة من تكرار Purchase ──────────────────────────────
     // الطبقة ١: sessionStorage — تمنع إعادة الإرسال طوال جلسة التاب الحالية
