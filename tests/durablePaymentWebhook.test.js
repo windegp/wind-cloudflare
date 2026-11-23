@@ -25,3 +25,16 @@ it("unknown legacy IDs fall back, unknown durable UUIDs are retained", async () 
 it("persistence failure throws for provider retry, never acknowledgement", async () => {
   receive.mockRejectedValue(new Error("unavailable")); await expect(run()).rejects.toThrow("unavailable");
 });
+
+it("passes signed SUCCESS/00 unchanged through the authenticated durable boundary", async () => {
+  const approved = { ...data, transactionResponseCode: "00" };
+  expect(await run({ data: approved })).toMatchObject({ status: 200, code: "applied" });
+  expect(verify).toHaveBeenCalledWith(approved, "a".repeat(64));
+  expect(receive).toHaveBeenCalledWith(approved, { store });
+});
+it("never passes a SUCCESS/00 event with invalid signature to processing", async () => {
+  verify.mockResolvedValue(false);
+  expect(await run({ data: { ...data, transactionResponseCode: "00" } })).toMatchObject({ status: 401 });
+  expect(store.get).not.toHaveBeenCalled();
+  expect(receive).not.toHaveBeenCalled();
+});
