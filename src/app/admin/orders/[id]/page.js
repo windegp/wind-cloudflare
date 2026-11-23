@@ -1,5 +1,5 @@
-
 "use client";
+import { orderDisplayLabel } from "@/lib/orderDisplayNumber";
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -414,7 +414,7 @@ export default function OrderDetailsPage() {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-xl sm:text-2xl font-black text-[#202223]">
-                  {order.Name || id}
+                  {orderDisplayLabel(order, id)}
                 </h1>
 
                 <span className={`text-[10px] font-bold px-2.5 py-1 rounded-md border ${paymentStatus[1]}`}>

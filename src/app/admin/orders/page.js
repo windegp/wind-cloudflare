@@ -1,4 +1,5 @@
 "use client";
+import { orderDisplayLabel } from "@/lib/orderDisplayNumber";
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getDb } from "@/lib/firebase";
@@ -153,6 +154,7 @@ export default function OrdersListPage() {
 
     if (search) {
       result = result.filter(o => 
+        orderDisplayLabel(o).toLowerCase().includes(search.toLowerCase()) ||
         o.Name?.toLowerCase().includes(search.toLowerCase()) || 
         o.Email?.toLowerCase().includes(search.toLowerCase()) ||
         o.Phone?.includes(search)
@@ -301,7 +303,7 @@ export default function OrdersListPage() {
         const status = o['Financial Status'] || '';
         const source = o.data_source || 'Shopify_Import';
 
-        return `"${orderLink}","${date}","${customerName}","${email}","${phone}","${product}","${qty}","${total}","${status}","${source}"`;
+        return `"${Number.isSafeInteger(o["Order Number"]) && o["Order Number"] >= 1001 ? orderDisplayLabel(o) : orderLink}","${date}","${customerName}","${email}","${phone}","${product}","${qty}","${total}","${status}","${source}"`;
       });
 
       const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + headers.concat(rows).join("\n");
@@ -603,7 +605,7 @@ return (
                               />
                             </td>
                             <td className="px-6 py-4">
-                              <p className="text-sm font-black text-[#005bd3] group-hover:underline">{order.Name}</p>
+                              <p className="text-sm font-black text-[#005bd3] group-hover:underline">{orderDisplayLabel(order)}</p>
                               <p className="text-[10px] text-gray-400 font-bold mt-1">{order['Created at']?.split(' ')[0]}</p>
                             </td>
                             <td className="px-6 py-4">

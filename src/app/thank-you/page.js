@@ -1,4 +1,5 @@
 "use client";
+import { orderDisplayLabel } from "@/lib/orderDisplayNumber";
 
 import { resolveThankYouState } from "@/lib/checkoutThankYouState";
 import { finishBrowserCheckoutAttempt } from "@/lib/checkoutAttemptBrowser";
@@ -80,6 +81,8 @@ function SuccessContent() {
             return;
           }
           parsed.total = result.total;
+          if (Number.isSafeInteger(result.orderNumber) && result.orderNumber >= 1001) parsed.orderNumber = result.orderNumber;
+          setOrderData({ ...parsed });
           setVerification(null);
           sessionStorage.setItem("wind_last_confirmed_order_v1", JSON.stringify(parsed));
           finishBrowserCheckoutAttempt(sessionStorage);
@@ -175,7 +178,7 @@ function SuccessContent() {
   if (verification) return (
     <div className="w-full max-w-md rounded-2xl border border-amber-300 bg-amber-50 p-6 text-right" dir="rtl">
       <h1 className="text-xl font-bold text-amber-950 mb-3">التحقق من الطلب</h1>
-      {(orderId || orderData?.orderId) && <p className="text-xs font-mono break-all mb-3">{orderId || orderData?.orderId}</p>}
+      {(orderId || orderData?.orderId) && <p className="text-xs font-mono break-all mb-3">{orderDisplayLabel(orderData, orderId)}</p>}
       <p role="status" className="text-sm leading-7 text-amber-950">{verification}</p>
       <button type="button" onClick={() => setStatusRefresh(value => value + 1)} className="mt-4 rounded-lg bg-amber-950 px-4 py-3 text-white font-bold text-sm">تحقق مرة أخرى</button>
       <div className="mt-5 text-sm"><Link href="/contact" className="underline">تواصل معنا لمراجعة حالة الطلب</Link></div>
@@ -208,7 +211,7 @@ function SuccessContent() {
           </div>
           {(orderId || orderData?.orderId) && (
             <p className="text-[10px] font-mono text-gray-400 uppercase tracking-widest mb-1">
-              تأكيد #{orderId || orderData?.orderId}
+              تأكيد <bdi dir="ltr">{orderDisplayLabel(orderData, orderId).startsWith("#") ? orderDisplayLabel(orderData, orderId) : `#${orderDisplayLabel(orderData, orderId)}`}</bdi>
             </p>
           )}
           <h1 className="text-2xl font-black text-gray-900 mb-1">شكراً لثقتك بـ WIND Shopping!</h1>

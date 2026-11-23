@@ -21,3 +21,13 @@ it("provider refusal or unverifiable acceptance throws for durable retry", async
 it("requires strict push outcome rather than swallowed failure", async () => {
   await checkoutDeliveryHandlers().admin_push({ order }); expect(sendNewOrderNotification).toHaveBeenLastCalledWith(expect.objectContaining({ strict: true }));
 });
+
+it("uses the sequential label in email and push while keeping UUID notification routing", async () => {
+  const numbered = { ...order, orderNumber: 1001 };
+  await checkoutDeliveryHandlers().customer_email({ order: numbered, idempotencyKey: "same-internal-key" });
+  const email = JSON.parse(fetch.mock.calls[0][1].body);
+  expect(email.subject).toContain("#1001"); expect(email.html).toContain("1001");
+  expect(email.subject).not.toContain(order.orderId);
+  await checkoutDeliveryHandlers().admin_push({ order: numbered });
+  expect(sendNewOrderNotification).toHaveBeenLastCalledWith(expect.objectContaining({ body: expect.stringContaining("#1001"), orderId: order.orderId }));
+});
