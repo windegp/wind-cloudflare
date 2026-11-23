@@ -238,6 +238,8 @@ export const EditorialCenteredHero = ({ data }) => {
           
           {slides.map((slide, index) => {
             const isActive = isMounted && index === current;
+            // H1 واحد فقط في الصفحة (الشريحة الأولى)، باقي الشرائح div بنفس الشكل
+            const Title = index === 0 ? 'h1' : 'div';
 
             return (
               <div 
@@ -253,12 +255,12 @@ export const EditorialCenteredHero = ({ data }) => {
                   {slide.tag || "WIND EXCLUSIVE"}
                 </span>
                 
-                <h1 
+                <Title 
                   className={`text-[32px] md:text-[42px] lg:text-[48px] font-medium text-[#1A1A1A] leading-[1.2] tracking-normal text-center px-4 mb-8 md:mb-9 transition-all ease-[cubic-bezier(0.22,1,0.36,1)] ${isActive ? 'translate-y-0 opacity-100 duration-[800ms] delay-[300ms]' : 'translate-y-12 opacity-0 duration-[300ms] delay-0'}`}
                   style={{ fontFamily: "'Cairo', sans-serif", willChange: 'opacity, transform' }}
                 >
                   {slide.title}
-                </h1>
+                </Title>
                 
                 <a 
                   href={slide.productLink} 
