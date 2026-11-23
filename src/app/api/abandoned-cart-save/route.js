@@ -13,6 +13,9 @@ export async function POST(request) {
       return Response.json({ error: 'Invalid request' }, { status: 400 });
     }
     
+    if (typeof data.Name !== "string" || data.Name.startsWith("WIND-D-")) {
+      return Response.json({ error: 'Invalid draft namespace' }, { status: 400 });
+    }
     const db = getDb();
     const orderRef = doc(db, 'Orders', data.Name);
     

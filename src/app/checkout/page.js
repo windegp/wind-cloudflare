@@ -1,5 +1,6 @@
 "use client";
 
+import { durableCheckoutEnabled, getBrowserCheckoutAttempt } from "@/lib/checkoutAttemptBrowser";
 import React, { useState, useEffect, useRef } from 'react';
 import { useCart } from "../../context/CartContext";
 import { usePathname } from 'next/navigation';
@@ -510,9 +511,15 @@ export default function CheckoutPage() {
 }, [pathname, signalPageReady, cartItems]);
 
   // 🔥 توحيد رقم الطلب من البداية (استراتيجية المستند الواحد)
+  const durableCheckout = durableCheckoutEnabled();
   const activeOrderIdRef = useRef(null);
   if (!activeOrderIdRef.current && typeof window !== 'undefined') {
-    activeOrderIdRef.current = `WIND-${Date.now().toString().slice(-5)}-${Math.random().toString(36).substring(2, 4).toUpperCase()}`;
+    if (durableCheckout) {
+      try { activeOrderIdRef.current = getBrowserCheckoutAttempt(window.sessionStorage); }
+      catch (_) { activeOrderIdRef.current = "STORAGE_UNAVAILABLE"; }
+    } else {
+      activeOrderIdRef.current = `WIND-${Date.now().toString().slice(-5)}-${Math.random().toString(36).substring(2, 4).toUpperCase()}`;
+    }
   }
   const activeOrderId = activeOrderIdRef.current;
 
@@ -658,6 +665,9 @@ export default function CheckoutPage() {
   }, [formData.email, formData.phone, shippingSettings?.firstOrderEnabled, setIsFirstOrder]);
 
   useEffect(() => {
+    // Legacy abandoned-cart writes target Orders and Customers. They must never
+    // run for a canonical attempt. Separate server draft capture is follow-up.
+    if (durableCheckout) return;
     const isValidEmail = formData.email && formData.email.includes('@') && formData.email.includes('.');
     const isValidPhone = formData.phone && formData.phone.length >= 11;
     const hasContactInfo = isValidEmail || isValidPhone;
@@ -808,8 +818,45 @@ export default function CheckoutPage() {
     if (name === 'governorate') setSelectedGovernorate(value);
   };
 
+  const submitDurableAttempt = async (payload) => {
+    // Save BEFORE sending. Lost responses and refresh reuse the exact signed request.
+    // Never silently replace this request with newly calculated first-order eligibility.
+    const saved = { ...payload, durable: true };
+    sessionStorage.setItem("wind_durable_request_v1", JSON.stringify(saved));
+    localStorage.setItem("pendingOrder", JSON.stringify(saved));
+    const response = await fetchWithTimeout("/api/checkout-attempt", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(saved),
+    }, 25000, "تعذر تأكيد حالة الطلب. أعد المحاولة بنفس الرقم، ولا تكرر الدفع قبل التحقق.");
+    const result = await response.json();
+    if (!response.ok || !result.success) {
+      // This response guarantees no existing attempt and no payment setup. A new
+      // quote under the SAME order ID is safe; network errors never clear it.
+      if (result.code === "INVALID_CHECKOUT_QUOTE") sessionStorage.removeItem("wind_durable_request_v1");
+      throw new Error(result.error || "تعذر تأكيد الطلب. أعد المحاولة بنفس الرقم.");
+    }
+    if (result.status === "pending_payment" && result.iframeData) {
+      setIframeData(result.iframeData); setLoading(false);
+    } else if (["confirmed", "paid"].includes(result.status)) {
+      router.push(`/thank-you?orderId=${payload.orderId}`);
+    } else {
+      throw new Error("الطلب محفوظ وقيد التحقق. لا تبدأ دفعاً جديداً.");
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (durableCheckout) {
+      setSubmitError("");
+      try {
+        if (activeOrderId === "STORAGE_UNAVAILABLE") throw new Error("تعذر حفظ رقم الطلب في المتصفح. اسمح بالتخزين ثم أعد المحاولة.");
+        const saved = sessionStorage.getItem("wind_durable_request_v1");
+        if (saved) {
+          const original = JSON.parse(saved);
+          if (original.orderId !== activeOrderId) throw new Error("يوجد طلب محفوظ برقم مختلف. تحقق من حالته قبل طلب جديد.");
+          setLoading(true); await submitDurableAttempt(original); return;
+        }
+      } catch (error) { setSubmitError(error.message); setLoading(false); return; }
+    }
     if (!validate()) return window.scrollTo(0, 0);
 
     // إعادة تسعير السلة من Firestore على السيرفر قبل حفظ أي طلب أو بدء الدفع.
@@ -909,6 +956,14 @@ export default function CheckoutPage() {
     
     isOrderSubmittedRef.current = true;
 
+    if (durableCheckout) {
+      try {
+        await submitDurableAttempt({ orderId: activeOrderId, paymentMethod, formData, quoteToken,
+          cartItems: quote.cartItems, lineItems: quote.lineItems, subtotal: quote.subtotal,
+          discount: quote.discount, shipping: quote.shipping, total: quote.total });
+      } catch (error) { setSubmitError(error.message); setLoading(false); }
+      return;
+    }
     const orderId = activeOrderId;
 
     const pendingOrder = {

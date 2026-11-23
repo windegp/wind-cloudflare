@@ -43,6 +43,12 @@ describe("atomic customer and counter effect", () => {
   it("missing settings fail before any partial effects", async () => {
     docs.delete("settings/siteSettings"); await expect(run()).rejects.toMatchObject({ code: "SITE_SETTINGS_NOT_FOUND" }); expect(store.commit).not.toHaveBeenCalled();
   });
+  it("promo usage shares the ledger transaction and cannot double count on replay", async () => {
+    seed("promoCodes/SAVE", { usedCount: 2, usedBy: ["old@example.com"] });
+    const financials = { total: 100, appliedPromo: { valid: true, code: "SAVE", usageType: "once_per_customer" } };
+    await run({ financials }); await run({ financials });
+    expect(docs.get("promoCodes/SAVE").data).toEqual({ usedCount: 3, usedBy: ["old@example.com", "test@example.com"] });
+  });
   it("unpaid orders never count", async () => {
     await expect(run({ status: "pending_payment" })).rejects.toMatchObject({ code: "ORDER_NOT_CONFIRMED" }); expect(store.commit).not.toHaveBeenCalled();
   });
