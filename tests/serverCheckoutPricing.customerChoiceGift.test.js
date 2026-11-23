@@ -64,6 +64,8 @@ const firestoreMocks = vi.hoisted(() => {
   };
 
   return mocks;
+
+
 });
 
 vi.mock("@/lib/firebase", () => ({
@@ -302,7 +304,7 @@ describe("server checkout quote: customer-choice gifts", () => {
     });
   });
 
-  it("rejects a fixed coupon when a cart-percent offer qualifies", async () => {
+  it("selects the best base discount when a fixed coupon and a cart-percent offer qualifies", async () => {
     const cartOffer = {
       id: "cart-percent",
       name: "خصم السلة",
@@ -325,11 +327,13 @@ describe("server checkout quote: customer-choice gifts", () => {
     };
     installFixture([cartOffer, coupon]);
 
-    await expect(createServerCheckoutQuote(quoteInput({ promoCode: "SAVE50" })))
-      .rejects.toMatchObject({ status: 409, message: expect.stringContaining("قسيمة الخصم") });
+    firestoreMocks.state.docs.set("settings/siteSettings", { promotions: { shippingCost: 70, freeShippingThreshold: 0 } });
+    const q = await createServerCheckoutQuote(quoteInput({ promoCode: "SAVE50" }));
+    expect(q.discountLines.reduce((sum, line) => sum + line.amount, 0)).toBe(q.discount);
+    expect(q.discountLines.filter(line => ["offer", "promo"].includes(line.source))).toHaveLength(1);
   });
 
-  it("rejects a fixed coupon when a buy-X-get-Y benefit qualifies", async () => {
+  it("selects the best base discount when a fixed coupon and a buy-X-get-Y benefit qualifies", async () => {
     const buyGetOffer = {
       id: "buy-get",
       name: "اشتر 2 واحصل على 1",
@@ -352,14 +356,17 @@ describe("server checkout quote: customer-choice gifts", () => {
     };
     installFixture([buyGetOffer, coupon]);
 
-    await expect(createServerCheckoutQuote(quoteInput({
+    firestoreMocks.state.docs.set("settings/siteSettings", { promotions: { shippingCost: 70, freeShippingThreshold: 0 } });
+    const q = await createServerCheckoutQuote(quoteInput({
       promoCode: "SAVE50",
       cartItems: [{ id: "A", qty: 2 }],
       customerChoiceGiftSelections: [],
-    }))).rejects.toMatchObject({ status: 409 });
+    }));
+    expect(q.discountLines.reduce((sum, line) => sum + line.amount, 0)).toBe(q.discount);
+    expect(q.discountLines.filter(line => ["offer", "promo"].includes(line.source))).toHaveLength(1);
   });
 
-  it("rejects a fixed coupon when a customer-choice gift benefit is complete", async () => {
+  it("selects the best base discount when a fixed coupon and a customer-choice gift benefit is complete", async () => {
     const coupon = {
       id: "fixed-coupon",
       name: "قسيمة خصم",
@@ -372,8 +379,10 @@ describe("server checkout quote: customer-choice gifts", () => {
     };
     installFixture([choiceOffer, coupon]);
 
-    await expect(createServerCheckoutQuote(quoteInput({ promoCode: "SAVE50" })))
-      .rejects.toMatchObject({ status: 409 });
+    firestoreMocks.state.docs.set("settings/siteSettings", { promotions: { shippingCost: 70, freeShippingThreshold: 0 } });
+    const q = await createServerCheckoutQuote(quoteInput({ promoCode: "SAVE50" }));
+    expect(q.discountLines.reduce((sum, line) => sum + line.amount, 0)).toBe(q.discount);
+    expect(q.discountLines.filter(line => ["offer", "promo"].includes(line.source))).toHaveLength(1);
   });
 
   it("stacks a fixed coupon with the first-order discount", async () => {
@@ -409,7 +418,7 @@ describe("server checkout quote: customer-choice gifts", () => {
     expect(q.discount).toBe(50 + q.stackedDiscount.amount);
   });
 
-  it("rejects a fixed coupon when a verified bundle discount is applied", async () => {
+  it("selects the best base discount when a fixed coupon and a verified bundle discount is applied", async () => {
     const coupon = {
       id: "fixed-coupon",
       name: "قسيمة خصم",
@@ -431,14 +440,17 @@ describe("server checkout quote: customer-choice gifts", () => {
       },
     });
 
-    await expect(createServerCheckoutQuote(quoteInput({
+    firestoreMocks.state.docs.set("settings/siteSettings", { promotions: { shippingCost: 70, freeShippingThreshold: 0 } });
+    const q = await createServerCheckoutQuote(quoteInput({
       promoCode: "SAVE50",
       customerChoiceGiftSelections: [],
       cartItems: [
         { id: "A", qty: 1, bundleGroupId: "bundle-1", bundleParentId: "A", bundleRole: "parent" },
         { id: "B", qty: 1, bundleGroupId: "bundle-1", bundleParentId: "A", bundleRole: "child" },
       ],
-    }))).rejects.toMatchObject({ status: 409 });
+    }));
+    expect(q.discountLines.reduce((sum, line) => sum + line.amount, 0)).toBe(q.discount);
+    expect(q.discountLines.filter(line => ["offer", "promo"].includes(line.source))).toHaveLength(1);
   });
 
   it("allows a fixed coupon with a bundle that grants free shipping but no cash discount", async () => {
@@ -592,7 +604,7 @@ describe("server checkout quote: customer-choice gifts", () => {
     });
   });
 
-  it("rejects a legacy cash promo code when another cash offer qualifies", async () => {
+  it("selects the best base discount when a legacy code and another cash offer qualifies", async () => {
     const cartOffer = {
       id: "cart-percent",
       name: "خصم السلة",
@@ -612,10 +624,13 @@ describe("server checkout quote: customer-choice gifts", () => {
       usageType: "unlimited",
     });
 
-    await expect(createServerCheckoutQuote(quoteInput({
+    firestoreMocks.state.docs.set("settings/siteSettings", { promotions: { shippingCost: 70, freeShippingThreshold: 0 } });
+    const q = await createServerCheckoutQuote(quoteInput({
       promoCode: "LEGACY50",
       customerChoiceGiftSelections: [],
-    }))).rejects.toMatchObject({ status: 409 });
+    }));
+    expect(q.discountLines.reduce((sum, line) => sum + line.amount, 0)).toBe(q.discount);
+    expect(q.discountLines.filter(line => ["offer", "promo"].includes(line.source))).toHaveLength(1);
   });
 
   it("allows a free-shipping promo code alongside a qualifying cash offer", async () => {
@@ -674,4 +689,16 @@ describe("server checkout quote: customer-choice gifts", () => {
       scope: ["A"],
       discountAmount: 50,
     });
-  });});
+  });
+  it("enabled mode keeps customer-choice gift allocations while stacking code and first-order", async () => {
+    installFixture([choiceOffer]);
+    firestoreMocks.state.docs.set("settings/siteSettings", { promotions: { shippingCost: 0, freeShippingThreshold: 0, firstOrderEnabled: true, firstOrderDiscount: 10 } });
+    firestoreMocks.state.docs.set("promoCodes/EXTRA", { active: true, type: "fixed", value: 50, scope: "all", usageType: "unlimited" });
+    const q = await createServerCheckoutQuote(quoteInput({ promoCode: "EXTRA", customerEmail: "new@example.com", customerPhone: "01012345678" }));
+    expect(q).toMatchObject({ subtotal: 900, discount: 140, total: 760, discountSource: "offer" });
+    expect(q.discountLines.map(line => [line.source, line.amount])).toEqual([["offer", 100], ["first_order", 40]]);
+    expect(q.lineItems.some(line => line.productId === "G")).toBe(true);
+    expect(q.customerChoiceGiftSelections).toHaveLength(1);
+    expect(q.lineItems.reduce((sum, line) => sum + line.price * line.quantity, 0)).toBe(800);
+  });
+});

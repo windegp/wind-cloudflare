@@ -21,6 +21,22 @@ export const SettingsProvider = ({ children }) => {
     dedupingInterval: 300000,
   });
 
+  // Refresh promotion settings on navigation and after a successful subscription.
+  // The server quote still reads Firestore directly and owns checkout pricing.
+  useEffect(() => {
+    let active = true;
+    const refresh = async () => {
+      try {
+        const response = await fetch("/api/site-settings?fresh=true", { cache: "no-store" });
+        const result = await response.json();
+        if (active && response.ok && result.success) mutate(result.data, false);
+      } catch (_) {}
+    };
+    refresh();
+    window.addEventListener("wind:subscribed", refresh);
+    return () => { active = false; window.removeEventListener("wind:subscribed", refresh); };
+  }, [pathname, mutate]);
+
   // 🔥 Visitor event tracking — writes an immutable event document
   // Each visitor gets one event per day per session
   // Also updates counters.visitors and counters.todayVisitors
