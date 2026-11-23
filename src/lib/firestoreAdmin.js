@@ -78,3 +78,22 @@ export async function firestoreAdminDelete(collectionPath, docId) {
     throw new Error(`Firestore admin delete failed (${res.status}): ${errBody}`);
   }
 }
+
+// قراءة مستند بصلاحيات Admin (تتخطى القواعد). بترجع null لو المستند مش موجود.
+export async function firestoreAdminGet(collectionPath, docId) {
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  if (!projectId) throw new Error("FIREBASE_PROJECT_ID env var missing");
+
+  const accessToken = await getGoogleAccessToken(FIRESTORE_SCOPE);
+  const res = await fetch(docUrl(projectId, collectionPath, docId), {
+    method: "GET",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => "");
+    throw new Error(`Firestore admin read failed (${res.status}): ${errBody}`);
+  }
+  return res.json();
+}

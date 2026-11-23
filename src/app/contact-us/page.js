@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { CONTACT_INFO } from "@/lib/contactInfo";
 import ContactForm from "./ContactForm";
-import SubscribeForm from "./SubscribeForm";
 
 export const metadata = {
   title: "تواصل معانا | WIND Shopping",
@@ -98,14 +97,6 @@ export default function ContactUsPage() {
           />
         </section>
       )}
-      <section className="bg-[#1A1A1A] text-white" aria-labelledby="sub-title">
-        <div className="max-w-3xl mx-auto px-5 py-12 text-center">
-          <span className="inline-block text-[#F5C518] text-xs font-bold tracking-[0.25em] mb-3">NEWSLETTER</span>
-          <h2 id="sub-title" className="text-2xl md:text-3xl font-black mb-2">اشترك واستنى الخصومات</h2>
-          <p className="text-gray-300 mb-6">سيب بريدك وهتوصلك عروضنا وخصوماتنا الجديدة قبل أي حد.</p>
-          <SubscribeForm />
-        </div>
-      </section>
     </main>
   );
 }

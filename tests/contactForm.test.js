@@ -1,6 +1,8 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/apiGuards", async (orig) => ({ ...(await orig()), enforceRateLimit: vi.fn(async () => null) }));
+const setMock = vi.fn(async () => ({}));
+vi.mock("@/lib/firestoreAdmin", () => ({ firestoreAdminSet: (...a) => setMock(...a) }));
 import { POST } from "@/app/api/contact/route";
 import { validateContactForm, buildContactEmail } from "@/lib/contactForm";
 
@@ -10,6 +12,8 @@ const call = (body, headers = { origin: "https://windeg.com" }) =>
 
 let fetchMock;
 beforeEach(() => {
+  setMock.mockReset();
+  setMock.mockResolvedValue({});
   process.env.RESEND_API_KEY = "test-key";
   fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ id: "x" }) }));
   vi.stubGlobal("fetch", fetchMock);
@@ -80,5 +84,24 @@ describe("contact form", () => {
     expect((await call({ type: "subscribe", email: "a@b.com" }, {})).status).toBe(403);
     expect((await call({ type: "subscribe", email: "a@b.com", website: "spam" })).status).toBe(200);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("subscribe saves the lowercased email to Subscribers; inquiries save nothing", async () => {
+    await call({ type: "subscribe", email: "New@Example.com" });
+    expect(setMock).toHaveBeenCalledTimes(1);
+    expect(setMock.mock.calls[0][0]).toBe("Subscribers");
+    expect(setMock.mock.calls[0][1]).toBe("new@example.com");
+    setMock.mockClear();
+    await call(good);
+    expect(setMock).not.toHaveBeenCalled();
+  });
+
+  it("subscribe still succeeds if only the email or only the save works, fails if both fail", async () => {
+    setMock.mockRejectedValue(new Error("x"));
+    expect((await call({ type: "subscribe", email: "a@b.com" })).status).toBe(200);
+    fetchMock.mockResolvedValue({ ok: false, json: async () => ({}) });
+    expect((await call({ type: "subscribe", email: "a@b.com" })).status).toBe(502);
+    setMock.mockResolvedValue({});
+    expect((await call({ type: "subscribe", email: "a@b.com" })).status).toBe(200);
   });
 });

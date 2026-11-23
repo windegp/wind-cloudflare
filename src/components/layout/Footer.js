@@ -1,6 +1,10 @@
 "use client";
 import Link from "next/link";
 import { useState } from "react";
+import { fbTrack } from "@/lib/fbTrack";
+import { ttTrack } from "@/lib/ttTrack";
+import { useSettings } from "@/context/SettingsContext";
+import { DEFAULT_NEWSLETTER_SUBTITLE, DEFAULT_NEWSLETTER_TITLE } from "@/lib/subscriberDiscount";
 import styles from "./Footer.module.css";
 
 const paymentIcons = [
@@ -65,6 +69,10 @@ const socials = [
 ];
 
 function Newsletter() {
+  const settingsCtx = useSettings();
+  const promos = settingsCtx?.settings?.promotions || {};
+  const nlTitle = String(promos.newsletterTitle || "").trim() || DEFAULT_NEWSLETTER_TITLE;
+  const nlSubtitle = String(promos.newsletterSubtitle ?? "").trim() || DEFAULT_NEWSLETTER_SUBTITLE;
   const [email, setEmail] = useState("");
   const [honey, setHoney] = useState("");
   const [status, setStatus] = useState("idle"); // idle | sending | sent | error
@@ -86,6 +94,11 @@ function Newsletter() {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.ok) {
+        // Lead / SubmitForm for Meta and TikTok (email is hashed by the server relays)
+        try {
+          fbTrack("Lead", { email, content_name: "newsletter" });
+          ttTrack("SubmitForm", { email, content_name: "newsletter" });
+        } catch (_) {}
         setStatus("sent");
         setEmail("");
       } else {
@@ -102,8 +115,8 @@ function Newsletter() {
 
   return (
     <form className={styles.nlWrap} onSubmit={submit}>
-      <p className={styles.nlTitle}>اشترك واحصل على خصم 10%</p>
-      <p className={styles.nlSub}>على أول طلب</p>
+      <p className={styles.nlTitle}>{nlTitle}</p>
+      <p className={styles.nlSub}>{nlSubtitle}</p>
       {status === "sent" ? (
         <p role="status" className={styles.nlSub}>تم اشتراكك. شكراً ليك!</p>
       ) : (
@@ -129,6 +142,7 @@ function Newsletter() {
             {status === "sending" ? "جاري الاشتراك..." : "اشترك الآن"}
           </button>
           {status === "error" && <p role="alert" className={styles.nlSub}>{error}</p>}
+          <p className={styles.nlSub} style={{ fontSize: "11px", opacity: 0.7 }}>بالاشتراك أنت توافق على استلام عروضنا وخصوماتنا على بريدك.</p>
         </>
       )}
     </form>
