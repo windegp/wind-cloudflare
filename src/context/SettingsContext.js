@@ -86,8 +86,10 @@ export const SettingsProvider = ({ children }) => {
                 if (storedTodayDate === todayStr) {
                   updates["counters.todayVisitors"] = increment(1);
                 } else {
-                  updates["counters.yesterdayVisitors"] = Number(currentCounters.todayVisitors) || 0;
-                  updates["counters.todayVisitors"] = increment(1);
+                  // أول زائر في يوم جديد: نبدأ العداد من 1 (قيمة ثابتة وليس increment)،
+                  // وإلا يتراكم عدد اليوم فوق مجموع الأيام السابقة.
+                  updates["counters.yesterdayVisitors"] = storedTodayDate ? (Number(currentCounters.todayVisitors) || 0) : 0;
+                  updates["counters.todayVisitors"] = 1;
                   updates["counters.todayDate"] = todayStr;
                 }
                 await updateDoc(settingsRef, updates);
