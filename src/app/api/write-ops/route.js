@@ -1,4 +1,4 @@
-import { kvGet, kvSet } from '@/lib/kv-cache';
+import { kvGet, kvSet, kvDelete } from '@/lib/kv-cache';
 
 /**
  * Unified API route for write operations (idempotency + write guard)
