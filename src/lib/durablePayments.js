@@ -18,7 +18,8 @@ export async function receiveVerifiedPayment(data, { store = serverOrderStore, n
   // No provider customer information or full webhook body is retained.
   const event = { transactionId: data.transactionId, orderId: data.merchantOrderId, status: data.status,
     amount: typeof data.amount === "number" || typeof data.amount === "string" ? String(data.amount) : "",
-    currency: typeof data.currency === "string" ? data.currency.toUpperCase() : "" };
+    currency: typeof data.currency === "string" ? data.currency.toUpperCase() : "",
+    responseCode: typeof data.transactionResponseCode === "string" ? data.transactionResponseCode : "" };
   const id = await checkoutFingerprint({ transactionId: event.transactionId, status: event.status });
   const payloadHash = await checkoutFingerprint(event);
   let receipt = await store.get(PAYMENT_RECEIPTS, id);
@@ -56,6 +57,8 @@ export async function processPaymentReceipt(id, { store = serverOrderStore, now 
       state = "awaiting_order"; reason = "CANONICAL_ORDER_MISSING";
     } else if (canonical.data.paymentMethod !== "card") {
       state = "review"; reason = "PAYMENT_METHOD_MISMATCH";
+    } else if (event.status === "SUCCESS" && event.responseCode !== "APPROVED") {
+      state = "review"; reason = "PAYMENT_NOT_APPROVED";
     } else if (event.status === "SUCCESS") {
       const expected = Number(canonical.data.financials?.total);
       const received = event.amount.trim() ? Number(event.amount) : NaN;

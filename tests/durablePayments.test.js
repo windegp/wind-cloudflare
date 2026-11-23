@@ -3,7 +3,7 @@ vi.mock("@/lib/googleServiceAccount", () => ({ getGoogleAccessToken: vi.fn() }))
 import { receiveVerifiedPayment, processPaymentReceipt, PAYMENT_RECEIPTS } from "@/lib/durablePayments";
 import { CHECKOUT_ATTEMPTS } from "@/lib/durableCheckout";
 let store, docs, serial;
-const event = { merchantOrderId: "WIND-payment-1234", transactionId: "tx-123", status: "SUCCESS", amount: "100.00", currency: "EGP" };
+const event = { merchantOrderId: "WIND-payment-1234", transactionId: "tx-123", status: "SUCCESS", transactionResponseCode: "APPROVED", amount: "100.00", currency: "EGP" };
 const key = `${CHECKOUT_ATTEMPTS}/${event.merchantOrderId}`;
 const get = (c, id) => docs.get(`${c}/${id}`);
 const seed = (k, data) => docs.set(k, { data: structuredClone(data), version: String(++serial) });
@@ -78,6 +78,10 @@ describe("durable payments", () => {
   it("a missing dashboard projection is flagged rather than recreated without customer data", async () => {
     docs.delete(`Orders/${event.merchantOrderId}`);
     expect(await run()).toMatchObject({ state: "review", reason: "ORDER_PROJECTION_MISSING" });
+    expect(docs.get(key).data.status).toBe("pending_payment");
+  });
+  it("successful authentication is not an approved payment", async () => {
+    expect(await run({ transactionResponseCode: "AUTHENTICATION_IN_PROGRESS" })).toMatchObject({ state: "review", reason: "PAYMENT_NOT_APPROVED" });
     expect(docs.get(key).data.status).toBe("pending_payment");
   });
   it("malformed event never persists", async () => {

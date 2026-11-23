@@ -8,7 +8,7 @@ import { receiveVerifiedPayment } from "@/lib/durablePayments";
  */
 export async function durablePaymentWebhook(body, signature, { store = serverOrderStore, verify = verifyWebhookSignature, receive = receiveVerifiedPayment } = {}) {
   const data = body?.data;
-  const required = ["merchantOrderId", "transactionId", "amount", "currency", "status"];
+  const required = ["merchantOrderId", "transactionId", "amount", "currency", "status", "transactionResponseCode"];
   if (!data || !Array.isArray(data.signatureKeys) || !required.every(key => data.signatureKeys.includes(key)) ||
       !data.signatureKeys.every(key => typeof key === "string" && Object.hasOwn(data, key)) ||
       typeof signature !== "string" || !/^[0-9a-f]{64}$/i.test(signature)) return { status: 401, code: "INVALID_SIGNATURE" };

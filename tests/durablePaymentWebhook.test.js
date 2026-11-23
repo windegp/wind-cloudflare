@@ -2,7 +2,7 @@ import { beforeEach, afterEach, expect, it, vi } from "vitest";
 vi.mock("@/lib/kashier", () => ({ verifyWebhookSignature: vi.fn() }));
 import { durablePaymentWebhook } from "@/lib/durablePaymentWebhook";
 let store, verify, receive;
-const data = { merchantOrderId: "WIND-webhook-123", transactionId: "tx", amount: "100", currency: "EGP", status: "SUCCESS", signatureKeys: ["merchantOrderId", "transactionId", "amount", "currency", "status"] };
+const data = { merchantOrderId: "WIND-webhook-123", transactionId: "tx", amount: "100", currency: "EGP", status: "SUCCESS", transactionResponseCode: "APPROVED", signatureKeys: ["merchantOrderId", "transactionId", "amount", "currency", "status", "transactionResponseCode"] };
 const run = (body = { event: "pay", data }) => durablePaymentWebhook(body, "a".repeat(64), { store, verify, receive });
 beforeEach(() => { store = { get: vi.fn(async () => ({ data: {} })) }; verify = vi.fn(async () => true); receive = vi.fn(async () => ({ state: "applied" })); });
 afterEach(() => delete process.env.CHECKOUT_DURABLE_ENABLED);
