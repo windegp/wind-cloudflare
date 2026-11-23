@@ -15,6 +15,8 @@ import {
   isCustomerChoiceGiftAllowed,
 } from "@/lib/customerChoiceGiftPricing";
 import { FREE_SHIPPING_THRESHOLD, SHIPPING_COST } from "@/lib/constants";
+import { firestoreAdminGet } from "@/lib/firestoreAdmin";
+import { computeSubscriberDiscountAmount, normalizeSubscriberSettings } from "@/lib/subscriberDiscount";
 import { isFreeShippingThresholdMet } from "@/lib/shippingCalculations";
 
 const MAX_CART_LINES = 50;
@@ -315,7 +317,7 @@ async function resolveCustomerChoiceGiftSelections(db, purchaseItems, selections
   return resolved;
 }
 
-async function checkFirstOrder(db, email, phone) {
+export async function checkFirstOrder(db, email, phone) {
   const normalizedEmail = String(email || "").trim().toLowerCase();
   const normalizedPhone = normalizePhone(phone);
   if (!normalizedEmail || !normalizedEmail.includes("@") || normalizedPhone.length < 11) return false;
@@ -463,7 +465,36 @@ async function validatePromo(db, code, customer, cartItems, isFirstOrder, now, o
   };
 }
 
-function assertPromoDoesNotConflict({ promo, firstOrderDiscount, offerResult, bundleDiscount }) {
+const SUBSCRIBER_EMAIL_RE = /^[^\s@<>"',;]+@[^\s@<>"',;]+\.[^\s@<>"',;]{2,}$/;
+
+/** True when the email is in the Subscribers collection (read with the service account). */
+export async function isSubscriberEmail(email) {
+  const normalized = String(email || "").trim().toLowerCase();
+  if (!SUBSCRIBER_EMAIL_RE.test(normalized)) return false;
+  try {
+    const found = await firestoreAdminGet("Subscribers", normalized);
+    if (!found) return false;
+    return found.fields?.status?.stringValue !== "unsubscribed";
+  } catch (error) {
+    // Fail closed: if we cannot confirm the subscription, no subscriber discount is given.
+    console.error("[checkout-quote] Subscribers lookup failed:", error?.message);
+    return false;
+  }
+}
+
+/**
+ * Eligibility of one customer for the subscriber discount (used by the quote and by the
+ * checkout page, so both sides decide the same way). Returns null when not eligible.
+ */
+export async function getSubscriberDiscountOffer({ promotions, email, phone, isFirstOrder }) {
+  const cfg = normalizeSubscriberSettings(promotions?.subscriberDiscount);
+  if (!cfg.enabled) return null;
+  if (cfg.firstOrderOnly && !isFirstOrder) return null;
+  if (!(await isSubscriberEmail(email))) return null;
+  return { name: cfg.name, type: cfg.type, value: cfg.value, firstOrderOnly: cfg.firstOrderOnly };
+}
+
+function assertPromoDoesNotConflict({ promo, firstOrderDiscount, subscriberDiscount = 0, offerResult, bundleDiscount }) {
   const hasCashPromo =
     promo?.valid === true &&
     promo.type !== "free_shipping" &&
@@ -473,7 +504,7 @@ function assertPromoDoesNotConflict({ promo, firstOrderDiscount, offerResult, bu
   const hasQualifyingOffer = (offerResult?.candidates || []).some(
     (candidate) => Number(candidate.discount) > 0
   );
-  const hasFirstOrderDiscount = Number(firstOrderDiscount) > 0;
+  const hasFirstOrderDiscount = Number(firstOrderDiscount) > 0 || Number(subscriberDiscount) > 0;
   const hasBundleDiscount = Number(bundleDiscount) > 0;
 
   if (hasQualifyingOffer || hasFirstOrderDiscount || hasBundleDiscount) {
@@ -484,7 +515,7 @@ function assertPromoDoesNotConflict({ promo, firstOrderDiscount, offerResult, bu
   }
 }
 
-function chooseBestDiscount({ offerResult, promo, firstOrderDiscount }) {
+function chooseBestDiscount({ offerResult, promo, firstOrderDiscount, subscriberDiscount = 0 }) {
   const options = [];
 
   if (promo?.valid && promo.type !== "free_shipping" && promo.discountAmount > 0) {
@@ -493,8 +524,11 @@ function chooseBestDiscount({ offerResult, promo, firstOrderDiscount }) {
   if (firstOrderDiscount > 0) {
     options.push({ source: "first_order", discount: firstOrderDiscount, rank: 2 });
   }
+  if (subscriberDiscount > 0) {
+    options.push({ source: "subscriber", discount: subscriberDiscount, rank: 3 });
+  }
   if (offerResult?.discount > 0) {
-    options.push({ source: "offer", discount: offerResult.discount, rank: 3 });
+    options.push({ source: "offer", discount: offerResult.discount, rank: 4 });
   }
 
   options.sort((a, b) => b.discount - a.discount || a.rank - b.rank);
@@ -538,8 +572,13 @@ export async function createServerCheckoutQuote(input = {}) {
     offer.type === "coupon_fixed" &&
     String(offer.couponCode || "").trim().toUpperCase() === normalizedInputCode
   );
+  const subscriberSettings = normalizeSubscriberSettings(promotions.subscriberDiscount);
+  const needsFirstOrderCheck =
+    promotions.firstOrderEnabled === true ||
+    (Boolean(input.promoCode) && !isCouponCode) ||
+    (subscriberSettings.enabled && subscriberSettings.firstOrderOnly);
   const isFirstOrder =
-    promotions.firstOrderEnabled === true || (Boolean(input.promoCode) && !isCouponCode)
+    needsFirstOrderCheck
       ? await checkFirstOrder(db, customer.email, customer.phone)
       : false;
 
@@ -561,6 +600,16 @@ export async function createServerCheckoutQuote(input = {}) {
       ? Math.round((paidSubtotal * Number(promotions.firstOrderDiscount)) / 100)
       : 0;
 
+  const subscriberOffer = await getSubscriberDiscountOffer({
+    promotions,
+    email: customer.email,
+    phone: customer.phone,
+    isFirstOrder,
+  });
+  const subscriberDiscount = subscriberOffer
+    ? computeSubscriberDiscountAmount(subscriberOffer, paidSubtotal)
+    : 0;
+
   const customerChoiceGiftSelections = await resolveCustomerChoiceGiftSelections(
     db,
     items,
@@ -570,8 +619,8 @@ export async function createServerCheckoutQuote(input = {}) {
     Math.max(0, MAX_TOTAL_UNITS - paidUnitCount)
   );
   const offerResult = computeBestOffer(items, offers, now, customerChoiceGiftSelections);
-  assertPromoDoesNotConflict({ promo, firstOrderDiscount, offerResult, bundleDiscount });
-  const winner = chooseBestDiscount({ offerResult, promo, firstOrderDiscount });
+  assertPromoDoesNotConflict({ promo, firstOrderDiscount, subscriberDiscount, offerResult, bundleDiscount });
+  const winner = chooseBestDiscount({ offerResult, promo, firstOrderDiscount, subscriberDiscount });
 
   // A qualifying buy-X-get-Y gift is an additional line, so its original
   // value is included in subtotal and offset by the offer discount.
@@ -790,6 +839,9 @@ export async function createServerCheckoutQuote(input = {}) {
       : [],
     appliedPromo,
     isFirstOrder,
+    subscriberDiscount: winner.source === "subscriber" && subscriberOffer
+      ? { name: subscriberOffer.name, type: subscriberOffer.type, value: subscriberOffer.value, amount: discount }
+      : null,
     lineItems,
     cartItems: items.map(({ _product, ...item }) => item),
     originalSubtotal,

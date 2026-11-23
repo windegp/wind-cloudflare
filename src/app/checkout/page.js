@@ -807,12 +807,21 @@ export default function CheckoutPage() {
             Math.abs(Number(trustedSelection.price) - Number(selection.price)) > 0.01;
         })
       );
+      // خصم المشتركين بيتحسب على السيرفر بس (بيتأكد من الإيميل في Subscribers)،
+      // فلو السيرفر طبّقه بنقبل الفرق بشرط يكون الخصم أكبر من اللي العميل شايفه.
+      const serverAppliedSubscriber =
+        quote.discountSource === "subscriber" &&
+        Number(quote.discount) >= Number(discount) - 0.01;
+      const expectedDiscount = serverAppliedSubscriber ? Number(quote.discount) : Number(discount);
+      const expectedTotal = serverAppliedSubscriber
+        ? Number(finalTotal) - (Number(quote.discount) - Number(discount))
+        : Number(finalTotal);
       const quoteChanged =
         Math.abs(Number(quote.subtotal) - Number(subtotal)) > 0.01 ||
-        Math.abs(Number(quote.discount) - Number(discount)) > 0.01 ||
+        Math.abs(Number(quote.discount) - expectedDiscount) > 0.01 ||
         Math.abs(Number(quote.shipping) - Number(shipping)) > 0.01 ||
-        Math.abs(Number(quote.total) - Number(finalTotal)) > 0.01 ||
-        quote.discountSource !== discountSource ||
+        Math.abs(Number(quote.total) - expectedTotal) > 0.01 ||
+        (quote.discountSource !== discountSource && !serverAppliedSubscriber) ||
         customerChoiceGiftQuoteChanged;
 
       if (quoteChanged) {
@@ -864,6 +873,8 @@ export default function CheckoutPage() {
           ? (quote.appliedPromo?.type === "coupon_fixed" ? `قسيمة شراء ${quote.appliedPromo?.code || ""}`.trim() : `كود الخصم ${quote.appliedPromo?.code || ""}`.trim())
           : quote.discountSource === "first_order"
             ? "خصم الطلب الأول"
+            : quote.discountSource === "subscriber"
+              ? (quote.subscriberDiscount?.name || "خصم المشتركين")
             : quote.appliedPromo?.freeShipping
               ? "شحن مجاني"
               : "",
@@ -871,7 +882,9 @@ export default function CheckoutPage() {
         ? Number(quote.appliedPromo.value) || 0
         : quote.discountSource === "first_order"
           ? Number(quote.firstOrderDiscount) || 0
-          : 0,
+          : quote.discountSource === "subscriber" && quote.subscriberDiscount?.type === "percent"
+            ? Number(quote.subscriberDiscount.value) || 0
+            : 0,
       "Free Shipping Applied": Boolean(quote.freeShipping),
       "Discount Code": quote.appliedPromo?.code || "",
       "Offer Id": quote.appliedOffer?.id || "",
