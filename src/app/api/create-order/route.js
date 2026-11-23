@@ -12,6 +12,7 @@ import {
 import { calculateAllTotals } from '@/lib/cartCalculations';
 import { sendNewOrderNotification } from '@/lib/fcmAdmin';
 import { verifyCheckoutQuote } from '@/lib/checkoutQuoteToken';
+import { enforceRateLimit, escapeHtml, safeHttpUrl } from '@/lib/apiGuards';
 
 // Generate unique order number with format: WND-YYYYMMDD-TTTT
 function generateOrderNumber() {
@@ -22,6 +23,10 @@ function generateOrderNumber() {
 }
 
 export async function POST(req) {
+  // Each call can send emails and a push notification, so cap abuse per IP.
+  const limited = await enforceRateLimit(req, 'CREATE_ORDER');
+  if (limited) return limited;
+
   try {
     const body = await req.json();
     const { 
@@ -41,29 +46,28 @@ export async function POST(req) {
       quoteToken,
     } = body;
 
-    // Verify the server-signed quote before creating a payment hash or sending order confirmation.
-    // Legacy card_success callbacks without a token remain supported for already-started orders.
+    // A server-signed quote is mandatory for every payment method. The old unsigned
+    // "card_success" callback path was removed: it trusted totals sent by the browser.
     let signedQuote = null;
-    if (quoteToken) {
-      try {
-        signedQuote = await verifyCheckoutQuote(quoteToken, orderId);
-      } catch (error) {
-        console.error("[create-order] Checkout quote verification failed:", error);
-      }
-      if (!signedQuote) {
-        return NextResponse.json(
-          { success: false, error: "انتهت صلاحية تسعير الطلب أو تعذر التحقق منه. أعد المحاولة من صفحة الدفع." },
-          { status: 409 }
-        );
-      }
-    } else if (paymentMethod !== "card_success") {
+    if (!quoteToken) {
       return NextResponse.json(
         { success: false, error: "بيانات التسعير الموثوقة غير موجودة. حدّث صفحة الدفع وحاول مرة أخرى." },
         { status: 409 }
       );
     }
+    try {
+      signedQuote = await verifyCheckoutQuote(quoteToken, orderId);
+    } catch (error) {
+      console.error("[create-order] Checkout quote verification failed:", error);
+    }
+    if (!signedQuote) {
+      return NextResponse.json(
+        { success: false, error: "انتهت صلاحية تسعير الطلب أو تعذر التحقق منه. أعد المحاولة من صفحة الدفع." },
+        { status: 409 }
+      );
+    }
 
-    if (signedQuote) {
+    {
       const matches = (provided, trusted) =>
         provided !== undefined && provided !== null &&
         Number.isFinite(Number(provided)) &&
@@ -84,11 +88,11 @@ export async function POST(req) {
       }
     }
 
-    const trustedSubtotal = signedQuote?.subtotal ?? (Number(subtotal) || 0);
-    const trustedShipping = signedQuote?.shipping ?? (Number(shipping) || 0);
-    const trustedTotal = signedQuote?.total ?? (Number(total) || 0);
-    const trustedCartItems = signedQuote?.cartItems ?? (Array.isArray(cartItems) ? cartItems : []);
-    const trustedLineItems = signedQuote?.lineItems ?? trustedCartItems;
+    const trustedSubtotal = signedQuote.subtotal;
+    const trustedShipping = signedQuote.shipping;
+    const trustedTotal = signedQuote.total;
+    const trustedCartItems = signedQuote.cartItems ?? [];
+    const trustedLineItems = signedQuote.lineItems ?? trustedCartItems;
 
     // ============================================
     // 1. كاشير — إرجاع بيانات الـ iFrame (hash + params)
@@ -183,16 +187,16 @@ export async function POST(req) {
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: #fafafa; border-radius: 6px; border: 1px solid #f0f0f0; margin-bottom: 8px;">
         <tr>
           <td width="56" style="padding: 10px;">
-            <img src="${imgUrl}" alt="${title}" width="52" height="52" style="width: 52px; height: 52px; object-fit: cover; border-radius: 4px; display: block; background: #efefef;" />
+            <img src="${escapeHtml(safeHttpUrl(imgUrl))}" alt="${escapeHtml(title)}" width="52" height="52" style="width: 52px; height: 52px; object-fit: cover; border-radius: 4px; display: block; background: #efefef;" />
           </td>
           <td style="padding: 10px 6px; vertical-align: middle;">
-            <span style="color: #111111; font-size: 12px; font-weight: bold; display: block; margin-bottom: 2px;">${title}</span>
-            <span style="color: #888888; font-size: 11px;">المقاس: ${item.selectedSize || '-'} &nbsp;|&nbsp; اللون: ${item.selectedColor || '-'} &nbsp;|&nbsp; الكمية: ${quantity}</span>
+            <span style="color: #111111; font-size: 12px; font-weight: bold; display: block; margin-bottom: 2px;">${escapeHtml(title)}</span>
+            <span style="color: #888888; font-size: 11px;">المقاس: ${escapeHtml(item.selectedSize || '-')} &nbsp;|&nbsp; اللون: ${escapeHtml(item.selectedColor || '-')} &nbsp;|&nbsp; الكمية: ${quantity}</span>
             ${benefitLabel ? `<span style="color: #16835f; font-size: 10px; font-weight: bold; display: block; margin-top: 3px;">${benefitLabel}</span>` : ''}
           </td>
           <td width="65" style="padding: 10px; text-align: left; vertical-align: middle; white-space: nowrap;">
             ${hasDiscount ? `<span style="color: #bbbbbb; font-size: 10px; text-decoration: line-through; display: block;">${originalPrice}</span>` : ''}
-            <span style="color: #111111; font-size: 12px; font-weight: bold;">${item.price} ${CURRENCY}</span>
+            <span style="color: #111111; font-size: 12px; font-weight: bold;">${escapeHtml(item.price)} ${CURRENCY}</span>
           </td>
         </tr>
       </table>
@@ -210,7 +214,7 @@ export async function POST(req) {
           <tr><td style="padding: 24px 24px 18px; text-align: center;">
             <span style="color: #999999; font-size: 11px; letter-spacing: 1px;">${headline}</span><br>
             <span style="color: #111111; font-size: 19px; font-weight: bold;">${subline}</span><br>
-            <span style="color: #888888; font-size: 12px;">رقم الطلب #${orderNumber}</span>
+            <span style="color: #888888; font-size: 12px;">رقم الطلب #${escapeHtml(orderNumber)}</span>
           </td></tr>
 
           <tr><td style="padding: 0 20px 16px;">
@@ -218,12 +222,12 @@ export async function POST(req) {
               <tr><td style="padding: 12px 14px;">
                 <span style="color: #999999; font-size: 9px; letter-spacing: 1px; display: block; margin-bottom: 8px;">بيانات العميل</span>
                 <span style="color: #444444; font-size: 12px; line-height: 1.8;">
-                  <strong style="color:#111111;">الاسم:</strong> ${formData.firstName} ${formData.lastName}<br>
-                  <strong style="color:#111111;">الهاتف:</strong> ${formData.phone}<br>
-                  ${isAdminEmail && formData.altPhone ? `<strong style="color:#111111;">هاتف بديل:</strong> ${formData.altPhone}<br>` : ''}
-                  ${isAdminEmail && formData.email ? `<strong style="color:#111111;">البريد الإلكتروني:</strong> ${formData.email}<br>` : ''}
-                  ${isAdminEmail && formData.postalCode ? `<strong style="color:#111111;">الرمز البريدي:</strong> ${formData.postalCode}<br>` : ''}
-                  <strong style="color:#111111;">طريقة الدفع:</strong> <span style="color: #10b981; font-weight: bold;">${displayPaymentMethod}</span>
+                  <strong style="color:#111111;">الاسم:</strong> ${escapeHtml(formData.firstName)} ${escapeHtml(formData.lastName)}<br>
+                  <strong style="color:#111111;">الهاتف:</strong> ${escapeHtml(formData.phone)}<br>
+                  ${isAdminEmail && formData.altPhone ? `<strong style="color:#111111;">هاتف بديل:</strong> ${escapeHtml(formData.altPhone)}<br>` : ''}
+                  ${isAdminEmail && formData.email ? `<strong style="color:#111111;">البريد الإلكتروني:</strong> ${escapeHtml(formData.email)}<br>` : ''}
+                  ${isAdminEmail && formData.postalCode ? `<strong style="color:#111111;">الرمز البريدي:</strong> ${escapeHtml(formData.postalCode)}<br>` : ''}
+                  <strong style="color:#111111;">طريقة الدفع:</strong> <span style="color: #10b981; font-weight: bold;">${escapeHtml(displayPaymentMethod)}</span>
                 </span>
               </td></tr>
             </table>
@@ -254,7 +258,7 @@ export async function POST(req) {
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: #fafafa; border-radius: 6px; border: 1px solid #f0f0f0;">
               <tr><td style="padding: 14px;">
                 <span style="color: #999999; font-size: 9px; letter-spacing: 1px; display: block; margin-bottom: 6px;">عنوان الشحن</span>
-                <span style="color: #444444; font-size: 12px; line-height: 1.6;">${formData.firstName} ${formData.lastName}<br>${formData.address}${formData.landmark ? ' - ' + formData.landmark : ''}<br>${formData.city}, ${formData.governorate}</span>
+                <span style="color: #444444; font-size: 12px; line-height: 1.6;">${escapeHtml(formData.firstName)} ${escapeHtml(formData.lastName)}<br>${escapeHtml(formData.address)}${formData.landmark ? ' - ' + escapeHtml(formData.landmark) : ''}<br>${escapeHtml(formData.city)}, ${escapeHtml(formData.governorate)}</span>
               </td></tr>
             </table>
           </td></tr>
@@ -279,7 +283,7 @@ export async function POST(req) {
     // --- محتوى إيميل الأدمن (يشمل كل البيانات اللي كتبها العميل) ---
     const htmlContent = buildEmailHtml({
       headline: 'طلب جديد',
-      subline: `طلب جديد من ${formData.firstName}`,
+      subline: `طلب جديد من ${escapeHtml(formData.firstName)}`,
       isAdminEmail: true,
     });
 
@@ -342,7 +346,8 @@ export async function POST(req) {
       orderId: orderNumber,
     });
 
-    if (customerEmail || formData.email) {
+    const recipientEmail = customerEmail || formData.email;
+    if (typeof recipientEmail === 'string' && /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/.test(recipientEmail)) {
       try {
         const response = await fetch('https://api.resend.com/emails', {
           method: 'POST',
@@ -352,7 +357,7 @@ export async function POST(req) {
           },
           body: JSON.stringify({
             from: EMAIL_FROM,
-            to: customerEmail || formData.email,
+            to: recipientEmail,
             subject: `تأكيد طلبك من ${SITE_NAME} — #${orderNumber}`,
             html: customerHtmlContent,
           })
