@@ -66,22 +66,72 @@ const socials = [
 
 function Newsletter() {
   const [email, setEmail] = useState("");
+  const [honey, setHoney] = useState("");
+  const [status, setStatus] = useState("idle"); // idle | sending | sent | error
+  const [error, setError] = useState("");
+
+  async function submit(e) {
+    e.preventDefault();
+    if (status === "sending") return;
+    setStatus("sending");
+    setError("");
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20000);
+    try {
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "subscribe", email, website: honey }),
+        signal: controller.signal,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        setStatus("sent");
+        setEmail("");
+      } else {
+        setError(res.status === 429 ? "محاولات كتير. جرب بعد شوية." : data.error || "حصلت مشكلة. حاول تاني.");
+        setStatus("error");
+      }
+    } catch {
+      setError("الاتصال بطيء أو فصل. حاول تاني.");
+      setStatus("error");
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   return (
-    <div className={styles.nlWrap}>
+    <form className={styles.nlWrap} onSubmit={submit}>
       <p className={styles.nlTitle}>اشترك واحصل على خصم 10%</p>
       <p className={styles.nlSub}>على أول طلب</p>
-      <div className={styles.nlInputRow}>
-        <span className={styles.nlIcon}><MailIcon /></span>
-        <input
-          type="email"
-          className={styles.nlInput}
-          placeholder="بريدك الإلكتروني"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-      </div>
-      <button className={styles.nlBtn}>اشترك الآن</button>
-    </div>
+      {status === "sent" ? (
+        <p role="status" className={styles.nlSub}>تم اشتراكك. شكراً ليك!</p>
+      ) : (
+        <>
+          <div className={styles.nlInputRow}>
+            <span className={styles.nlIcon}><MailIcon /></span>
+            <input
+              type="email"
+              required
+              maxLength={120}
+              autoComplete="email"
+              className={styles.nlInput}
+              placeholder="بريدك الإلكتروني"
+              aria-label="بريدك الإلكتروني"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+          <div aria-hidden="true" style={{ position: "absolute", left: "-9999px", height: 0, overflow: "hidden" }}>
+            <label>Website<input tabIndex={-1} autoComplete="off" value={honey} onChange={(e) => setHoney(e.target.value)} /></label>
+          </div>
+          <button type="submit" disabled={status === "sending"} className={styles.nlBtn}>
+            {status === "sending" ? "جاري الاشتراك..." : "اشترك الآن"}
+          </button>
+          {status === "error" && <p role="alert" className={styles.nlSub}>{error}</p>}
+        </>
+      )}
+    </form>
   );
 }
 
