@@ -21,7 +21,7 @@ export async function POST(request) {
     const result = await persistVerifiedCheckout(body);
     const iframeData = result.paymentMethod === "card" && result.status === "pending_payment"
       ? await checkoutIframeData(result.orderId, result.financials.total) : undefined;
-    return NextResponse.json({ success: true, orderId: result.orderId, status: result.status, replay: result.replay, iframeData }, { headers });
+    return NextResponse.json({ success: true, orderId: result.orderId, ...(result.orderNumber ? { orderNumber: result.orderNumber } : {}), status: result.status, replay: result.replay, iframeData }, { headers });
   } catch (error) {
     const known = error instanceof CheckoutPersistenceError;
     console.error(JSON.stringify({ event: "checkout_attempt_failed", code: known ? error.code : "CHECKOUT_UNAVAILABLE" }));

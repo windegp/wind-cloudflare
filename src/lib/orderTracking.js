@@ -1,3 +1,4 @@
+import { orderDisplayLabel } from "@/lib/orderDisplayNumber";
 // Logic for the public order tracking lookup.
 // A lookup only succeeds when the order number AND the phone on the order match.
 // The response contains status and items only: no address, name, email or phone.
@@ -73,7 +74,7 @@ export function toPublicOrder(order, orderNumber) {
   const fin = String(order["Financial Status"] || "").toLowerCase();
   const method = String(order["Payment Method"] || "").toLowerCase();
   return {
-    orderNumber,
+    orderNumber: orderDisplayLabel(order, orderNumber),
     createdAt: String(order["Created at"] || "").slice(0, 19),
     stage: orderStage(order),
     paymentStatus: PAYMENT_LABELS[fin] || "",

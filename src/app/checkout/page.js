@@ -834,6 +834,11 @@ export default function CheckoutPage() {
       if (result.code === "INVALID_CHECKOUT_QUOTE") sessionStorage.removeItem("wind_durable_request_v1");
       throw new Error(result.error || "تعذر تأكيد الطلب. أعد المحاولة بنفس الرقم.");
     }
+    if (Number.isSafeInteger(result.orderNumber) && result.orderNumber >= 1001) {
+      const receipt = { ...saved, orderNumber: result.orderNumber };
+      sessionStorage.setItem("wind_durable_request_v1", JSON.stringify(receipt));
+      localStorage.setItem("pendingOrder", JSON.stringify(receipt));
+    }
     if (result.status === "pending_payment" && result.iframeData) {
       setIframeData(result.iframeData); setLoading(false);
     } else if (["confirmed", "paid"].includes(result.status)) {

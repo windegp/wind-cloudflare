@@ -47,7 +47,7 @@ export default function TrackOrderForm() {
           <input
             value={orderNumber}
             onChange={(e) => setOrderNumber(e.target.value)}
-            placeholder="WIND-12345-AB"
+            placeholder="#1001 أو WIND-12345-AB"
             dir="ltr"
             required
             maxLength={43}

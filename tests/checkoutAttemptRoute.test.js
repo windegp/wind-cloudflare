@@ -30,3 +30,11 @@ it("uncertain persistence never starts payment or reports success", async () => 
   process.env.CHECKOUT_DURABLE_ENABLED = "true"; persistVerifiedCheckout.mockRejectedValueOnce(new Error("network"));
   expect((await call()).status).toBe(503); expect(checkoutIframeData).not.toHaveBeenCalled();
 });
+
+it("returns display number but keeps UUID as the payment setup reference", async () => {
+  process.env.CHECKOUT_DURABLE_ENABLED = "true";
+  persistVerifiedCheckout.mockResolvedValueOnce({ orderId: "WIND-D-a1b2c3d4-1234-4123-8123-123456789abc", orderNumber: 1001, status: "pending_payment", paymentMethod: "card", financials: { total: 100 } });
+  const result = await (await call()).json();
+  expect(result.orderNumber).toBe(1001);
+  expect(checkoutIframeData).toHaveBeenCalledWith("WIND-D-a1b2c3d4-1234-4123-8123-123456789abc", 100);
+});

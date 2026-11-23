@@ -1,9 +1,14 @@
+import { validDisplayNumber } from "@/lib/orderDisplayNumber";
 import { verifyCheckoutQuote } from "@/lib/checkoutQuoteToken";
 import { getCairoTimestamp } from "@/lib/analytics-helpers";
 import { serverOrderStore, OrderStoreError } from "@/lib/serverOrderStore";
 
 export const CHECKOUT_ATTEMPTS = "WindCheckoutAttempts";
 export const CHECKOUT_OUTBOX = "WindCheckoutOutbox";
+// Reuse the existing private namespace, never publicly writable siteSettings counters.
+export const ORDER_NUMBER_COLLECTION = "WindCheckoutEffects";
+export const ORDER_SEQUENCE_ID = "order_sequence_v1";
+export const orderNumberIndexId = number => `order_number_${number}`;
 export class CheckoutPersistenceError extends Error {
   constructor(code, status, message) { super(message); this.code = code; this.status = status; }
 }
@@ -21,7 +26,7 @@ export async function checkoutFingerprint(value) {
   return [...new Uint8Array(bytes)].map(byte => byte.toString(16).padStart(2, "0")).join("");
 }
 
-/** Foundation only. Call from a server route after rollout protections are installed.
+/** Called by the gated server route only after rollout protections are installed.
  * The caller may only start payment once this returns persisted=true.
  * Canonical snapshot and jobs are private. Orders is a compatibility projection.
  */
@@ -71,45 +76,69 @@ export async function persistVerifiedCheckout(input, { store = serverOrderStore,
   const fingerprint = await checkoutFingerprint({ customer, financials, paymentMethod });
   const receipt = record => {
     if (record.data.fingerprint !== fingerprint) fail("CHECKOUT_ID_REUSED", 409, "هذا الطلب محفوظ ببيانات مختلفة. تحقق من حالته قبل بدء طلب جديد.");
-    return { persisted: true, replay: true, orderId, status: record.data.status, paymentMethod: record.data.paymentMethod, financials: record.data.financials };
+    return { persisted: true, replay: true, orderId, ...(validDisplayNumber(record.data.orderNumber) ? { orderNumber: record.data.orderNumber } : {}), status: record.data.status, paymentMethod: record.data.paymentMethod, financials: record.data.financials };
   };
   try {
     const existing = await store.get(CHECKOUT_ATTEMPTS, orderId);
     if (existing) return receipt(existing);
     if (expired) fail("INVALID_CHECKOUT_QUOTE", 409, "انتهت صلاحية التسعير. راجع الإجمالي ثم أعد المحاولة.");
-    const timestamp = now().toISOString();
-    const status = paymentMethod === "card" ? "pending_payment" : "confirmed";
-    const record = { schemaVersion: 1, orderId, fingerprint, paymentMethod, customer, financials, status, createdAt: timestamp };
-    const projection = {
-      Name: orderId, Email: customer.email, Phone: customer.phone, "Alternate Phone": customer.altPhone,
-      "Billing Name": `${customer.firstName} ${customer.lastName}`, "Shipping Address1": `${customer.address}${customer.landmark ? ` - ${customer.landmark}` : ""}`,
-      "Shipping City": customer.city, "Shipping Province": customer.governorate, "Shipping Phone": customer.phone, "Shipping Zip": customer.postalCode,
-      Subtotal: financials.subtotal, Shipping: financials.shipping, Total: financials.total, Currency: financials.currency,
-      "Financial Status": paymentMethod === "card" ? "pending_payment" : "pending", "Payment Method": paymentMethod,
-      "Created at": getCairoTimestamp(), data_source: "WIND_Web", "Server Checkout Version": 1,
-      "Discount Amount": financials.discount, "Discount Type": financials.discountSource,
-      "Discount Label": financials.discountLines.map(line => line.label).join(" + "), "Discount Breakdown": financials.discountLines,
-      "Free Shipping Applied": financials.shipping === 0, lineItems: financials.lineItems,
-    };
-    const jobs = paymentMethod === "card" ? [] : ["customer_counters", "admin_email", "customer_email", "admin_push"];
-    const writes = [
-      { collection: CHECKOUT_ATTEMPTS, id: orderId, data: record, create: true },
-      // Never overwrite an older/browser-created order using the same key.
-      { collection: "Orders", id: orderId, data: projection, create: true },
-      ...jobs.map(type => ({ collection: CHECKOUT_OUTBOX, id: `${orderId}.${type}`, create: true,
-        data: { schemaVersion: 1, orderId, type, state: "pending", attempts: 0, createdAt: timestamp, nextAttemptAt: timestamp } })),
-    ];
-    try { await store.commit(writes); }
-    catch (error) {
-      // Commit response may be lost after a successful atomic write. Always resolve by key.
-      for (let attempt = 0; attempt < 2; attempt++) {
-        const recovered = await store.get(CHECKOUT_ATTEMPTS, orderId);
-        if (recovered) return receipt(recovered);
+    // Allocation, mapping and order creation share a single CAS-protected commit.
+    // Retries after a lost acknowledgement recover by UUID, never increment alone.
+    for (let allocation = 0; allocation < 8; allocation++) {
+      const committed = await store.get(CHECKOUT_ATTEMPTS, orderId);
+      if (committed) return receipt(committed);
+      const sequence = await store.get(ORDER_NUMBER_COLLECTION, ORDER_SEQUENCE_ID);
+      const lastNumber = sequence ? sequence.data.lastNumber : 1000;
+      if (!Number.isSafeInteger(lastNumber) || lastNumber < 1000 || lastNumber >= Number.MAX_SAFE_INTEGER) {
+        fail("ORDER_SEQUENCE_INVALID", 503, "تعذر إصدار رقم الطلب حالياً. حاول لاحقاً بنفس المحاولة.");
       }
-      if (error.code === "ORDER_WRITE_CONFLICT") fail("CHECKOUT_CONFLICT", 409, "الطلب قيد التحقق. أعد المحاولة بنفس رقم الطلب، ولا تبدأ دفعاً جديداً.");
-      throw error;
+      const orderNumber = lastNumber + 1;
+      const timestamp = now().toISOString();
+      const status = paymentMethod === "card" ? "pending_payment" : "confirmed";
+      const record = { schemaVersion: 1, orderId, orderNumber, fingerprint, paymentMethod, customer, financials, status, createdAt: timestamp };
+      const projection = {
+        Name: orderId, "Order Number": orderNumber, Email: customer.email, Phone: customer.phone, "Alternate Phone": customer.altPhone,
+        "Billing Name": `${customer.firstName} ${customer.lastName}`, "Shipping Address1": `${customer.address}${customer.landmark ? ` - ${customer.landmark}` : ""}`,
+        "Shipping City": customer.city, "Shipping Province": customer.governorate, "Shipping Phone": customer.phone, "Shipping Zip": customer.postalCode,
+        Subtotal: financials.subtotal, Shipping: financials.shipping, Total: financials.total, Currency: financials.currency,
+        "Financial Status": paymentMethod === "card" ? "pending_payment" : "pending", "Payment Method": paymentMethod,
+        "Created at": getCairoTimestamp(), data_source: "WIND_Web", "Server Checkout Version": 1,
+        "Discount Amount": financials.discount, "Discount Type": financials.discountSource,
+        "Discount Label": financials.discountLines.map(line => line.label).join(" + "), "Discount Breakdown": financials.discountLines,
+        "Free Shipping Applied": financials.shipping === 0, lineItems: financials.lineItems,
+      };
+      const jobs = paymentMethod === "card" ? [] : ["customer_counters", "admin_email", "customer_email", "admin_push"];
+      const writes = [
+        { collection: ORDER_NUMBER_COLLECTION, id: ORDER_SEQUENCE_ID,
+          ...(sequence ? { version: sequence.version } : { create: true }),
+          data: { lastNumber: orderNumber, updatedAt: timestamp } },
+        { collection: ORDER_NUMBER_COLLECTION, id: orderNumberIndexId(orderNumber), create: true,
+          data: { orderId, orderNumber, createdAt: timestamp } },
+        { collection: CHECKOUT_ATTEMPTS, id: orderId, data: record, create: true },
+        // Never overwrite an older/browser-created order using the same key.
+        { collection: "Orders", id: orderId, data: projection, create: true },
+        ...jobs.map(type => ({ collection: CHECKOUT_OUTBOX, id: `${orderId}.${type}`, create: true,
+          data: { schemaVersion: 1, orderId, type, state: "pending", attempts: 0, createdAt: timestamp, nextAttemptAt: timestamp } })),
+      ];
+      try { await store.commit(writes); }
+      catch (error) {
+        // Commit response may be lost after a successful atomic write. Always resolve by key.
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const recovered = await store.get(CHECKOUT_ATTEMPTS, orderId);
+          if (recovered) return receipt(recovered);
+        }
+        if (error.code === "ORDER_WRITE_CONFLICT") {
+          // A pre-existing projection or number mapping is not ours to overwrite.
+          if (await store.get("Orders", orderId)) fail("CHECKOUT_CONFLICT", 409, "الطلب قيد التحقق. أعد المحاولة بنفس رقم الطلب، ولا تبدأ دفعاً جديداً.");
+          const latest = await store.get(ORDER_NUMBER_COLLECTION, ORDER_SEQUENCE_ID);
+          if ((latest?.data.lastNumber ?? 1000) === lastNumber) fail("ORDER_SEQUENCE_CONFLICT", 503, "تعذر إصدار رقم الطلب حالياً. حاول لاحقاً بنفس المحاولة.");
+          continue;
+        }
+        throw error;
+      }
+      return { persisted: true, replay: false, orderId, orderNumber, status, paymentMethod, financials };
     }
-    return { persisted: true, replay: false, orderId, status, paymentMethod, financials };
+    fail("CHECKOUT_CONFLICT", 409, "الطلب قيد التحقق. أعد المحاولة بنفس رقم الطلب، ولا تبدأ دفعاً جديداً.");
   } catch (error) {
     if (error instanceof CheckoutPersistenceError) throw error;
     console.error(JSON.stringify({ event: "checkout_persistence_failed", orderId, code: error instanceof OrderStoreError ? error.code : "UNEXPECTED_STORAGE_ERROR" }));
@@ -128,5 +157,5 @@ export async function readCheckoutStatus({ orderId, quoteToken }, { store = serv
   if (quote.customerIdentity?.email !== order.data.customer.email ||
       String(quote.customerIdentity?.phone || "").replace(/\D/g, "") !== order.data.customer.phone.replace(/\D/g, "") ||
       Number(quote.total) !== order.data.financials.total) fail("CHECKOUT_CREDENTIAL_MISMATCH", 401);
-  return { orderId, status: order.data.status, paymentMethod: order.data.paymentMethod, total: order.data.financials.total, currency: order.data.financials.currency };
+  return { orderId, ...(validDisplayNumber(order.data.orderNumber) ? { orderNumber: order.data.orderNumber } : {}), status: order.data.status, paymentMethod: order.data.paymentMethod, total: order.data.financials.total, currency: order.data.financials.currency };
 }
