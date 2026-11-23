@@ -2,34 +2,15 @@ import { NextResponse } from 'next/server';
 import { firestoreAdminSet } from '@/lib/firestoreAdmin';
 import { getCairoTimestamp } from '@/lib/analytics-helpers';
 import { ADMIN_UID } from '@/lib/constants';
+import { verifyAdminIdToken } from '@/lib/verifyAdminIdToken';
 
-// 🔥 Endpoint مخصص لاستقبال توكن FCM الـ Native من تطبيق الموبايل
-// (عبر Capacitor's PushNotifications API)، بعكس توكنات الويب اللي
-// بتتسجل مباشرة من المتصفح في src/components/OrderNotifications.js.
-//
-// كل التوكنات (ويب + نيتيف) بتتخزن في نفس الكولكشن adminTokens،
-// لأن fcmAdmin.js بيبعت لكل التوكنات الموجودة فيها بنفس الطريقة —
-// FCM v1 API بيتعامل مع توكنات الويب والنيتيف بنفس الـ endpoint.
-//
-// ⚠️ CORS: التطبيق المصغر (Capacitor) بيناديني من origin مختلف تمامًا
-// عن windeg.com (الـ WebView بتاعه شغال على https://localhost)، فالـ
-// fetch بتاعه بـ Content-Type: application/json بيخلي المتصفح يبعت
-// OPTIONS preflight الأول. من غير الـ headers دي تحت، المتصفح كان
-// بيرفض الطلب من نفسه قبل ما يوصل هنا خالص — وده سبب رسالة "فشل إرسال
-// التوكن للسيرفر" اللي كانت بتظهر في التطبيق.
-//
-// ⚠️ مهم جداً: الكتابة هنا بتستخدم firestoreAdminSet (REST API + Service
-// Account) مش setDoc العادي من firebase/firestore/lite. السبب: قواعد
-// الأمان (Firestore Security Rules) بتمنع الكتابة في adminTokens غير
-// من مستخدم مسجل دخول بـ UID الأدمن — والـ endpoint ده بيتنادى من
-// السيرفر من غير أي تسجيل دخول، فـ setDoc كان بيترفض بصمت
-// (permission-denied) رغم إن الـ response كان بيرجع 200 وهمي، وده
-// السبب الحقيقي إن توكن التطبيق مكنش بيوصل لقاعدة البيانات خالص.
-
+// Native clients must send the signed-in admin's Firebase ID token as a Bearer
+// token. The FCM device token in the JSON body is not proof of admin identity.
+// Web registration still writes through the authenticated Firestore client.
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
 export async function OPTIONS() {
@@ -38,8 +19,26 @@ export async function OPTIONS() {
 
 export async function POST(req) {
   try {
-    const body = await req.json();
-    const { token, platform } = body;
+    // Verify before parsing or writing. A caller-supplied UID, platform or Origin
+    // cannot replace Firebase authentication. Fail closed if verification fails.
+    const auth = await verifyAdminIdToken(req);
+    if (!auth.ok) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401, headers: CORS_HEADERS }
+      );
+    }
+
+    let body;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json(
+        { success: false, error: 'Invalid JSON' },
+        { status: 400, headers: CORS_HEADERS }
+      );
+    }
+    const { token, platform } = body || {};
 
     if (!token || typeof token !== 'string') {
       return NextResponse.json(
@@ -51,16 +50,17 @@ export async function POST(req) {
     await firestoreAdminSet('adminTokens', token, {
       token,
       uid: ADMIN_UID,
-      platform: platform || 'unknown', // مثال: "android-native"
+      platform: platform || 'unknown',
       createdAt: getCairoTimestamp(),
       lastSeenAt: getCairoTimestamp(),
     });
 
-    console.log(`✅ Native admin token registered (${platform || 'unknown'}): ${token.slice(0, 12)}...`);
+    // Do not log device tokens or Firebase ID tokens.
+    console.log('Native admin token registered');
 
     return NextResponse.json({ success: true }, { status: 200, headers: CORS_HEADERS });
   } catch (error) {
-    console.error('❌ register-admin-token error:', error?.message);
+    console.error('register-admin-token failed:', error?.name || 'Error');
     return NextResponse.json(
       { success: false, error: 'Internal Server Error' },
       { status: 500, headers: CORS_HEADERS }
