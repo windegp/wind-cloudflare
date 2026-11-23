@@ -1,5 +1,6 @@
 "use client";
 
+import { finishBrowserCheckoutAttempt } from "@/lib/checkoutAttemptBrowser";
 import { useEffect, Suspense, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useCart } from "@/context/CartContext";
@@ -28,32 +29,63 @@ function SuccessContent() {
   const searchParams = useSearchParams();
   const orderId = searchParams.get('orderId');
   const [orderData, setOrderData] = useState(null);
+  const [verification, setVerification] = useState("جاري التحقق من بيانات الطلب.");
+  const [statusRefresh, setStatusRefresh] = useState(0);
 
  useEffect(() => {
-    const pendingOrder = localStorage.getItem('pendingOrder');
-    if (!pendingOrder) return;
+    const pendingOrder = sessionStorage.getItem("wind_durable_request_v1") || localStorage.getItem('pendingOrder') || sessionStorage.getItem("wind_last_confirmed_order_v1");
+    if (!pendingOrder) { setVerification("للتأكد من حالة الطلب تواصل معنا برقم الطلب. لا تعتمد على صفحة الشكر وحدها كإثبات للدفع."); return; }
 
-    const parsed = JSON.parse(pendingOrder);
+    let parsed;
+    try { parsed = JSON.parse(pendingOrder); } catch (_) { setVerification("تعذر قراءة بيانات الطلب. تواصل معنا برقم الطلب قبل تكرار الدفع."); return; }
+    if (orderId && parsed.orderId !== orderId) { setVerification("بيانات الطلب المحفوظة لا تطابق الرابط. تواصل معنا قبل تكرار الدفع."); return; }
 
     // ── حماية مزدوجة من تكرار Purchase ──────────────────────────────
     // الطبقة ١: sessionStorage — تمنع إعادة الإرسال طوال جلسة التاب الحالية
     //           (يبقى عند Refresh، يُمسح عند إغلاق التاب)
     // الطبقة ٢: orderId كـ event_id — Meta تُلغي التكرار تلقائياً
     //           إذا وصل نفس pixel_id + event_name + event_id في أقل من 48 ساعة
+    if (!parsed.durable) setVerification(null);
     const purchaseGuardKey = `purchase_sent_${parsed.orderId}`;
     if (sessionStorage.getItem(purchaseGuardKey)) {
       // تم الإرسال من قبل في هذه الجلسة → أظهر البيانات فقط
       setOrderData(parsed);
+      setVerification(null);
       return;
     }
 
     setOrderData(parsed);
-    fetch('/api/create-order', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...parsed, paymentMethod: 'card_success' }),
-    })
-    .then(() => {
+    let cancelled = false;
+    let timer;
+    const attempt = async (remaining = 6) => {
+      if (parsed.durable) {
+        setVerification("جاري التحقق من حالة الطلب. لا تكرر الدفع.");
+        try {
+          const response = await fetch("/api/checkout-status", { method: "POST", signal: AbortSignal.timeout(10000),
+            headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderId: parsed.orderId, quoteToken: parsed.quoteToken }) });
+          const result = await response.json();
+          if (cancelled) return;
+          const confirmed = result.status === "paid" || (parsed.paymentMethod !== "card" && result.status === "confirmed");
+          if (!response.ok || !confirmed) {
+            setVerification("الطلب محفوظ وحالة الدفع لسه قيد التحقق. لو اتخصم المبلغ ما تدفعش تاني. تواصل معنا برقم الطلب.");
+            if (remaining > 0) timer = setTimeout(() => attempt(remaining - 1), 5000);
+            return;
+          }
+          parsed.total = result.total;
+          setVerification(null);
+          sessionStorage.setItem("wind_last_confirmed_order_v1", JSON.stringify(parsed));
+          finishBrowserCheckoutAttempt(sessionStorage);
+          sessionStorage.removeItem("wind_durable_request_v1");
+        } catch (_) {
+          if (!cancelled) setVerification("تعذر التحقق من حالة الطلب الآن. سلتك محفوظة. لا تكرر الدفع قبل التواصل معنا.");
+          return;
+        }
+      } else {
+        // Preserve legacy processing for orders created before the durable rollout.
+        await fetch('/api/create-order', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...parsed, paymentMethod: 'card_success' }) });
+      }
+      if (cancelled) return;
       clearCart();
       localStorage.removeItem('pendingOrder');
 
@@ -122,15 +154,25 @@ function SuccessContent() {
         }),
       });
       gaPurchase(parsed.orderId || "", purchaseItems, parsed.total || 0);
-    })
-    .catch(err => console.error("Error:", err));
-  }, []);
+    };
+    attempt().catch(() => { if (!cancelled) setVerification("تعذر التحقق من الطلب. تواصل معنا قبل تكرار الدفع."); });
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [statusRefresh]);
 
   // Signal readiness for GlobalLoader (thank you page is ready immediately)
   useEffect(() => {
     signalPageReady();
   }, [pathname, signalPageReady]);
 
+  if (verification) return (
+    <div className="w-full max-w-md rounded-2xl border border-amber-300 bg-amber-50 p-6 text-right" dir="rtl">
+      <h1 className="text-xl font-bold text-amber-950 mb-3">التحقق من الطلب</h1>
+      {(orderId || orderData?.orderId) && <p className="text-xs font-mono break-all mb-3">{orderId || orderData?.orderId}</p>}
+      <p role="status" className="text-sm leading-7 text-amber-950">{verification}</p>
+      <button type="button" onClick={() => setStatusRefresh(value => value + 1)} className="mt-4 rounded-lg bg-amber-950 px-4 py-3 text-white font-bold text-sm">تحقق مرة أخرى</button>
+      <div className="mt-5 text-sm"><Link href="/contact" className="underline">تواصل معنا لمراجعة حالة الطلب</Link></div>
+    </div>
+  );
   const paymentInfo = PAYMENT_LABELS[orderData?.paymentMethod] || PAYMENT_LABELS['card'];
 
   return (

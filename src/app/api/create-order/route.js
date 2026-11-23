@@ -47,6 +47,9 @@ export async function POST(req) {
       quoteToken,
     } = body;
 
+    if (typeof orderId === "string" && orderId.startsWith("WIND-D-")) {
+      return NextResponse.json({ error: "USE_DURABLE_CHECKOUT" }, { status: 409 });
+    }
     // A server-signed quote is mandatory for every payment method. The old unsigned
     // "card_success" callback path was removed: it trusted totals sent by the browser.
     let signedQuote = null;

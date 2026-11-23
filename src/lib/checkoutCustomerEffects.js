@@ -41,6 +41,16 @@ export async function applyCheckoutCustomerEffects({ order }, { store = serverOr
         customers: number(counters.customers) + (orders === 0 ? 1 : 0),
       } } },
     ];
+    const promo = order.financials?.appliedPromo;
+    if (promo?.valid && typeof promo.code === "string" && /^[A-Za-z0-9_.@+-]{1,200}$/.test(promo.code)) {
+      const promoDoc = await store.get("promoCodes", promo.code);
+      if (!promoDoc) throw new OrderStoreError("PROMO_EFFECT_SOURCE_MISSING");
+      const usedBy = Array.isArray(promoDoc.data.usedBy) ? promoDoc.data.usedBy : [];
+      writes.push({ collection: "promoCodes", id: promo.code, version: promoDoc.version, merge: true, data: {
+        usedCount: number(promoDoc.data.usedCount) + 1,
+        ...(promo.usageType === "once_per_customer" ? { usedBy: [...new Set([...usedBy, customerId])] } : {}),
+      } });
+    }
     try { await store.commit(writes); return { replay: false }; }
     catch (error) {
       if (await store.get(CUSTOMER_EFFECTS, id)) return { replay: true };
