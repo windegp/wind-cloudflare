@@ -13,6 +13,7 @@
  *  - كل تغيير يُسجَّل في inventoryHistory subcollection
  */
 
+import { adminFetch } from "@/lib/adminFetch";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { getDb } from "@/lib/firebase";
 import {
@@ -726,7 +727,7 @@ export default function InventoryPage() {
   // من الـ KV حتى لو Firestore اتحدّث فعلاً.
   const revalidateProduct = useCallback(async (productId) => {
     try {
-      const res = await fetch("/api/revalidate", {
+      const res = await adminFetch("/api/revalidate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "product", id: productId }),

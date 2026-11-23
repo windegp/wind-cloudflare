@@ -1,4 +1,5 @@
 "use client";
+import { adminFetch } from "@/lib/adminFetch";
 import { useState, useEffect } from 'react';
 import { getDb } from "@/lib/firebase";
 import { collection, doc, query, orderBy, getDocs, writeBatch, where, arrayUnion, arrayRemove } from "firebase/firestore/lite";
@@ -167,7 +168,7 @@ export default function CollectionsPage() {
 try {
   const slugToInvalidate = formData.slug?.trim().replace(/^\//, '');
   
-  await fetch("/api/revalidate", {
+  await adminFetch("/api/revalidate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ type: 'collection', slug: slugToInvalidate })
@@ -178,7 +179,7 @@ try {
 
 // 🔥 مسح كاش الكتالوج لأن تغيير الأقسام يؤثر على product_type/custom_labels في Facebook Catalog
 try {
-  await fetch("/api/revalidate", {
+  await adminFetch("/api/revalidate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ type: 'fb_catalog' })
@@ -211,7 +212,7 @@ try {
 
                 // 🔥 مسح كاش الكتالوج لأن حذف القسم يزيل ارتباطه من المنتجات
                 try {
-                  await fetch("/api/revalidate", {
+                  await adminFetch("/api/revalidate", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ type: 'fb_catalog' })

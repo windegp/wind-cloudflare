@@ -1,6 +1,7 @@
 "use client";
 // Final Production Icon Fix - v2.1
 
+import { adminFetch } from "@/lib/adminFetch";
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { getDb } from "@/lib/firebase";
@@ -614,7 +615,7 @@ function CreateProductForm() {
           });
 
           // مسح كاش الرابط القديم فوراً، عشان الزوار يبدأوا ياخدوا التحويل الجديد على طول
-          await fetch("/api/revalidate", {
+          await adminFetch("/api/revalidate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ type: 'product', id: productId })
@@ -626,7 +627,7 @@ function CreateProductForm() {
 
       // 🔥 مسح KV Cache للمنتج والصفحة الرئيسية عند الحفظ
       try {
-        await fetch("/api/revalidate", {
+        await adminFetch("/api/revalidate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ type: 'product', id: documentId })
@@ -637,7 +638,7 @@ function CreateProductForm() {
       
       // 🔥 مسح كاش الكتالوج (Facebook Catalog) عند الحفظ — يضمن تحديث الكاش فوراً
       try {
-        await fetch("/api/revalidate", {
+        await adminFetch("/api/revalidate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ type: 'fb_catalog' })
@@ -660,7 +661,7 @@ if (collectionsToRevalidate.length > 0) {
   try {
     await Promise.all(
       collectionsToRevalidate.map(async (slug) => {
-        await fetch("/api/revalidate", {
+        await adminFetch("/api/revalidate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

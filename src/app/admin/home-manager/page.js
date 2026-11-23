@@ -1,4 +1,5 @@
 "use client";
+import { adminFetch } from "@/lib/adminFetch";
 import React, { useState, useEffect } from 'react';
 import { getDb } from "@/lib/firebase";
 import { doc, getDoc, setDoc, collection, getDocs, query, limit } from "firebase/firestore/lite";
@@ -477,13 +478,12 @@ export default function HomeManagerPage() {
       
       //  Clear KV cache so visitors see updates
       try {
-        const revalidateResponse = await fetch('/api/revalidate', {
+        const revalidateResponse = await adminFetch('/api/revalidate', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            secret: process.env.NEXT_PUBLIC_REVALIDATE_SECRET,
             keys: ['homepage_data_v1']
           })
         });

@@ -1,5 +1,6 @@
 "use client";
 // Final Production Icon Fix - v2.1
+import { adminFetch } from "@/lib/adminFetch";
 import { useEffect, useState } from 'react';
 import { getDb } from "@/lib/firebase";
 import { deleteStoreImage } from "@/lib/storeMedia";
@@ -148,7 +149,7 @@ if (Array.isArray(product.images) && product.images.length > 0) {
       // 🔥 6. تحديث الواجهة والذاكرة معاً بعد الحذف بدون إعادة سحب
       // 🔥 مسح KV Cache للمنتج المحذوف
       try {
-        await fetch('/api/revalidate', {
+        await adminFetch('/api/revalidate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ type: 'product', id: product.id })
@@ -157,7 +158,7 @@ if (Array.isArray(product.images) && product.images.length > 0) {
       
       // 🔥 مسح كاش الكتالوج أيضاً عند حذف منتج
       try {
-        await fetch('/api/revalidate', {
+        await adminFetch('/api/revalidate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ type: 'fb_catalog' })

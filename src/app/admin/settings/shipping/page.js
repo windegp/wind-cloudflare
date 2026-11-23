@@ -1,5 +1,6 @@
 "use client";
 
+import { adminFetch } from "@/lib/adminFetch";
 import { useState, useEffect } from "react";
 import { getDb } from "@/lib/firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore/lite";
@@ -80,7 +81,7 @@ export default function ShippingSettingsPage() {
       });
 
       // 🔥 نفس مسار الكاش الموجود بالفعل — بدون أي مفتاح KV جديد
-      await fetch("/api/revalidate", {
+      await adminFetch("/api/revalidate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "site_settings" }),
