@@ -54,3 +54,15 @@ Missing service-account configuration, failed auth, permission/network errors an
 `checkoutCustomerEffects.js` atomically creates a private `WindCheckoutEffects` ledger with customer totals and site counters. It uses CAS on customer and settings documents, preserving unrelated fields and serializing concurrent purchases. A handler retry after a lost acknowledgement cannot count twice. The same private-rule requirements apply to receipts and effect ledgers.
 
 These modules have injected handlers and are still inactive: no scheduler, external email, push, live webhook, provider inquiry or database mutation is triggered merely by merging. Integrating them without an authenticated due-job runner and a review queue is unsupported.
+
+## Recovery runner deployment, still off by default
+
+`POST /api/internal/checkout-recovery` requires both `CHECKOUT_RECOVERY_ENABLED=true` and `Authorization: Bearer <CHECKOUT_RECOVERY_SECRET>` (at least 32 characters). Store this secret only as a server secret, never NEXT_PUBLIC. Do not enable until private rules, indexes, review visibility and route migration have been checked. An external authenticated scheduler must invoke it every minute, record non-2xx/timeouts, and alert on backlog age and review states. This PR does not create that schedule or change Cloudflare settings.
+
+Create/review Firestore composite indexes for collection-scope queries on each of `WindCheckoutOutbox` and `WindPaymentReceipts`: `state ASC, nextAttemptAt ASC`. Missing indexes are loud 503s. Due processing jobs use `nextAttemptAt=leaseUntil`, so an expired lease is discoverable without relying on the crashed request.
+
+The runner processes up to ten receipts and ten jobs per tick, sequentially, with an 18-second admission budget. In-flight network work can extend beyond that budget. Ensure the scheduler/runtime timeout is long enough and monitor backlog. The budget is not a hard execution timeout. Use a queue worker for sustained high volume, not an ever-growing HTTP tick.
+
+Provider handlers use the canonical snapshot. Resend receives the stable idempotency header and a 10-second network timeout; accepted message IDs are stored. Existing email HTML is shared without changing its layout. Push opts into strict error handling so failures retry instead of being swallowed. Push retries can duplicate a notification to devices that succeeded during a partial failure. Customer/counters use the atomic ledger.
+
+No production sender, recipient or template is added. The existing administrator mailbox, sender identity and customer confirmation templates are reused. Authentication failures return no customer information. The endpoint's summary contains counts only.

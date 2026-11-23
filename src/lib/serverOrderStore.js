@@ -86,6 +86,28 @@ export const serverOrderStore = {
     const result = await request(documentName(collection, id));
     return result ? { data: decodeOrderFields(result.fields || {}), version: result.updateTime } : null;
   },
+  async listDue(collection, { states, before, limit = 20 } = {}) {
+    assertOrderStoreConfiguration();
+    documentName(collection, "validate");
+    if (!Array.isArray(states) || !states.length || states.length > 10 ||
+        !states.every(v => typeof v === "string" && /^[a-z_]+$/.test(v)) ||
+        !Number.isFinite(Date.parse(before)) || !Number.isInteger(limit) || limit < 1 || limit > 50) {
+      throw new OrderStoreError("INVALID_ORDER_QUERY", 400);
+    }
+    const result = await request(`projects/${process.env.FIREBASE_PROJECT_ID}/databases/(default)/documents:runQuery`, {
+      method: "POST", body: { structuredQuery: {
+        from: [{ collectionId: collection }],
+        where: { compositeFilter: { op: "AND", filters: [
+          { fieldFilter: { field: { fieldPath: "state" }, op: "IN", value: encodeOrderValue(states) } },
+          { fieldFilter: { field: { fieldPath: "nextAttemptAt" }, op: "LESS_THAN_OR_EQUAL", value: encodeOrderValue(before) } },
+        ] } },
+        orderBy: [{ field: { fieldPath: "nextAttemptAt" }, direction: "ASCENDING" }], limit,
+      } },
+    });
+    return result.filter(row => row.document).map(row => ({
+      id: row.document.name.split("/").pop(), data: decodeOrderFields(row.document.fields || {}), version: row.document.updateTime,
+    }));
+  },
   async commit(writes) {
     assertOrderStoreConfiguration();
     if (!Array.isArray(writes) || !writes.length || writes.length > 50) throw new OrderStoreError("INVALID_ORDER_BATCH", 400);

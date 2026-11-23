@@ -31,6 +31,7 @@ export async function processCheckoutJob(id, { store = serverOrderStore, handler
   const token = leaseToken();
   try {
     await update({ state: "processing", leaseToken: token, leaseUntil: new Date(clock + LEASE_MS).toISOString(),
+      nextAttemptAt: new Date(clock + LEASE_MS).toISOString(),
       attempts: Number(data.attempts || 0) + 1, firstAttemptAt: data.firstAttemptAt || now().toISOString(), updatedAt: now().toISOString() });
   } catch (error) {
     // An ambiguous lease write is safe to recover using this execution's random token.
