@@ -68,6 +68,13 @@ const RATE_LIMITS = {
     blockDuration: 900
   },
 
+  // Public contact form (sends an email to the store owner)
+  CONTACT: {
+    requests: 5,
+    window: 600,
+    blockDuration: 1800
+  },
+
   // Relaxed for read-only endpoints
   READ: {
     requests: 100,    // 100 requests
