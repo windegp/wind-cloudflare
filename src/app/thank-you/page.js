@@ -33,7 +33,7 @@ function SuccessContent() {
   const [statusRefresh, setStatusRefresh] = useState(0);
 
  useEffect(() => {
-    const pendingOrder = sessionStorage.getItem("wind_durable_request_v1") || localStorage.getItem('pendingOrder');
+    const pendingOrder = sessionStorage.getItem("wind_durable_request_v1") || localStorage.getItem('pendingOrder') || sessionStorage.getItem("wind_last_confirmed_order_v1");
     if (!pendingOrder) { setVerification("للتأكد من حالة الطلب تواصل معنا برقم الطلب. لا تعتمد على صفحة الشكر وحدها كإثبات للدفع."); return; }
 
     let parsed;
@@ -73,6 +73,7 @@ function SuccessContent() {
           }
           parsed.total = result.total;
           setVerification(null);
+          sessionStorage.setItem("wind_last_confirmed_order_v1", JSON.stringify(parsed));
           finishBrowserCheckoutAttempt(sessionStorage);
           sessionStorage.removeItem("wind_durable_request_v1");
         } catch (_) {

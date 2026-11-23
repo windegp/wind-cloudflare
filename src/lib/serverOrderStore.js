@@ -27,6 +27,10 @@ export function encodeOrderFields(data) {
 }
 export function decodeOrderValue(value) {
   if ("stringValue" in value) return value.stringValue;
+  if ("timestampValue" in value) return value.timestampValue;
+  if ("referenceValue" in value) return value.referenceValue;
+  if ("bytesValue" in value) return value.bytesValue;
+  if ("geoPointValue" in value) return { ...value.geoPointValue };
   if ("integerValue" in value) return Number(value.integerValue);
   if ("doubleValue" in value) return value.doubleValue;
   if ("booleanValue" in value) return value.booleanValue;
