@@ -111,10 +111,10 @@ describe('أفضل خصم واحد: العرض ضد الكود ضد خصم ال�
     expect(calculateAllTotals(CART, null, settings, true, []))
       .toMatchObject({ subtotal: 965, discount: 97, shipping: 70, total: 938 });
   });
-  it('خصم الطلب الأول يقارن فعلياً مع الكود والعرض', () => {
+  it('كود الخصم النقدي يتجمع مع خصم الطلب الأول', () => {
     const promo = { valid: true, type: 'fixed', discountAmount: 50 };
     const result = calculateAllTotals(CART, promo, FIRST, true, []);
-    expect(result).toMatchObject({ discount: 97, discountSource: 'first_order' });
+    expect(result).toMatchObject({ discount: 147, discountSource: 'promo', promoAmount: 50, stackedFirstOrderAmount: 97 });
   });
   it('الكود النقدي الأكبر يفوز على خصم الطلب الأول والعرض', () => {
     const promo = { valid: true, type: 'fixed', discountAmount: 500 };

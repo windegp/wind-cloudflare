@@ -375,7 +375,7 @@ const [customerChoiceGiftSelections, setCustomerChoiceGiftSelections] = useState
 
   // ── Calculations ───────────────────────────────────────────────
   const {
-    subtotal, discount, shipping, total, discountSource, appliedOffer, appliedOffers, offerBenefits, customerChoiceGiftStatus,
+    subtotal, discount, shipping, total, discountSource, promoAmount, stackedFirstOrderAmount, appliedOffer, appliedOffers, offerBenefits, customerChoiceGiftStatus,
   } = useMemo(
     () => calculateAllTotals(cartItems, appliedPromo, shippingSettings, isFirstOrder, offers, freeShippingRule, customerChoiceGiftSelections),
     [cartItems, appliedPromo, shippingSettings, isFirstOrder, offers, freeShippingRule, customerChoiceGiftSelections]
@@ -657,7 +657,7 @@ useEffect(() => {
     addToCart, removeFromCart, updateQty, updateCartItemVariant, clearCart,
     isCartOpen, toggleCart, openCart, closeCart,
     subtotal, discount, shipping, total,
-    discountSource, appliedOffer, appliedOffers, offers, offerBenefits, customerChoiceGiftStatus, freeShippingRule,
+    discountSource, promoAmount, stackedFirstOrderAmount, appliedOffer, appliedOffers, offers, offerBenefits, customerChoiceGiftStatus, freeShippingRule,
     appliedPromo: appliedPromoView,
     applyPromoCode, removePromoCode,
     discountError, setDiscountError, promoLoading,
@@ -670,7 +670,7 @@ useEffect(() => {
     addToCart, removeFromCart, updateQty, updateCartItemVariant, clearCart,
     isCartOpen, toggleCart, openCart, closeCart,
     subtotal, discount, shipping, total,
-    discountSource, appliedOffer, appliedOffers, offers, offerBenefits, customerChoiceGiftStatus, freeShippingRule,
+    discountSource, promoAmount, stackedFirstOrderAmount, appliedOffer, appliedOffers, offers, offerBenefits, customerChoiceGiftStatus, freeShippingRule,
     appliedPromoView, applyPromoCode, removePromoCode,
     discountError, setDiscountError, promoLoading, shippingSettings,
     isFirstOrder, setIsFirstOrder,

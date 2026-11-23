@@ -376,7 +376,7 @@ describe("server checkout quote: customer-choice gifts", () => {
       .rejects.toMatchObject({ status: 409 });
   });
 
-  it("rejects a fixed coupon when the customer qualifies for the first-order discount", async () => {
+  it("stacks a fixed coupon with the first-order discount", async () => {
     const coupon = {
       id: "fixed-coupon",
       name: "قسيمة خصم",
@@ -397,11 +397,16 @@ describe("server checkout quote: customer-choice gifts", () => {
       },
     });
 
-    await expect(createServerCheckoutQuote(quoteInput({
+    const q = await createServerCheckoutQuote(quoteInput({
       promoCode: "SAVE50",
       customerEmail: "first@example.com",
       customerPhone: "201234567890",
-    }))).rejects.toMatchObject({ status: 409 });
+      customerChoiceGiftSelections: [],
+    }));
+    expect(q.discountSource).toBe("promo");
+    expect(q.promoDiscountAmount).toBe(50);
+    expect(q.stackedDiscount).toMatchObject({ source: "first_order", label: "خصم الطلب الأول" });
+    expect(q.discount).toBe(50 + q.stackedDiscount.amount);
   });
 
   it("rejects a fixed coupon when a verified bundle discount is applied", async () => {

@@ -81,20 +81,24 @@ describe('calculateAllTotals — خصم الطلب الأول', () => {
     expect(calculateAllTotals(CART, null, FIRST, false).discount).toBe(0);
     expect(calculateAllTotals(CART, null, { firstOrderEnabled: true, firstOrderDiscount: 0 }, true).discount).toBe(0);
   });
-  it('خصم الطلب الأول الأكبر من الكود هو الذي يفوز ولا يتجمع الخصمان', () => {
+  it('كود الخصم يتجمع مع خصم الطلب الأول (الاتنين مع بعض)', () => {
     const promo = { valid: true, type: 'fixed', discountAmount: 50 };
     expect(calculateAllTotals(CART, promo, FIRST, true)).toMatchObject({
-      discount: 129,
-      discountSource: 'first_order',
-      total: 1226,
+      discount: 179,
+      discountSource: 'promo',
+      promoAmount: 50,
+      stackedFirstOrderAmount: 129,
+      total: 1176,
     });
   });
-  it('الكود يفوز عندما يكون خصمه أكبر من خصم الطلب الأول', () => {
+  it('كود أكبر من خصم الطلب الأول: برضو الاتنين مع بعض', () => {
     const promo = { valid: true, type: 'fixed', discountAmount: 200 };
     expect(calculateAllTotals(CART, promo, FIRST, true)).toMatchObject({
-      discount: 200,
+      discount: 329,
       discountSource: 'promo',
-      total: 1155,
+      promoAmount: 200,
+      stackedFirstOrderAmount: 129,
+      total: 1026,
     });
   });
   it('كود الشحن المجاني يتجمع مع خصم الطلب الأول', () => {
