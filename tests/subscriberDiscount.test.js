@@ -199,4 +199,45 @@ describe("server quote: subscriber discount", () => {
     expect(q.discount).toBe(0);
     expect(m.adminGet).not.toHaveBeenCalled();
   });
+
+  it("stacks a promo code with the subscriber discount (both applied, shown separately)", async () => {
+    setup({ sub: pct(10) });
+    m.docs.set("promoCodes/SAVE100", { active: true, type: "fixed", value: 100, usageType: "unlimited", scope: "all" });
+    const q = await quote({ promoCode: "SAVE100" });
+    expect(q.discountSource).toBe("promo");
+    expect(q.promoDiscountAmount).toBe(100);
+    expect(q.stackedDiscount).toMatchObject({ source: "subscriber", amount: 100, label: "خصم الأصدقاء" });
+    expect(q.discount).toBe(200);
+    expect(q.total).toBe(800);
+  });
+
+  it("stacks a promo code with first-order when the customer is not a subscriber", async () => {
+    setup({ first: 10, subscribed: false });
+    m.docs.set("promoCodes/P20", { active: true, type: "percent", value: 20, usageType: "unlimited", scope: "all" });
+    const q = await quote({ promoCode: "P20" });
+    expect(q.promoDiscountAmount).toBe(200);
+    expect(q.stackedDiscount).toMatchObject({ source: "first_order", amount: 100 });
+    expect(q.discount).toBe(300);
+  });
+
+  it("only the best automatic discount stacks with the code (not both subscriber and first-order)", async () => {
+    setup({ sub: pct(25), first: 10 });
+    m.docs.set("promoCodes/SAVE100", { active: true, type: "fixed", value: 100, usageType: "unlimited", scope: "all" });
+    const q = await quote({ promoCode: "SAVE100" });
+    expect(q.stackedDiscount).toMatchObject({ source: "subscriber", amount: 250 });
+    expect(q.discount).toBe(350);
+  });
+
+  it("total discount never exceeds the subtotal when stacking", async () => {
+    setup({ sub: pct(60) });
+    m.docs.set("promoCodes/BIG", { active: true, type: "percent", value: 60, usageType: "unlimited", scope: "all" });
+    const q = await quote({ promoCode: "BIG" });
+    expect(q.discount).toBe(1000);
+    expect(q.promoDiscountAmount + q.stackedDiscount.amount).toBe(1000);
+  });
+
+  it("an abandoned customer record (Total Orders 0) is still a first order", async () => {
+    setup({ sub: pct(15), customers: { [EMAIL]: { "Total Orders": 0, Last_Order_Status: "abandoned" } } });
+    expect((await quote()).discountSource).toBe("subscriber");
+  });
 });

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { fbTrack } from "@/lib/fbTrack";
 import { ttTrack } from "@/lib/ttTrack";
 import { useSettings } from "@/context/SettingsContext";
-import { DEFAULT_NEWSLETTER_SUBTITLE, DEFAULT_NEWSLETTER_TITLE } from "@/lib/subscriberDiscount";
+import { resolveNewsletterText } from "@/lib/subscriberDiscount";
 import styles from "./Footer.module.css";
 
 const paymentIcons = [
@@ -70,9 +70,7 @@ const socials = [
 
 function Newsletter() {
   const settingsCtx = useSettings();
-  const promos = settingsCtx?.settings?.promotions || {};
-  const nlTitle = String(promos.newsletterTitle || "").trim() || DEFAULT_NEWSLETTER_TITLE;
-  const nlSubtitle = String(promos.newsletterSubtitle ?? "").trim() || DEFAULT_NEWSLETTER_SUBTITLE;
+  const { title: nlTitle, subtitle: nlSubtitle } = resolveNewsletterText(settingsCtx?.settings?.promotions);
   const [email, setEmail] = useState("");
   const [honey, setHoney] = useState("");
   const [status, setStatus] = useState("idle"); // idle | sending | sent | error
@@ -116,7 +114,7 @@ function Newsletter() {
   return (
     <form className={styles.nlWrap} onSubmit={submit}>
       <p className={styles.nlTitle}>{nlTitle}</p>
-      <p className={styles.nlSub}>{nlSubtitle}</p>
+      {nlSubtitle ? <p className={styles.nlSub}>{nlSubtitle}</p> : null}
       {status === "sent" ? (
         <p role="status" className={styles.nlSub}>تم اشتراكك. شكراً ليك!</p>
       ) : (

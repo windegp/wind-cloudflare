@@ -629,8 +629,12 @@ export default function PromotionsPage() {
                 <div className="sm:col-span-2 border-t border-gray-100 pt-5">
                   <div className="flex items-center justify-between mb-3">
                     <div>
-                      <p className="text-xs font-bold text-gray-700">خصم المشتركين في النشرة</p>
-                      <p className="text-[10px] text-gray-400 mt-0.5">يُطبَّق تلقائياً لو إيميل العميل مشترك في الفوتر. الأفضل خصم واحد فقط (بدون تجميع مع خصم الطلب الأول أو كود أو عرض). مغلق افتراضياً.</p>
+                      <p className="text-xs font-bold text-gray-700">خصم المشتركين في النشرة
+                        <span className={`mr-2 px-2 py-0.5 rounded-full text-[10px] font-black ${subEnabled ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-500"}`}>
+                          {subEnabled ? "مفعّل" : "متوقف"}
+                        </span>
+                      </p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">يُطبَّق تلقائياً لو إيميل العميل مشترك في الفوتر (لأول طلب مكتمل فقط لو "لأول طلب فقط" شغال). الأكبر بين خصم المشتركين وخصم الطلب الأول يتطبق ويتجمع مع كود الخصم. مغلق افتراضياً. اضغط "حفظ" بعد التغيير.</p>
                     </div>
                     <div onClick={() => setSubEnabled(p => !p)}
                       className={`w-11 h-6 rounded-full transition-colors cursor-pointer flex items-center ${subEnabled ? "bg-emerald-500" : "bg-gray-200"}`}>
@@ -671,7 +675,7 @@ export default function PromotionsPage() {
                 {/* ── نص اشتراك النشرة في الفوتر ── */}
                 <div className="sm:col-span-2 border-t border-gray-100 pt-5">
                   <p className="text-xs font-bold text-gray-700 mb-1">نص الاشتراك فوق خانة الإيميل في الفوتر</p>
-                  <p className="text-[10px] text-gray-400 mb-3">لو فضيت الخانة بيرجع النص الافتراضي. اتأكد إن النص يطابق الخصم الفعلي.</p>
+                  <p className="text-[10px] text-gray-400 mb-3">النص ده بيظهر لما خصم المشتركين مفعّل (لو فضيت الخانة بيرجع النص الافتراضي). لما تتوقف الخصم، الفوتر بيعرض تلقائياً "اشترك ليصلك أحدث العروض". اتأكد إن النص يطابق الخصم الفعلي.</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <input type="text" maxLength={80} value={nlTitle} onChange={e => setNlTitle(e.target.value)} placeholder={DEFAULT_NEWSLETTER_TITLE}
                       className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:border-gray-400"/>

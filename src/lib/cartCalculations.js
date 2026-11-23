@@ -164,11 +164,15 @@ export function calculateAllTotals(cartItems, promoResult = null, shippingSettin
       : 0;
 
   const offerResult = computeBestOffer(cartItems, offers, new Date(), customerChoiceGiftSelections);
-  const candidates = [
-    { source: 'promo', discount: promoDiscount, rank: 1 },
-    { source: 'first_order', discount: firstOrderDiscount, rank: 2 },
-    { source: 'offer', discount: Math.max(0, Number(offerResult.discount) || 0), rank: 3 },
-  ].filter((candidate) => candidate.discount > 0);
+  // كود الخصم النقدي بيتجمع مع خصم الطلب الأول (الاتنين مع بعض). العروض بتفضل بنظام الأفضل.
+  const stackFirstOrder = promoDiscount > 0 && firstOrderDiscount > 0;
+  const candidates = stackFirstOrder
+    ? [{ source: 'promo', discount: promoDiscount, rank: 1 }]
+    : [
+        { source: 'promo', discount: promoDiscount, rank: 1 },
+        { source: 'first_order', discount: firstOrderDiscount, rank: 2 },
+        { source: 'offer', discount: Math.max(0, Number(offerResult.discount) || 0), rank: 3 },
+      ].filter((candidate) => candidate.discount > 0);
 
   candidates.sort((a, b) => b.discount - a.discount || a.rank - b.rank);
   const winner = candidates[0] || { source: 'none', discount: 0 };
@@ -196,7 +200,12 @@ export function calculateAllTotals(cartItems, promoResult = null, shippingSettin
         )
       : 0;
   const subtotal = cartSubtotal + autoGiftSubtotal + customerChoiceGiftSubtotal;
-  const discount = Math.min(subtotal, Math.max(0, Math.round(winner.discount)));
+  const discount = Math.min(
+    subtotal,
+    Math.max(0, Math.round(winner.discount + (stackFirstOrder ? firstOrderDiscount : 0)))
+  );
+  const promoAmount = stackFirstOrder ? Math.min(Math.max(0, Math.round(promoDiscount)), discount) : 0;
+  const stackedFirstOrderAmount = stackFirstOrder ? Math.max(0, discount - promoAmount) : 0;
 
   // شحن المنتجات المحددة مستقل عن الحد العام الذي يُحسب بعد الخصم النقدي.
   const freeShippingByRule = isFreeShippingRuleEligible(cartItems, freeShippingRule);
@@ -210,6 +219,8 @@ export function calculateAllTotals(cartItems, promoResult = null, shippingSettin
     shipping,
     total,
     discountSource,
+    promoAmount,
+    stackedFirstOrderAmount,
     appliedOffer,
     appliedOffers: discountSource === 'offer' ? offerResult.appliedOffers : [],
     offerBenefits: discountSource === 'offer' ? offerResult.offerBenefits : null,

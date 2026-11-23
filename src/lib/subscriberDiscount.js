@@ -3,6 +3,23 @@
 
 export const DEFAULT_NEWSLETTER_TITLE = "اشترك واحصل على خصم 10%";
 export const DEFAULT_NEWSLETTER_SUBTITLE = "على أول طلب";
+// لما خصم المشتركين يكون متوقف، الفوتر بيعرض سطر عام بدل نص الخصم.
+export const GENERIC_NEWSLETTER_TITLE = "اشترك ليصلك أحدث العروض";
+export const GENERIC_NEWSLETTER_SUBTITLE = "";
+
+/** Footer newsletter text: discount copy (editable) when the discount is on, generic line when off. */
+export function resolveNewsletterText(promotions) {
+  const promos = promotions || {};
+  const enabled = normalizeSubscriberSettings(promos.subscriberDiscount).enabled;
+  if (!enabled) {
+    return { title: GENERIC_NEWSLETTER_TITLE, subtitle: GENERIC_NEWSLETTER_SUBTITLE, discountOn: false };
+  }
+  return {
+    title: String(promos.newsletterTitle || "").trim() || DEFAULT_NEWSLETTER_TITLE,
+    subtitle: String(promos.newsletterSubtitle ?? "").trim() || DEFAULT_NEWSLETTER_SUBTITLE,
+    discountOn: true,
+  };
+}
 
 /** Normalizes whatever is stored in settings. Disabled unless explicitly enabled with a valid value. */
 export function normalizeSubscriberSettings(raw) {
@@ -31,19 +48,31 @@ export function computeSubscriberDiscountAmount(cfg, subtotal) {
 /**
  * Display-only: decides what the checkout summary shows after a live quote.
  * The submit-time quote stays authoritative; this never changes what is charged.
+ * `lines` are the discount rows (a code and an automatic discount are shown separately).
  */
-export function resolveLiveSubscriberDisplay({ liveQuote, subtotal, discount, discountLabel, total }) {
+export function resolveLiveSubscriberDisplay({ liveQuote, subtotal, discount, discountLabel, total, promoLabel, clientLines }) {
+  const defaultLines = clientLines || [{ label: discountLabel, amount: discount }];
+  const hasSubscriber =
+    liveQuote?.discountSource === "subscriber" || liveQuote?.stackedDiscount?.source === "subscriber";
   const applies =
-    liveQuote?.discountSource === "subscriber" &&
+    hasSubscriber &&
     Math.abs(Number(liveQuote.subtotal) - Number(subtotal)) < 0.01 &&
     Number(liveQuote.discount) > Number(discount);
   if (!applies) {
-    return { applies: false, discount, label: discountLabel, total };
+    return { applies: false, discount, label: discountLabel, total, lines: defaultLines };
   }
+  const stacked = liveQuote.stackedDiscount;
+  const lines = liveQuote.discountSource === "promo" && stacked
+    ? [
+        { label: promoLabel || "خصم الكود", amount: Number(liveQuote.promoDiscountAmount) || 0 },
+        { label: stacked.label, amount: Number(stacked.amount) || 0 },
+      ]
+    : [{ label: liveQuote.subscriberDiscount?.name || "خصم المشتركين", amount: Number(liveQuote.discount) }];
   return {
     applies: true,
     discount: Number(liveQuote.discount),
-    label: liveQuote.subscriberDiscount?.name || "خصم المشتركين",
+    label: lines[0].label,
     total: Number(liveQuote.total),
+    lines,
   };
 }

@@ -165,6 +165,8 @@ export default function CheckoutPage() {
     shippingSettings,
     setSelectedGovernorate,
     discountSource,
+    promoAmount,
+    stackedFirstOrderAmount,
     appliedOffer,
     offerBenefits,
     offerGiftSelections,
@@ -556,7 +558,7 @@ export default function CheckoutPage() {
         }, 10000, "");
         const data = await res.json();
         if (seq !== liveQuoteSeq.current) return; // نتيجة قديمة
-        if (res.ok && data?.success && data.quote?.discountSource === "subscriber") {
+        if (res.ok && data?.success && (data.quote?.discountSource === "subscriber" || data.quote?.stackedDiscount?.source === "subscriber")) {
           setLiveQuote(data.quote);
         }
       } catch (_) {
@@ -567,9 +569,18 @@ export default function CheckoutPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subscriberLiveEnabled, liveEligibleInput, liveEmail, livePhoneDigits, formData.governorate, liveCartKey, appliedPromo?.code, subtotal]);
 
-  const liveDisplay = resolveLiveSubscriberDisplay({ liveQuote, subtotal, discount, discountLabel, total: finalTotal });
+  const promoLineLabel = appliedPromo?.type === 'coupon_fixed'
+    ? `قسيمة شراء: ${appliedPromo.code || ''}`
+    : 'خصم الكود';
+  const clientLines = discountSource === 'promo' && Number(stackedFirstOrderAmount) > 0
+    ? [
+        { label: promoLineLabel, amount: Number(promoAmount) || 0 },
+        { label: 'خصم الطلب الأول 🎉', amount: Number(stackedFirstOrderAmount) || 0 },
+      ]
+    : [{ label: discountLabel, amount: discount }];
+  const liveDisplay = resolveLiveSubscriberDisplay({ liveQuote, subtotal, discount, discountLabel, total: finalTotal, promoLabel: promoLineLabel, clientLines });
+  const shownLines = liveDisplay.lines;
   const shownDiscount = liveDisplay.discount;
-  const shownLabel = liveDisplay.label;
   const shownTotal = liveDisplay.total;
   const shownProductsAfter = Math.max(0, Number(subtotal || 0) - Number(shownDiscount || 0));
   
@@ -871,7 +882,7 @@ export default function CheckoutPage() {
       // خصم المشتركين بيتحسب على السيرفر بس (بيتأكد من الإيميل في Subscribers)،
       // فلو السيرفر طبّقه بنقبل الفرق بشرط يكون الخصم أكبر من اللي العميل شايفه.
       const serverAppliedSubscriber =
-        quote.discountSource === "subscriber" &&
+        (quote.discountSource === "subscriber" || quote.stackedDiscount?.source === "subscriber") &&
         Number(quote.discount) >= Number(discount) - 0.01;
       const expectedDiscount = serverAppliedSubscriber ? Number(quote.discount) : Number(discount);
       const expectedTotal = serverAppliedSubscriber
@@ -931,7 +942,8 @@ export default function CheckoutPage() {
       "Discount Label": quote.discountSource === "offer"
         ? `عرض: ${quote.appliedOffer?.name || ""}`.trim()
         : quote.discountSource === "promo"
-          ? (quote.appliedPromo?.type === "coupon_fixed" ? `قسيمة شراء ${quote.appliedPromo?.code || ""}`.trim() : `كود الخصم ${quote.appliedPromo?.code || ""}`.trim())
+          ? ((quote.appliedPromo?.type === "coupon_fixed" ? `قسيمة شراء ${quote.appliedPromo?.code || ""}`.trim() : `كود الخصم ${quote.appliedPromo?.code || ""}`.trim())
+              + (quote.stackedDiscount ? ` + ${quote.stackedDiscount.label}` : ""))
           : quote.discountSource === "first_order"
             ? "خصم الطلب الأول"
             : quote.discountSource === "subscriber"
@@ -946,6 +958,9 @@ export default function CheckoutPage() {
           : quote.discountSource === "subscriber" && quote.subscriberDiscount?.type === "percent"
             ? Number(quote.subscriberDiscount.value) || 0
             : 0,
+      "Code Discount Amount": quote.stackedDiscount ? Number(quote.promoDiscountAmount) || 0 : 0,
+      "Auto Discount Type": quote.stackedDiscount?.source || "",
+      "Auto Discount Amount": quote.stackedDiscount ? Number(quote.stackedDiscount.amount) || 0 : 0,
       "Free Shipping Applied": Boolean(quote.freeShipping),
       "Discount Code": quote.appliedPromo?.code || "",
       "Offer Id": quote.appliedOffer?.id || "",
@@ -1395,12 +1410,12 @@ router.push(`/thank-you?orderId=${orderId}`);
 
             <div className="border-t border-gray-100 pt-3 space-y-1.5 text-base">
               {shownDiscount > 0 && <div className="flex justify-between text-gray-500"><span>قيمة المنتجات قبل الخصم</span><span className="text-gray-800 font-medium">ج.م {subtotal}.00</span></div>}
-              {shownDiscount > 0 && (
-                <div className="flex justify-between text-emerald-600">
-                  <span>{shownLabel}</span>
-                  <span className="font-bold">- ج.م {shownDiscount}.00</span>
+              {shownDiscount > 0 && shownLines.filter((l) => Number(l.amount) > 0).map((l, idx) => (
+                <div key={idx} className="flex justify-between text-emerald-600">
+                  <span>{l.label}</span>
+                  <span className="font-bold">- ج.م {l.amount}.00</span>
                 </div>
-              )}
+              ))}
               <div className="flex justify-between text-gray-700 font-semibold"><span>سعر المنتجات</span><span>ج.م {shownProductsAfter}.00</span></div>
               <div className="flex justify-between text-red-700 font-semibold text-sm"><span>تكلفة الشحن</span><span>{SHIPPING_COST === 0 ? 'مجاناً' : `ج.م ${SHIPPING_COST}.00`}</span></div>
               <div className="flex justify-between font-black text-lg pt-2 border-t border-gray-100">
@@ -1823,12 +1838,12 @@ router.push(`/thank-you?orderId=${orderId}`);
 
                   <div className="border-t border-gray-100 pt-3 space-y-1.5 text-sm">
                     {shownDiscount > 0 && <div className="flex justify-between text-gray-500"><span>قيمة المنتجات قبل الخصم</span><span className="text-gray-800 font-medium">ج.م {subtotal}.00</span></div>}
-                    {shownDiscount > 0 && (
-                      <div className="flex justify-between text-emerald-600">
-                        <span>{shownLabel}</span>
-                        <span className="font-bold">- ج.م {shownDiscount}.00</span>
+                    {shownDiscount > 0 && shownLines.filter((l) => Number(l.amount) > 0).map((l, idx) => (
+                      <div key={idx} className="flex justify-between text-emerald-600">
+                        <span>{l.label}</span>
+                        <span className="font-bold">- ج.م {l.amount}.00</span>
                       </div>
-                    )}
+                    ))}
                     <div className="flex justify-between text-gray-700 font-semibold"><span>سعر المنتجات</span><span>ج.م {shownProductsAfter}.00</span></div>
                     <div className="flex justify-between text-red-700 font-semibold text-sm">
                       <span>تكلفة الشحن</span>
@@ -1936,12 +1951,12 @@ router.push(`/thank-you?orderId=${orderId}`);
                   <span className="font-semibold text-gray-800">ج.م {subtotal}.00</span>
                 </div>
               )}
-              {shownDiscount > 0 && (
-                <div className="flex justify-between items-center text-base text-emerald-600">
-                  <span>{shownLabel}</span>
-                  <span className="font-semibold">- ج.م {shownDiscount}.00</span>
+              {shownDiscount > 0 && shownLines.filter((l) => Number(l.amount) > 0).map((l, idx) => (
+                <div key={idx} className="flex justify-between items-center text-base text-emerald-600">
+                  <span>{l.label}</span>
+                  <span className="font-semibold">- ج.م {l.amount}.00</span>
                 </div>
-              )}
+              ))}
               <div className="flex justify-between items-center text-base font-semibold text-gray-700">
                 <span>سعر المنتجات</span>
                 <span>ج.م {shownProductsAfter}.00</span>
