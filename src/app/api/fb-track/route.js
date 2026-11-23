@@ -7,6 +7,12 @@
 // Zaraz أُزيل نهائياً من المشروع (Phase 1) — لا يوجد أي Workaround خاص به هنا.
 
 import { normalizePhoneForMetaHash } from "@/lib/metaEventData";
+import { isSameOrigin, enforceRateLimit } from "@/lib/apiGuards";
+
+const ALLOWED_EVENTS = new Set([
+  "PageView", "ViewContent", "AddToCart", "InitiateCheckout", "AddPaymentInfo",
+  "Purchase", "Search", "AddToWishlist", "Lead", "CompleteRegistration", "Contact",
+]);
 
 const PIXEL_ID = "880930164288645";
 
@@ -49,6 +55,13 @@ function isValidMetaFbc(value) {
 }
 
 export async function POST(request) {
+  // Only our own pages may relay events to the Conversions API.
+  if (!isSameOrigin(request)) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+  const limited = await enforceRateLimit(request, "TRACKING");
+  if (limited) return limited;
+
   try {
     const body = await request.json();
     const {
@@ -79,6 +92,9 @@ export async function POST(request) {
 
     if (!event_name) {
       return Response.json({ error: "event_name مطلوب" }, { status: 400 });
+    }
+    if (!ALLOWED_EVENTS.has(event_name)) {
+      return Response.json({ error: "event_name غير مسموح" }, { status: 400 });
     }
 
     const cookieHeader = request.headers.get("cookie") || "";
