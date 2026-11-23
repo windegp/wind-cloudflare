@@ -64,6 +64,8 @@ const firestoreMocks = vi.hoisted(() => {
   };
 
   return mocks;
+
+
 });
 
 vi.mock("@/lib/firebase", () => ({
@@ -325,6 +327,7 @@ describe("server checkout quote: customer-choice gifts", () => {
     };
     installFixture([cartOffer, coupon]);
 
+    firestoreMocks.state.docs.set("settings/siteSettings", { promotions: { shippingCost: 70, freeShippingThreshold: 0 } });
     await expect(createServerCheckoutQuote(quoteInput({ promoCode: "SAVE50" })))
       .rejects.toMatchObject({ status: 409, message: expect.stringContaining("قسيمة الخصم") });
   });
@@ -352,6 +355,7 @@ describe("server checkout quote: customer-choice gifts", () => {
     };
     installFixture([buyGetOffer, coupon]);
 
+    firestoreMocks.state.docs.set("settings/siteSettings", { promotions: { shippingCost: 70, freeShippingThreshold: 0 } });
     await expect(createServerCheckoutQuote(quoteInput({
       promoCode: "SAVE50",
       cartItems: [{ id: "A", qty: 2 }],
@@ -372,6 +376,7 @@ describe("server checkout quote: customer-choice gifts", () => {
     };
     installFixture([choiceOffer, coupon]);
 
+    firestoreMocks.state.docs.set("settings/siteSettings", { promotions: { shippingCost: 70, freeShippingThreshold: 0 } });
     await expect(createServerCheckoutQuote(quoteInput({ promoCode: "SAVE50" })))
       .rejects.toMatchObject({ status: 409 });
   });
@@ -431,6 +436,7 @@ describe("server checkout quote: customer-choice gifts", () => {
       },
     });
 
+    firestoreMocks.state.docs.set("settings/siteSettings", { promotions: { shippingCost: 70, freeShippingThreshold: 0 } });
     await expect(createServerCheckoutQuote(quoteInput({
       promoCode: "SAVE50",
       customerChoiceGiftSelections: [],
@@ -612,6 +618,7 @@ describe("server checkout quote: customer-choice gifts", () => {
       usageType: "unlimited",
     });
 
+    firestoreMocks.state.docs.set("settings/siteSettings", { promotions: { shippingCost: 70, freeShippingThreshold: 0 } });
     await expect(createServerCheckoutQuote(quoteInput({
       promoCode: "LEGACY50",
       customerChoiceGiftSelections: [],
@@ -674,4 +681,16 @@ describe("server checkout quote: customer-choice gifts", () => {
       scope: ["A"],
       discountAmount: 50,
     });
-  });});
+  });
+  it("enabled mode keeps customer-choice gift allocations while stacking code and first-order", async () => {
+    installFixture([choiceOffer]);
+    firestoreMocks.state.docs.set("settings/siteSettings", { promotions: { shippingCost: 0, freeShippingThreshold: 0, firstOrderEnabled: true, firstOrderDiscount: 10 } });
+    firestoreMocks.state.docs.set("promoCodes/EXTRA", { active: true, type: "fixed", value: 50, scope: "all", usageType: "unlimited" });
+    const q = await createServerCheckoutQuote(quoteInput({ promoCode: "EXTRA", customerEmail: "new@example.com", customerPhone: "01012345678" }));
+    expect(q).toMatchObject({ subtotal: 900, discount: 190, total: 710, discountSource: "offer" });
+    expect(q.discountLines.map(line => [line.source, line.amount])).toEqual([["offer", 100], ["promo", 50], ["first_order", 40]]);
+    expect(q.lineItems.some(line => line.productId === "G")).toBe(true);
+    expect(q.customerChoiceGiftSelections).toHaveLength(1);
+    expect(q.lineItems.reduce((sum, line) => sum + line.price * line.quantity, 0)).toBe(800);
+  });
+});

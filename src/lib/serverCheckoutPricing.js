@@ -1,3 +1,4 @@
+import { buildDiscountBreakdown, isStackingEnabled } from "@/lib/discountBreakdown";
 import { getDb } from "@/lib/firebase";
 import {
   collection,
@@ -494,52 +495,6 @@ export async function getSubscriberDiscountOffer({ promotions, email, phone, isF
   return { name: cfg.name, type: cfg.type, value: cfg.value, firstOrderOnly: cfg.firstOrderOnly };
 }
 
-function assertPromoDoesNotConflict({ promo, firstOrderDiscount, subscriberDiscount = 0, offerResult, bundleDiscount }) {
-  const hasCashPromo =
-    promo?.valid === true &&
-    promo.type !== "free_shipping" &&
-    Number(promo.discountAmount) > 0;
-  if (!hasCashPromo) return;
-
-  const hasQualifyingOffer = (offerResult?.candidates || []).some(
-    (candidate) => Number(candidate.discount) > 0
-  );
-  const hasFirstOrderDiscount = false; // الكود بيتجمع مع خصم الطلب الأول/المشتركين
-  const hasBundleDiscount = Number(bundleDiscount) > 0;
-
-  if (hasQualifyingOffer || hasFirstOrderDiscount || hasBundleDiscount) {
-    throw new CheckoutQuoteError(
-      "لا يمكن استخدام قسيمة الخصم مع خصم آخر مستحق على السلة. أزل القسيمة أو استمر بالعرض الآخر.",
-      409
-    );
-  }
-}
-
-function chooseBestDiscount({ offerResult, promo, firstOrderDiscount, subscriberDiscount = 0 }) {
-  const hasCashPromo =
-    promo?.valid && promo.type !== "free_shipping" && promo.discountAmount > 0;
-
-  // الخصم التلقائي: الأكبر بين خصم الطلب الأول وخصم المشتركين (عند التعادل الطلب الأول).
-  const autoOptions = [];
-  if (firstOrderDiscount > 0) autoOptions.push({ source: "first_order", discount: firstOrderDiscount, rank: 1 });
-  if (subscriberDiscount > 0) autoOptions.push({ source: "subscriber", discount: subscriberDiscount, rank: 2 });
-  autoOptions.sort((a, b) => b.discount - a.discount || a.rank - b.rank);
-  const auto = autoOptions[0] || null;
-
-  // كود الخصم النقدي بيتجمع مع الخصم التلقائي (الاتنين مع بعض).
-  if (hasCashPromo) {
-    return { source: "promo", discount: promo.discountAmount, rank: 1, stacked: auto };
-  }
-
-  const options = [];
-  if (auto) options.push({ ...auto });
-  if (offerResult?.discount > 0) {
-    options.push({ source: "offer", discount: offerResult.discount, rank: 4 });
-  }
-  options.sort((a, b) => b.discount - a.discount || a.rank - b.rank);
-  return options[0] || { source: "none", discount: 0, rank: 99 };
-}
-
 /**
  * Calculates checkout prices exclusively from current Firestore product,
  * offer, promo-code and site-settings data. Client-supplied prices are ignored.
@@ -624,8 +579,13 @@ export async function createServerCheckoutQuote(input = {}) {
     Math.max(0, MAX_TOTAL_UNITS - paidUnitCount)
   );
   const offerResult = computeBestOffer(items, offers, now, customerChoiceGiftSelections);
-  assertPromoDoesNotConflict({ promo, firstOrderDiscount, subscriberDiscount, offerResult, bundleDiscount });
-  const winner = chooseBestDiscount({ offerResult, promo, firstOrderDiscount, subscriberDiscount });
+  const stackingEnabled = isStackingEnabled(promotions, freeShippingRule);
+  if (!stackingEnabled && promo?.discountAmount > 0 &&
+      ((offerResult.candidates || []).some(candidate => candidate.discount > 0) || bundleDiscount > 0)) {
+    throw new CheckoutQuoteError("لا يمكن استخدام قسيمة الخصم مع خصم آخر مستحق على السلة. أزل القسيمة أو استمر بالعرض الآخر.", 409);
+  }
+  // Offers still select one best product offer internally; other benefit categories stack.
+  const winner = { source: offerResult.discount > 0 ? "offer" : promo?.discountAmount > 0 ? "promo" : firstOrderDiscount >= subscriberDiscount && firstOrderDiscount > 0 ? "first_order" : subscriberDiscount > 0 ? "subscriber" : "none" };
 
   // A qualifying buy-X-get-Y gift is an additional line, so its original
   // value is included in subtotal and offset by the offer discount.
@@ -663,13 +623,17 @@ export async function createServerCheckoutQuote(input = {}) {
       ? Math.max(0, Number(offerResult.offerBenefits?.discount) || 0)
       : 0;
   const subtotal = paidSubtotal + autoGiftSubtotal + customerChoiceGiftSubtotal;
-  const promoPart = winner.stacked ? Math.max(0, Math.round(winner.discount)) : 0;
-  const discount = Math.min(
-    subtotal,
-    Math.max(0, Math.round(winner.discount + (winner.stacked ? winner.stacked.discount : 0)))
-  );
-  // الجزء التلقائي المتجمع بعد تطبيق سقف الإجمالي
-  const stackedAmount = winner.stacked ? Math.max(0, discount - Math.min(promoPart, discount)) : 0;
+  const breakdown = buildDiscountBreakdown({
+    subtotal, offerAmount: offerResult.discount,
+    offerLabel: `عرض: ${offerResult.offer?.name || "خصم"}`,
+    promoAmount: promo?.discountAmount,
+    promoLabel: `${promo?.type === "coupon_fixed" ? "قسيمة شراء" : "كود الخصم"} ${promo?.code || ""}`.trim(),
+    firstOrderAmount: firstOrderDiscount, subscriberAmount: subscriberDiscount,
+    subscriberLabel: subscriberOffer?.name,
+  });
+  const discount = breakdown.discount;
+  const autoLine = breakdown.lines.find(line => ["subscriber", "first_order"].includes(line.source));
+  const promoPart = breakdown.lines.find(line => line.source === "promo")?.amount || 0;
 
   const shippingCostByGovernorate = promotions.shippingCostByGovernorate || {};
   const configuredShipping =
@@ -693,7 +657,7 @@ export async function createServerCheckoutQuote(input = {}) {
   const total = Math.max(0, Number((subtotal - discount + shipping).toFixed(2)));
 
   const appliedPromo =
-    promo && (promo.freeShipping || winner.source === "promo") ? promo : null;
+    promo && (promo.freeShipping || promoPart > 0) ? promo : null;
   const appliedOffer = winner.source === "offer" ? offerResult.offer : null;
   const appliedOffers = winner.source === "offer" ? offerResult.appliedOffers : [];
   // Reuse the exact per-unit allocation selected by the shared offer engine.
@@ -850,25 +814,12 @@ export async function createServerCheckoutQuote(input = {}) {
       : [],
     appliedPromo,
     isFirstOrder,
-    subscriberDiscount: (winner.source === "subscriber" || winner.stacked?.source === "subscriber") && subscriberOffer
-      ? {
-          name: subscriberOffer.name,
-          type: subscriberOffer.type,
-          value: subscriberOffer.value,
-          amount: winner.source === "subscriber" ? discount : stackedAmount,
-        }
-      : null,
-    // خصم تلقائي متجمع مع كود الخصم (الاتنين مع بعض)
-    stackedDiscount: winner.stacked && stackedAmount > 0
-      ? {
-          source: winner.stacked.source,
-          amount: stackedAmount,
-          label: winner.stacked.source === "subscriber"
-            ? (subscriberOffer?.name || "خصم المشتركين")
-            : "خصم الطلب الأول",
-        }
-      : null,
-    promoDiscountAmount: winner.stacked ? Math.min(promoPart, discount) : 0,
+    stackingEnabled,
+    discountLines: breakdown.lines,
+    subscriberDiscount: autoLine?.source === "subscriber" && subscriberOffer
+      ? { ...subscriberOffer, amount: autoLine.amount } : null,
+    stackedDiscount: autoLine ? { source: autoLine.source, amount: autoLine.amount, label: autoLine.label } : null,
+    promoDiscountAmount: promoPart,
     lineItems,
     cartItems: items.map(({ _product, ...item }) => item),
     originalSubtotal,

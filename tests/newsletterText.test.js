@@ -12,26 +12,26 @@ import { resolveLiveSubscriberDisplay } from "@/lib/subscriberDiscount";
 
 describe("live subscriber display (display only)", () => {
   const base = { subtotal: 1000, discount: 0, discountLabel: "x", total: 1000 };
-  const q = (over = {}) => ({ discountSource: "subscriber", subtotal: 1000, discount: 150, total: 850, subscriberDiscount: { name: "خصم الأصدقاء" }, ...over });
+  const q = (over = {}) => ({ discountSource: "subscriber", subtotal: 1000, discount: 150, shipping: 0, total: 850, subscriberDiscount: { name: "خصم الأصدقاء" }, ...over });
   it("shows the admin name, discount and updated total", () => {
     expect(resolveLiveSubscriberDisplay({ ...base, liveQuote: q() })).toMatchObject({ applies: true, discount: 150, total: 850, lines: [{ label: "خصم الأصدقاء", amount: 150 }] });
   });
   it("shows nothing extra without a live quote or for other sources", () => {
     expect(resolveLiveSubscriberDisplay({ ...base, liveQuote: null }).applies).toBe(false);
-    expect(resolveLiveSubscriberDisplay({ ...base, liveQuote: q({ discountSource: "offer" }) }).applies).toBe(false);
+    expect(resolveLiveSubscriberDisplay({ ...base, liveQuote: q({ discountSource: "offer" }) }).applies).toBe(true);
   });
   it("ignores a stale quote for a different subtotal", () => {
     expect(resolveLiveSubscriberDisplay({ ...base, liveQuote: q({ subtotal: 900 }) }).applies).toBe(false);
   });
-  it("does not override a larger client discount", () => {
-    expect(resolveLiveSubscriberDisplay({ ...base, discount: 200, liveQuote: q() }).applies).toBe(false);
+  it("adopts a current server quote even when it removes a stale client discount", () => {
+    expect(resolveLiveSubscriberDisplay({ ...base, discount: 200, liveQuote: q() })).toMatchObject({ applies: true, discount: 150 });
   });
 });
 
 describe("live display with a stacked code", () => {
   it("shows the code and the subscriber discount as two separate lines", () => {
     const r = resolveLiveSubscriberDisplay({
-      liveQuote: { discountSource: "promo", subtotal: 1000, discount: 200, total: 870, promoDiscountAmount: 100, stackedDiscount: { source: "subscriber", amount: 100, label: "خصم الأصدقاء" } },
+      liveQuote: { discountSource: "promo", subtotal: 1000, discount: 200, shipping: 70, total: 870, promoDiscountAmount: 100, stackedDiscount: { source: "subscriber", amount: 100, label: "خصم الأصدقاء" } },
       subtotal: 1000, discount: 100, discountLabel: "خصم الكود", total: 970, promoLabel: "خصم الكود",
     });
     expect(r.applies).toBe(true);

@@ -634,7 +634,7 @@ export default function PromotionsPage() {
                           {subEnabled ? "مفعّل" : "متوقف"}
                         </span>
                       </p>
-                      <p className="text-[10px] text-gray-400 mt-0.5">يُطبَّق تلقائياً لو إيميل العميل مشترك في الفوتر (لأول طلب مكتمل فقط لو "لأول طلب فقط" شغال). الأكبر بين خصم المشتركين وخصم الطلب الأول يتطبق ويتجمع مع كود الخصم. مغلق افتراضياً. اضغط "حفظ" بعد التغيير.</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">يُطبَّق تلقائياً لو إيميل العميل مشترك في الفوتر (لأول طلب مكتمل فقط لو "لأول طلب فقط" شغال). الأكبر بين خصم المشتركين وخصم الطلب الأول يتطبق ويتجمع مع العروض والأكواد والشحن المجاني المفعّل. مغلق افتراضياً. اضغط "حفظ" بعد التغيير.</p>
                     </div>
                     <div onClick={() => setSubEnabled(p => !p)}
                       className={`w-11 h-6 rounded-full transition-colors cursor-pointer flex items-center ${subEnabled ? "bg-emerald-500" : "bg-gray-200"}`}>

@@ -170,7 +170,7 @@ describe("server quote: subscriber discount", () => {
     expect(q.discount).toBe(100);
   });
 
-  it("a larger offer beats the subscriber discount, a smaller one loses", async () => {
+  it("product offers stack with the subscriber discount", async () => {
     const offer = (percent) => ({
       id: "o1", name: "عرض السلة", active: true, environment: "production",
       type: "cart_percent", config: { percent }, productScope: "all", priority: 1,
@@ -178,11 +178,11 @@ describe("server quote: subscriber discount", () => {
     setup({ sub: pct(10), offers: [offer(40)] });
     let q = await quote();
     expect(q.discountSource).toBe("offer");
-    expect(q.discount).toBe(400);
+    expect(q.discount).toBe(500);
     setup({ sub: pct(30), offers: [offer(5)] });
     q = await quote();
-    expect(q.discountSource).toBe("subscriber");
-    expect(q.discount).toBe(300);
+    expect(q.discountSource).toBe("offer");
+    expect(q.discount).toBe(350);
   });
 
   it("fails closed when the Subscribers read throws", async () => {
@@ -281,13 +281,46 @@ describe("server quote: subscriber discount", () => {
       expect(q).toMatchObject({ discount: 100, shipping: ruleEnabled ? 0 : 70, total: ruleEnabled ? 900 : 970, stackedDiscount: null });
     }
   });
-  it("non-shipping qualifying offers still reject a cash code, with autos on or off", async () => {
+  it("non-shipping offer + code + welcome stack, with welcome optional", async () => {
     for (const enabled of [true, false]) {
       setup({ sub: pct(15, { enabled }), offers: [{ id: "o", active: true, type: "cart_percent", productScope: "all", config: { percent: 20 } }] });
       shippingSettings(); addCode();
       m.docs.set("settings/offerShippingRules_production", shippingRule);
-      await expect(quote({ promoCode: "CODE" })).rejects.toMatchObject({ status: 409 });
+      expect(await quote({ promoCode: "CODE" })).toMatchObject({ discount: enabled ? 450 : 300, shipping: 0, total: enabled ? 550 : 700 });
     }
+  });
+
+  it("owner example: second-item 40% + best welcome + code + shipping all apply", async () => {
+    setup({ sub: pct(10), first: 10, offers: [{ id: "second", active: true, name: "40% على القطعة الثانية", type: "nth_percent", productScope: "all", config: { nth: 2, percent: 40 } }] });
+    m.docs.get("products/A").price = 2000;
+    shippingSettings({ freeShippingThreshold: 2000 }); addCode();
+    const q = await quote({ cartItems: [{ id: "A", qty: 2 }], promoCode: "CODE" });
+    expect(q).toMatchObject({ subtotal: 4000, discount: 1300, shipping: 0, total: 2700 });
+    expect(q.discountLines.map(line => [line.source, line.amount])).toEqual([["offer", 800], ["promo", 100], ["first_order", 400]]);
+    expect(q.lineItems.reduce((sum, line) => sum + line.price * line.quantity, 0)).toBe(3200);
+  });
+  it("mode is settings-based even when this customer is not welcome-eligible", async () => {
+    const offer = { id: "o", active: true, type: "cart_percent", productScope: "all", config: { percent: 20 } };
+    setup({ first: 10, offers: [offer], customers: { [EMAIL]: { "Total Orders": 1 } } });
+    shippingSettings(); addCode();
+    expect(await quote({ promoCode: "CODE" })).toMatchObject({ discount: 300, stackingEnabled: true });
+    setup({ offers: [offer] }); shippingSettings(); addCode();
+    await expect(quote({ promoCode: "CODE" })).rejects.toMatchObject({ status: 409 });
+  });
+  it("a fresh subscriber is re-read without cached negative eligibility", async () => {
+    setup({ sub: pct(15), subscribed: false });
+    expect((await quote()).discount).toBe(0);
+    m.adminGet.mockResolvedValue({ fields: { status: { stringValue: "active" } } });
+    expect((await quote()).discount).toBe(150);
+    expect(m.adminGet).toHaveBeenCalledTimes(2);
+  });
+  it("either prior email or prior phone blocks welcome; a draft customer does not", async () => {
+    for (const identity of [EMAIL, PHONE]) {
+      setup({ sub: pct(15), customers: { [identity]: { "Total Orders": 1 } } });
+      expect((await quote()).discount).toBe(0);
+    }
+    setup({ sub: pct(15), customers: { [EMAIL]: { "Total Orders": 0 }, [PHONE]: { "Total Orders": 0 } } });
+    expect((await quote()).discount).toBe(150);
   });
 
 });

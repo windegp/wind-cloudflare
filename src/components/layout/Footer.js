@@ -97,6 +97,7 @@ function Newsletter() {
           fbTrack("Lead", { email, content_name: "newsletter" });
           ttTrack("SubmitForm", { email, content_name: "newsletter" });
         } catch (_) {}
+        window.dispatchEvent(new Event("wind:subscribed"));
         setStatus("sent");
         setEmail("");
       } else {

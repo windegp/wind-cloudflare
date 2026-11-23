@@ -88,11 +88,11 @@ describe('أفضل خصم واحد: العرض ضد الكود ضد خصم ال�
   });
   it('العرض أعلى من خصم الطلب الأول → العرض', () => {
     // 965 × 10% = 96.5 → 97  <  128
-    expect(calculateAllTotals(CART, null, FIRST, true, [NTH])).toMatchObject({ discount: 128, discountSource: 'offer' });
+    expect(calculateAllTotals(CART, null, FIRST, true, [NTH])).toMatchObject({ discount: 225, discountSource: 'offer' });
   });
   it('خصم الطلب الأول أعلى من العرض → خصم الطلب الأول', () => {
     const big = { ...FIRST, firstOrderDiscount: 20 }; // 193
-    expect(calculateAllTotals(CART, null, big, true, [NTH])).toMatchObject({ discount: 193, discountSource: 'first_order' });
+    expect(calculateAllTotals(CART, null, big, true, [NTH])).toMatchObject({ discount: 321, discountSource: 'offer' });
   });
   it('كود الشحن المجاني يظل مستقلاً عن حد الشحن بعد الخصم', () => {
     const promo = { valid: true, type: 'free_shipping', freeShipping: true, code: 'FS' };
@@ -118,7 +118,7 @@ describe('أفضل خصم واحد: العرض ضد الكود ضد خصم ال�
   });
   it('الكود النقدي الأكبر يفوز على خصم الطلب الأول والعرض', () => {
     const promo = { valid: true, type: 'fixed', discountAmount: 500 };
-    expect(calculateAllTotals(CART, promo, FIRST, true, [NTH, BXGY]).discountSource).toBe('promo');
+    expect(calculateAllTotals(CART, promo, FIRST, true, [NTH, BXGY]).discountSource).toBe('offer');
   });
 });
 

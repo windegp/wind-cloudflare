@@ -1,3 +1,4 @@
+import { buildDiscountBreakdown, isStackingEnabled } from "@/lib/discountBreakdown";
 // ============================================
 // 🛒 CART CALCULATIONS UTILITY
 // Centralized calculations for cart operations
@@ -164,21 +165,12 @@ export function calculateAllTotals(cartItems, promoResult = null, shippingSettin
       : 0;
 
   const offerResult = computeBestOffer(cartItems, offers, new Date(), customerChoiceGiftSelections);
-  // كود الخصم النقدي بيتجمع مع خصم الطلب الأول (الاتنين مع بعض). العروض بتفضل بنظام الأفضل.
-  const stackFirstOrder = promoDiscount > 0 && firstOrderDiscount > 0;
-  const candidates = stackFirstOrder
-    ? [{ source: 'promo', discount: promoDiscount, rank: 1 }]
-    : [
-        { source: 'promo', discount: promoDiscount, rank: 1 },
-        { source: 'first_order', discount: firstOrderDiscount, rank: 2 },
-        { source: 'offer', discount: Math.max(0, Number(offerResult.discount) || 0), rank: 3 },
-      ].filter((candidate) => candidate.discount > 0);
-
-  candidates.sort((a, b) => b.discount - a.discount || a.rank - b.rank);
-  const winner = candidates[0] || { source: 'none', discount: 0 };
-
-  const discountSource = winner.source;
-  const appliedOffer = discountSource === 'offer' ? offerResult.offer : null;
+  const stackingEnabled = isStackingEnabled(shippingSettings || {}, freeShippingRule);
+  const legacyPromoWins = !stackingEnabled && promoDiscount >= Number(offerResult.discount || 0) && promoDiscount > 0;
+  const offerDiscount = legacyPromoWins ? 0 : Number(offerResult.discount) || 0;
+  const effectivePromoDiscount = !stackingEnabled && offerDiscount > 0 ? 0 : promoDiscount;
+  const discountSource = offerDiscount > 0 ? 'offer'  : promoDiscount > 0 ? 'promo' : firstOrderDiscount > 0 ? 'first_order' : 'none';
+  const appliedOffer = offerDiscount > 0 ? offerResult.offer : null;
 
   // A buy-X-get-Y gift is an extra line, not a discounted unit from the paid cart.
   // Include its original value in the displayed subtotal, then subtract the benefit.
@@ -200,12 +192,13 @@ export function calculateAllTotals(cartItems, promoResult = null, shippingSettin
         )
       : 0;
   const subtotal = cartSubtotal + autoGiftSubtotal + customerChoiceGiftSubtotal;
-  const discount = Math.min(
-    subtotal,
-    Math.max(0, Math.round(winner.discount + (stackFirstOrder ? firstOrderDiscount : 0)))
-  );
-  const promoAmount = stackFirstOrder ? Math.min(Math.max(0, Math.round(promoDiscount)), discount) : 0;
-  const stackedFirstOrderAmount = stackFirstOrder ? Math.max(0, discount - promoAmount) : 0;
+  const breakdown = buildDiscountBreakdown({ subtotal, offerAmount: offerDiscount,
+    offerLabel: `عرض: ${offerResult.offer?.name || 'خصم'}`, promoAmount: effectivePromoDiscount,
+    promoLabel: `${promoResult?.type === 'coupon_fixed' ? 'قسيمة شراء' : 'كود الخصم'} ${promoResult?.code || ''}`.trim(),
+    firstOrderAmount: firstOrderDiscount });
+  const discount = breakdown.discount;
+  const promoAmount = breakdown.lines.find(line => line.source === 'promo')?.amount || 0;
+  const stackedFirstOrderAmount = breakdown.lines.find(line => line.source === 'first_order')?.amount || 0;
 
   // شحن المنتجات المحددة مستقل عن الحد العام الذي يُحسب بعد الخصم النقدي.
   const freeShippingByRule = isFreeShippingRuleEligible(cartItems, freeShippingRule);
@@ -219,6 +212,7 @@ export function calculateAllTotals(cartItems, promoResult = null, shippingSettin
     shipping,
     total,
     discountSource,
+    discountLines: breakdown.lines,
     promoAmount,
     stackedFirstOrderAmount,
     appliedOffer,
