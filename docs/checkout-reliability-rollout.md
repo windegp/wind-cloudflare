@@ -1,10 +1,26 @@
-# Checkout reliability rollout, foundation
+# Checkout reliability rollout and activation checklist
 
-## Status
+## Current status after PRs 19-24
 
-Inactive foundation. No existing route imports this service. Merging this PR does not migrate checkout, send messages, create collections, or require immediate configuration. Do not claim checkout is migrated after this PR.
+The durable persistence, payment receipts, recovery runner, server APIs and browser/thank-you integration are all implemented in main, behind opt-in gates. The original foundation-only status is no longer current. Merging code is not activation or proof of a successful production payment. Existing checkout creation stays legacy while the gates are unset. Production settings, IAM, indexes, scheduler operation and merchant configuration have not been independently verified here.
 
-The next integration PR must use a signed customer identity, a browser-persisted UUID per attempt, and this persistence call before returning payment setup. It must remove browser order/counter/customer writes and integrate durable payment receipts and retryable outbox processing. The existing production checkout continues unchanged until that integration ships.
+The compatibility follow-up accepts signed `SUCCESS` with response code `00` as well as the existing `APPROVED`, still requiring matching private amount/currency and all existing signature checks. Tracking accepts the exact 43-character `WIND-D-<UUIDv4>` format, normalizes the UUID back to its generated lowercase Firestore document ID and keeps legacy IDs/phone verification intact. The input allows 43 characters. No gate, rule or live setting is changed by these fixes. This does not repair a previously terminal `review` receipt automatically; any existing review records require an authorized operator check, not a blind replay.
+
+### Activation checklist, not executed
+
+- [ ] Verify current deployed code and build/runtime gates without turning them on. `NEXT_PUBLIC_DURABLE_CHECKOUT_ENABLED` is build-time; `CHECKOUT_DURABLE_ENABLED`, `CHECKOUT_DURABLE_WEBHOOK_ENABLED` and `CHECKOUT_RECOVERY_ENABLED` are runtime. A recovery secret alone activates nothing.
+- [ ] In a separate reviewed rules change, make all four `WindCheckoutAttempts`, `WindCheckoutOutbox`, `WindPaymentReceipts` and `WindCheckoutEffects` collections private to browser clients. Test guest/regular/admin get/list/create/update/delete in Emulator and regression-test existing public pages and legacy admin/notification dependencies. A deny match cannot override a broader allow. No rule edit is included here. Existing Orders/Customers public exposure and writes remain a separate known risk, not fixed by activating this flow.
+- [ ] Verify same-project service credentials and IAM with non-production integration tests; rules tests do not prove service-account access.
+- [ ] Verify composite indexes (`state`, `nextAttemptAt`) for outbox/receipts, a real authenticated one-minute recovery scheduler, and an operator-visible review/backlog alert and response process. No dedicated admin recovery/review screen is included yet; do not assume routine admin orders view covers it.
+- [ ] Resolve feature parity: durable flow currently omits abandoned-cart capture and has no customer cancellation/replacement flow for a persisted pending attempt. Add safe separate draft/cancellation endpoints or explicitly agree a limited rollout with these gaps. Never reset an uncertain attempt into another payment.
+- [ ] Run staging end-to-end tests: COD/InstaPay/card, approved `SUCCESS/00` and `SUCCESS/APPROVED`, failed/pending/incorrectly signed/amount-mismatched events, duplicate/late webhook, refresh/retry, lost commit acknowledgement, email failure/recovery, counters/customers without double-counting, legacy and 43-character durable tracking with wrong-phone denial. No real customer orders are needed for these tests.
+- [ ] Review provider-specific payment contract and runtime limits, then authorize a controlled rollout with monitoring and rollback. If pausing new creation, keep durable webhook/recovery enabled for outstanding canonical payments. Do not enable from this checklist alone.
+
+The Android notification-registration change (PR25) is separate and is not a dependency of these compatibility fixes or the durable checkout migration. A full admin redesign is not required to do this checklist. Reservations for stock, promo quota and first-order entitlement, provider inquiry/reconciliation and delivered/bounced email events remain follow-up scope, not delivered guarantees. No zero-failure or universally exactly-once delivery promise is made.
+
+## Foundation design notes (historical stage 19)
+
+The sections below describe the staged design and its later extensions. References to an inactive foundation or future integrations in historical paragraphs describe that earlier stage; use the current checklist above for the merged implementation's status.
 
 ## Data model
 
@@ -14,7 +30,7 @@ The next integration PR must use a signed customer identity, a browser-persisted
 
 Order snapshot, projection and jobs use one Firestore atomic commit with create preconditions. Retries compare the payload fingerprint. Concurrent identical attempts converge; conflicting payloads get 409; uncertain commit results are read back twice by the same key before surfacing an unresolved failure. No email, push or provider call happens in the storage transaction.
 
-Outbox jobs are not processed in this foundation. Do not integrate the service into live order creation until the worker and recovery path exist.
+At the foundation-only stage, outbox jobs were not processed. PR21 now supplies the worker/recovery route; scheduling and monitored activation remain deployment prerequisites.
 
 ## Required production configuration before activation
 
@@ -23,15 +39,15 @@ Outbox jobs are not processed in this foundation. Do not integrate the service i
 3. Keep `CHECKOUT_QUOTE_SECRET` configured. The integration signs customer email/phone into quotes, not merely financial totals.
 4. Firestore security rules must prevent browser access to every new private collection. A restrictive match does NOT override a broader matching `allow read/write: if true`; Firestore allows a request if ANY matching allow succeeds. Remove/narrow broad grants for these collections. This requires reviewing the deployed rules, not pasting one deny block.
 5. Protect authoritative order financials and paid status. Existing dashboard projections may remain separately readable under the owner's chosen policy, but must not be payment authority.
-6. Scheduler/queue and authenticated recovery runner will be required for the outbox. No detached promises or browser visits may be the only retry mechanism. Exact deployment steps come with the integration PR.
+6. The authenticated recovery runner exists; an actual scheduler/queue must invoke it. No detached promises or browser visits may be the only retry mechanism. Deployment checks are below.
 
-Missing service-account configuration, failed auth, permission/network errors and unresolved commits return a typed failure to the future route. The route must return Arabic failure text plus the stable order reference, and must never start payment unless persistence is confirmed. Log event, order ID and error code only, not customer data, keys or signed tokens.
+Missing service-account configuration, failed auth, permission/network errors and unresolved commits return a typed failure to the integrated route. The integrated route must return Arabic failure text plus the stable order reference, and must never start payment unless persistence is confirmed. Log event, order ID and error code only, not customer data, keys or signed tokens.
 
-## Remaining work
+## Original foundation roadmap (now partly implemented)
 
-- Wire server-owned creation into checkout, persisting the attempt key across refresh/retries.
-- Durable webhook event receipts keyed by provider transaction ID + status; validate against private canonical financials, independent of quote TTL; atomic paid transition + jobs.
-- CAS-leased outbox worker, provider idempotency, bounded retries, dead-letter/reconciliation view and authenticated recovery runner.
+- Implemented behind gates: server-owned creation wired into checkout with persisted attempt keys.
+- Implemented behind gates: durable webhook event receipts keyed by provider transaction ID + status; validate against private canonical financials, independent of quote TTL; atomic paid transition + jobs.
+- Implemented behind gates: CAS-leased outbox worker, provider idempotency, bounded retries and authenticated recovery runner. Operator review visibility, alerts and provider reconciliation remain activation/follow-up work as detailed above.
 - Provider inquiry/reconciliation API requires confirmed Kashier contract and server secret. Current fetched searchOrders reference returned an incomplete description, so no endpoint/payload is guessed.
 - Stock reservation requires mapping the actual variant/inventory model and an expiry/release worker. Do not decrement stock speculatively.
 - Firestore emulator/integration tests and controlled production rollout. Unit mocks are not evidence of deployed permissions or merchant setup.
@@ -53,7 +69,7 @@ Missing service-account configuration, failed auth, permission/network errors an
 
 `checkoutCustomerEffects.js` atomically creates a private `WindCheckoutEffects` ledger with customer totals and site counters. It uses CAS on customer and settings documents, preserving unrelated fields and serializing concurrent purchases. A handler retry after a lost acknowledgement cannot count twice. The same private-rule requirements apply to receipts and effect ledgers.
 
-These modules have injected handlers and are still inactive: no scheduler, external email, push, live webhook, provider inquiry or database mutation is triggered merely by merging. Integrating them without an authenticated due-job runner and a review queue is unsupported.
+These modules have injected handlers and opt-in route integration: merging alone does not create a scheduler or enable the gates. Production activation remains unverified; provider inquiry is not implemented. Integrating them without an authenticated due-job runner and a review queue is unsupported.
 
 ## Recovery runner deployment, still off by default
 
@@ -67,15 +83,15 @@ Provider handlers use the canonical snapshot. Resend receives the stable idempot
 
 No production sender, recipient or template is added. The existing administrator mailbox, sender identity and customer confirmation templates are reused. Authentication failures return no customer information. The endpoint's summary contains counts only.
 
-## Server API layer, opt-in and not connected to browser yet
+## Server API layer, opt-in (browser integration now exists behind its own gate)
 
 New `POST /api/checkout-attempt` is off unless `CHECKOUT_DURABLE_ENABLED=true`. It also requires the recovery runner, strong recovery secret, `CHECKOUT_DURABLE_WEBHOOK_ENABLED=true`, and the actual store project `wind-reviews`. These are configuration checks, not proof the schedule/rules/indexes work. Validate them before activation. Card config is checked before persistence; payment setup comes only after a confirmed immutable snapshot. A paid replay never returns a fresh payment hash.
 
 New quotes bind the normalized email, phone AND shipping governorate used for eligibility/shipping pricing. No client substitution can change those after signing. An expired quote can replay only an existing identical attempt, never create a new order. The status endpoint accepts a signed, order-bound credential even after expiry, and returns status/amount only. Tokens are bearer credentials: POST bodies only, no URLs/logs/local analytics. Do not share them.
 
-The opt-in durable webhook path checks all required financial/identity fields are actually signed before any private reads. Canonical orders stay on durable processing even when accepting new orders is paused. The future browser must use `WIND-D-<UUID>` IDs so unknown new-order events remain recoverable while legacy IDs continue through the previous path. Keep durable webhook routing enabled while ANY canonical card order is outstanding. Both gates must remain unset until full migration is reviewed.
+The opt-in durable webhook path checks all required financial/identity fields are actually signed before any private reads. Canonical orders stay on durable processing even when accepting new orders is paused. The durable browser uses `WIND-D-<UUID>` IDs so unknown new-order events remain recoverable while legacy IDs continue through the previous path. Keep durable webhook routing enabled while ANY canonical card order is outstanding. Both gates must remain unset until full migration is reviewed.
 
-Browser migration is deliberately separate. The old browser still writes abandoned `Orders` documents, which collide with create-only snapshots. It MUST move abandoned drafts out of `Orders`, use session-persisted UUID attempt keys, remove client customer/counter writes and call the new endpoint before payment. Do not manually point the old UI at the new endpoint. Thank-you must check canonical payment status before clearing cart or firing Purchase; redirects/iframe messages alone are not payment proof.
+Browser migration was delivered separately in PR23 behind the build gate below. The legacy browser still writes abandoned `Orders` documents, which collide with create-only snapshots. Do not route that legacy UI to the new endpoint. The gated durable UI uses session-persisted UUID attempt keys, bypasses client customer/counter writes and calls the new endpoint before payment; it deliberately omits abandoned drafts until a safe separate endpoint exists. Do not manually point the old UI at the new endpoint. Thank-you must check canonical payment status before clearing cart or firing Purchase; redirects/iframe messages alone are not payment proof.
 
 ## Browser migration, build gate
 

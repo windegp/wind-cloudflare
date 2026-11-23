@@ -57,7 +57,7 @@ export async function processPaymentReceipt(id, { store = serverOrderStore, now 
       state = "awaiting_order"; reason = "CANONICAL_ORDER_MISSING";
     } else if (canonical.data.paymentMethod !== "card") {
       state = "review"; reason = "PAYMENT_METHOD_MISMATCH";
-    } else if (event.status === "SUCCESS" && event.responseCode !== "APPROVED") {
+    } else if (event.status === "SUCCESS" && !["APPROVED", "00"].includes(event.responseCode)) {
       state = "review"; reason = "PAYMENT_NOT_APPROVED";
     } else if (event.status === "SUCCESS") {
       const expected = Number(canonical.data.financials?.total);

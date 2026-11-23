@@ -35,6 +35,31 @@ describe("durable payments", () => {
     expect(docs.get(key).data).toMatchObject({ status: "paid", paymentReference: "tx-123" });
     expect(get(PAYMENT_RECEIPTS, r.receiptId).data.nextAttemptAt).toBeUndefined();
   });
+  it.each(["00", "APPROVED"])("accepts SUCCESS with approved response code %s", async code => {
+    const result = await run({ transactionResponseCode: code });
+    expect(result.state).toBe("applied");
+    expect(docs.get(key).data.status).toBe("paid");
+    expect(store.commit.mock.calls[1][0]).toHaveLength(7);
+  });
+  it.each(["", "0", "05", "DECLINED", "AUTHENTICATION_IN_PROGRESS", "approved", " 00 "])("does not broaden success approval to %s", async code => {
+    expect(await run({ transactionResponseCode: code })).toMatchObject({ state: "review", reason: "PAYMENT_NOT_APPROVED" });
+    expect(docs.get(key).data.status).toBe("pending_payment");
+    expect(docs.size).toBe(3);
+  });
+  it.each(["PENDING", "FAILURE"])("code 00 does not approve a %s transaction", async status => {
+    expect(await run({ status, transactionResponseCode: "00" })).toMatchObject({ state: "observed" });
+    expect(docs.get(key).data.status).toBe("pending_payment");
+    expect(docs.size).toBe(3);
+  });
+  it.each([{ amount: "101" }, { currency: "USD" }])("code 00 still requires matching private financials: %o", async mismatch => {
+    expect(await run({ transactionResponseCode: "00", ...mismatch })).toMatchObject({ state: "review", reason: "PAYMENT_AMOUNT_OR_CURRENCY_MISMATCH" });
+    expect(docs.get(key).data.status).toBe("pending_payment");
+  });
+  it("replays a code 00 success without duplicate jobs", async () => {
+    await Promise.all([run({ transactionResponseCode: "00" }), run({ transactionResponseCode: "00" })]);
+    await run({ transactionResponseCode: "00" });
+    expect(docs.size).toBe(7);
+  });
   it("duplicate and concurrent deliveries create jobs and count opportunities once", async () => {
     const r = await Promise.all([run(), run()]); expect(r.every(v => v.state === "applied")).toBe(true);
     await run(); expect(docs.size).toBe(7);

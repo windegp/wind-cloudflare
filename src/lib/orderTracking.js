@@ -8,9 +8,13 @@ function westernDigits(value) {
   return String(value ?? "").replace(/[٠-٩]/g, (d) => String(ARABIC_DIGITS.indexOf(d)));
 }
 
-/** Order ids look like WIND-12345-AB. Returns "" when the input is not a plausible id. */
+/** Accept legacy IDs and the exact durable UUID namespace. Firestore IDs are case-sensitive. */
 export function normalizeOrderNumber(value) {
   const cleaned = westernDigits(value).trim().toUpperCase().replace(/^#/, "").replace(/\s+/g, "");
+  // Durable checkout generates lowercase UUIDs; preserve that canonical document ID.
+  if (/^WIND-D-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/.test(cleaned)) {
+    return `WIND-D-${cleaned.slice(7).toLowerCase()}`;
+  }
   if (!/^[A-Z0-9][A-Z0-9-]{2,39}$/.test(cleaned)) return "";
   return cleaned;
 }

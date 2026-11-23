@@ -50,7 +50,7 @@ export default function TrackOrderForm() {
             placeholder="WIND-12345-AB"
             dir="ltr"
             required
-            maxLength={40}
+            maxLength={43}
             className="w-full border border-gray-300 rounded-[3px] px-3 py-2.5 text-left"
           />
         </label>

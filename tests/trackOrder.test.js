@@ -37,6 +37,35 @@ describe("track-order", () => {
     expect(phoneTail("123")).toBe("");
   });
 
+  const durableId = "WIND-D-a1b2c3d4-1234-4123-8123-123456789abc";
+  it("accepts the full 43-character durable ID and restores canonical lowercase UUID", () => {
+    expect(durableId.length).toBe(43);
+    expect(normalizeOrderNumber(durableId)).toBe(durableId);
+    expect(normalizeOrderNumber(` #${durableId.toUpperCase()} `)).toBe(durableId);
+    expect(normalizeOrderNumber("A".repeat(40))).toBe("A".repeat(40));
+  });
+  it.each(["A".repeat(41), "A".repeat(43), "A".repeat(44),
+    "WIND-D-a1b2c3d4-1234-1123-8123-123456789abc", "WIND-D-a1b2c3d4-1234-4123-7123-123456789abc",
+    "WIND-D-a1b2c3d4-1234-4123-8123-123456789abg", `${durableId}/x`])("rejects invalid long IDs without reading Firestore: %s", async id => {
+    expect(normalizeOrderNumber(id)).toBe("");
+    expect((await call({ orderNumber: id, phone: "01012345678" })).status).toBe(404);
+    expect(getDocMock).not.toHaveBeenCalled();
+  });
+  it("looks up the actual case-sensitive durable document and still hides personal data", async () => {
+    getDocMock.mockResolvedValue({ exists: () => true, data: () => ({ ...order, Name: durableId }) });
+    const response = await call({ orderNumber: durableId.toUpperCase(), phone: "01012345678" });
+    expect(response.status).toBe(200);
+    expect(getDocMock).toHaveBeenCalledWith({ c: "Orders", id: durableId });
+    const body = await response.json();
+    expect(body.order.orderNumber).toBe(durableId);
+    expect(JSON.stringify(body)).not.toContain("secret@example.com");
+    expect(JSON.stringify(body)).not.toContain("Secret street");
+  });
+  it("does not loosen phone verification for a durable order", async () => {
+    getDocMock.mockResolvedValue({ exists: () => true, data: () => ({ ...order, Name: durableId }) });
+    expect((await call({ orderNumber: durableId, phone: "01099999999" })).status).toBe(404);
+  });
+
   it("rejects requests without a same-origin header", async () => {
     const res = await call({ orderNumber: "WIND-12345-AB", phone: "01012345678" }, {});
     expect(res.status).toBe(403);
