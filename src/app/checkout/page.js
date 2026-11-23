@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useCart } from "../../context/CartContext";
 import { usePathname } from 'next/navigation';
+import { useSettings } from "@/context/SettingsContext";
+import { normalizeSubscriberSettings, resolveLiveSubscriberDisplay } from "@/lib/subscriberDiscount";
 import { usePageReady, useGlobalLoader } from "../../context/GlobalLoaderContext";
 import { useRouter } from 'next/navigation';
 import Link from "next/link";
@@ -511,6 +513,65 @@ export default function CheckoutPage() {
     activeOrderIdRef.current = `WIND-${Date.now().toString().slice(-5)}-${Math.random().toString(36).substring(2, 4).toUpperCase()}`;
   }
   const activeOrderId = activeOrderIdRef.current;
+
+  // ── عرض خصم المشتركين قبل تأكيد الطلب ─────────────────────────
+  // للعرض فقط: السيرفر بيحسب الخصم الحقيقي عند التأكيد، وده اللي بيتعتمد دايماً.
+  const { settings: liveSettings } = useSettings() || {};
+  const subscriberLiveEnabled = normalizeSubscriberSettings(liveSettings?.promotions?.subscriberDiscount).enabled;
+  const [liveQuote, setLiveQuote] = useState(null);
+  const liveQuoteSeq = useRef(0);
+  const liveEmail = String(formData.email || '').trim().toLowerCase();
+  const livePhoneDigits = String(formData.phone || '').replace(/\D/g, '');
+  const liveEligibleInput = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(liveEmail) && livePhoneDigits.length >= 11;
+  const liveCartKey = JSON.stringify(cartItems.map((i) => [i.id, i.qty, i.selectedSize, i.selectedColor]));
+
+  useEffect(() => {
+    const seq = ++liveQuoteSeq.current;
+    setLiveQuote(null);
+    if (!subscriberLiveEnabled || !liveEligibleInput || cartItems.length === 0) return undefined;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetchWithTimeout("/api/checkout-quote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            orderId: activeOrderId,
+            cartItems,
+            offerGiftSelections,
+            customerChoiceGiftSelections: customerChoiceGiftSelections.map((selection) => ({
+              selectionId: selection.selectionId,
+              id: selection.id,
+              productId: selection.productId,
+              handle: selection.handle,
+              productHandle: selection.productHandle,
+              selectedColor: selection.selectedColor,
+              selectedSize: selection.selectedSize,
+              image: selection.image,
+            })),
+            promoCode: appliedPromo?.code || "",
+            customerEmail: liveEmail,
+            customerPhone: formData.phone,
+            governorate: formData.governorate,
+          }),
+        }, 10000, "");
+        const data = await res.json();
+        if (seq !== liveQuoteSeq.current) return; // نتيجة قديمة
+        if (res.ok && data?.success && data.quote?.discountSource === "subscriber") {
+          setLiveQuote(data.quote);
+        }
+      } catch (_) {
+        // فشل صامت: العميل مايشوفش خطأ، والخصم هيتحسب عند التأكيد.
+      }
+    }, 700);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subscriberLiveEnabled, liveEligibleInput, liveEmail, livePhoneDigits, formData.governorate, liveCartKey, appliedPromo?.code, subtotal]);
+
+  const liveDisplay = resolveLiveSubscriberDisplay({ liveQuote, subtotal, discount, discountLabel, total: finalTotal });
+  const shownDiscount = liveDisplay.discount;
+  const shownLabel = liveDisplay.label;
+  const shownTotal = liveDisplay.total;
+  const shownProductsAfter = Math.max(0, Number(subtotal || 0) - Number(shownDiscount || 0));
   
   // 🔥 متغير لإيقاف رادار السلة المتروكة بمجرد ضغط زر الدفع
   const isOrderSubmittedRef = useRef(false);
@@ -1282,7 +1343,7 @@ router.push(`/thank-you?orderId=${orderId}`);
           </div>
           <div className="text-left">
             <span className="block text-[10px] text-gray-500 font-medium">سعر المنتجات</span>
-            <span className="font-black text-xl text-gray-900">ج.م {productsAfterDiscount}.00</span>
+            <span className="font-black text-xl text-gray-900">ج.م {shownProductsAfter}.00</span>
           </div>
         </div>
 
@@ -1333,18 +1394,18 @@ router.push(`/thank-you?orderId=${orderId}`);
             </div>
 
             <div className="border-t border-gray-100 pt-3 space-y-1.5 text-base">
-              {discount > 0 && <div className="flex justify-between text-gray-500"><span>قيمة المنتجات قبل الخصم</span><span className="text-gray-800 font-medium">ج.م {subtotal}.00</span></div>}
-              {discount > 0 && (
+              {shownDiscount > 0 && <div className="flex justify-between text-gray-500"><span>قيمة المنتجات قبل الخصم</span><span className="text-gray-800 font-medium">ج.م {subtotal}.00</span></div>}
+              {shownDiscount > 0 && (
                 <div className="flex justify-between text-emerald-600">
-                  <span>{discountLabel}</span>
-                  <span className="font-bold">- ج.م {discount}.00</span>
+                  <span>{shownLabel}</span>
+                  <span className="font-bold">- ج.م {shownDiscount}.00</span>
                 </div>
               )}
-              <div className="flex justify-between text-gray-700 font-semibold"><span>سعر المنتجات</span><span>ج.م {productsAfterDiscount}.00</span></div>
+              <div className="flex justify-between text-gray-700 font-semibold"><span>سعر المنتجات</span><span>ج.م {shownProductsAfter}.00</span></div>
               <div className="flex justify-between text-red-700 font-semibold text-sm"><span>تكلفة الشحن</span><span>{SHIPPING_COST === 0 ? 'مجاناً' : `ج.م ${SHIPPING_COST}.00`}</span></div>
               <div className="flex justify-between font-black text-lg pt-2 border-t border-gray-100">
                 <span>الإجمالي</span>
-                <span>ج.م {finalTotal}.00</span>
+                <span>ج.م {shownTotal}.00</span>
               </div>
             </div>
           </div>
@@ -1663,7 +1724,7 @@ router.push(`/thank-you?orderId=${orderId}`);
                       <ol className="text-xs text-gray-600 space-y-1.5 leading-relaxed list-decimal list-inside">
                         <li>افتح تطبيق إنستا باي</li>
                         <li>
-                          حوّل المبلغ <strong>ج.م {finalTotal}.00</strong> للرقم:{' '}
+                          حوّل المبلغ <strong>ج.م {shownTotal}.00</strong> للرقم:{' '}
                           <span className="font-mono font-black text-white bg-gray-900 px-2 py-0.5 rounded select-all">01026628476</span>
                         </li>
                         <li>أرسل صورة الإيصال على واتساب للتأكيد</li>
@@ -1703,7 +1764,7 @@ router.push(`/thank-you?orderId=${orderId}`);
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <div className="text-right">
-                    <span className="block font-black text-xl text-gray-900">ج.م {productsAfterDiscount}.00</span>
+                    <span className="block font-black text-xl text-gray-900">ج.م {shownProductsAfter}.00</span>
                     <span className="block text-[11px] font-semibold text-red-700">
                       تكلفة الشحن: {SHIPPING_COST === 0 ? 'مجاناً' : `ج.م ${SHIPPING_COST}.00`}
                     </span>
@@ -1761,21 +1822,21 @@ router.push(`/thank-you?orderId=${orderId}`);
                   </div>
 
                   <div className="border-t border-gray-100 pt-3 space-y-1.5 text-sm">
-                    {discount > 0 && <div className="flex justify-between text-gray-500"><span>قيمة المنتجات قبل الخصم</span><span className="text-gray-800 font-medium">ج.م {subtotal}.00</span></div>}
-                    {discount > 0 && (
+                    {shownDiscount > 0 && <div className="flex justify-between text-gray-500"><span>قيمة المنتجات قبل الخصم</span><span className="text-gray-800 font-medium">ج.م {subtotal}.00</span></div>}
+                    {shownDiscount > 0 && (
                       <div className="flex justify-between text-emerald-600">
-                        <span>{discountLabel}</span>
-                        <span className="font-bold">- ج.م {discount}.00</span>
+                        <span>{shownLabel}</span>
+                        <span className="font-bold">- ج.م {shownDiscount}.00</span>
                       </div>
                     )}
-                    <div className="flex justify-between text-gray-700 font-semibold"><span>سعر المنتجات</span><span>ج.م {productsAfterDiscount}.00</span></div>
+                    <div className="flex justify-between text-gray-700 font-semibold"><span>سعر المنتجات</span><span>ج.م {shownProductsAfter}.00</span></div>
                     <div className="flex justify-between text-red-700 font-semibold text-sm">
                       <span>تكلفة الشحن</span>
                       <span>{SHIPPING_COST === 0 ? 'مجاناً' : `ج.م ${SHIPPING_COST}.00`}</span>
                     </div>
                     <div className="flex justify-between font-black text-base pt-2 border-t border-gray-100">
                       <span>الإجمالي</span>
-                      <span>ج.م {finalTotal}.00</span>
+                      <span>ج.م {shownTotal}.00</span>
                     </div>
                   </div>
                 </div>
@@ -1794,9 +1855,9 @@ router.push(`/thank-you?orderId=${orderId}`);
                   {paymentMethod === 'card' ? 'جارٍ تحضير بوابة الدفع...' : 'جارٍ المعالجة...'}
                 </>
               ) : paymentMethod === 'card' ? (
-                <>ادفع الآن — ج.م {finalTotal}.00</>
+                <>ادفع الآن — ج.م {shownTotal}.00</>
               ) : (
-                <>تأكيد الطلب — ج.م {finalTotal}.00</>
+                <>تأكيد الطلب — ج.م {shownTotal}.00</>
               )}
             </button>
 
@@ -1869,21 +1930,21 @@ router.push(`/thank-you?orderId=${orderId}`);
             </div>
 
             <div className="space-y-3">
-              {discount > 0 && (
+              {shownDiscount > 0 && (
                 <div className="flex justify-between items-center text-base">
                   <span className="text-gray-500">قيمة المنتجات قبل الخصم</span>
                   <span className="font-semibold text-gray-800">ج.م {subtotal}.00</span>
                 </div>
               )}
-              {discount > 0 && (
+              {shownDiscount > 0 && (
                 <div className="flex justify-between items-center text-base text-emerald-600">
-                  <span>{discountLabel}</span>
-                  <span className="font-semibold">- ج.م {discount}.00</span>
+                  <span>{shownLabel}</span>
+                  <span className="font-semibold">- ج.م {shownDiscount}.00</span>
                 </div>
               )}
               <div className="flex justify-between items-center text-base font-semibold text-gray-700">
                 <span>سعر المنتجات</span>
-                <span>ج.م {productsAfterDiscount}.00</span>
+                <span>ج.م {shownProductsAfter}.00</span>
               </div>
               <div className="flex justify-between items-center text-sm font-semibold text-red-700">
                 <span>تكلفة الشحن</span>
@@ -1896,7 +1957,7 @@ router.push(`/thank-you?orderId=${orderId}`);
                   <span className="text-xl font-black text-gray-900">الإجمالي</span>
                   <span className="text-xs text-gray-400 mr-1.5">• جنيه مصري</span>
                 </div>
-                <span className="text-3xl font-black text-gray-900">ج.م {finalTotal}.00</span>
+                <span className="text-3xl font-black text-gray-900">ج.م {shownTotal}.00</span>
               </div>
             </div>
 

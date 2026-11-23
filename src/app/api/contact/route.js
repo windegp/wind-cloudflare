@@ -74,7 +74,8 @@ export async function POST(request) {
         subscribedAt: new Date().toISOString(),
       });
       return true;
-    } catch {
+    } catch (error) {
+      console.error("[contact] Subscribers save failed:", error?.message);
       return false;
     }
   };
