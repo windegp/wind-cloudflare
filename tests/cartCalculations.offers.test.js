@@ -118,7 +118,7 @@ describe('أفضل خصم واحد: العرض ضد الكود ضد خصم ال�
   });
   it('الكود النقدي الأكبر يفوز على خصم الطلب الأول والعرض', () => {
     const promo = { valid: true, type: 'fixed', discountAmount: 500 };
-    expect(calculateAllTotals(CART, promo, FIRST, true, [NTH, BXGY]).discountSource).toBe('offer');
+    expect(calculateAllTotals(CART, promo, FIRST, true, [NTH, BXGY]).discountSource).toBe('promo');
   });
 });
 

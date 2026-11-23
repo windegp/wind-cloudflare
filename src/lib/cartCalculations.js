@@ -166,9 +166,9 @@ export function calculateAllTotals(cartItems, promoResult = null, shippingSettin
 
   const offerResult = computeBestOffer(cartItems, offers, new Date(), customerChoiceGiftSelections);
   const stackingEnabled = isStackingEnabled(shippingSettings || {}, freeShippingRule);
-  const legacyPromoWins = !stackingEnabled && promoDiscount >= Number(offerResult.discount || 0) && promoDiscount > 0;
+  const legacyPromoWins = promoDiscount >= Number(offerResult.discount || 0) && promoDiscount > 0;
   const offerDiscount = legacyPromoWins ? 0 : Number(offerResult.discount) || 0;
-  const effectivePromoDiscount = !stackingEnabled && offerDiscount > 0 ? 0 : promoDiscount;
+  const effectivePromoDiscount = offerDiscount > 0 ? 0 : promoDiscount;
   const discountSource = offerDiscount > 0 ? 'offer'  : promoDiscount > 0 ? 'promo' : firstOrderDiscount > 0 ? 'first_order' : 'none';
   const appliedOffer = offerDiscount > 0 ? offerResult.offer : null;
 

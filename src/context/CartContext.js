@@ -384,7 +384,12 @@ const [customerChoiceGiftSelections, setCustomerChoiceGiftSelections] = useState
 
   // لو عرض تلقائي كسب على كود الخصم: نوضح للعميل إن الكود ما اتطبقش
   // (الحساب نفسه بيستخدم appliedPromo الأصلي — ده للعرض فقط)
-  const appliedPromoView = appliedPromo;
+  const appliedPromoView = useMemo(() => {
+    if (appliedPromo?.valid && appliedPromo.type !== 'free_shipping' && discountSource === 'offer') {
+      return { ...appliedPromo, message: `العرض أوفر من الكود، تم تطبيق العرض بدلاً منه. خصم الترحيب والشحن المجاني المفعّلان لا يتأثران.` };
+    }
+    return appliedPromo;
+  }, [appliedPromo, discountSource]);
 
   // ── Promo code — server-side validation ───────────────────────
   const applyPromoCode = useCallback(async (code, customerEmail = "", customerPhone = "") => {

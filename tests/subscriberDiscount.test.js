@@ -286,7 +286,7 @@ describe("server quote: subscriber discount", () => {
       setup({ sub: pct(15, { enabled }), offers: [{ id: "o", active: true, type: "cart_percent", productScope: "all", config: { percent: 20 } }] });
       shippingSettings(); addCode();
       m.docs.set("settings/offerShippingRules_production", shippingRule);
-      expect(await quote({ promoCode: "CODE" })).toMatchObject({ discount: enabled ? 450 : 300, shipping: 0, total: enabled ? 550 : 700 });
+      expect(await quote({ promoCode: "CODE" })).toMatchObject({ discount: enabled ? 350 : 200, shipping: 0, total: enabled ? 650 : 800 });
     }
   });
 
@@ -295,17 +295,17 @@ describe("server quote: subscriber discount", () => {
     m.docs.get("products/A").price = 2000;
     shippingSettings({ freeShippingThreshold: 2000 }); addCode();
     const q = await quote({ cartItems: [{ id: "A", qty: 2 }], promoCode: "CODE" });
-    expect(q).toMatchObject({ subtotal: 4000, discount: 1300, shipping: 0, total: 2700 });
-    expect(q.discountLines.map(line => [line.source, line.amount])).toEqual([["offer", 800], ["promo", 100], ["first_order", 400]]);
+    expect(q).toMatchObject({ subtotal: 4000, discount: 1200, shipping: 0, total: 2800 });
+    expect(q.discountLines.map(line => [line.source, line.amount])).toEqual([["offer", 800], ["first_order", 400]]);
     expect(q.lineItems.reduce((sum, line) => sum + line.price * line.quantity, 0)).toBe(3200);
   });
   it("mode is settings-based even when this customer is not welcome-eligible", async () => {
     const offer = { id: "o", active: true, type: "cart_percent", productScope: "all", config: { percent: 20 } };
     setup({ first: 10, offers: [offer], customers: { [EMAIL]: { "Total Orders": 1 } } });
     shippingSettings(); addCode();
-    expect(await quote({ promoCode: "CODE" })).toMatchObject({ discount: 300, stackingEnabled: true });
+    expect(await quote({ promoCode: "CODE" })).toMatchObject({ discount: 200, stackingEnabled: true });
     setup({ offers: [offer] }); shippingSettings(); addCode();
-    await expect(quote({ promoCode: "CODE" })).rejects.toMatchObject({ status: 409 });
+    expect(await quote({ promoCode: "CODE" })).toMatchObject({ discount: 200, stackingEnabled: false });
   });
   it("a fresh subscriber is re-read without cached negative eligibility", async () => {
     setup({ sub: pct(15), subscribed: false });

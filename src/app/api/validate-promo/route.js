@@ -35,6 +35,9 @@ export async function POST(req) {
       offersEnvironment: getOffersEnvironment(req),
     });
 
+    if (quote.codeNotApplied) {
+      return NextResponse.json({ valid: false, message: "العرض الحالي أوفر من الكود، تم الاحتفاظ بالعرض. خصم الترحيب والشحن المجاني المفعّلان لا يتأثران." }, { headers: { "Cache-Control": "no-store, private" } });
+    }
     if (!quote.appliedPromo) {
       return NextResponse.json(
         { valid: false, message: "القسيمة لا تمنح خصماً على السلة الحالية." },

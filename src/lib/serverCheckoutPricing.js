@@ -580,12 +580,9 @@ export async function createServerCheckoutQuote(input = {}) {
   );
   const offerResult = computeBestOffer(items, offers, now, customerChoiceGiftSelections);
   const stackingEnabled = isStackingEnabled(promotions, freeShippingRule);
-  if (!stackingEnabled && promo?.discountAmount > 0 &&
-      ((offerResult.candidates || []).some(candidate => candidate.discount > 0) || bundleDiscount > 0)) {
-    throw new CheckoutQuoteError("لا يمكن استخدام قسيمة الخصم مع خصم آخر مستحق على السلة. أزل القسيمة أو استمر بالعرض الآخر.", 409);
-  }
-  // Offers still select one best product offer internally; other benefit categories stack.
-  const winner = { source: offerResult.discount > 0 ? "offer" : promo?.discountAmount > 0 ? "promo" : firstOrderDiscount >= subscriberDiscount && firstOrderDiscount > 0 ? "first_order" : subscriberDiscount > 0 ? "subscriber" : "none" };
+  // Codes and product offers compete in every mode. A tie goes to the code.
+  const offerWins = offerResult.discount > (Number(promo?.discountAmount) || 0);
+  const winner = { source: offerWins ? "offer" : promo?.discountAmount > 0 ? "promo" : firstOrderDiscount >= subscriberDiscount && firstOrderDiscount > 0 ? "first_order" : subscriberDiscount > 0 ? "subscriber" : "none" };
 
   // A qualifying buy-X-get-Y gift is an additional line, so its original
   // value is included in subtotal and offset by the offer discount.
@@ -624,7 +621,7 @@ export async function createServerCheckoutQuote(input = {}) {
       : 0;
   const subtotal = paidSubtotal + autoGiftSubtotal + customerChoiceGiftSubtotal;
   const breakdown = buildDiscountBreakdown({
-    subtotal, offerAmount: offerResult.discount,
+    subtotal, offerAmount: offerWins ? offerResult.discount : 0,
     offerLabel: `عرض: ${offerResult.offer?.name || "خصم"}`,
     promoAmount: promo?.discountAmount,
     promoLabel: `${promo?.type === "coupon_fixed" ? "قسيمة شراء" : "كود الخصم"} ${promo?.code || ""}`.trim(),
@@ -814,6 +811,7 @@ export async function createServerCheckoutQuote(input = {}) {
       : [],
     appliedPromo,
     isFirstOrder,
+    codeNotApplied: Boolean(promo?.discountAmount > 0 && offerWins),
     stackingEnabled,
     discountLines: breakdown.lines,
     subscriberDiscount: autoLine?.source === "subscriber" && subscriberOffer
