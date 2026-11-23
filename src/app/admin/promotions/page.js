@@ -1,5 +1,6 @@
 "use client";
 
+import { DEFAULT_NEWSLETTER_SUBTITLE, DEFAULT_NEWSLETTER_TITLE } from "@/lib/subscriberDiscount";
 import { adminFetch } from "@/lib/adminFetch";
 import { useState, useEffect, useCallback } from "react";
 import { getDb } from "@/lib/firebase";
@@ -62,6 +63,13 @@ export default function PromotionsPage() {
   const [freeShippingThreshold,   setFreeShippingThreshold]   = useState(0);
   const [firstOrderEnabled,       setFirstOrderEnabled]       = useState(false);
   const [firstOrderDiscount,      setFirstOrderDiscount]      = useState(10);
+  const [subEnabled,              setSubEnabled]              = useState(false);
+  const [subName,                 setSubName]                 = useState("خصم المشتركين");
+  const [subType,                 setSubType]                 = useState("percent");
+  const [subValue,                setSubValue]                = useState(10);
+  const [subFirstOnly,            setSubFirstOnly]            = useState(true);
+  const [nlTitle,                 setNlTitle]                 = useState(DEFAULT_NEWSLETTER_TITLE);
+  const [nlSubtitle,              setNlSubtitle]              = useState(DEFAULT_NEWSLETTER_SUBTITLE);
   const [origSettings,            setOrigSettings]            = useState(null);
 
   const [codes,          setCodes]          = useState([]);
@@ -86,6 +94,14 @@ export default function PromotionsPage() {
       setFreeShippingThreshold(promo.freeShippingThreshold ?? 0);
       setFirstOrderEnabled(promo.firstOrderEnabled ?? false);
       setFirstOrderDiscount(promo.firstOrderDiscount ?? 10);
+      const sd = promo.subscriberDiscount || {};
+      setSubEnabled(sd.enabled === true);
+      setSubName(sd.name || "خصم المشتركين");
+      setSubType(sd.type === "fixed" ? "fixed" : "percent");
+      setSubValue(sd.value ?? 10);
+      setSubFirstOnly(sd.firstOrderOnly !== false);
+      setNlTitle(promo.newsletterTitle || DEFAULT_NEWSLETTER_TITLE);
+      setNlSubtitle(promo.newsletterSubtitle ?? DEFAULT_NEWSLETTER_SUBTITLE);
       setOrigSettings(promo);
 
       // الأكواد
@@ -139,13 +155,33 @@ export default function PromotionsPage() {
       if (firstOrderEnabled && (Number(firstOrderDiscount) <= 0 || Number(firstOrderDiscount) > 100)) {
         return showToast("نسبة خصم الطلب الأول يجب أن تكون بين 1% و100%", false);
       }
+      if (subEnabled) {
+        const v = Number(subValue);
+        if (!(v > 0) || (subType === "percent" && v > 100)) {
+          return showToast("قيمة خصم المشتركين غير صحيحة (النسبة بين 1% و100%)", false);
+        }
+        if (!String(subName).trim()) return showToast("اكتب اسم خصم المشتركين", false);
+      }
+      const subscriberDiscount = {
+        enabled: Boolean(subEnabled),
+        name: String(subName).trim().slice(0, 60),
+        type: subType === "fixed" ? "fixed" : "percent",
+        value: Number(subValue) || 0,
+        firstOrderOnly: Boolean(subFirstOnly),
+      };
       await updateDoc(doc(db, "settings", "siteSettings"), {
+        "promotions.subscriberDiscount":    subscriberDiscount,
+        "promotions.newsletterTitle":       String(nlTitle).trim().slice(0, 80),
+        "promotions.newsletterSubtitle":    String(nlSubtitle).trim().slice(0, 80),
         "promotions.shippingCost":          Number(shippingCost),
         "promotions.freeShippingThreshold": Number(freeShippingThreshold),
         "promotions.firstOrderEnabled":     Boolean(firstOrderEnabled),
         "promotions.firstOrderDiscount":    Number(firstOrderDiscount),
       });
       setOrigSettings({
+        subscriberDiscount,
+        newsletterTitle: String(nlTitle).trim(),
+        newsletterSubtitle: String(nlSubtitle).trim(),
         shippingCost: Number(shippingCost),
         freeShippingThreshold: Number(freeShippingThreshold),
         firstOrderEnabled: Boolean(firstOrderEnabled),
@@ -284,7 +320,17 @@ export default function PromotionsPage() {
     (Number(shippingCost)           !== Number(origSettings.shippingCost)           ||
      Number(freeShippingThreshold)  !== Number(origSettings.freeShippingThreshold)  ||
      Boolean(firstOrderEnabled)     !== Boolean(origSettings.firstOrderEnabled)     ||
-     Number(firstOrderDiscount)     !== Number(origSettings.firstOrderDiscount));
+     Number(firstOrderDiscount)     !== Number(origSettings.firstOrderDiscount) ||
+     JSON.stringify({ e: subEnabled, n: subName, t: subType, v: Number(subValue), f: subFirstOnly }) !==
+       JSON.stringify({
+         e: origSettings.subscriberDiscount?.enabled === true,
+         n: origSettings.subscriberDiscount?.name || "خصم المشتركين",
+         t: origSettings.subscriberDiscount?.type === "fixed" ? "fixed" : "percent",
+         v: Number(origSettings.subscriberDiscount?.value ?? 10),
+         f: origSettings.subscriberDiscount?.firstOrderOnly !== false,
+       }) ||
+     String(nlTitle).trim()    !== String(origSettings.newsletterTitle || DEFAULT_NEWSLETTER_TITLE).trim() ||
+     String(nlSubtitle).trim() !== String(origSettings.newsletterSubtitle ?? DEFAULT_NEWSLETTER_SUBTITLE).trim());
 
   return (
     <div className="min-h-screen bg-[#f4f6f8] font-sans" dir="rtl">
@@ -577,6 +623,61 @@ export default function PromotionsPage() {
                       </div>
                     </div>
                   )}
+                </div>
+
+                {/* ── خصم المشتركين ── */}
+                <div className="sm:col-span-2 border-t border-gray-100 pt-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <p className="text-xs font-bold text-gray-700">خصم المشتركين في النشرة</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">يُطبَّق تلقائياً لو إيميل العميل مشترك في الفوتر. الأفضل خصم واحد فقط (بدون تجميع مع خصم الطلب الأول أو كود أو عرض). مغلق افتراضياً.</p>
+                    </div>
+                    <div onClick={() => setSubEnabled(p => !p)}
+                      className={`w-11 h-6 rounded-full transition-colors cursor-pointer flex items-center ${subEnabled ? "bg-emerald-500" : "bg-gray-200"}`}>
+                      <div className={`w-4 h-4 bg-white rounded-full shadow mx-1 transition-transform ${subEnabled ? "translate-x-[-4px] mr-auto ml-1" : ""}`}/>
+                    </div>
+                  </div>
+                  {subEnabled && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-2">
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-500 mb-1">اسم الخصم (يظهر للعميل وفي الطلب)</label>
+                        <input type="text" maxLength={60} value={subName} onChange={e => setSubName(e.target.value)}
+                          className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:border-gray-400"/>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-500 mb-1">النوع</label>
+                        <select value={subType} onChange={e => setSubType(e.target.value)}
+                          className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:border-gray-400 bg-white">
+                          <option value="percent">نسبة %</option>
+                          <option value="fixed">مبلغ ثابت (ج.م)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-500 mb-1">القيمة</label>
+                        <input type="number" min="1" value={subValue} onChange={e => setSubValue(e.target.value)}
+                          className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:border-gray-400"/>
+                      </div>
+                      <div className="sm:col-span-3 flex items-center justify-between">
+                        <p className="text-xs font-bold text-gray-700">لأول طلب فقط</p>
+                        <div onClick={() => setSubFirstOnly(p => !p)}
+                          className={`w-11 h-6 rounded-full transition-colors cursor-pointer flex items-center ${subFirstOnly ? "bg-emerald-500" : "bg-gray-200"}`}>
+                          <div className={`w-4 h-4 bg-white rounded-full shadow mx-1 transition-transform ${subFirstOnly ? "translate-x-[-4px] mr-auto ml-1" : ""}`}/>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── نص اشتراك النشرة في الفوتر ── */}
+                <div className="sm:col-span-2 border-t border-gray-100 pt-5">
+                  <p className="text-xs font-bold text-gray-700 mb-1">نص الاشتراك فوق خانة الإيميل في الفوتر</p>
+                  <p className="text-[10px] text-gray-400 mb-3">لو فضيت الخانة بيرجع النص الافتراضي. اتأكد إن النص يطابق الخصم الفعلي.</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <input type="text" maxLength={80} value={nlTitle} onChange={e => setNlTitle(e.target.value)} placeholder={DEFAULT_NEWSLETTER_TITLE}
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:border-gray-400"/>
+                    <input type="text" maxLength={80} value={nlSubtitle} onChange={e => setNlSubtitle(e.target.value)} placeholder={DEFAULT_NEWSLETTER_SUBTITLE}
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:border-gray-400"/>
+                  </div>
                 </div>
 
               </div>
