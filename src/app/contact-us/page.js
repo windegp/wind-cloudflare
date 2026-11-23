@@ -8,7 +8,7 @@ export const metadata = {
 };
 
 export default function ContactUsPage() {
-  const channels = [CONTACT_INFO.whatsapp, CONTACT_INFO.instagram, CONTACT_INFO.tiktok, CONTACT_INFO.facebook].filter(Boolean);
+  const channels = [CONTACT_INFO.whatsapp, CONTACT_INFO.phone, CONTACT_INFO.instagram, CONTACT_INFO.tiktok, CONTACT_INFO.facebook].filter(Boolean);
   return (
     <main className="px-4 py-12 max-w-xl mx-auto" dir="rtl" style={{ fontFamily: "'Cairo', sans-serif" }}>
       <h1 className="text-2xl md:text-3xl font-black text-[#1A1A1A] mb-2">تواصل معانا</h1>
@@ -39,6 +39,22 @@ export default function ContactUsPage() {
       </ul>
 
       {CONTACT_INFO.hours && <p className="text-sm text-gray-600 mb-8">مواعيد الرد: {CONTACT_INFO.hours}</p>}
+
+      {CONTACT_INFO.map && (
+        <section className="mb-8" aria-label="موقعنا على الخريطة">
+          <h2 className="font-black text-lg text-[#1A1A1A] mb-3">موقعنا</h2>
+          <iframe
+            src={CONTACT_INFO.map.embedSrc}
+            title="موقع WIND Shopping على خريطة جوجل"
+            className="w-full h-72 border border-gray-200 rounded-[3px]"
+            loading="lazy"
+            referrerPolicy="no-referrer-when-downgrade"
+          />
+          <a href={CONTACT_INFO.map.href} target="_blank" rel="noopener noreferrer" className="inline-block mt-2 text-sm underline font-bold text-[#1A1A1A]">
+            افتح في خرائط جوجل
+          </a>
+        </section>
+      )}
 
       <div className="flex flex-wrap gap-3">
         <Link href="/track-order" className="bg-[#1A1A1A] text-white px-6 py-2.5 rounded-[3px] font-bold">تتبع طلبك</Link>
