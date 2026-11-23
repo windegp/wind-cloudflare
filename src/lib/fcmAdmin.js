@@ -41,7 +41,7 @@ async function removeInvalidToken(token) {
 // ============================================
 // 3. الدالة الرئيسية — بتتنادى من create-order و webhooks/kashier
 // ============================================
-export async function sendNewOrderNotification({ title, body, orderId }) {
+export async function sendNewOrderNotification({ title, body, orderId, strict = false }) {
   try {
     const devices = await getAdminDeviceTokens();
     if (devices.length === 0) {
@@ -51,6 +51,7 @@ export async function sendNewOrderNotification({ title, body, orderId }) {
 
     const projectId = process.env.FIREBASE_PROJECT_ID;
     if (!projectId) {
+      if (strict) throw new Error("FCM_NOT_CONFIGURED");
       console.warn("FIREBASE_PROJECT_ID env var missing — skipping push notification");
       return;
     }
@@ -58,7 +59,7 @@ export async function sendNewOrderNotification({ title, body, orderId }) {
     const accessToken = await getGoogleAccessToken(FCM_SCOPE);
     const endpoint = `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`;
 
-    await Promise.allSettled(
+    const results = await Promise.allSettled(
       devices.map(async ({ token, platform }) => {
         const isNativeAndroid = platform === "android-native";
 
@@ -94,6 +95,7 @@ export async function sendNewOrderNotification({ title, body, orderId }) {
 
         const res = await fetch(endpoint, {
           method: "POST",
+          signal: AbortSignal.timeout(10000),
           headers: {
             Authorization: `Bearer ${accessToken}`,
             "Content-Type": "application/json",
@@ -107,15 +109,18 @@ export async function sendNewOrderNotification({ title, body, orderId }) {
           if (errorCode === "UNREGISTERED" || res.status === 404) {
             await removeInvalidToken(token);
           } else {
-            console.warn("FCM send failed:", res.status, JSON.stringify(errData));
+            console.warn("FCM send failed:", res.status);
+            if (strict) throw new Error("FCM_PROVIDER_REJECTED");
           }
         }
       })
     );
 
+    if (strict && results.some(result => result.status === "rejected")) throw new Error("FCM_DISPATCH_INCOMPLETE");
     console.log(`✅ Push notification dispatched to ${devices.length} admin device(s)`);
   } catch (error) {
     // ⚠️ مقصود: أي فشل هنا ما يأثرش على إنشاء الأوردر أو إرسال الإيميل
+    if (strict) throw new Error("FCM_DISPATCH_FAILED");
     console.error("❌ FCM push notification error:", error?.message);
   }
 }

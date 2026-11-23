@@ -32,6 +32,11 @@ describe("private server order REST store", () => {
     fetch.mockResolvedValue(new Response(JSON.stringify({ error: { status: "ALREADY_EXISTS", message: "private provider detail" } }), { status: 409 }));
     await expect(serverOrderStore.commit([{ collection: "Jobs", id: "a", data: {}, create: true }])).rejects.toMatchObject({ code: "ORDER_WRITE_CONFLICT" });
   });
+  it("queries due states in bounded order and decodes documents", async () => {
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify([{ document: { name: "projects/wind-reviews/databases/(default)/documents/Jobs/job1", fields: { state: { stringValue: "pending" } }, updateTime: "v1" } }])));
+    expect(await serverOrderStore.listDue("Jobs", { states: ["pending", "retry"], before: "2026-11-23T14:00:00Z", limit: 10 })).toEqual([{ id: "job1", data: { state: "pending" }, version: "v1" }]);
+    expect(JSON.parse(fetch.mock.calls[0][1].body).structuredQuery.limit).toBe(10);
+  });
   it("invalid paths and unsupported values fail closed", async () => {
     await expect(serverOrderStore.get("Jobs", "../secret")).rejects.toMatchObject({ code: "INVALID_ORDER_DOCUMENT_ID" });
     expect(() => encodeOrderFields({ amount: Infinity })).toThrow();
