@@ -1,3 +1,4 @@
+import { durablePaymentWebhook } from "@/lib/durablePaymentWebhook";
 import { NextResponse } from 'next/server';
 import { getCairoTimestamp } from '@/lib/analytics-helpers';
 import { verifyWebhookSignature } from '@/lib/kashier';
@@ -14,6 +15,17 @@ const requestCounts = new Map();
 const processedOrders = new Set();
 
 export async function POST(request) {
+    // Durable mode is opt-in. Once activated, keep this routing enabled while any
+    // durable card order is outstanding, even if accepting new orders is paused.
+    if (process.env.CHECKOUT_DURABLE_WEBHOOK_ENABLED === "true") {
+      try {
+        const result = await durablePaymentWebhook(await request.clone().json(), request.headers.get("x-kashier-signature"));
+        if (result) return NextResponse.json({ code: result.code }, { status: result.status });
+      } catch (_) {
+        console.error(JSON.stringify({ event: "durable_webhook_failed", code: "PAYMENT_RECEIPT_UNRESOLVED" }));
+        return NextResponse.json({ error: "PAYMENT_RECEIPT_UNRESOLVED" }, { status: 503 });
+      }
+    }
     // 🛡️ 1. الجدار الناري البسيط (Rate Limiting) - بحد أقصى 15 طلب في الدقيقة لكل IP
     const ip = request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || 'unknown';
     const now = Date.now();

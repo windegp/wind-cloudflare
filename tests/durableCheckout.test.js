@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/googleServiceAccount", () => ({ getGoogleAccessToken: vi.fn() }));
-import { persistVerifiedCheckout, CHECKOUT_ATTEMPTS } from "@/lib/durableCheckout";
+import { persistVerifiedCheckout, readCheckoutStatus, CHECKOUT_ATTEMPTS } from "@/lib/durableCheckout";
 
-const quote = { subtotal: 1000, discount: 150, shipping: 70, total: 920, cartItems: [{ id: "A", qty: 1 }], lineItems: [{ productId: "A", price: 1000, quantity: 1 }], discountLines: [{ source: "first_order", amount: 150, label: "خصم الطلب الأول" }], customerIdentity: { email: "new@example.com", phone: "01012345678" } };
+const quote = { subtotal: 1000, discount: 150, shipping: 70, total: 920, cartItems: [{ id: "A", qty: 1 }], lineItems: [{ productId: "A", price: 1000, quantity: 1 }], discountLines: [{ source: "first_order", amount: 150, label: "خصم الطلب الأول" }], customerIdentity: { email: "new@example.com", phone: "01012345678", governorate: "Cairo" } };
 const input = { orderId: "WIND-reliability-123", paymentMethod: "cod", quoteToken: "signed", formData: { email: "new@example.com", phone: "01012345678", firstName: "Ali", lastName: "Test", address: "Address", city: "Cairo", governorate: "Cairo" } };
 let store, docs, verify;
 beforeEach(() => {
@@ -69,6 +69,20 @@ describe("durable checkout foundation", () => {
   });
   it("fresh quote tokens with identical content have the same idempotency identity", async () => {
     await run(); expect((await run({ quoteToken: "a fresh signature" })).replay).toBe(true);
+  });
+  it("expired signatures only recover an existing identical attempt, never create", async () => {
+    await run(); verify.mockImplementation(async (_token, _id, options) => options?.allowExpired ? structuredClone(quote) : null);
+    expect((await run()).replay).toBe(true);
+    docs.clear(); await expect(run()).rejects.toMatchObject({ code: "INVALID_CHECKOUT_QUOTE" });
+  });
+  it("authenticated status never exposes customer data and accepts expired signed credentials", async () => {
+    await run(); const result = await readCheckoutStatus(input, { store, verify });
+    expect(result).toEqual({ orderId: input.orderId, status: "confirmed", paymentMethod: "cod", total: 920, currency: "EGP" });
+    verify.mockResolvedValue({ ...quote, customerIdentity: { email: "other@example.com", phone: "01012345678" } });
+    await expect(readCheckoutStatus(input, { store, verify })).rejects.toMatchObject({ code: "CHECKOUT_CREDENTIAL_MISMATCH" });
+  });
+  it("shipping destination is signed and cannot be substituted after pricing", async () => {
+    await expect(run({ formData: { ...input.formData, governorate: "Alexandria" } })).rejects.toMatchObject({ code: "CHECKOUT_IDENTITY_MISMATCH" });
   });
   it("requires the eligibility identity to be signed, never client-substituted", async () => {
     await expect(run({ formData: { ...input.formData, email: "other@example.com" } })).rejects.toMatchObject({ code: "CHECKOUT_IDENTITY_MISMATCH" });

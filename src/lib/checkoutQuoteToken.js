@@ -64,7 +64,7 @@ export async function signCheckoutQuote(quote, orderId) {
   return payloadPart + "." + signature;
 }
 
-export async function verifyCheckoutQuote(token, orderId) {
+export async function verifyCheckoutQuote(token, orderId, { allowExpired = false } = {}) {
   if (typeof token !== "string" || !token.includes(".") || !orderId) return null;
 
   const [payloadPart, receivedSignature, extra] = token.split(".");
@@ -88,7 +88,7 @@ export async function verifyCheckoutQuote(token, orderId) {
 
   if (payload?.version !== 1) return null;
   if (payload.orderId !== String(orderId)) return null;
-  if (!Number.isFinite(payload.expiresAt) || payload.expiresAt < Date.now()) return null;
+  if (!Number.isFinite(payload.expiresAt) || (!allowExpired && payload.expiresAt < Date.now())) return null;
   if (!payload.quote || !Number.isFinite(Number(payload.quote.total))) return null;
 
   return payload.quote;

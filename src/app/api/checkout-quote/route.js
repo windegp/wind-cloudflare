@@ -27,6 +27,8 @@ export async function POST(request) {
       ...body,
       offersEnvironment: getOfferEnvironment(request),
     });
+    // Sign exactly the identity used for server-side welcome eligibility.
+    quote.customerIdentity = { email: String(body.customerEmail || "").trim().toLowerCase(), phone: String(body.customerPhone || "").replace(/\D/g, ""), governorate: String(body.governorate || "").trim() };
     const quoteToken = await signCheckoutQuote(quote, body.orderId);
 
     return NextResponse.json(

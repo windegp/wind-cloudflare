@@ -1,4 +1,5 @@
 import { verifyCheckoutQuote } from "@/lib/checkoutQuoteToken";
+import { getCairoTimestamp } from "@/lib/analytics-helpers";
 import { serverOrderStore, OrderStoreError } from "@/lib/serverOrderStore";
 
 export const CHECKOUT_ATTEMPTS = "WindCheckoutAttempts";
@@ -25,7 +26,7 @@ export async function checkoutFingerprint(value) {
  * Canonical snapshot and jobs are private. Orders is a compatibility projection.
  */
 export async function persistVerifiedCheckout(input, { store = serverOrderStore, verify = verifyCheckoutQuote, now = () => new Date() } = {}) {
-  const { orderId, paymentMethod, quoteToken } = input;
+  const { orderId, paymentMethod, quoteToken } = input || {};
   if (typeof orderId !== "string" || !/^WIND-[A-Za-z0-9-]{8,100}$/.test(orderId)) fail("INVALID_CHECKOUT_ID");
   if (!["card", "cod", "instapay"].includes(paymentMethod)) fail("INVALID_PAYMENT_METHOD");
   const form = input.formData || {};
@@ -36,9 +37,18 @@ export async function persistVerifiedCheckout(input, { store = serverOrderStore,
     governorate: text(form.governorate, 100), postalCode: text(form.postalCode, 20), altPhone: text(form.altPhone, 30),
   };
   if (!/^[^\s@<>;,]+@[^\s@<>;,]+\.[^\s@<>;,]+$/.test(customer.email) ||
-      customer.phone.replace(/\D/g, "").length < 11 || !customer.firstName || !customer.lastName || !customer.address || !customer.city || !customer.governorate) fail("INVALID_CHECKOUT_CUSTOMER");
+      customer.phone.replace(/\D/g, "").length < 11 || !customer.firstName || !customer.address || !customer.city || !customer.governorate) fail("INVALID_CHECKOUT_CUSTOMER");
   let quote;
-  try { quote = await verify(quoteToken, orderId); }
+  let expired = false;
+  try {
+    quote = await verify(quoteToken, orderId);
+    if (!quote) {
+      // Expired signatures can authenticate replay of an existing identical attempt,
+      // never authorize creating a new order at an obsolete price.
+      quote = await verify(quoteToken, orderId, { allowExpired: true });
+      expired = Boolean(quote);
+    }
+  }
   catch (_) { fail("CHECKOUT_VERIFICATION_UNAVAILABLE", 503, "تعذر التحقق من تسعير الطلب حالياً. لم يبدأ الدفع. حاول لاحقاً."); }
   if (!quote) fail("INVALID_CHECKOUT_QUOTE", 409, "انتهت صلاحية التسعير. راجع الإجمالي ثم أعد المحاولة.");
   if (![quote.subtotal, quote.discount ?? 0, quote.shipping, quote.total].every(v => Number.isFinite(Number(v)) && Number(v) >= 0) ||
@@ -46,7 +56,7 @@ export async function persistVerifiedCheckout(input, { store = serverOrderStore,
       !Array.isArray(quote.lineItems) || !quote.lineItems.length) fail("INVALID_CHECKOUT_FINANCIALS", 409);
 
   // The integration must bind welcome eligibility to the same identity in the signed quote.
-  if (quote.customerIdentity?.email !== customer.email ||
+  if (quote.customerIdentity?.governorate !== customer.governorate || quote.customerIdentity?.email !== customer.email ||
       String(quote.customerIdentity?.phone || "").replace(/\D/g, "") !== customer.phone.replace(/\D/g, "")) {
     fail("CHECKOUT_IDENTITY_MISMATCH", 409, "تغيرت بيانات العميل. أعد التحقق من الخصم والإجمالي.");
   }
@@ -66,6 +76,7 @@ export async function persistVerifiedCheckout(input, { store = serverOrderStore,
   try {
     const existing = await store.get(CHECKOUT_ATTEMPTS, orderId);
     if (existing) return receipt(existing);
+    if (expired) fail("INVALID_CHECKOUT_QUOTE", 409, "انتهت صلاحية التسعير. راجع الإجمالي ثم أعد المحاولة.");
     const timestamp = now().toISOString();
     const status = paymentMethod === "card" ? "pending_payment" : "confirmed";
     const record = { schemaVersion: 1, orderId, fingerprint, paymentMethod, customer, financials, status, createdAt: timestamp };
@@ -75,7 +86,7 @@ export async function persistVerifiedCheckout(input, { store = serverOrderStore,
       "Shipping City": customer.city, "Shipping Province": customer.governorate, "Shipping Phone": customer.phone, "Shipping Zip": customer.postalCode,
       Subtotal: financials.subtotal, Shipping: financials.shipping, Total: financials.total, Currency: financials.currency,
       "Financial Status": paymentMethod === "card" ? "pending_payment" : "pending", "Payment Method": paymentMethod,
-      "Created at": timestamp, data_source: "WIND_Web", "Server Checkout Version": 1,
+      "Created at": getCairoTimestamp(), data_source: "WIND_Web", "Server Checkout Version": 1,
       "Discount Amount": financials.discount, "Discount Type": financials.discountSource,
       "Discount Label": financials.discountLines.map(line => line.label).join(" + "), "Discount Breakdown": financials.discountLines,
       "Free Shipping Applied": financials.shipping === 0, lineItems: financials.lineItems,
@@ -104,4 +115,18 @@ export async function persistVerifiedCheckout(input, { store = serverOrderStore,
     console.error(JSON.stringify({ event: "checkout_persistence_failed", orderId, code: error instanceof OrderStoreError ? error.code : "UNEXPECTED_STORAGE_ERROR" }));
     fail("CHECKOUT_STORAGE_UNAVAILABLE", 503, "تعذر حفظ الطلب بأمان الآن. لم يبدأ الدفع. احتفظ بالسلة وحاول لاحقاً.");
   }
+}
+
+/** Signed quote is a bearer credential. Returns status only, never customer/source details.
+ * Expiry does not block a customer checking a charge; signature and order binding still apply.
+ */
+export async function readCheckoutStatus({ orderId, quoteToken }, { store = serverOrderStore, verify = verifyCheckoutQuote } = {}) {
+  const quote = await verify(quoteToken, orderId, { allowExpired: true });
+  if (!quote) fail("INVALID_CHECKOUT_CREDENTIAL", 401);
+  const order = await store.get(CHECKOUT_ATTEMPTS, orderId);
+  if (!order) return { orderId, status: "not_found" };
+  if (quote.customerIdentity?.email !== order.data.customer.email ||
+      String(quote.customerIdentity?.phone || "").replace(/\D/g, "") !== order.data.customer.phone.replace(/\D/g, "") ||
+      Number(quote.total) !== order.data.financials.total) fail("CHECKOUT_CREDENTIAL_MISMATCH", 401);
+  return { orderId, status: order.data.status, paymentMethod: order.data.paymentMethod, total: order.data.financials.total, currency: order.data.financials.currency };
 }
