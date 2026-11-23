@@ -40,6 +40,27 @@ const RATE_LIMITS = {
     blockDuration: 300
   },
   
+  // Public cache refresh after a like or review
+  REVALIDATE_PUBLIC: {
+    requests: 30,
+    window: 60,
+    blockDuration: 300
+  },
+
+  // Pixel / Conversions API relays (a page view plus a few events per visit)
+  TRACKING: {
+    requests: 90,
+    window: 60,
+    blockDuration: 300
+  },
+
+  // Order creation / confirmation emails
+  CREATE_ORDER: {
+    requests: 10,
+    window: 300,
+    blockDuration: 600
+  },
+
   // Relaxed for read-only endpoints
   READ: {
     requests: 100,    // 100 requests

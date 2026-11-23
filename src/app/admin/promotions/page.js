@@ -1,5 +1,6 @@
 "use client";
 
+import { adminFetch } from "@/lib/adminFetch";
 import { useState, useEffect, useCallback } from "react";
 import { getDb } from "@/lib/firebase";
 import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs } from "firebase/firestore/lite";
@@ -151,7 +152,7 @@ export default function PromotionsPage() {
         firstOrderDiscount: Number(firstOrderDiscount),
       });
       // مسح KV cache عشان التغييرات تنعكس فوراً على الموقع
-      await fetch("/api/revalidate", {
+      await adminFetch("/api/revalidate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "site_settings" }),

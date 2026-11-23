@@ -1,5 +1,6 @@
 "use client";
 
+import { adminFetch } from "@/lib/adminFetch";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getDb } from "@/lib/firebase";
 import {
@@ -376,7 +377,7 @@ export default function AdminOffersPage() {
 
   const revalidateOffers = async () => {
     try {
-      await fetch("/api/revalidate", {
+      await adminFetch("/api/revalidate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "offers" }),

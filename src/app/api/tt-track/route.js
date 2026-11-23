@@ -9,6 +9,13 @@
 // Business Events API v1.3 العام وقت الكتابة — يُنصَح بتأكيده عبر Test
 // Events tool في TikTok Events Manager قبل الاعتماد الكامل في الإنتاج.
 
+import { isSameOrigin, enforceRateLimit } from "@/lib/apiGuards";
+
+const ALLOWED_EVENTS = new Set([
+  "ViewContent", "AddToCart", "InitiateCheckout", "CompletePayment", "AddPaymentInfo",
+  "PlaceAnOrder", "Search", "AddToWishlist", "Contact", "CompleteRegistration", "SubmitForm",
+]);
+
 const PIXEL_ID = process.env.NEXT_PUBLIC_TIKTOK_PIXEL_ID || "D4K5SMBC77U6QK8E5OMG";
 
 // 🔥 دالة SHA-256 مستقلة تمامًا — مكرَّرة عمدًا (~6 أسطر) بدل استيرادها من
@@ -52,8 +59,25 @@ async function postToTikTokEventsAPI(body) {
 }
 
 export async function POST(request) {
+  // Only our own pages may relay events to the TikTok Events API.
+  if (!isSameOrigin(request)) {
+    return new Response(JSON.stringify({ ok: false, error: "Forbidden" }), {
+      status: 403,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  const limited = await enforceRateLimit(request, "TRACKING");
+  if (limited) return limited;
+
   try {
     const data = await request.json();
+
+    if (!ALLOWED_EVENTS.has(data?.event)) {
+      return new Response(JSON.stringify({ ok: false, error: "event not allowed" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
 
     const ip = request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || undefined;
     const userAgent = request.headers.get("user-agent") || undefined;

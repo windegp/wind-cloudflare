@@ -1,15 +1,30 @@
 import { kvGet, kvSet, kvDelete } from '@/lib/kv-cache';
+import { verifyAdminIdToken } from '@/lib/verifyAdminIdToken';
 
 /**
  * Unified API route for write operations (idempotency + write guard)
  * Reduces overhead by merging tiny routes
  */
+const MAX_TTL_SECONDS = 3600;
+const SAFE_KEY = /^[A-Za-z0-9_:.\-]{1,120}$/;
+
 export async function POST(request) {
+  // No page in the storefront calls this route; only admin tooling may.
+  const auth = await verifyAdminIdToken(request);
+  if (!auth.ok) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
     const { operation, key, operationId, ttl, ttlMs } = await request.json();
     
     if (!operation) {
       return Response.json({ error: 'operation is required' }, { status: 400 });
+    }
+    for (const value of [operationId, key]) {
+      if (value !== undefined && !SAFE_KEY.test(String(value))) {
+        return Response.json({ error: 'invalid key format' }, { status: 400 });
+      }
     }
     
     // ═══════════════════════════════════════════════════════════
@@ -41,7 +56,7 @@ export async function POST(request) {
       }
       
       const kvKey = `idempotency_${operationId}`;
-      const idempotencyTtl = ttlMs || 600000; // Default 10 minutes
+      const idempotencyTtl = Math.min(Number(ttlMs) || 600000, MAX_TTL_SECONDS * 1000); // Default 10 minutes
       const data = {
         executed: true,
         executedAt: Date.now(),
@@ -81,7 +96,7 @@ export async function POST(request) {
       }
       
       const kvKey = `write_guard_${key}`;
-      const guardTtl = ttl || 300; // Default 5 minutes
+      const guardTtl = Math.min(Number(ttl) || 300, MAX_TTL_SECONDS); // Default 5 minutes
       
       // Check if already exists (atomic check-first-set)
       const existing = await kvGet(kvKey);

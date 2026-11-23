@@ -1,5 +1,6 @@
 "use client";
 
+import { adminFetch } from "@/lib/adminFetch";
 import React, { useState, useEffect } from "react";
 import { getDb } from "@/lib/firebase";
 import { collection, getDocs, doc, getDoc, setDoc } from "firebase/firestore/lite";
@@ -298,12 +299,12 @@ export default function ProfessionalMenuManager() {
 // 🔥 مسح KV Cache للصفحة الرئيسية
 try {
   await Promise.all([
-    fetch("/api/revalidate", { 
+    adminFetch("/api/revalidate", { 
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type: 'homepage' })
     }),
-    fetch("/api/revalidate", { 
+    adminFetch("/api/revalidate", { 
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type: 'site_settings' })

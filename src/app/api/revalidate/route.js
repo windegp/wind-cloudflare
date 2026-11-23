@@ -1,7 +1,22 @@
 import { getKV, kvDeleteMany } from '@/lib/kv-cache';
 import { revalidatePath } from 'next/cache';
+import { verifyAdminIdToken } from '@/lib/verifyAdminIdToken';
+import { isSameOrigin, enforceRateLimit } from '@/lib/apiGuards';
 
 export const dynamic = 'force-dynamic';
+
+// Customer pages may only refresh the cache of ONE product after a like or a review.
+// Every other type (and raw `keys`) is admin-only.
+const PUBLIC_TYPES = new Set(['likes', 'product_stats']);
+// Raw cache keys an admin may delete. Rate-limit, idempotency and write-guard keys are never touched.
+const ALLOWED_KEY_PREFIXES = [
+  'homepage_', 'site_settings_', 'sitemap_', 'fb_catalog_', 'google_catalog_',
+  'tiktok_catalog_', 'tt_catalog_', 'product_', 'collection_', 'offers_',
+];
+const isAllowedKey = (key) =>
+  typeof key === 'string' && key.length <= 200 && ALLOWED_KEY_PREFIXES.some((p) => key.startsWith(p));
+
+const SAFE_ID = /^[^\s/\\?#]{1,200}$/;
 
 export async function POST(request) {
   let body;
@@ -9,10 +24,32 @@ export async function POST(request) {
   catch { return Response.json({ error: 'Invalid JSON' }, { status: 400 }); }
 
   const { type, id, slug, handle, keys } = body;
+
+  const isPublicRequest =
+    PUBLIC_TYPES.has(type) &&
+    !(Array.isArray(keys) && keys.length > 0) &&
+    (id === undefined || SAFE_ID.test(String(id))) &&
+    (handle === undefined || SAFE_ID.test(String(handle)));
+
+  if (isPublicRequest) {
+    if (!isSameOrigin(request)) {
+      return Response.json({ error: 'Forbidden' }, { status: 403 });
+    }
+    const limited = await enforceRateLimit(request, 'REVALIDATE_PUBLIC');
+    if (limited) return limited;
+  } else {
+    const auth = await verifyAdminIdToken(request);
+    if (!auth.ok) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+  }
   
   let keysToDelete = [];
 
   if (keys?.length > 0) {
+    if (!Array.isArray(keys) || keys.length > 100 || !keys.every(isAllowedKey)) {
+      return Response.json({ error: 'Key not allowed' }, { status: 400 });
+    }
     keysToDelete = keys;
   } else if (type === 'homepage') {
     keysToDelete = ['homepage_data_v1'];
@@ -66,7 +103,7 @@ export async function POST(request) {
     const kv = await getKV();
     if (kv) {
         const list = await kv.list();
-        keysToDelete = list.keys.map(k => k.name);
+        keysToDelete = list.keys.map(k => k.name).filter(isAllowedKey);
       }
       revalidatePath('/', 'layout');
     } catch {}

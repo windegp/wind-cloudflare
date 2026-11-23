@@ -1,4 +1,5 @@
 "use client";
+import { adminFetch } from "@/lib/adminFetch";
 import { useState } from 'react';
 import Papa from 'papaparse';
 import { getDb } from "@/lib/firebase";
@@ -162,11 +163,10 @@ export default function ImportShopifyCSV() {
         // 🔥 مسح كاش الموقع بالكامل بعد انتهاء الاستيراد
         try {
           addLog("جاري مسح كاش السيرفر لتحديث الموقع...");
-          const revalidateRes = await fetch('/api/revalidate', {
+          const revalidateRes = await adminFetch('/api/revalidate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
-              secret: process.env.NEXT_PUBLIC_REVALIDATE_SECRET, 
               type: 'all' 
             })
           });

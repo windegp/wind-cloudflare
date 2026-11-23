@@ -1,5 +1,6 @@
 "use client";
 
+import { adminFetch } from "@/lib/adminFetch";
 import React, { useState, useEffect } from 'react';
 import { getDb } from "@/lib/firebase";
 import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore/lite";
@@ -77,7 +78,7 @@ export default function SettingsPolicies() {
         "returnPolicy.merchantReturnDays": Number(merchantReturnDays),
       });
       // نفس مسار الكاش الموجود بالفعل — بدون أي مفتاح KV جديد
-      await fetch('/api/revalidate', {
+      await adminFetch('/api/revalidate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'site_settings' }),
@@ -102,11 +103,10 @@ export default function SettingsPolicies() {
 
       // 🔥 مسح الكاش لتحديث السياسات في الفوتر وباقي الموقع فوراً
       try {
-        const revalidateRes = await fetch('/api/revalidate', {
+        const revalidateRes = await adminFetch('/api/revalidate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
-            secret: process.env.NEXT_PUBLIC_REVALIDATE_SECRET, 
             type: 'all' 
           })
         });

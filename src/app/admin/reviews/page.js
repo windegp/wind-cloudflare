@@ -1,5 +1,6 @@
 "use client";
 
+import { adminFetch } from "@/lib/adminFetch";
 import React, { useState, useEffect, useRef } from 'react';
 import { getDb } from "@/lib/firebase";
 import { collection, query, getDocs, deleteDoc, doc, writeBatch, orderBy, updateDoc, setDoc, increment, where, limit, startAfter } from "firebase/firestore/lite";
@@ -222,7 +223,7 @@ export default function ReviewsAdminPage() {
 
       // مسح KV Cache + تحديث فوري للواجهة
       try {
-        await fetch('/api/revalidate', {
+        await adminFetch('/api/revalidate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -326,7 +327,7 @@ export default function ReviewsAdminPage() {
             try {
               await Promise.all(affectedHandles.map(async (pHandle) => {
                 const productId = products.find(p => p.handle === pHandle)?.id || pHandle;
-                await fetch('/api/revalidate', {
+                await adminFetch('/api/revalidate', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
@@ -422,7 +423,7 @@ export default function ReviewsAdminPage() {
       // productId already declared above for batch update
       const effectiveProductId = productId || pHandle;
       try {
-        await fetch('/api/revalidate', {
+        await adminFetch('/api/revalidate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -531,7 +532,7 @@ export default function ReviewsAdminPage() {
       // (نفس logic الـ handleAddManualReview بالظبط)
       const effectiveProductId = productId || productHandle;
       try {
-        await fetch('/api/revalidate', {
+        await adminFetch('/api/revalidate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

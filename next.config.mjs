@@ -39,6 +39,25 @@ const nextConfig = {
   },
 
   // ============================================
+  // 🛡️ SECURITY HEADERS
+  // (CSP مؤجلة عمداً: الموقع بيحمّل سكريبتات Meta/TikTok/Kashier وتحتاج قائمة دقيقة أولاً)
+  // ============================================
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+          { key: 'Strict-Transport-Security', value: 'max-age=31536000' },
+        ],
+      },
+    ];
+  },
+
+  // ============================================
   // 🔄 REDIRECTS FOR SEO
   // ============================================
   async redirects() {

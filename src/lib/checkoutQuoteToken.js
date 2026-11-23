@@ -15,13 +15,14 @@ function base64UrlDecodeToText(encoded) {
 }
 
 function getQuoteSecret() {
-  const secret =
-    process.env.CHECKOUT_QUOTE_SECRET ||
-    process.env.FIREBASE_PRIVATE_KEY ||
-    process.env.KASHIER_API_KEY;
+  // Dedicated secret only. Falling back to the Firebase private key or the Kashier API key
+  // would tie quote signing to unrelated credentials, so we fail closed instead.
+  const secret = process.env.CHECKOUT_QUOTE_SECRET;
 
-  if (!secret) throw new Error("A server secret is required to sign checkout quotes.");
-  return secret.replace(/\\n/g, "\n");
+  if (!secret || secret.length < 16) {
+    throw new Error("CHECKOUT_QUOTE_SECRET must be set (at least 16 characters) to sign checkout quotes.");
+  }
+  return secret;
 }
 
 async function signPayload(payloadPart) {
