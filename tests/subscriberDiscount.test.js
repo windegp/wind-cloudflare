@@ -240,4 +240,54 @@ describe("server quote: subscriber discount", () => {
     setup({ sub: pct(15), customers: { [EMAIL]: { "Total Orders": 0, Last_Order_Status: "abandoned" } } });
     expect((await quote()).discountSource).toBe("subscriber");
   });
+  const shippingRule = { enabled: true, scope: "selected", productIds: ["A"], condition: "quantity", minQuantity: 1 };
+  function shippingSettings(extra = {}) {
+    const settings = m.docs.get("settings/siteSettings");
+    settings.promotions = { ...settings.promotions, shippingCost: 70, freeShippingThreshold: 0, ...extra };
+  }
+  function addCode(type = "fixed", value = 100) {
+    m.docs.set("promoCodes/CODE", { active: true, type, value, usageType: "unlimited", scope: "all" });
+  }
+  it("free shipping rule + subscriber + code all stack", async () => {
+    setup({ sub: pct(15) }); shippingSettings(); addCode();
+    m.docs.set("settings/offerShippingRules_production", shippingRule);
+    const q = await quote({ promoCode: "CODE" });
+    expect(q).toMatchObject({ discount: 250, shipping: 0, total: 750, freeShippingByRule: true });
+    expect(q.stackedDiscount).toMatchObject({ source: "subscriber", amount: 150 });
+    expect(q.promoDiscountAmount).toBe(100);
+  });
+  it("free shipping rule + first-order + fixed voucher all stack", async () => {
+    setup({ first: 10, offers: [{ id: "v", active: true, type: "coupon_fixed", couponCode: "VOUCHER", productScope: "all", config: { amount: 100 } }] });
+    shippingSettings(); m.docs.set("settings/offerShippingRules_production", shippingRule);
+    const q = await quote({ promoCode: "VOUCHER" });
+    expect(q).toMatchObject({ discount: 200, shipping: 0, total: 800 });
+    expect(q.stackedDiscount.source).toBe("first_order");
+  });
+  it("threshold shipping stays free when eligible after both cash discounts", async () => {
+    setup({ sub: pct(15) }); shippingSettings({ freeShippingThreshold: 750 }); addCode();
+    expect(await quote({ promoCode: "CODE" })).toMatchObject({ discount: 250, shipping: 0, total: 750 });
+    shippingSettings({ freeShippingThreshold: 751 });
+    expect(await quote({ promoCode: "CODE" })).toMatchObject({ discount: 250, shipping: 70, total: 820 });
+  });
+  it("a free-shipping code stacks with subscriber without a cash code", async () => {
+    setup({ sub: pct(15) }); shippingSettings(); addCode("free_shipping", 0);
+    expect(await quote({ promoCode: "CODE" })).toMatchObject({ discount: 150, shipping: 0, total: 850, freeShippingByPromo: true });
+  });
+  it("disabled autos preserve code and voucher amounts, free shipping remains independent", async () => {
+    for (const ruleEnabled of [true, false]) {
+      setup({ sub: pct(15, { enabled: false }) }); shippingSettings(); addCode();
+      m.docs.set("settings/offerShippingRules_production", { ...shippingRule, enabled: ruleEnabled });
+      const q = await quote({ promoCode: "CODE" });
+      expect(q).toMatchObject({ discount: 100, shipping: ruleEnabled ? 0 : 70, total: ruleEnabled ? 900 : 970, stackedDiscount: null });
+    }
+  });
+  it("non-shipping qualifying offers still reject a cash code, with autos on or off", async () => {
+    for (const enabled of [true, false]) {
+      setup({ sub: pct(15, { enabled }), offers: [{ id: "o", active: true, type: "cart_percent", productScope: "all", config: { percent: 20 } }] });
+      shippingSettings(); addCode();
+      m.docs.set("settings/offerShippingRules_production", shippingRule);
+      await expect(quote({ promoCode: "CODE" })).rejects.toMatchObject({ status: 409 });
+    }
+  });
+
 });

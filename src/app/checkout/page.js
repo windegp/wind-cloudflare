@@ -578,10 +578,11 @@ export default function CheckoutPage() {
         { label: 'خصم الطلب الأول 🎉', amount: Number(stackedFirstOrderAmount) || 0 },
       ]
     : [{ label: discountLabel, amount: discount }];
-  const liveDisplay = resolveLiveSubscriberDisplay({ liveQuote, subtotal, discount, discountLabel, total: finalTotal, promoLabel: promoLineLabel, clientLines });
+  const liveDisplay = resolveLiveSubscriberDisplay({ liveQuote, subtotal, discount, discountLabel, total: finalTotal, shipping, promoLabel: promoLineLabel, clientLines });
   const shownLines = liveDisplay.lines;
   const shownDiscount = liveDisplay.discount;
   const shownTotal = liveDisplay.total;
+  const shownShipping = liveDisplay.shipping ?? shipping;
   const shownProductsAfter = Math.max(0, Number(subtotal || 0) - Number(shownDiscount || 0));
   
   // 🔥 متغير لإيقاف رادار السلة المتروكة بمجرد ضغط زر الدفع
@@ -885,13 +886,17 @@ export default function CheckoutPage() {
         (quote.discountSource === "subscriber" || quote.stackedDiscount?.source === "subscriber") &&
         Number(quote.discount) >= Number(discount) - 0.01;
       const expectedDiscount = serverAppliedSubscriber ? Number(quote.discount) : Number(discount);
-      const expectedTotal = serverAppliedSubscriber
+      // Compare the fresh quote with the full total the customer reviewed, including shipping.
+      const reviewedShipping = liveDisplay.applies ? shownShipping : shipping;
+      const reviewedTotal = liveDisplay.applies ? shownTotal : finalTotal;
+      const expectedTotal = serverAppliedSubscriber && !liveDisplay.applies
         ? Number(finalTotal) - (Number(quote.discount) - Number(discount))
-        : Number(finalTotal);
+          + (Number(quote.shipping) - Number(shipping))
+        : Number(reviewedTotal);
       const quoteChanged =
         Math.abs(Number(quote.subtotal) - Number(subtotal)) > 0.01 ||
         Math.abs(Number(quote.discount) - expectedDiscount) > 0.01 ||
-        Math.abs(Number(quote.shipping) - Number(shipping)) > 0.01 ||
+        Math.abs(Number(quote.shipping) - Number(reviewedShipping)) > 0.01 ||
         Math.abs(Number(quote.total) - expectedTotal) > 0.01 ||
         (quote.discountSource !== discountSource && !serverAppliedSubscriber) ||
         customerChoiceGiftQuoteChanged;
@@ -1417,7 +1422,7 @@ router.push(`/thank-you?orderId=${orderId}`);
                 </div>
               ))}
               <div className="flex justify-between text-gray-700 font-semibold"><span>سعر المنتجات</span><span>ج.م {shownProductsAfter}.00</span></div>
-              <div className="flex justify-between text-red-700 font-semibold text-sm"><span>تكلفة الشحن</span><span>{SHIPPING_COST === 0 ? 'مجاناً' : `ج.م ${SHIPPING_COST}.00`}</span></div>
+              <div className="flex justify-between text-red-700 font-semibold text-sm"><span>تكلفة الشحن</span><span>{shownShipping === 0 ? 'مجاناً' : `ج.م ${shownShipping}.00`}</span></div>
               <div className="flex justify-between font-black text-lg pt-2 border-t border-gray-100">
                 <span>الإجمالي</span>
                 <span>ج.م {shownTotal}.00</span>
@@ -1611,10 +1616,10 @@ router.push(`/thank-you?orderId=${orderId}`);
                     <p className="text-xs text-gray-400">٣ - ٥ أيام عمل</p>
                   </div>
                 </div>
-                {SHIPPING_COST === 0 ? (
+                {shownShipping === 0 ? (
                   <span className="font-bold text-green-600 text-sm">مجاناً</span>
                 ) : (
-                  <span className="font-bold text-gray-800 text-sm">ج.م {SHIPPING_COST}.00</span>
+                  <span className="font-bold text-gray-800 text-sm">{shownShipping === 0 ? "مجاناً" : `ج.م ${shownShipping}.00`}</span>
                 )}
               </div>
             </div>
@@ -1781,7 +1786,7 @@ router.push(`/thank-you?orderId=${orderId}`);
                   <div className="text-right">
                     <span className="block font-black text-xl text-gray-900">ج.م {shownProductsAfter}.00</span>
                     <span className="block text-[11px] font-semibold text-red-700">
-                      تكلفة الشحن: {SHIPPING_COST === 0 ? 'مجاناً' : `ج.م ${SHIPPING_COST}.00`}
+                      تكلفة الشحن: {shownShipping === 0 ? 'مجاناً' : `ج.م ${shownShipping}.00`}
                     </span>
                   </div>
                   <span className="bg-gray-100 text-gray-500 text-[11px] font-bold px-2 py-1 rounded-full">EGP</span>
@@ -1847,7 +1852,7 @@ router.push(`/thank-you?orderId=${orderId}`);
                     <div className="flex justify-between text-gray-700 font-semibold"><span>سعر المنتجات</span><span>ج.م {shownProductsAfter}.00</span></div>
                     <div className="flex justify-between text-red-700 font-semibold text-sm">
                       <span>تكلفة الشحن</span>
-                      <span>{SHIPPING_COST === 0 ? 'مجاناً' : `ج.م ${SHIPPING_COST}.00`}</span>
+                      <span>{shownShipping === 0 ? 'مجاناً' : `ج.م ${shownShipping}.00`}</span>
                     </div>
                     <div className="flex justify-between font-black text-base pt-2 border-t border-gray-100">
                       <span>الإجمالي</span>
@@ -1964,7 +1969,7 @@ router.push(`/thank-you?orderId=${orderId}`);
               <div className="flex justify-between items-center text-sm font-semibold text-red-700">
                 <span>تكلفة الشحن</span>
                 <span>
-                  {SHIPPING_COST === 0 ? 'مجاناً' : `ج.م ${SHIPPING_COST}.00`}
+                  {shownShipping === 0 ? 'مجاناً' : `ج.م ${shownShipping}.00`}
                 </span>
               </div>
               <div className="flex justify-between items-center pt-4 border-t border-gray-300">

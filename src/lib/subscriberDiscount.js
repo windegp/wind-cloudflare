@@ -50,7 +50,7 @@ export function computeSubscriberDiscountAmount(cfg, subtotal) {
  * The submit-time quote stays authoritative; this never changes what is charged.
  * `lines` are the discount rows (a code and an automatic discount are shown separately).
  */
-export function resolveLiveSubscriberDisplay({ liveQuote, subtotal, discount, discountLabel, total, promoLabel, clientLines }) {
+export function resolveLiveSubscriberDisplay({ liveQuote, subtotal, discount, discountLabel, total, shipping, promoLabel, clientLines }) {
   const defaultLines = clientLines || [{ label: discountLabel, amount: discount }];
   const hasSubscriber =
     liveQuote?.discountSource === "subscriber" || liveQuote?.stackedDiscount?.source === "subscriber";
@@ -59,7 +59,7 @@ export function resolveLiveSubscriberDisplay({ liveQuote, subtotal, discount, di
     Math.abs(Number(liveQuote.subtotal) - Number(subtotal)) < 0.01 &&
     Number(liveQuote.discount) > Number(discount);
   if (!applies) {
-    return { applies: false, discount, label: discountLabel, total, lines: defaultLines };
+    return { applies: false, discount, label: discountLabel, total, shipping, lines: defaultLines };
   }
   const stacked = liveQuote.stackedDiscount;
   const lines = liveQuote.discountSource === "promo" && stacked
@@ -73,6 +73,7 @@ export function resolveLiveSubscriberDisplay({ liveQuote, subtotal, discount, di
     discount: Number(liveQuote.discount),
     label: lines[0].label,
     total: Number(liveQuote.total),
+    shipping: Number(liveQuote.shipping),
     lines,
   };
 }

@@ -54,3 +54,18 @@ describe("footer newsletter text follows the subscriber discount toggle", () => 
     expect(resolveNewsletterText(undefined).title).toBe(GENERIC_NEWSLETTER_TITLE);
   });
 });
+
+describe("live quote shipping in a stacked checkout", () => {
+  it("uses the quote shipping and total along with both cash lines", () => {
+    const result = resolveLiveSubscriberDisplay({
+      liveQuote: { subtotal: 1000, discountSource: "promo", discount: 250, shipping: 0, total: 750,
+        promoDiscountAmount: 100, stackedDiscount: { source: "subscriber", label: "خصم المشتركين", amount: 150 } },
+      subtotal: 1000, discount: 100, discountLabel: "خصم الكود", shipping: 70, total: 970,
+    });
+    expect(result).toMatchObject({ applies: true, shipping: 0, total: 750, discount: 250 });
+    expect(result.lines.map(line => line.amount)).toEqual([100, 150]);
+  });
+  it("keeps client shipping when no live discount applies", () => {
+    expect(resolveLiveSubscriberDisplay({ liveQuote: null, subtotal: 1000, discount: 0, shipping: 70, total: 1070 }).shipping).toBe(70);
+  });
+});

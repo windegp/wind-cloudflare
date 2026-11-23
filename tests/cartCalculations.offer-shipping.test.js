@@ -98,3 +98,18 @@ describe("شحن مجاني للمنتجات المحددة دون التأثي�
     expect(result.shipping).toBe(70);
   });
 });
+
+
+describe("free shipping with stacked first-order and code", () => {
+  const cart = [{ id: "A", price: 1000, qty: 1 }];
+  const code = { valid: true, type: "fixed", value: 100, discountAmount: 100 };
+  const rule = { enabled: true, scope: "selected", productIds: ["A"], condition: "quantity", minQuantity: 1 };
+  it("rule shipping is independent of both cash discounts", () => {
+    expect(calculateAllTotals(cart, code, { shippingCost: 70, freeShippingThreshold: 0, firstOrderEnabled: true, firstOrderDiscount: 15 }, true, [], rule))
+      .toMatchObject({ discount: 250, shipping: 0, total: 750, promoAmount: 100, stackedFirstOrderAmount: 150 });
+  });
+  it("disabling autos leaves the code unchanged", () => {
+    expect(calculateAllTotals(cart, code, { shippingCost: 70, freeShippingThreshold: 0, firstOrderEnabled: false, firstOrderDiscount: 15 }, true, [], rule))
+      .toMatchObject({ discount: 100, shipping: 0, total: 900 });
+  });
+});
