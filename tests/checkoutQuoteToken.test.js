@@ -5,7 +5,7 @@ import {
 } from "@/lib/checkoutQuoteToken";
 
 beforeEach(() => {
-  process.env.CHECKOUT_QUOTE_SECRET = "test-checkout-quote-secret";
+  process.env.CHECKOUT_QUOTE_SECRET = "test-checkout-quote-secret-0123456789abcdef";
 });
 
 describe("signed checkout quotes", () => {
