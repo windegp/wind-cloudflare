@@ -39,3 +39,27 @@ describe("signed checkout quotes", () => {
     await expect(verifyCheckoutQuote("not-a-token", "WND-TEST-001")).resolves.toBeNull();
   });
 });
+
+describe("checkout quote secret", () => {
+  it("fails closed when CHECKOUT_QUOTE_SECRET is missing, even if other secrets exist", async () => {
+    const saved = { ...process.env };
+    delete process.env.CHECKOUT_QUOTE_SECRET;
+    process.env.FIREBASE_PRIVATE_KEY = "some-firebase-private-key-value-0123456789";
+    process.env.KASHIER_API_KEY = "some-kashier-api-key-value-0123456789";
+    try {
+      await expect(signCheckoutQuote({ total: 1 }, "WND-TEST-001")).rejects.toThrow(/CHECKOUT_QUOTE_SECRET/);
+    } finally {
+      process.env = saved;
+    }
+  });
+
+  it("rejects a too-short secret", async () => {
+    const saved = process.env.CHECKOUT_QUOTE_SECRET;
+    process.env.CHECKOUT_QUOTE_SECRET = "short";
+    try {
+      await expect(signCheckoutQuote({ total: 1 }, "WND-TEST-001")).rejects.toThrow(/CHECKOUT_QUOTE_SECRET/);
+    } finally {
+      process.env.CHECKOUT_QUOTE_SECRET = saved;
+    }
+  });
+});
