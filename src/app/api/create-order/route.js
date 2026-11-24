@@ -14,6 +14,7 @@ import { calculateAllTotals } from '@/lib/cartCalculations';
 import { sendNewOrderNotification } from '@/lib/fcmAdmin';
 import { verifyCheckoutQuote } from '@/lib/checkoutQuoteToken';
 import { enforceRateLimit, escapeHtml, safeHttpUrl } from '@/lib/apiGuards';
+import { claimOrderSend } from '@/lib/orderSendCap';
 
 // Generate unique order number with format: WND-YYYYMMDD-TTTT
 function generateOrderNumber() {
@@ -160,6 +161,15 @@ export async function POST(req) {
    // ============================================
     // 2. COD أو InstaPay أو Card_Success — إرسال الإيميل
     // ============================================
+    // Each order ID may trigger the emails and push only twice, so one signed quote
+    // cannot be replayed to spam the admin or a customer address. Nothing is sent when blocked.
+    if (!(await claimOrderSend(orderId))) {
+      return NextResponse.json(
+        { success: false, error: "تم إرسال تأكيد هذا الطلب بالفعل. لا حاجة لإعادة المحاولة." },
+        { status: 429 }
+      );
+    }
+
     const orderNumber = orderId; // 🔥 توحيد رقم الطلب مع اللي اتسجل في الداتا بيز بدل ما نولد واحد جديد للإيميل
 
     // --- تجهيز بيانات الإيميل ---
