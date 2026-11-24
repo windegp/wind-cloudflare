@@ -40,7 +40,14 @@ export async function GET(request) {
     }
 
     // خزّن في KV (للزوار الجايين)
-    await kvSet(CACHE_KEY, data);
+    // fresh=true runs on checkout visits and after subscriptions. Write to KV only when
+    // the document actually changed, so repeated fresh reads do not burn the daily KV write quota.
+    let unchanged = false;
+    if (isFreshRequested) {
+      const cachedNow = await kvGet(CACHE_KEY);
+      unchanged = !!cachedNow && JSON.stringify(cachedNow) === JSON.stringify(JSON.parse(JSON.stringify(data)));
+    }
+    if (!unchanged) await kvSet(CACHE_KEY, data);
 
     return Response.json(
       { success: true, source: 'firebase', data },
