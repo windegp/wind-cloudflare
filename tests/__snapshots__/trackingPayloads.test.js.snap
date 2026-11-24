@@ -1,0 +1,256 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Meta and TikTok payloads (event name, event_id, dedupe fields) are identical, KV missing 1`] = `
+[
+  {
+    "body": {
+      "data": [
+        {
+          "action_source": "website",
+          "custom_data": {
+            "content_ids": [
+              "1",
+              "b",
+            ],
+            "content_type": "product",
+            "contents": [
+              {
+                "id": "a",
+                "item_price": 225,
+                "quantity": 2,
+              },
+            ],
+            "currency": "EGP",
+            "order_id": "WIND-1",
+            "value": 450,
+          },
+          "event_id": "Purchase-evt-1",
+          "event_name": "Purchase",
+          "event_source_url": "https://windeg.com/thank-you",
+          "event_time": 1795514400,
+          "user_data": {
+            "client_ip_address": "1.2.3.4",
+            "client_user_agent": "UA/1.0",
+            "em": "fb98d44ad7501a959f3f4f4a3f004fe2d9e581ea6207e218c4b02c08a4d75adf",
+            "external_id": "e7fe907b3287888acfd1b4783f3ce5b528593e6c60d4d7f2923662da6d41fe8b",
+            "fbp": "fb.1.1700000000000.123",
+            "ph": "b12a7c358b87131b5cef5a3e69a5d474532a78e4a3183971b2c70f67c8bb3c8f",
+          },
+        },
+      ],
+    },
+    "url": "https://graph.facebook.com/v21.0/880930164288645/events?access_token=X",
+  },
+  {
+    "body": {
+      "data": [
+        {
+          "event": "CompletePayment",
+          "event_id": "Purchase-evt-1",
+          "event_time": 1795514400,
+          "page": {
+            "url": "https://windeg.com/thank-you",
+          },
+          "properties": {
+            "contents": [
+              {
+                "content_id": "a",
+                "quantity": 2,
+              },
+            ],
+            "currency": "EGP",
+            "order_id": "WIND-1",
+            "value": 450,
+          },
+          "user": {
+            "email": [
+              "fb98d44ad7501a959f3f4f4a3f004fe2d9e581ea6207e218c4b02c08a4d75adf",
+            ],
+            "external_id": [
+              "e7fe907b3287888acfd1b4783f3ce5b528593e6c60d4d7f2923662da6d41fe8b",
+            ],
+            "ip": "1.2.3.4",
+            "phone": [
+              "b12a7c358b87131b5cef5a3e69a5d474532a78e4a3183971b2c70f67c8bb3c8f",
+            ],
+            "user_agent": "UA/1.0",
+          },
+        },
+      ],
+      "event_source": "web",
+      "event_source_id": "D4K5SMBC77U6QK8E5OMG",
+    },
+    "url": "https://business-api.tiktok.com/open_api/v1.3/event/track/",
+  },
+]
+`;
+
+exports[`Meta and TikTok payloads (event name, event_id, dedupe fields) are identical, KV ok 1`] = `
+[
+  {
+    "body": {
+      "data": [
+        {
+          "action_source": "website",
+          "custom_data": {
+            "content_ids": [
+              "1",
+              "b",
+            ],
+            "content_type": "product",
+            "contents": [
+              {
+                "id": "a",
+                "item_price": 225,
+                "quantity": 2,
+              },
+            ],
+            "currency": "EGP",
+            "order_id": "WIND-1",
+            "value": 450,
+          },
+          "event_id": "Purchase-evt-1",
+          "event_name": "Purchase",
+          "event_source_url": "https://windeg.com/thank-you",
+          "event_time": 1795514400,
+          "user_data": {
+            "client_ip_address": "1.2.3.4",
+            "client_user_agent": "UA/1.0",
+            "em": "fb98d44ad7501a959f3f4f4a3f004fe2d9e581ea6207e218c4b02c08a4d75adf",
+            "external_id": "e7fe907b3287888acfd1b4783f3ce5b528593e6c60d4d7f2923662da6d41fe8b",
+            "fbp": "fb.1.1700000000000.123",
+            "ph": "b12a7c358b87131b5cef5a3e69a5d474532a78e4a3183971b2c70f67c8bb3c8f",
+          },
+        },
+      ],
+    },
+    "url": "https://graph.facebook.com/v21.0/880930164288645/events?access_token=X",
+  },
+  {
+    "body": {
+      "data": [
+        {
+          "event": "CompletePayment",
+          "event_id": "Purchase-evt-1",
+          "event_time": 1795514400,
+          "page": {
+            "url": "https://windeg.com/thank-you",
+          },
+          "properties": {
+            "contents": [
+              {
+                "content_id": "a",
+                "quantity": 2,
+              },
+            ],
+            "currency": "EGP",
+            "order_id": "WIND-1",
+            "value": 450,
+          },
+          "user": {
+            "email": [
+              "fb98d44ad7501a959f3f4f4a3f004fe2d9e581ea6207e218c4b02c08a4d75adf",
+            ],
+            "external_id": [
+              "e7fe907b3287888acfd1b4783f3ce5b528593e6c60d4d7f2923662da6d41fe8b",
+            ],
+            "ip": "1.2.3.4",
+            "phone": [
+              "b12a7c358b87131b5cef5a3e69a5d474532a78e4a3183971b2c70f67c8bb3c8f",
+            ],
+            "user_agent": "UA/1.0",
+          },
+        },
+      ],
+      "event_source": "web",
+      "event_source_id": "D4K5SMBC77U6QK8E5OMG",
+    },
+    "url": "https://business-api.tiktok.com/open_api/v1.3/event/track/",
+  },
+]
+`;
+
+exports[`Meta and TikTok payloads (event name, event_id, dedupe fields) are identical, KV throws 1`] = `
+[
+  {
+    "body": {
+      "data": [
+        {
+          "action_source": "website",
+          "custom_data": {
+            "content_ids": [
+              "1",
+              "b",
+            ],
+            "content_type": "product",
+            "contents": [
+              {
+                "id": "a",
+                "item_price": 225,
+                "quantity": 2,
+              },
+            ],
+            "currency": "EGP",
+            "order_id": "WIND-1",
+            "value": 450,
+          },
+          "event_id": "Purchase-evt-1",
+          "event_name": "Purchase",
+          "event_source_url": "https://windeg.com/thank-you",
+          "event_time": 1795514400,
+          "user_data": {
+            "client_ip_address": "1.2.3.4",
+            "client_user_agent": "UA/1.0",
+            "em": "fb98d44ad7501a959f3f4f4a3f004fe2d9e581ea6207e218c4b02c08a4d75adf",
+            "external_id": "e7fe907b3287888acfd1b4783f3ce5b528593e6c60d4d7f2923662da6d41fe8b",
+            "fbp": "fb.1.1700000000000.123",
+            "ph": "b12a7c358b87131b5cef5a3e69a5d474532a78e4a3183971b2c70f67c8bb3c8f",
+          },
+        },
+      ],
+    },
+    "url": "https://graph.facebook.com/v21.0/880930164288645/events?access_token=X",
+  },
+  {
+    "body": {
+      "data": [
+        {
+          "event": "CompletePayment",
+          "event_id": "Purchase-evt-1",
+          "event_time": 1795514400,
+          "page": {
+            "url": "https://windeg.com/thank-you",
+          },
+          "properties": {
+            "contents": [
+              {
+                "content_id": "a",
+                "quantity": 2,
+              },
+            ],
+            "currency": "EGP",
+            "order_id": "WIND-1",
+            "value": 450,
+          },
+          "user": {
+            "email": [
+              "fb98d44ad7501a959f3f4f4a3f004fe2d9e581ea6207e218c4b02c08a4d75adf",
+            ],
+            "external_id": [
+              "e7fe907b3287888acfd1b4783f3ce5b528593e6c60d4d7f2923662da6d41fe8b",
+            ],
+            "ip": "1.2.3.4",
+            "phone": [
+              "b12a7c358b87131b5cef5a3e69a5d474532a78e4a3183971b2c70f67c8bb3c8f",
+            ],
+            "user_agent": "UA/1.0",
+          },
+        },
+      ],
+      "event_source": "web",
+      "event_source_id": "D4K5SMBC77U6QK8E5OMG",
+    },
+    "url": "https://business-api.tiktok.com/open_api/v1.3/event/track/",
+  },
+]
+`;
