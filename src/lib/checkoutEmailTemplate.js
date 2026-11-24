@@ -1,14 +1,33 @@
-import { PAYMENT_METHOD_DISPLAY, SITE_NAME, CURRENCY } from "@/lib/constants";
+import { PAYMENT_METHOD_DISPLAY, SITE_NAME, SITE_DOMAIN, CURRENCY } from "@/lib/constants";
 import { escapeHtml, safeHttpUrl } from "@/lib/apiGuards";
 
 // Existing checkout email markup, shared unchanged with durable delivery.
-export function buildCheckoutEmails({ paymentMethod, formData, orderNumber, signedQuote }) {
+// Itemized money rows shared by both emails. total = subtotal - discount + shipping.
+// Every discount the server applied (offer, code, first order, subscriber) gets its own line.
+export function buildBreakdownRows(signedQuote) {
+  const subtotal = Number(signedQuote.subtotal);
+  const shipping = Number(signedQuote.shipping) || 0;
+  const discount = Number(signedQuote.discount) || 0;
+  const lines = Array.isArray(signedQuote.discountLines)
+    ? signedQuote.discountLines.filter(l => Number(l?.amount) > 0).map(l => ({ label: String(l.label || "خصم"), amount: Number(l.amount) }))
+    : [];
+  const itemized = lines.reduce((sum, l) => sum + l.amount, 0);
+  const discountRows = lines.length && Math.abs(itemized - discount) <= 0.01
+    ? lines
+    : discount > 0 ? [{ label: "الخصم", amount: discount }] : [];
+  const markdown = Number(signedQuote.productDiscountTotal) || 0;
+  const saved = markdown + discount;
+  return { subtotal, shipping, discountRows, saved, total: Number(signedQuote.total) };
+}
+
+export function buildCheckoutEmails({ paymentMethod, formData, orderNumber, signedQuote, orderId }) {
   const trustedSubtotal = signedQuote.subtotal;
   const trustedTotal = signedQuote.total;
   const trustedCartItems = signedQuote.cartItems || [];
   const trustedLineItems = signedQuote.lineItems || trustedCartItems;
   const actualShipping = Number(signedQuote.shipping) || 0;
   const isFreeShipping = actualShipping === 0;
+  const breakdown = buildBreakdownRows(signedQuote);
   const shippingText = isFreeShipping ? `0 ${CURRENCY} (شحن مجاني)` : `${actualShipping} ${CURRENCY}`;
     // Map payment method to display name
     const displayPaymentMethod = PAYMENT_METHOD_DISPLAY[paymentMethod?.toUpperCase()?.replace('-', '_')] || paymentMethod;
@@ -83,9 +102,13 @@ export function buildCheckoutEmails({ paymentMethod, formData, orderNumber, sign
           <tr><td style="padding: 4px 24px 16px;">
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top: 1px solid #ededed; padding-top: 12px;">
               <tr>
-                <td style="padding: 6px 0; font-size: 12px; color: #999999;">سعر المنتج</td>
-                <td style="padding: 6px 0; font-size: 12px; color: #444444; text-align: left;">${trustedSubtotal || trustedCartItems.reduce((sum, item) => sum + (Number(item.price) * Number(item.qty)), 0)} ${CURRENCY}</td>
+                <td style="padding: 6px 0; font-size: 12px; color: #999999;">المجموع الفرعي</td>
+                <td style="padding: 6px 0; font-size: 12px; color: #444444; text-align: left;">${breakdown.subtotal} ${CURRENCY}</td>
               </tr>
+              ${breakdown.discountRows.map(row => `<tr>
+                <td style="padding: 6px 0; font-size: 12px; color: #1d9e75;">${escapeHtml(row.label)}</td>
+                <td style="padding: 6px 0; font-size: 12px; color: #1d9e75; text-align: left;">- ${row.amount} ${CURRENCY}</td>
+              </tr>`).join('')}
               <tr>
                 <td style="padding: 6px 0; font-size: 12px; color: #999999;">الشحن</td>
                 <td style="padding: 6px 0; font-size: 12px; color: ${isFreeShipping ? '#1d9e75' : '#444444'}; text-align: left; font-weight: ${isFreeShipping ? 'bold' : 'normal'};">${shippingText}</td>
@@ -123,12 +146,64 @@ export function buildCheckoutEmails({ paymentMethod, formData, orderNumber, sign
       </div>
     `;
 
-    // --- محتوى إيميل الأدمن (يشمل كل البيانات اللي كتبها العميل) ---
-    const htmlContent = buildEmailHtml({
-      headline: 'طلب جديد',
-      subline: `طلب جديد من ${escapeHtml(formData.firstName)}`,
-      isAdminEmail: true,
-    });
+
+    // --- إيميل الأدمن: بنفس ترتيب إيميل Shopify (عنوان، زر عرض الطلب، ملخص الطلب، الدفع، الشحن) ---
+    const adminOrderId = String(orderId || orderNumber);
+    const rowTd = 'padding: 4px 0; font-size: 15px; color: #202223;';
+    const adminItem = (item) => {
+      const title = item.productTitle || item.title || item.name || "منتج";
+      const quantity = Number(item.quantity ?? item.qty) || 1;
+      const price = Number(item.price) || 0;
+      const imgUrl = safeHttpUrl(item.image || (Array.isArray(item.images) ? item.images[0] : '') || '');
+      const meta = [item.selectedSize && `المقاس: ${item.selectedSize}`, item.selectedColor && `اللون: ${item.selectedColor}`].filter(Boolean).map(escapeHtml).join(' &nbsp;|&nbsp; ');
+      const note = item.isOfferBenefit === true ? (item.isFree ? "هدية مجانية من العرض" : "خصم العرض") : item.isCustomerChoiceGiftSelection ? "اختيار ضمن العرض" : "";
+      return `<tr>
+        <td width="64" style="padding: 8px 0; vertical-align: top;"><img src="${escapeHtml(imgUrl)}" alt="" width="56" height="56" style="width: 56px; height: 56px; object-fit: cover; border-radius: 6px; border: 1px solid #e1e3e5; display: block; background: #f6f6f7;" /></td>
+        <td style="padding: 8px 10px; vertical-align: top; font-size: 15px; color: #202223;">${escapeHtml(title)}<br><span style="font-size: 14px; color: #6d7175;">${price === 0 ? 'مجاني' : `${price} ${CURRENCY}`} × ${quantity}</span>${meta ? `<br><span style="font-size: 12px; color: #6d7175;">${meta}</span>` : ''}${note ? `<br><span style="font-size: 12px; color: #16835f;">${note}</span>` : ''}</td>
+        <td style="padding: 8px 0; vertical-align: top; text-align: left; font-size: 15px; color: #202223; white-space: nowrap;">${price === 0 ? 'مجاني' : `${price * quantity} ${CURRENCY}`}</td>
+      </tr>`;
+    };
+    const moneyRow = (label, value, color = '#202223') => `<tr><td style="${rowTd} color: ${color};">${label}</td><td style="${rowTd} color: ${color}; text-align: left;">${value}</td></tr>`;
+    const adminHtml = `
+      <div dir="rtl" style="background: #ffffff; padding: 32px 12px; font-family: Arial, Helvetica, sans-serif; color: #202223;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 560px; margin: 0 auto; border: 1px solid #e1e3e5; border-radius: 8px; border-collapse: separate;">
+          <tr><td style="padding: 24px 28px 8px; font-size: 18px; line-height: 1.6; color: #202223;">
+            ${escapeHtml(formData.firstName)} ${escapeHtml(formData.lastName)} سجّل الطلب #${escapeHtml(orderNumber)}
+          </td></tr>
+          <tr><td style="padding: 8px 28px 20px;">
+            <a href="https://${SITE_DOMAIN}/admin/orders/${encodeURIComponent(adminOrderId)}" style="display: inline-block; background: #008060; color: #ffffff; font-size: 15px; text-decoration: none; padding: 12px 20px; border-radius: 6px;">عرض الطلب</a>
+          </td></tr>
+          <tr><td style="padding: 0 28px;"><div style="border-top: 1px solid #e1e3e5;"></div></td></tr>
+          <tr><td style="padding: 20px 28px 4px; font-size: 18px; font-weight: bold; color: #202223;">ملخص الطلب</td></tr>
+          <tr><td style="padding: 4px 28px 12px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${trustedLineItems.map(adminItem).join('')}</table>
+          </td></tr>
+          <tr><td style="padding: 4px 28px 16px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+              ${moneyRow('المجموع الفرعي', `${breakdown.subtotal} ${CURRENCY}`)}
+              ${breakdown.discountRows.map(row => moneyRow(escapeHtml(row.label), `- ${row.amount} ${CURRENCY}`, '#16835f')).join('')}
+              ${moneyRow('الشحن', isFreeShipping ? 'مجاني' : `${actualShipping} ${CURRENCY}`)}
+              <tr><td style="padding: 8px 0 0; font-size: 16px; font-weight: bold; color: #202223;">الإجمالي</td><td style="padding: 8px 0 0; font-size: 16px; font-weight: bold; color: #202223; text-align: left;">${breakdown.total} ${CURRENCY}</td></tr>
+              ${breakdown.saved > 0 ? moneyRow('إجمالي التوفير', `${breakdown.saved} ${CURRENCY}`, '#16835f') : ''}
+            </table>
+          </td></tr>
+          <tr><td style="padding: 0 28px;"><div style="border-top: 1px solid #e1e3e5;"></div></td></tr>
+          <tr><td style="padding: 20px 28px 0; font-size: 15px; line-height: 1.7; color: #202223;">
+            <strong>طريقة الدفع</strong><br>${escapeHtml(displayPaymentMethod)}
+          </td></tr>
+          <tr><td style="padding: 16px 28px 0; font-size: 15px; line-height: 1.7; color: #202223;">
+            <strong>طريقة الشحن</strong><br>${isFreeShipping ? 'شحن مجاني' : 'شحن قياسي'}
+          </td></tr>
+          <tr><td style="padding: 16px 28px 28px; font-size: 15px; line-height: 1.7; color: #202223;">
+            <strong>عنوان الشحن</strong><br>
+            ${escapeHtml(formData.firstName)} ${escapeHtml(formData.lastName)}<br>
+            ${escapeHtml(formData.address)}${formData.landmark ? ' - ' + escapeHtml(formData.landmark) : ''}<br>
+            ${escapeHtml(formData.city)}, ${escapeHtml(formData.governorate)}${formData.postalCode ? ' ' + escapeHtml(formData.postalCode) : ''}<br>
+            ${escapeHtml(formData.phone)}${formData.altPhone ? `<br>هاتف بديل: ${escapeHtml(formData.altPhone)}` : ''}${formData.email ? `<br>${escapeHtml(formData.email)}` : ''}
+          </td></tr>
+        </table>
+      </div>
+    `;
 
     // --- محتوى إيميل العميل (مختصر) ---
     const customerHtmlContent = buildEmailHtml({
@@ -138,5 +213,5 @@ export function buildCheckoutEmails({ paymentMethod, formData, orderNumber, sign
     });
 
 
-  return { adminHtml: htmlContent, customerHtml: customerHtmlContent };
+  return { adminHtml, customerHtml: customerHtmlContent };
 }

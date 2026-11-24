@@ -10,7 +10,7 @@ async function sendEmail({ order, idempotencyKey, admin }) {
   const label = orderDisplayLabel(order);
   const reference = label.startsWith("#") ? label : `#${label}`;
   const html = buildCheckoutEmails({ paymentMethod: order.paymentMethod, formData: order.customer,
-    orderNumber: orderDisplayLabel(order).replace(/^#/, ""), signedQuote: order.financials });
+    orderNumber: orderDisplayLabel(order).replace(/^#/, ""), signedQuote: order.financials, orderId: order.orderId });
   const response = await fetch("https://api.resend.com/emails", { method: "POST", signal: AbortSignal.timeout(10000),
     headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
     body: JSON.stringify({ from: EMAIL_FROM, to: admin ? ADMIN_EMAIL : order.customer.email,
