@@ -15,12 +15,13 @@ import { ttTrack, buildTtUserData } from "@/lib/ttTrack";
 import { getCatalogId } from "@/lib/catalogId";
 import { gaPurchase } from "@/lib/gaTrack";
 import { buildCheckoutMetaUserData } from "@/lib/metaEventData";
+import { DISPLAY_RECORD_KEY, knownPaymentMethod, parseDisplayRecord, mergeDisplayOrder, formatMoney } from "@/lib/thankYouDisplay";
 
 const PAYMENT_LABELS = {
-  card:         { label: 'كارت / محفظة إلكترونية', icon: <CreditCard size={14} className="text-[#F5C518]" /> },
-  card_success: { label: 'كارت / محفظة إلكترونية', icon: <CreditCard size={14} className="text-[#F5C518]" /> },
-  cod:          { label: 'الدفع عند الاستلام',       icon: <Banknote   size={14} className="text-[#F5C518]" /> },
-  instapay:     { label: 'إنستا باي',                icon: <Smartphone size={14} className="text-[#F5C518]" /> },
+  card:         { label: 'كارت / محفظة إلكترونية', icon: <CreditCard size={14} className="text-[#737373]" /> },
+  card_success: { label: 'كارت / محفظة إلكترونية', icon: <CreditCard size={14} className="text-[#737373]" /> },
+  cod:          { label: 'الدفع عند الاستلام',       icon: <Banknote   size={14} className="text-[#737373]" /> },
+  instapay:     { label: 'إنستا باي',                icon: <Smartphone size={14} className="text-[#737373]" /> },
 };
 
 function SuccessContent() {
@@ -33,6 +34,12 @@ function SuccessContent() {
   const [orderData, setOrderData] = useState(null);
   const [verification, setVerification] = useState(orderId?.startsWith("WIND-D-") ? "جاري التحقق من بيانات الطلب." : null);
   const [statusRefresh, setStatusRefresh] = useState(0);
+  // Display-only copy of the order saved at checkout (cash / InstaPay orders have no receipt).
+  // It is never used for tracking, emails or payment checks.
+  const [displayRecord, setDisplayRecord] = useState(null);
+  useEffect(() => {
+    try { setDisplayRecord(parseDisplayRecord(sessionStorage.getItem(DISPLAY_RECORD_KEY), orderId)); } catch (_) {}
+  }, [orderId]);
 
  useEffect(() => {
     let records = [];
@@ -176,7 +183,7 @@ function SuccessContent() {
   }, [pathname, signalPageReady]);
 
   if (verification) return (
-    <div className="w-full max-w-md rounded-2xl border border-amber-300 bg-amber-50 p-6 text-right" dir="rtl">
+    <div className="w-full max-w-md m-5 rounded-2xl border border-amber-300 bg-amber-50 p-6 text-right" dir="rtl">
       <h1 className="text-xl font-bold text-amber-950 mb-3">التحقق من الطلب</h1>
       {(orderId || orderData?.orderId) && <p className="text-xs font-mono break-all mb-3">{orderDisplayLabel(orderData, orderId)}</p>}
       <p role="status" className="text-sm leading-7 text-amber-950">{verification}</p>
@@ -184,175 +191,153 @@ function SuccessContent() {
       <div className="mt-5 text-sm"><Link href="/contact" className="underline">تواصل معنا لمراجعة حالة الطلب</Link></div>
     </div>
   );
-  const paymentInfo = PAYMENT_LABELS[orderData?.paymentMethod] || PAYMENT_LABELS['card'];
+  const view = mergeDisplayOrder(orderData, displayRecord);
+  const method = knownPaymentMethod(view?.paymentMethod);
+  const paymentInfo = method ? PAYMENT_LABELS[method] : null;
+  const label = orderDisplayLabel(view, orderId);
+  const shownLabel = label.startsWith("#") ? label : `#${label}`;
+  const form = view?.formData || null;
+  const items = Array.isArray(view?.lineItems) && view.lineItems.length ? view.lineItems : [];
+  const discount = Number(view?.discount) || 0;
+  const hasShipping = view?.shipping !== undefined && view?.shipping !== null && view?.shipping !== "";
+  const shippingValue = Number(view?.shipping) || 0;
+  const firstName = form?.firstName || "";
+  const addressLines = form ? [
+    `${form.firstName || ""} ${form.lastName || ""}`.trim(),
+    form.address,
+    [form.city, form.governorate].filter(Boolean).join("، "),
+    form.phone,
+  ].filter(Boolean) : [];
+
+  const ACCENT = "#3a76b5";
+  const Field = ({ title, children }) => (
+    <div className="mb-5">
+      <p className="text-sm font-bold text-[#333] mb-1.5">{title}</p>
+      <div className="text-sm text-[#545454] leading-7">{children}</div>
+    </div>
+  );
+  const subtotalShown = view?.subtotal !== undefined && view?.subtotal !== null && view?.subtotal !== "";
 
   return (
-    <div className="w-full max-w-md">
+    <div className="w-full bg-white lg:bg-[linear-gradient(to_right,#ffffff_50%,#fafafa_50%)] text-[#333]">
+      <div dir="ltr" className="mx-auto max-w-[1100px] grid grid-cols-1 lg:grid-cols-2">
 
-      {/* Header */}
-      <div className="text-center mb-8">
-        <p className="text-2xl font-black text-gray-900 tracking-tight">
-          WIND <span className="font-light text-gray-400">Shopping</span>
-        </p>
-        <div className="flex items-center justify-center gap-2 mt-3 text-xs text-gray-400 font-medium">
-          <span>السلة</span><span className="opacity-40">›</span>
-          <span>معلومات</span><span className="opacity-40">›</span>
-          <span>الشحن</span><span className="opacity-40">›</span>
-          <span className="text-[#F5C518] font-bold">تأكيد الطلب</span>
-        </div>
-      </div>
-
-      {/* بطاقة التأكيد */}
-      <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm mb-4">
-        <div className="h-1.5 w-full bg-gradient-to-l from-[#F5C518] via-green-400 to-green-500"></div>
-        <div className="p-6 text-center">
-          <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-green-100">
-            <CheckCircle2 size={32} className="text-green-500" />
+        {/* 1. Check + order number + thanks */}
+        <header dir="rtl" className="px-5 pt-7 pb-4 lg:col-start-1 lg:pt-14 lg:pl-8 lg:pr-12">
+          <p className="text-2xl font-normal text-[#333] mb-6">WIND <span className="text-[#737373]">Shopping</span></p>
+          <div className="flex items-center gap-4">
+            <span className="w-12 h-12 shrink-0 rounded-full border-2 flex items-center justify-center" style={{ borderColor: ACCENT, color: ACCENT }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+            </span>
+            <div className="min-w-0">
+              {(orderId || orderData?.orderId) && (
+                <p className="text-sm text-[#545454]">طلب <bdi dir="ltr" className="font-mono">{shownLabel}</bdi></p>
+              )}
+              <h1 className="text-2xl text-[#333] leading-snug">{firstName ? `شكراً يا ${firstName}!` : "شكراً لثقتك بنا!"}</h1>
+            </div>
           </div>
-          {(orderId || orderData?.orderId) && (
-            <p className="text-[10px] font-mono text-gray-400 uppercase tracking-widest mb-1">
-              تأكيد <bdi dir="ltr">{orderDisplayLabel(orderData, orderId).startsWith("#") ? orderDisplayLabel(orderData, orderId) : `#${orderDisplayLabel(orderData, orderId)}`}</bdi>
-            </p>
-          )}
-          <h1 className="text-2xl font-black text-gray-900 mb-1">شكراً لثقتك بـ WIND Shopping!</h1>
-          <p className="text-sm text-gray-500 leading-relaxed">
-            تم استلام طلبك بنجاح. ستصلك رسالة تأكيد على بريدك الإلكتروني قريباً.
-          </p>
-        </div>
-      </div>
+        </header>
 
-      {/* تفاصيل الطلب */}
-      <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm mb-4">
-        <div className="px-5 py-4 border-b border-gray-100">
-          <p className="font-black text-gray-900 text-sm">تفاصيل الطلب</p>
-        </div>
-        <div className="divide-y divide-gray-100">
-
-          {/* معلومات التواصل */}
-          {orderData?.customerEmail && (
-            <div className="px-5 py-3.5">
-              <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-1">معلومات التواصل</p>
-              <p className="text-sm text-gray-700">{orderData.customerEmail}</p>
-            </div>
-          )}
-
-          {/* عنوان الشحن */}
-          {orderData?.formData && (
-            <div className="px-5 py-3.5">
-              <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-1">عنوان الشحن</p>
-              <p className="text-sm text-gray-700 leading-relaxed">
-                {orderData.formData.firstName} {orderData.formData.lastName}
-                {orderData.formData.address && <><br />{orderData.formData.address}</>}
-                {orderData.formData.city && (
-                  <><br />{orderData.formData.city}{orderData.formData.governorate ? `، ${orderData.formData.governorate}` : ''}</>
-                )}
-                {orderData.formData.phone && <><br />{orderData.formData.phone}</>}
-              </p>
-            </div>
-          )}
-
-          {/* طريقة الشحن */}
-          <div className="px-5 py-3.5">
-            <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-1">طريقة الشحن</p>
-            <p className="text-sm text-gray-700">شحن قياسي · ٣ - ٥ أيام عمل</p>
+        {/* 2. Confirmed box */}
+        <section dir="rtl" className="px-5 py-2 lg:col-start-1 lg:pl-8 lg:pr-12">
+          <div className="rounded-lg border border-[#d9d9d9] p-4">
+            <h2 className="text-base font-bold text-[#333] mb-1">تم تأكيد طلبك</h2>
+            <p className="text-sm text-[#545454] leading-7">هتوصلك رسالة تأكيد على بريدك الإلكتروني قريباً.</p>
           </div>
+        </section>
 
-          {/* طريقة الدفع */}
-          <div className="px-5 py-3.5">
-            <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-1">طريقة الدفع</p>
-            <div className="flex items-center gap-2">
-              {paymentInfo.icon}
-              <p className="text-sm text-gray-700">{paymentInfo.label}</p>
-            </div>
-            {orderData?.total && (
-              <p className="text-xs text-gray-400 mt-0.5">ج.م {orderData.total}.00 EGP</p>
+        {/* 3. Order summary: stacked on phones, right column on desktop */}
+        {(items.length > 0 || view?.total) && (
+          <aside dir="rtl" className="mt-4 lg:mt-0 bg-[#fafafa] border-y border-[#e1e1e1] lg:border-y-0 lg:border-l px-5 py-6 lg:col-start-2 lg:row-start-1 lg:row-span-4 lg:pt-14 lg:pr-8 lg:pl-12 lg:bg-transparent">
+            {items.length > 0 && (
+              <ul className="space-y-4 mb-5">
+                {items.map((item, i) => {
+                  const qty = Number(item.quantity) || 1;
+                  const price = Number(item.price) || 0;
+                  const meta = [item.selectedSize, item.selectedColor].filter(Boolean).join(" · ");
+                  return (
+                    <li key={i} className="flex items-center gap-3">
+                      <div className="relative w-16 h-16 shrink-0 rounded-lg border border-[#d9d9d9] bg-white">
+                        {item.image ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={item.image} alt="" loading="lazy" className="w-full h-full object-cover rounded-lg" />
+                        ) : null}
+                        <span className="absolute -top-2 -left-2 min-w-[22px] h-[22px] px-1 rounded-full bg-[#737373] text-white text-xs font-medium flex items-center justify-center">{qty}</span>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm text-[#333] leading-snug">{item.productTitle || item.name}</p>
+                        {meta && <p className="text-xs text-[#737373] mt-0.5">{meta}</p>}
+                      </div>
+                      <p className="text-sm text-[#333] shrink-0">{price === 0 ? "هدية" : formatMoney(price * qty)}</p>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
-          </div>
-
-        </div>
-      </div>
-
-      {/* Timeline */}
-      <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm mb-4">
-        <div className="px-5 py-4 space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-[#F5C518]/10 rounded-full flex items-center justify-center shrink-0">
-              <Package size={15} className="text-[#F5C518]" />
+            <div className="border-t border-[#d9d9d9] pt-4 space-y-2 text-sm text-[#545454]">
+              {subtotalShown && <div className="flex justify-between"><span>المجموع الفرعي</span><span className="text-[#333]">{formatMoney(view.subtotal)}</span></div>}
+              {discount > 0 && <div className="flex justify-between"><span>الخصم</span><span className="text-[#333]">- {formatMoney(discount)}</span></div>}
+              {hasShipping && <div className="flex justify-between"><span>الشحن</span><span className="text-[#333]">{shippingValue === 0 ? "مجاني" : formatMoney(shippingValue)}</span></div>}
             </div>
-            <div>
-              <p className="text-sm font-bold text-gray-800">جاري تجهيز طلبك</p>
-              <p className="text-xs text-gray-400">سيتم التجهيز خلال ٢٤ ساعة</p>
-            </div>
-            <div className="mr-auto w-2 h-2 rounded-full bg-[#F5C518] animate-pulse"></div>
-          </div>
-          <div className="w-px h-4 bg-gray-100 mr-4"></div>
-          <div className="flex items-center gap-3 opacity-40">
-            <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center shrink-0">
-              <Truck size={15} className="text-gray-400" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-gray-600">في الطريق إليك</p>
-              <p className="text-xs text-gray-400">٣ - ٥ أيام عمل</p>
-            </div>
-          </div>
-          <div className="w-px h-4 bg-gray-100 mr-4"></div>
-          <div className="flex items-center gap-3 opacity-40">
-            <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center shrink-0">
-              <CheckCircle2 size={15} className="text-gray-400" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-gray-600">تم التسليم</p>
-              <p className="text-xs text-gray-400">استمتع بمنتجاتك!</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Trust badges */}
-      <div className="bg-white rounded-2xl border border-gray-200 px-5 py-4 mb-6 shadow-sm">
-        <div className="flex justify-around text-center">
-          {[
-            { icon: <Shield size={16} />, label: 'دفع آمن' },
-            { icon: <Truck size={16} />,  label: 'شحن سريع' },
-            { icon: <Phone size={16} />,  label: 'دعم فوري' },
-          ].map(b => (
-            <div key={b.label} className="flex flex-col items-center gap-2">
-              <div className="w-9 h-9 bg-[#F5C518]/10 rounded-full flex items-center justify-center text-[#F5C518]">
-                {b.icon}
+            {view?.total && (
+              <div className="border-t border-[#d9d9d9] mt-4 pt-4 flex justify-between items-baseline">
+                <span className="text-base text-[#333]">الإجمالي</span>
+                <span className="flex items-baseline gap-2"><span className="text-xs text-[#737373]">EGP</span><span className="text-2xl text-[#333]">{formatMoney(view.total)}</span></span>
               </div>
-              <span className="text-[10px] text-gray-400 font-medium">{b.label}</span>
+            )}
+          </aside>
+        )}
+
+        {/* 4. Customer information */}
+        <section dir="rtl" className="px-5 py-2 lg:col-start-1 lg:pl-8 lg:pr-12">
+          <div className="rounded-lg border border-[#d9d9d9] p-4 mt-2">
+            <h2 className="text-base font-bold text-[#333] mb-4">معلومات العميل</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 sm:gap-x-6">
+              <div>
+                {view?.customerEmail && <Field title="معلومات التواصل"><bdi dir="ltr">{view.customerEmail}</bdi></Field>}
+                {addressLines.length > 0 && (
+                  <Field title="عنوان الشحن">{addressLines.map((line, i) => <span key={i} className="block">{line}</span>)}</Field>
+                )}
+                <Field title="طريقة الشحن">شحن قياسي · ٣ - ٥ أيام عمل</Field>
+              </div>
+              <div>
+                {paymentInfo && (
+                  <Field title="طريقة الدفع"><span className="inline-flex items-center gap-2">{paymentInfo.icon}{paymentInfo.label}</span></Field>
+                )}
+                {addressLines.length > 0 && (
+                  <Field title="عنوان الفاتورة">{addressLines.map((line, i) => <span key={i} className="block">{line}</span>)}</Field>
+                )}
+              </div>
             </div>
-          ))}
-        </div>
+          </div>
+        </section>
+
+        {/* 5. Help + continue shopping */}
+        <footer dir="rtl" className="px-5 pt-4 pb-10 lg:col-start-1 lg:pl-8 lg:pr-12 flex flex-col-reverse gap-5 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-[#545454] text-center sm:text-right">
+            محتاج مساعدة؟{' '}
+            <a href="https://wa.me/201026628476" target="_blank" rel="noreferrer" className="hover:underline" style={{ color: ACCENT }}>تواصل معنا</a>
+          </p>
+          <Link href="/" className="inline-flex items-center justify-center min-h-[52px] px-8 rounded-md text-white text-base font-medium" style={{ backgroundColor: ACCENT }}>
+            متابعة التسوق
+          </Link>
+        </footer>
       </div>
-
-      {/* CTA */}
-      <Link href="/" className="flex items-center justify-center gap-2 w-full bg-[#F5C518] hover:bg-[#e6b800] text-black font-black py-4 rounded-xl text-base transition-all shadow-sm mb-3">
-        <ShoppingBag size={18} />
-        متابعة التسوق
-      </Link>
-
-      <p className="text-center text-xs text-gray-400">
-        محتاج مساعدة؟{' '}
-        <a href="https://wa.me/201026628476" target="_blank" rel="noreferrer" className="text-[#F5C518] font-bold hover:underline">
-          تواصل معنا
-        </a>
-      </p>
     </div>
   );
 }
 
 export default function SuccessPage() {
   return (
-    <div className="min-h-screen bg-[#f5f5f0] flex flex-col items-center justify-center p-5 py-10" dir="rtl">
+    <div className="min-h-[70vh] w-full bg-white flex flex-col items-center justify-start" dir="rtl">
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
         * { font-family: 'Cairo', sans-serif; }
       `}</style>
       <Suspense fallback={
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-4 border-[#F5C518] border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-[#F5C518] font-black animate-pulse">جاري تأكيد الطلب...</p>
+        <div className="flex flex-col items-center gap-3 py-20">
+          <div className="w-10 h-10 border-4 border-[#3a76b5] border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-[#3a76b5] font-black animate-pulse">جاري تأكيد الطلب...</p>
         </div>
       }>
         <SuccessContent />

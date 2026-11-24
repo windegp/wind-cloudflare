@@ -1292,6 +1292,16 @@ export default function CheckoutPage() {
           ...buildTtUserData(formData),
         });
         gaPurchase(orderId, purchaseCartSnapshot, quote.total);
+        // Display-only copy for the thank-you page (cash / InstaPay have no saved receipt).
+        // Not used for tracking, emails or payment checks.
+        try {
+          sessionStorage.setItem("wind_order_display_v1", JSON.stringify({
+            orderId, paymentMethod, customerEmail: formData.email,
+            formData: { firstName: formData.firstName, lastName: formData.lastName, address: formData.address, city: formData.city, governorate: formData.governorate, phone: formData.phone },
+            lineItems: Array.isArray(quote.lineItems) ? quote.lineItems.map(i => ({ productTitle: i.productTitle || i.name, price: i.price, quantity: i.quantity, selectedSize: i.selectedSize, selectedColor: i.selectedColor, image: i.image })) : [],
+            subtotal: quote.subtotal, discount: quote.discount, shipping: quote.shipping, total: quote.total,
+          }));
+        } catch (_) { /* display only */ }
 router.push(`/thank-you?orderId=${orderId}`);
       }
 
