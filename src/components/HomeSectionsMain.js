@@ -47,8 +47,10 @@ export default function HomeSectionsMainContent() {
           let isMobileViewport = false;
           try { isMobileViewport = window.matchMedia(HERO_MOBILE_MEDIA).matches; } catch (e) {}
           img.src = pickHeroImage(heroData.slides[0], isMobileViewport);
-          img.onload = () => signalPageReady();
-          img.onerror = () => signalPageReady();
+          // Wait for the hero image, but never more than 1.5s: a slow image must not hold the whole page.
+          const cap = window.setTimeout(() => signalPageReady(), 1500);
+          img.onload = () => { window.clearTimeout(cap); signalPageReady(); };
+          img.onerror = () => { window.clearTimeout(cap); signalPageReady(); };
         } else {
           signalPageReady();
         }

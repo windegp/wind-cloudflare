@@ -48,7 +48,7 @@ export default function GlobalLoader() {
         
         /* خروج ناعم وسريع جداً (Fade Out) بدون أي رجة للصفحة */
         .receding-standard {
-          animation: loader-fade-out 500ms ease-out forwards;
+          animation: loader-fade-out 250ms ease-out forwards;
         }
         
         @keyframes loader-fade-out {

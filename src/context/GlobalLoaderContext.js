@@ -11,6 +11,7 @@ import React, {
   useLayoutEffect,
 } from "react";
 import { usePathname } from "next/navigation";
+import { routeSignalsReady } from "@/lib/loaderRoutes";
 
 const GlobalLoaderContext = createContext();
 
@@ -18,8 +19,11 @@ const GlobalLoaderContext = createContext();
 const useIsomorphicLayoutEffect =
   typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
-const MAX_LOADER_TIME = 8000;
-const LOADER_FADE_DURATION = 500;
+// Safety nets only. A page normally reports ready much sooner than this.
+const MAX_LOADER_TIME = 4000;
+// Back/forward should feel instant: never hold the screen long.
+const POP_LOADER_TIME = 1500;
+const LOADER_FADE_DURATION = 250;
 
 export function GlobalLoaderProvider({ children }) {
   const pathname = usePathname();
@@ -32,6 +36,7 @@ export function GlobalLoaderProvider({ children }) {
   const [readyPathname, setReadyPathname] = useState(null);
   const pageReady = Boolean(pathname && readyPathname === pathname);
 
+  const isPopRef = useRef(false);
   const fallbackTimerRef = useRef(null);
   const hideTimerRef = useRef(null);
 
@@ -83,16 +88,28 @@ export function GlobalLoaderProvider({ children }) {
     }, MAX_LOADER_TIME);
   }, [pathname, clearLoaderTimers, setPageReady]);
 
+  // Back/forward (popstate) is not a link click: remember it for the next path change.
+  useEffect(() => {
+    const onPop = () => { isPopRef.current = true; };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
   // إعداد اللودر عند كل تغيير حقيقي في المسار.
   useIsomorphicLayoutEffect(() => {
     clearLoaderTimers();
 
-    // بدء الصفحة الجديدة من الأعلى.
-    window.scrollTo({
-      top: 0,
-      left: 0,
-      behavior: "instant",
-    });
+    const wasPop = isPopRef.current;
+    isPopRef.current = false;
+
+    // New page starts at the top, but back/forward keeps the browser's own scroll position.
+    if (!wasPop) {
+      window.scrollTo({
+        top: 0,
+        left: 0,
+        behavior: "instant",
+      });
+    }
 
     // استثناء صفحات الإدارة والدفع من Global Loader.
     const isExcludedRoute =
@@ -110,9 +127,10 @@ export function GlobalLoaderProvider({ children }) {
     }
 
     // إعداد دورة تحميل جديدة.
+    // Pages that never call signalPageReady are ready as soon as they render.
     setIsVisible(true);
     setIsReceding(false);
-    setPageReady(false);
+    setPageReady(!routeSignalsReady(pathname));
 
     // تحديد نوع اللودر مع الحفاظ على السلوك السابق.
     const isKashierPayment =
@@ -133,7 +151,7 @@ export function GlobalLoaderProvider({ children }) {
         hideTimerRef.current = null;
         setIsVisible(false);
       }, LOADER_FADE_DURATION);
-    }, MAX_LOADER_TIME);
+    }, wasPop ? POP_LOADER_TIME : MAX_LOADER_TIME);
 
     // إلغاء مؤقتات هذه الصفحة عند الانتقال إلى صفحة أخرى.
     return () => {
