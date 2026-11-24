@@ -235,7 +235,13 @@ const fetchHomepageProductsSections = async () => {
 
 // هوك الإعدادات (مقفل الكوتا بالكامل)
 export const useSiteSettings = () => {
-  return useSWR('settings/siteSettings', fetchDoc, {
+  // Same SWR key and fetcher as SettingsContext, so this adds no extra request and no Firestore read:
+  // the settings come from the KV-backed /api/site-settings endpoint.
+  return useSWR('site-settings', async () => {
+    const res = await fetch("/api/site-settings");
+    const result = await res.json();
+    return result.success ? result.data : null;
+  }, {
     dedupingInterval: 300000, // 5 دقائق كاش (mutate() بيجبر الريفريش فوراً)
     revalidateOnFocus: false,
     revalidateOnReconnect: false
