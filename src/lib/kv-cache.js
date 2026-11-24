@@ -97,6 +97,11 @@ function classifyKey(key) {
     return 'operational';
   }
   
+  // Cached listings: cleared on every admin product change, with a TTL as a backstop
+  if (key.startsWith('catpage_') || key.startsWith('relcol_')) {
+    return 'operational';
+  }
+
   // Rate limit keys: Operational but handled separately (direct kv.put)
   if (key.startsWith('ratelimit_')) {
     return 'operational';

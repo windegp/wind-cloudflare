@@ -295,9 +295,29 @@ export const usePaginatedProducts = (categorySlug, limitCount = 10, lastVisibleD
     const products = [];
     let cursor = lastVisibleDoc;
     let hasMore = false;
+    let usedCache = false;
+
+    // First page: served from KV through /api/category-products (cleared on every admin product
+    // change). If the API is unavailable, fall back to the same Firestore query below.
+    if (!lastVisibleDoc && limitCount === 12 && categorySlug && !String(categorySlug).includes('/')) {
+      try {
+        const res = await fetch(`/api/category-products?slug=${encodeURIComponent(categorySlug)}`);
+        if (res.ok) {
+          const cached = await res.json();
+          if (cached && Array.isArray(cached.products)) {
+            products.push(...cached.products);
+            cursor = cached.lastDocId ? { id: cached.lastDocId } : null;
+            hasMore = Boolean(cached.hasMore);
+            usedCache = true;
+          }
+        }
+      } catch (e) {
+        console.error("WIND Category Cache Error:", e);
+      }
+    }
 
     // استمر في الجلب حتى نحصل على العدد المطلوب من المنتجات الظاهرة.
-    while (products.length < limitCount) {
+    while (!usedCache && products.length < limitCount) {
       const remainingCount = limitCount - products.length;
 
       const constraints = [
@@ -431,12 +451,30 @@ export const useRelatedProducts = (product) => {
       // 🔥 التعديل هنا: خليناه يقرأ من collections
       const fbRefValue = (Array.isArray(product.collections) && product.collections[0]) || product.category;
       if (fbRefValue) {
-        // 🔥 التعديل هنا: البحث في حقل collections
-        const qCat = query(productsRef, where("collections", "array-contains", fbRefValue), limit(6));
-        const snap = await getDocs(qCat);
-        snap.forEach(d => {
-          if (d.id !== product.id) related.push({ id: d.id, ...d.data() });
-        });
+        // Same query, served from KV through /api/related-by-collection (cleared on product changes).
+        // Falls back to Firestore if the API is unavailable.
+        let cachedList = null;
+        try {
+          const res = await fetch(`/api/related-by-collection?value=${encodeURIComponent(fbRefValue)}`);
+          if (res.ok) {
+            const json = await res.json();
+            if (json && Array.isArray(json.products)) cachedList = json.products;
+          }
+        } catch (e) {
+          console.error("WIND Related Cache Error:", e);
+        }
+        if (cachedList) {
+          cachedList.forEach(p => {
+            if (p.id !== product.id) related.push(p);
+          });
+        } else {
+          // 🔥 التعديل هنا: البحث في حقل collections
+          const qCat = query(productsRef, where("collections", "array-contains", fbRefValue), limit(6));
+          const snap = await getDocs(qCat);
+          snap.forEach(d => {
+            if (d.id !== product.id) related.push({ id: d.id, ...d.data() });
+          });
+        }
       }
     }
 

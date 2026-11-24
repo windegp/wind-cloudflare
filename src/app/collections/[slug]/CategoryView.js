@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { getDb } from "../../../lib/firebase";
-import { collection, query, where, getDocs, limit, orderBy, startAfter } from 'firebase/firestore/lite';
+import { collection, query, where, getDocs, limit, orderBy, startAfter, doc, getDoc } from 'firebase/firestore/lite';
 import { isProductHiddenFromListings } from '@/lib/inventoryHelpers';
 import { usePageReady, useGlobalLoader } from "../../../context/GlobalLoaderContext";
 import ProductCard from "../../../components/products/ProductCard";
@@ -92,6 +92,11 @@ export default function CategoryView({ initialSlug, initialCategoryData }) {
       }
 
       let cursor = lastDoc;
+      // The cached first page carries only the cursor doc id: load that one document to continue
+      // from exactly the same place as before (one read, only when "load more" is used).
+      if (cursor && typeof cursor.data !== 'function') {
+        cursor = await getDoc(doc(db, "products", cursor.id));
+      }
       let newItems = [];
       let hasMoreAfterFetch = false;
 
