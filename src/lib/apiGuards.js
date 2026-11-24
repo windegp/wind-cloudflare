@@ -32,7 +32,7 @@ export function isSameOrigin(request) {
 
 /**
  * Rate limit by client IP. Returns a Response when blocked, otherwise null.
- * checkRateLimit fails open when KV is unavailable.
+ * checkRateLimit fails open when KV is unavailable, except TRACK_ORDER, CONTACT and CREATE_ORDER, which fall back to an in-memory counter.
  */
 export async function enforceRateLimit(request, type = "DEFAULT") {
   const ip = getClientIP(request);

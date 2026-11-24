@@ -66,7 +66,7 @@ export async function POST(request) {
       headers: { "Content-Type": "application/json" },
     });
   }
-  const limited = await enforceRateLimit(request, "TRACKING");
+  const limited = await enforceRateLimit(request, "TRACKING_TT");
   if (limited) return limited;
 
   try {

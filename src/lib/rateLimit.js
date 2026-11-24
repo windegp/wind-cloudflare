@@ -47,8 +47,20 @@ const RATE_LIMITS = {
     blockDuration: 300
   },
 
-  // Pixel / Conversions API relays (a page view plus a few events per visit)
+  // Pixel / Conversions API relays (a page view plus a few events per visit).
+  // Meta and TikTok use separate counters so one pixel never uses up the other's allowance.
+  // Same limit as before, now per relay. TRACKING is kept for any caller that still uses it.
   TRACKING: {
+    requests: 90,
+    window: 60,
+    blockDuration: 300
+  },
+  TRACKING_FB: {
+    requests: 90,
+    window: 60,
+    blockDuration: 300
+  },
+  TRACKING_TT: {
     requests: 90,
     window: 60,
     blockDuration: 300
@@ -117,6 +129,50 @@ function getRateLimitKey(ip, endpointType = 'DEFAULT') {
   return `ratelimit_${endpointType}_${ip}`;
 }
 
+// Endpoints that protect against guessing, spam or abuse. If KV errors out (for example the
+// daily write quota is used up) these keep a per-isolate counter instead of switching protection
+// off. Tracking relays are NOT listed: they stay open so no conversion event is ever dropped.
+const MEMORY_FALLBACK_TYPES = new Set(['TRACK_ORDER', 'CONTACT', 'CREATE_ORDER']);
+const memoryCounters = new Map();
+const MEMORY_MAX_ENTRIES = 5000;
+
+function memoryCheck(ip, endpointType, config) {
+  const now = Math.floor(Date.now() / 1000);
+  const key = getRateLimitKey(ip, endpointType);
+
+  if (memoryCounters.size > MEMORY_MAX_ENTRIES) {
+    for (const [k, v] of memoryCounters) {
+      if (now > Math.max(v.resetTime, v.blockUntil || 0)) memoryCounters.delete(k);
+    }
+    if (memoryCounters.size > MEMORY_MAX_ENTRIES) memoryCounters.clear();
+  }
+
+  let entry = memoryCounters.get(key);
+  if (entry?.blockUntil && now < entry.blockUntil) {
+    return { allowed: false, remaining: 0, resetTime: entry.blockUntil, blocked: true };
+  }
+  if (!entry || now > entry.resetTime) {
+    entry = { count: 1, resetTime: now + config.window };
+  } else {
+    entry.count += 1;
+  }
+  if (entry.count > config.requests) {
+    entry.blockUntil = now + config.blockDuration;
+    memoryCounters.set(key, entry);
+    return { allowed: false, remaining: 0, resetTime: entry.blockUntil, blocked: true };
+  }
+  memoryCounters.set(key, entry);
+  return { allowed: true, remaining: Math.max(0, config.requests - entry.count), resetTime: entry.resetTime, blocked: false };
+}
+
+function failedKvResult(ip, endpointType) {
+  if (MEMORY_FALLBACK_TYPES.has(endpointType)) {
+    return memoryCheck(ip, endpointType, RATE_LIMITS[endpointType] || RATE_LIMITS.DEFAULT);
+  }
+  // Fail open for everything else
+  return { allowed: true, remaining: 1, resetTime: 0, blocked: false };
+}
+
 /**
  * Checks if a request should be rate limited
  * 
@@ -128,8 +184,8 @@ export async function checkRateLimit(ip, endpointType = 'DEFAULT') {
   try {
     const kv = await getKV();
     if (!kv) {
-      // If KV is not available, allow the request
-      return { allowed: true, remaining: 1, resetTime: 0, blocked: false };
+      // KV binding not available: sensitive endpoints use the in-memory counter, others allow
+      return failedKvResult(ip, endpointType);
     }
     
     const config = RATE_LIMITS[endpointType] || RATE_LIMITS.DEFAULT;
@@ -211,8 +267,8 @@ export async function checkRateLimit(ip, endpointType = 'DEFAULT') {
     
   } catch (err) {
     console.error('[RATE LIMIT] Error checking rate limit:', err);
-    // Fail open - allow request on error
-    return { allowed: true, remaining: 1, resetTime: 0, blocked: false };
+    // KV error: sensitive endpoints keep an in-memory counter, everything else fails open
+    return failedKvResult(ip, endpointType);
   }
 }
 

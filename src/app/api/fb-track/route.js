@@ -59,7 +59,7 @@ export async function POST(request) {
   if (!isSameOrigin(request)) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
-  const limited = await enforceRateLimit(request, "TRACKING");
+  const limited = await enforceRateLimit(request, "TRACKING_FB");
   if (limited) return limited;
 
   try {
