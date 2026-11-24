@@ -56,7 +56,7 @@ const RATE_LIMITS = {
 
   // Order creation / confirmation emails
   CREATE_ORDER: {
-    requests: 10,
+    requests: 60,
     window: 300,
     blockDuration: 600
   },
