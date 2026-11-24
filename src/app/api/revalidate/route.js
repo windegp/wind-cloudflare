@@ -81,7 +81,7 @@ export async function POST(request) {
       const old = collectionsOf(await kvGet(`product_${id}`));
       let current = [];
       try { current = await readProductCollectionsFromFirestore(getDb(), id); } catch {}
-      keysToDelete.push(...listingKeysForCollections([...old, ...current, ...(Array.isArray(body.collections) ? body.collections : [])]));
+      keysToDelete.push(...listingKeysForCollections([...old, ...current, ...(Array.isArray(body.collections) ? body.collections.slice(0, 20).filter((c) => typeof c === 'string' && c.length <= 100) : [])]));
     } catch {}
     revalidatePath('/');
     if (handle) revalidatePath(`/products/${handle}`);
