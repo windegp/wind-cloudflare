@@ -2,6 +2,9 @@ import { getKV, kvDeleteMany } from '@/lib/kv-cache';
 import { revalidatePath } from 'next/cache';
 import { verifyAdminIdToken } from '@/lib/verifyAdminIdToken';
 import { isSameOrigin, enforceRateLimit } from '@/lib/apiGuards';
+import { getDb } from '@/lib/firebase';
+import { kvGet } from '@/lib/kv-cache';
+import { collectionsOf, listingKeysForCollections, readProductCollectionsFromFirestore } from '@/lib/listingCache';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +15,7 @@ const PUBLIC_TYPES = new Set(['likes', 'product_stats']);
 const ALLOWED_KEY_PREFIXES = [
   'homepage_', 'site_settings_', 'sitemap_', 'fb_catalog_', 'google_catalog_',
   'tiktok_catalog_', 'tt_catalog_', 'product_', 'collection_', 'offers_',
+  'catpage_', 'relcol_',
 ];
 const isAllowedKey = (key) =>
   typeof key === 'string' && key.length <= 200 && ALLOWED_KEY_PREFIXES.some((p) => key.startsWith(p));
@@ -70,6 +74,15 @@ export async function POST(request) {
   ])
 );
     if (handle) keysToDelete.push(`product_stats_${handle}`);
+    // Cached category pages and related lists: clear the product's OLD collections (from its cached
+    // copy, still the pre-edit version here) and NEW ones (from Firestore, already saved).
+    // Covers create, edit, delete, inventory and import, whatever the admin page sends.
+    try {
+      const old = collectionsOf(await kvGet(`product_${id}`));
+      let current = [];
+      try { current = await readProductCollectionsFromFirestore(getDb(), id); } catch {}
+      keysToDelete.push(...listingKeysForCollections([...old, ...current, ...(Array.isArray(body.collections) ? body.collections.slice(0, 20).filter((c) => typeof c === 'string' && c.length <= 100) : [])]));
+    } catch {}
     revalidatePath('/');
     if (handle) revalidatePath(`/products/${handle}`);
   } else if (type === 'product_stats' && handle) {
@@ -84,7 +97,7 @@ export async function POST(request) {
     revalidatePath('/');
   }
   else if (type === 'collection' && slug) {
-    keysToDelete = [`collection_${slug}`, 'homepage_data_v1'];
+    keysToDelete = [`collection_${slug}`, 'homepage_data_v1', ...listingKeysForCollections([slug])];
     revalidatePath('/');
     revalidatePath(`/collections/${slug}`);
   } else if (type === 'offers') {

@@ -173,6 +173,16 @@ try {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ type: 'collection', slug: slugToInvalidate })
   });
+
+  // Renamed collection: the old slug's cached product list must go too
+  const oldSlugToInvalidate = (originalSlug || '').trim().replace(/^\//, '');
+  if (oldSlugToInvalidate && oldSlugToInvalidate !== slugToInvalidate) {
+    await adminFetch("/api/revalidate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: 'collection', slug: oldSlugToInvalidate })
+    });
+  }
 } catch (error) {
   console.error("WIND Error: Collection and Homepage revalidate failed", error);
 }
@@ -209,6 +219,17 @@ try {
                 
                 // 🔥 5. تحديث الكاش بعد الحذف
                 mutate('collections-data');
+
+                // Deleted collection: clear its cached page data and product list
+                try {
+                  await adminFetch("/api/revalidate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ type: 'collection', slug: String(slug || '').replace(/^\//, '') })
+                  });
+                } catch (error) {
+                  console.error("WIND Error: Collection revalidate failed after delete", error);
+                }
 
                 // 🔥 مسح كاش الكتالوج لأن حذف القسم يزيل ارتباطه من المنتجات
                 try {
