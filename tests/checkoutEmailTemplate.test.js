@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { writeFileSync } from "fs";
 import { buildBreakdownRows, buildCheckoutEmails } from "@/lib/checkoutEmailTemplate";
 
 const formData = { firstName: "Ali", lastName: "Hassan", phone: "01000000000", address: "12 Nasr St", city: "Cairo", governorate: "Cairo", email: "a@b.com" };
@@ -41,4 +42,19 @@ describe("order emails", () => {
     expect(adminHtml).toContain("550");
     expect(customerHtml).toContain("550");
   });
+  it("puts the logo at the bottom and links the customer button to order tracking", () => {
+    const { adminHtml, customerHtml } = buildCheckoutEmails({ paymentMethod: "cod", formData, orderNumber: "1001", orderId: "WIND-D-abc", signedQuote: quote });
+    for (const html of [adminHtml, customerHtml]) {
+      expect(html.indexOf("/logo.png")).toBeGreaterThan(html.indexOf("عنوان الشحن"));
+    }
+    expect(customerHtml).toContain("/track-order?order=1001");
+    expect(customerHtml).toContain("عرض طلبك");
+    expect(customerHtml).toContain("أهلاً Ali");
+  });
+});
+
+it.skipIf(!process.env.DUMP_EMAIL)("dump", () => {
+  const q = { ...quote, lineItems: [{ productTitle: "تيشيرت قطن أسود", price: 350, quantity: 3, selectedSize: "L", selectedColor: "أسود" }, { productTitle: "كاب هدية", price: 0, quantity: 1, isOfferBenefit: true, isFree: true }] , subtotal: 1050, discount: 300, total: 750};
+  const r = buildCheckoutEmails({ paymentMethod: "cod", formData, orderNumber: "1001", orderId: "x", signedQuote: q });
+  writeFileSync("/tmp/ea.html", r.adminHtml); writeFileSync("/tmp/ec.html", r.customerHtml);
 });

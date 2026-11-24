@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 
 const STEPS = ["تم استلام الطلب", "جاري التجهيز", "تم الشحن"];
@@ -11,6 +11,12 @@ export default function TrackOrderForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [order, setOrder] = useState(null);
+
+  // Prefill the order number from the email link (?order=1001). Phone is never prefilled.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("order");
+    if (q) setOrderNumber(q.slice(0, 43));
+  }, []);
 
   async function submit(e) {
     e.preventDefault();

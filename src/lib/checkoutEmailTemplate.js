@@ -164,29 +164,8 @@ export function buildCheckoutEmails({ paymentMethod, formData, orderNumber, sign
       </tr>`;
     };
     const moneyRow = (label, value, color = '#202223') => `<tr><td style="${rowTd} color: ${color};">${label}</td><td style="${rowTd} color: ${color}; text-align: left;">${value}</td></tr>`;
-    const adminHtml = `
-      <div dir="rtl" style="background: #ffffff; padding: 32px 12px; font-family: Arial, Helvetica, sans-serif; color: #202223;">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 560px; margin: 0 auto; border: 1px solid #e1e3e5; border-radius: 8px; border-collapse: separate;">
-          <tr><td style="padding: 24px 28px 8px; font-size: 18px; line-height: 1.6; color: #202223;">
-            ${escapeHtml(formData.firstName)} ${escapeHtml(formData.lastName)} سجّل الطلب #${escapeHtml(orderNumber)}
-          </td></tr>
-          <tr><td style="padding: 8px 28px 20px;">
-            <a href="https://${SITE_DOMAIN}/admin/orders/${encodeURIComponent(adminOrderId)}" style="display: inline-block; background: #008060; color: #ffffff; font-size: 15px; text-decoration: none; padding: 12px 20px; border-radius: 6px;">عرض الطلب</a>
-          </td></tr>
-          <tr><td style="padding: 0 28px;"><div style="border-top: 1px solid #e1e3e5;"></div></td></tr>
-          <tr><td style="padding: 20px 28px 4px; font-size: 18px; font-weight: bold; color: #202223;">ملخص الطلب</td></tr>
-          <tr><td style="padding: 4px 28px 12px;">
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${trustedLineItems.map(adminItem).join('')}</table>
-          </td></tr>
-          <tr><td style="padding: 4px 28px 16px;">
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-              ${moneyRow('المجموع الفرعي', `${breakdown.subtotal} ${CURRENCY}`)}
-              ${breakdown.discountRows.map(row => moneyRow(escapeHtml(row.label), `- ${row.amount} ${CURRENCY}`, '#16835f')).join('')}
-              ${moneyRow('الشحن', isFreeShipping ? 'مجاني' : `${actualShipping} ${CURRENCY}`)}
-              <tr><td style="padding: 8px 0 0; font-size: 16px; font-weight: bold; color: #202223;">الإجمالي</td><td style="padding: 8px 0 0; font-size: 16px; font-weight: bold; color: #202223; text-align: left;">${breakdown.total} ${CURRENCY}</td></tr>
-              ${breakdown.saved > 0 ? moneyRow('إجمالي التوفير', `${breakdown.saved} ${CURRENCY}`, '#16835f') : ''}
-            </table>
-          </td></tr>
+    const logoBlock = `<tr><td style="padding: 8px 28px 28px; text-align: center; border-top: 1px solid #e1e3e5;"><img src="https://${SITE_DOMAIN}/logo.png" alt="${escapeHtml(SITE_NAME)}" width="120" style="width: 120px; max-width: 50%; height: auto; display: inline-block; margin-top: 24px;" /></td></tr>`;
+    const detailsBlocks = `
           <tr><td style="padding: 0 28px;"><div style="border-top: 1px solid #e1e3e5;"></div></td></tr>
           <tr><td style="padding: 20px 28px 0; font-size: 15px; line-height: 1.7; color: #202223;">
             <strong>طريقة الدفع</strong><br>${escapeHtml(displayPaymentMethod)}
@@ -200,17 +179,49 @@ export function buildCheckoutEmails({ paymentMethod, formData, orderNumber, sign
             ${escapeHtml(formData.address)}${formData.landmark ? ' - ' + escapeHtml(formData.landmark) : ''}<br>
             ${escapeHtml(formData.city)}, ${escapeHtml(formData.governorate)}${formData.postalCode ? ' ' + escapeHtml(formData.postalCode) : ''}<br>
             ${escapeHtml(formData.phone)}${formData.altPhone ? `<br>هاتف بديل: ${escapeHtml(formData.altPhone)}` : ''}${formData.email ? `<br>${escapeHtml(formData.email)}` : ''}
+          </td></tr>`;
+    const summaryBlocks = `
+          <tr><td style="padding: 20px 28px 4px; font-size: 18px; font-weight: bold; color: #202223;">ملخص الطلب</td></tr>
+          <tr><td style="padding: 4px 28px 12px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${trustedLineItems.map(adminItem).join('')}</table>
           </td></tr>
+          <tr><td style="padding: 4px 28px 16px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+              ${moneyRow('المجموع الفرعي', `${breakdown.subtotal} ${CURRENCY}`)}
+              ${breakdown.discountRows.map(row => moneyRow(escapeHtml(row.label), `- ${row.amount} ${CURRENCY}`, '#16835f')).join('')}
+              ${moneyRow('الشحن', isFreeShipping ? 'مجاني' : `${actualShipping} ${CURRENCY}`)}
+              <tr><td style="padding: 8px 0 0; font-size: 16px; font-weight: bold; color: #202223;">الإجمالي</td><td style="padding: 8px 0 0; font-size: 16px; font-weight: bold; color: #202223; text-align: left;">${breakdown.total} ${CURRENCY}</td></tr>
+              ${breakdown.saved > 0 ? moneyRow('إجمالي التوفير', `${breakdown.saved} ${CURRENCY}`, '#16835f') : ''}
+            </table>
+          </td></tr>`;
+    const wrap = (inner) => `
+      <div dir="rtl" style="background: #ffffff; padding: 32px 12px; font-family: Arial, Helvetica, sans-serif; color: #202223;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 560px; margin: 0 auto; border: 1px solid #e1e3e5; border-radius: 8px; border-collapse: separate;">${inner}
+          ${logoBlock}
         </table>
       </div>
     `;
+    const adminHtml = wrap(`
+          <tr><td style="padding: 24px 28px 8px; font-size: 18px; line-height: 1.6; color: #202223;">
+            ${escapeHtml(formData.firstName)} ${escapeHtml(formData.lastName)} سجّل الطلب #${escapeHtml(orderNumber)}
+          </td></tr>
+          <tr><td style="padding: 8px 28px 20px;">
+            <a href="https://${SITE_DOMAIN}/admin/orders/${encodeURIComponent(adminOrderId)}" style="display: inline-block; background: #008060; color: #ffffff; font-size: 15px; text-decoration: none; padding: 12px 20px; border-radius: 6px;">عرض الطلب</a>
+          </td></tr>
+          <tr><td style="padding: 0 28px;"><div style="border-top: 1px solid #e1e3e5;"></div></td></tr>
+          ${summaryBlocks}${detailsBlocks}`);
 
-    // --- محتوى إيميل العميل (مختصر) ---
-    const customerHtmlContent = buildEmailHtml({
-      headline: 'ORDER CONFIRMED',
-      subline: 'شكراً لطلبك من وينـد',
-      isAdminEmail: false,
-    });
+    // --- إيميل العميل: نفس ترتيب إيميل Shopify. زر "عرض طلبك" يفتح صفحة تتبع الطلب برقم الطلب ---
+    const trackUrl = `https://${SITE_DOMAIN}/track-order?order=${encodeURIComponent(String(orderNumber))}`;
+    const customerHtmlContent = wrap(`
+          <tr><td style="padding: 28px 28px 4px; font-size: 24px; color: #202223;">شكراً لطلبك من وينـد!</td></tr>
+          <tr><td style="padding: 4px 28px 0; font-size: 14px; color: #6d7175;">رقم الطلب #${escapeHtml(orderNumber)}</td></tr>
+          <tr><td style="padding: 12px 28px 0; font-size: 15px; line-height: 1.8; color: #6d7175;">أهلاً ${escapeHtml(formData.firstName)}، بنجهّز طلبك للشحن دلوقتي، وهنبلغك أول ما يتشحن.</td></tr>
+          <tr><td style="padding: 20px 28px 24px; font-size: 15px; color: #6d7175;">
+            <a href="${trackUrl}" style="display: inline-block; background: #1990c6; color: #ffffff; font-size: 15px; text-decoration: none; padding: 14px 22px; border-radius: 5px;">عرض طلبك</a>
+            &nbsp; أو <a href="https://${SITE_DOMAIN}" style="color: #1990c6; text-decoration: none;">زيارة المتجر</a>
+          </td></tr>
+          ${summaryBlocks}${detailsBlocks}`);
 
 
   return { adminHtml, customerHtml: customerHtmlContent };
