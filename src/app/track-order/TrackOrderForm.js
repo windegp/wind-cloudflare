@@ -12,14 +12,21 @@ export default function TrackOrderForm() {
   const [error, setError] = useState("");
   const [order, setOrder] = useState(null);
 
-  // Prefill the order number from the email link (?order=1001). Phone is never prefilled.
+  // Email link: /track-order?order=1001#p=0100... Fill both fields and show the status right away.
+  // The phone is in the fragment so it never reaches server logs. Cleared from the address bar after reading.
   useEffect(() => {
     const q = new URLSearchParams(window.location.search).get("order");
+    const ph = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("p");
     if (q) setOrderNumber(q.slice(0, 43));
+    if (ph) setPhone(ph.slice(0, 30));
+    if (q && ph) {
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      lookup(q.slice(0, 43), ph.slice(0, 30));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function submit(e) {
-    e.preventDefault();
+  async function lookup(num, ph) {
     if (loading) return;
     setLoading(true);
     setError("");
@@ -30,7 +37,7 @@ export default function TrackOrderForm() {
       const res = await fetch("/api/track-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderNumber, phone }),
+        body: JSON.stringify({ orderNumber: num, phone: ph }),
         signal: controller.signal,
       });
       const data = await res.json().catch(() => ({}));
@@ -43,6 +50,11 @@ export default function TrackOrderForm() {
       clearTimeout(timer);
       setLoading(false);
     }
+  }
+
+  function submit(e) {
+    e.preventDefault();
+    lookup(orderNumber, phone);
   }
 
   return (
@@ -92,6 +104,11 @@ export default function TrackOrderForm() {
         <section className="mt-8 border border-gray-200 rounded-[3px] p-5" aria-live="polite">
           <p className="text-sm text-gray-500 mb-1">طلب رقم</p>
           <p className="font-black text-lg mb-5" dir="ltr" style={{ textAlign: "right" }}>{order.orderNumber}</p>
+
+          <p className="text-sm text-gray-500 mb-1">حالة الطلب</p>
+          <p className="font-black text-xl mb-5" style={{ color: order.stage === 0 ? "#b91c1c" : "#1A1A1A" }}>
+            {order.stage === 0 ? "ملغي" : STEPS[Math.max(0, order.stage - 1)] || STEPS[0]}
+          </p>
 
           {order.stage === 0 ? (
             <p className="font-bold text-red-700 mb-5">الطلب ده اتلغى.</p>
