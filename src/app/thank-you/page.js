@@ -15,6 +15,7 @@ import { ttTrack, buildTtUserData } from "@/lib/ttTrack";
 import { getCatalogId } from "@/lib/catalogId";
 import { gaPurchase } from "@/lib/gaTrack";
 import { buildCheckoutMetaUserData } from "@/lib/metaEventData";
+import { DISPLAY_RECORD_KEY, knownPaymentMethod, parseDisplayRecord, mergeDisplayOrder, formatMoney } from "@/lib/thankYouDisplay";
 
 const PAYMENT_LABELS = {
   card:         { label: 'كارت / محفظة إلكترونية', icon: <CreditCard size={14} className="text-[#F5C518]" /> },
@@ -33,6 +34,12 @@ function SuccessContent() {
   const [orderData, setOrderData] = useState(null);
   const [verification, setVerification] = useState(orderId?.startsWith("WIND-D-") ? "جاري التحقق من بيانات الطلب." : null);
   const [statusRefresh, setStatusRefresh] = useState(0);
+  // Display-only copy of the order saved at checkout (cash / InstaPay orders have no receipt).
+  // It is never used for tracking, emails or payment checks.
+  const [displayRecord, setDisplayRecord] = useState(null);
+  useEffect(() => {
+    try { setDisplayRecord(parseDisplayRecord(sessionStorage.getItem(DISPLAY_RECORD_KEY), orderId)); } catch (_) {}
+  }, [orderId]);
 
  useEffect(() => {
     let records = [];
@@ -184,157 +191,139 @@ function SuccessContent() {
       <div className="mt-5 text-sm"><Link href="/contact" className="underline">تواصل معنا لمراجعة حالة الطلب</Link></div>
     </div>
   );
-  const paymentInfo = PAYMENT_LABELS[orderData?.paymentMethod] || PAYMENT_LABELS['card'];
+  const view = mergeDisplayOrder(orderData, displayRecord);
+  const method = knownPaymentMethod(view?.paymentMethod);
+  const paymentInfo = method ? PAYMENT_LABELS[method] : null;
+  const label = orderDisplayLabel(view, orderId);
+  const shownLabel = label.startsWith("#") ? label : `#${label}`;
+  const form = view?.formData || null;
+  const items = Array.isArray(view?.lineItems) && view.lineItems.length ? view.lineItems : [];
+  const discount = Number(view?.discount) || 0;
+  const hasShipping = view?.shipping !== undefined && view?.shipping !== null && view?.shipping !== "";
+  const shippingValue = Number(view?.shipping) || 0;
+  const firstName = form?.firstName || "";
+  const addressLines = form ? [
+    `${form.firstName || ""} ${form.lastName || ""}`.trim(),
+    form.address,
+    [form.city, form.governorate].filter(Boolean).join("، "),
+    form.phone,
+  ].filter(Boolean) : [];
+
+  const Section = ({ title, children }) => (
+    <div className="py-4 border-b border-gray-100 last:border-0">
+      <p className="text-xs font-bold text-gray-500 mb-1.5">{title}</p>
+      <div className="text-sm text-gray-800 leading-7">{children}</div>
+    </div>
+  );
 
   return (
-    <div className="w-full max-w-md">
+    <div className="w-full max-w-xl" dir="rtl">
 
-      {/* Header */}
-      <div className="text-center mb-8">
+      {/* Brand */}
+      <div className="text-center mb-6">
         <p className="text-2xl font-black text-gray-900 tracking-tight">
           WIND <span className="font-light text-gray-400">Shopping</span>
         </p>
-        <div className="flex items-center justify-center gap-2 mt-3 text-xs text-gray-400 font-medium">
-          <span>السلة</span><span className="opacity-40">›</span>
-          <span>معلومات</span><span className="opacity-40">›</span>
-          <span>الشحن</span><span className="opacity-40">›</span>
-          <span className="text-[#F5C518] font-bold">تأكيد الطلب</span>
-        </div>
       </div>
 
-      {/* بطاقة التأكيد */}
-      <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm mb-4">
-        <div className="h-1.5 w-full bg-gradient-to-l from-[#F5C518] via-green-400 to-green-500"></div>
-        <div className="p-6 text-center">
-          <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-green-100">
-            <CheckCircle2 size={32} className="text-green-500" />
-          </div>
+      {/* Confirmation */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-4 flex items-center gap-4">
+        <div className="w-14 h-14 shrink-0 bg-green-50 rounded-full flex items-center justify-center border-2 border-green-200">
+          <CheckCircle2 size={28} className="text-green-600" />
+        </div>
+        <div className="min-w-0">
           {(orderId || orderData?.orderId) && (
-            <p className="text-[10px] font-mono text-gray-400 uppercase tracking-widest mb-1">
-              تأكيد <bdi dir="ltr">{orderDisplayLabel(orderData, orderId).startsWith("#") ? orderDisplayLabel(orderData, orderId) : `#${orderDisplayLabel(orderData, orderId)}`}</bdi>
-            </p>
+            <p className="text-xs text-gray-500 mb-0.5">تأكيد الطلب <bdi dir="ltr" className="font-mono">{shownLabel}</bdi></p>
           )}
-          <h1 className="text-2xl font-black text-gray-900 mb-1">شكراً لثقتك بـ WIND Shopping!</h1>
-          <p className="text-sm text-gray-500 leading-relaxed">
-            تم استلام طلبك بنجاح. ستصلك رسالة تأكيد على بريدك الإلكتروني قريباً.
-          </p>
+          <h1 className="text-xl font-black text-gray-900 leading-snug">
+            {firstName ? `شكراً يا ${firstName}!` : "شكراً لثقتك بـ WIND Shopping!"}
+          </h1>
         </div>
       </div>
+      <p className="text-sm text-gray-600 leading-7 px-1 mb-4">
+        تم استلام طلبك بنجاح، وهنراجعه ونجهزه للشحن. هتوصلك رسالة تأكيد على بريدك الإلكتروني.
+      </p>
 
-      {/* تفاصيل الطلب */}
-      <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm mb-4">
-        <div className="px-5 py-4 border-b border-gray-100">
-          <p className="font-black text-gray-900 text-sm">تفاصيل الطلب</p>
-        </div>
-        <div className="divide-y divide-gray-100">
-
-          {/* معلومات التواصل */}
-          {orderData?.customerEmail && (
-            <div className="px-5 py-3.5">
-              <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-1">معلومات التواصل</p>
-              <p className="text-sm text-gray-700">{orderData.customerEmail}</p>
-            </div>
-          )}
-
-          {/* عنوان الشحن */}
-          {orderData?.formData && (
-            <div className="px-5 py-3.5">
-              <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-1">عنوان الشحن</p>
-              <p className="text-sm text-gray-700 leading-relaxed">
-                {orderData.formData.firstName} {orderData.formData.lastName}
-                {orderData.formData.address && <><br />{orderData.formData.address}</>}
-                {orderData.formData.city && (
-                  <><br />{orderData.formData.city}{orderData.formData.governorate ? `، ${orderData.formData.governorate}` : ''}</>
-                )}
-                {orderData.formData.phone && <><br />{orderData.formData.phone}</>}
-              </p>
-            </div>
-          )}
-
-          {/* طريقة الشحن */}
-          <div className="px-5 py-3.5">
-            <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-1">طريقة الشحن</p>
-            <p className="text-sm text-gray-700">شحن قياسي · ٣ - ٥ أيام عمل</p>
+      {/* Order summary */}
+      {(items.length > 0 || view?.total) && (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm mb-4 overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100">
+            <p className="font-black text-gray-900 text-sm">ملخص الطلب</p>
           </div>
-
-          {/* طريقة الدفع */}
-          <div className="px-5 py-3.5">
-            <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-1">طريقة الدفع</p>
-            <div className="flex items-center gap-2">
-              {paymentInfo.icon}
-              <p className="text-sm text-gray-700">{paymentInfo.label}</p>
-            </div>
-            {orderData?.total && (
-              <p className="text-xs text-gray-400 mt-0.5">ج.م {orderData.total}.00 EGP</p>
+          {items.length > 0 && (
+            <ul className="divide-y divide-gray-100">
+              {items.map((item, i) => {
+                const qty = Number(item.quantity) || 1;
+                const price = Number(item.price) || 0;
+                const meta = [item.selectedSize, item.selectedColor].filter(Boolean).join(" · ");
+                return (
+                  <li key={i} className="px-5 py-3.5 flex items-center gap-3">
+                    <div className="relative w-14 h-14 shrink-0 rounded-lg border border-gray-200 bg-gray-50">
+                      {item.image ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={item.image} alt="" loading="lazy" className="w-full h-full object-cover rounded-lg" />
+                      ) : null}
+                      <span className="absolute -top-2 -left-2 min-w-5 h-5 px-1 rounded-full bg-gray-700 text-white text-[11px] font-bold flex items-center justify-center">{qty}</span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold text-gray-800 leading-snug">{item.productTitle || item.name}</p>
+                      {meta && <p className="text-xs text-gray-500 mt-0.5">{meta}</p>}
+                    </div>
+                    <p className="text-sm font-bold text-gray-800 shrink-0">{price === 0 ? "هدية" : formatMoney(price * qty)}</p>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <div className="px-5 py-4 space-y-2 border-t border-gray-100 text-sm">
+            {view?.subtotal !== undefined && view?.subtotal !== null && (
+              <div className="flex justify-between text-gray-600"><span>المجموع الفرعي</span><span>{formatMoney(view.subtotal)}</span></div>
+            )}
+            {discount > 0 && (
+              <div className="flex justify-between text-green-700"><span>الخصم</span><span>- {formatMoney(discount)}</span></div>
+            )}
+            {hasShipping && (
+              <div className="flex justify-between text-gray-600"><span>الشحن</span><span>{shippingValue === 0 ? "مجاني" : formatMoney(shippingValue)}</span></div>
+            )}
+            {view?.total && (
+              <div className="flex justify-between items-baseline pt-3 border-t border-gray-100">
+                <span className="font-black text-gray-900">الإجمالي</span>
+                <span className="font-black text-lg text-gray-900">{formatMoney(view.total)}</span>
+              </div>
             )}
           </div>
-
         </div>
-      </div>
+      )}
 
-      {/* Timeline */}
-      <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm mb-4">
-        <div className="px-5 py-4 space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-[#F5C518]/10 rounded-full flex items-center justify-center shrink-0">
-              <Package size={15} className="text-[#F5C518]" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-gray-800">جاري تجهيز طلبك</p>
-              <p className="text-xs text-gray-400">سيتم التجهيز خلال ٢٤ ساعة</p>
-            </div>
-            <div className="mr-auto w-2 h-2 rounded-full bg-[#F5C518] animate-pulse"></div>
-          </div>
-          <div className="w-px h-4 bg-gray-100 mr-4"></div>
-          <div className="flex items-center gap-3 opacity-40">
-            <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center shrink-0">
-              <Truck size={15} className="text-gray-400" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-gray-600">في الطريق إليك</p>
-              <p className="text-xs text-gray-400">٣ - ٥ أيام عمل</p>
-            </div>
-          </div>
-          <div className="w-px h-4 bg-gray-100 mr-4"></div>
-          <div className="flex items-center gap-3 opacity-40">
-            <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center shrink-0">
-              <CheckCircle2 size={15} className="text-gray-400" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-gray-600">تم التسليم</p>
-              <p className="text-xs text-gray-400">استمتع بمنتجاتك!</p>
-            </div>
-          </div>
+      {/* Details */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm mb-4 px-5">
+        <div className="py-4 border-b border-gray-100">
+          <p className="font-black text-gray-900 text-sm">تفاصيل الطلب</p>
         </div>
-      </div>
-
-      {/* Trust badges */}
-      <div className="bg-white rounded-2xl border border-gray-200 px-5 py-4 mb-6 shadow-sm">
-        <div className="flex justify-around text-center">
-          {[
-            { icon: <Shield size={16} />, label: 'دفع آمن' },
-            { icon: <Truck size={16} />,  label: 'شحن سريع' },
-            { icon: <Phone size={16} />,  label: 'دعم فوري' },
-          ].map(b => (
-            <div key={b.label} className="flex flex-col items-center gap-2">
-              <div className="w-9 h-9 bg-[#F5C518]/10 rounded-full flex items-center justify-center text-[#F5C518]">
-                {b.icon}
-              </div>
-              <span className="text-[10px] text-gray-400 font-medium">{b.label}</span>
-            </div>
-          ))}
-        </div>
+        {view?.customerEmail && <Section title="معلومات التواصل"><bdi dir="ltr">{view.customerEmail}</bdi></Section>}
+        {addressLines.length > 0 && (
+          <Section title="عنوان الشحن">
+            {addressLines.map((line, i) => <span key={i} className="block">{line}</span>)}
+          </Section>
+        )}
+        <Section title="طريقة الشحن">شحن قياسي · ٣ - ٥ أيام عمل</Section>
+        {paymentInfo && (
+          <Section title="طريقة الدفع">
+            <span className="inline-flex items-center gap-2">{paymentInfo.icon}{paymentInfo.label}</span>
+          </Section>
+        )}
+        {addressLines.length > 0 && <Section title="عنوان الفاتورة">نفس عنوان الشحن</Section>}
       </div>
 
       {/* CTA */}
-      <Link href="/" className="flex items-center justify-center gap-2 w-full bg-[#F5C518] hover:bg-[#e6b800] text-black font-black py-4 rounded-xl text-base transition-all shadow-sm mb-3">
+      <Link href="/" className="flex items-center justify-center gap-2 w-full bg-[#F5C518] hover:bg-[#e6b800] text-black font-black py-4 rounded-xl text-base transition-all shadow-sm mb-4">
         <ShoppingBag size={18} />
         متابعة التسوق
       </Link>
 
-      <p className="text-center text-xs text-gray-400">
+      <p className="text-center text-xs text-gray-500">
         محتاج مساعدة؟{' '}
-        <a href="https://wa.me/201026628476" target="_blank" rel="noreferrer" className="text-[#F5C518] font-bold hover:underline">
+        <a href="https://wa.me/201026628476" target="_blank" rel="noreferrer" className="text-[#b8920a] font-bold hover:underline">
           تواصل معنا
         </a>
       </p>
