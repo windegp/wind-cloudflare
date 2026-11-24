@@ -4,7 +4,7 @@ import { buildBreakdownRows, buildCheckoutEmails } from "@/lib/checkoutEmailTemp
 
 const formData = { firstName: "Ali", lastName: "Hassan", phone: "01000000000", address: "12 Nasr St", city: "Cairo", governorate: "Cairo", email: "a@b.com" };
 const quote = {
-  subtotal: 1000, discount: 300, shipping: 0, total: 700, productDiscountTotal: 100,
+  subtotal: 1000, discount: 300, shipping: 0, total: 700, productDiscountTotal: 100, originalSubtotal: 1100,
   discountLines: [{ source: "offer", label: "عرض: الجمعة البيضاء", amount: 200 }, { source: "first_order", label: "خصم الطلب الأول", amount: 100 }],
   lineItems: [{ productTitle: "Shirt", price: 500, quantity: 2, selectedSize: "L" }],
   cartItems: [],
@@ -16,6 +16,10 @@ describe("order emails", () => {
     expect(rows.discountRows.map(r => r.amount)).toEqual([200, 100]);
     expect(rows.subtotal - rows.discountRows.reduce((s, r) => s + r.amount, 0) + rows.shipping).toBe(rows.total);
     expect(rows.saved).toBe(400);
+  });
+  it("savings exclude shipping and do not double count a free gift", () => {
+    const q = { subtotal: 798, originalSubtotal: 798, productDiscountTotal: 399, discount: 399, shipping: 70, total: 469, discountLines: [{ label: "عرض", amount: 399 }] };
+    expect(buildBreakdownRows(q).saved).toBe(399);
   });
   it("falls back to one discount line when lines are missing or do not add up", () => {
     expect(buildBreakdownRows({ ...quote, discountLines: [] }).discountRows).toEqual([{ label: "الخصم", amount: 300 }]);

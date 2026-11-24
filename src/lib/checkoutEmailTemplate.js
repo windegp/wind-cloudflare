@@ -15,7 +15,10 @@ export function buildBreakdownRows(signedQuote) {
   const discountRows = lines.length && Math.abs(itemized - discount) <= 0.01
     ? lines
     : discount > 0 ? [{ label: "الخصم", amount: discount }] : [];
-  const markdown = Number(signedQuote.productDiscountTotal) || 0;
+  // Real price markdowns only (compare-at vs price). productDiscountTotal also counts the free-gift
+  // value, which is already inside `discount`, so using it double counted. Shipping is never savings.
+  const orig = Number(signedQuote.originalSubtotal);
+  const markdown = Number.isFinite(orig) ? Math.max(0, orig - subtotal) : 0;
   const saved = markdown + discount;
   return { subtotal, shipping, discountRows, saved, total: Number(signedQuote.total) };
 }
@@ -206,20 +209,22 @@ export function buildCheckoutEmails({ paymentMethod, formData, orderNumber, sign
             ${escapeHtml(formData.firstName)} ${escapeHtml(formData.lastName)} سجّل الطلب #${escapeHtml(orderNumber)}
           </td></tr>
           <tr><td style="padding: 8px 28px 20px;">
-            <a href="https://${SITE_DOMAIN}/admin/orders/${encodeURIComponent(adminOrderId)}" style="display: inline-block; background: #008060; color: #ffffff; font-size: 15px; text-decoration: none; padding: 12px 20px; border-radius: 6px;">عرض الطلب</a>
+            <a href="https://${SITE_DOMAIN}/admin/orders/${encodeURIComponent(adminOrderId)}" target="_blank" rel="noopener noreferrer" style="display: inline-block; background: #008060; color: #ffffff; font-size: 15px; text-decoration: none; padding: 12px 20px; border-radius: 6px;">عرض الطلب</a>
           </td></tr>
           <tr><td style="padding: 0 28px;"><div style="border-top: 1px solid #e1e3e5;"></div></td></tr>
           ${summaryBlocks}${detailsBlocks}`);
 
     // --- إيميل العميل: نفس ترتيب إيميل Shopify. زر "عرض طلبك" يفتح صفحة تتبع الطلب برقم الطلب ---
-    const trackUrl = `https://${SITE_DOMAIN}/track-order?order=${encodeURIComponent(String(orderNumber))}`;
+    // The phone goes in the URL fragment (#p=), which browsers never send to the server or logs.
+    const trackPhone = String(formData.phone || '').replace(/[^0-9+]/g, '').slice(0, 20);
+    const trackUrl = `https://${SITE_DOMAIN}/track-order?order=${encodeURIComponent(String(orderNumber))}${trackPhone ? `#p=${encodeURIComponent(trackPhone)}` : ''}`;
     const customerHtmlContent = wrap(`
           <tr><td style="padding: 28px 28px 4px; font-size: 24px; color: #202223;">شكراً لطلبك من وينـد!</td></tr>
           <tr><td style="padding: 4px 28px 0; font-size: 14px; color: #6d7175;">رقم الطلب #${escapeHtml(orderNumber)}</td></tr>
           <tr><td style="padding: 12px 28px 0; font-size: 15px; line-height: 1.8; color: #6d7175;">أهلاً ${escapeHtml(formData.firstName)}، بنجهّز طلبك للشحن دلوقتي، وهنبلغك أول ما يتشحن.</td></tr>
           <tr><td style="padding: 20px 28px 24px; font-size: 15px; color: #6d7175;">
-            <a href="${trackUrl}" style="display: inline-block; background: #1990c6; color: #ffffff; font-size: 15px; text-decoration: none; padding: 14px 22px; border-radius: 5px;">عرض طلبك</a>
-            &nbsp; أو <a href="https://${SITE_DOMAIN}" style="color: #1990c6; text-decoration: none;">زيارة المتجر</a>
+            <a href="${trackUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; background: #1990c6; color: #ffffff; font-size: 15px; text-decoration: none; padding: 14px 22px; border-radius: 5px;">عرض طلبك</a>
+            &nbsp; أو <a href="https://${SITE_DOMAIN}" target="_blank" rel="noopener noreferrer" style="color: #1990c6; text-decoration: none;">زيارة المتجر</a>
           </td></tr>
           ${summaryBlocks}${detailsBlocks}`);
 
