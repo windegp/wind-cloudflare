@@ -1,5 +1,6 @@
 "use client";
 
+import { buildKashierCheckoutUrl } from "@/lib/kashierCheckoutUrl";
 import { durableCheckoutEnabled, getBrowserCheckoutAttempt } from "@/lib/checkoutAttemptBrowser";
 import React, { useState, useEffect, useRef } from 'react';
 import { useCart } from "../../context/CartContext";
@@ -70,21 +71,7 @@ function KashierIframeModal({ iframeData, onClose }) {
   const iframeRef = useRef(null);
 
   // ── بناء رابط كاشير iFrame ──
-  const kashierUrl =
-    `https://checkout.kashier.io?` +
-    `merchantId=${iframeData.merchantId}` +
-    `&orderId=${iframeData.orderId}` +
-    `&amount=${iframeData.amount}` +
-    `&currency=${iframeData.currency}` +
-    `&hash=${iframeData.hash}` +
-    `&merchantRedirect=${encodeURIComponent(iframeData.merchantRedirect)}` +
-    `&failureRedirect=${encodeURIComponent(iframeData.failureRedirect)}` +
-    `&allowedMethods=${iframeData.allowedMethods}` +
-    `&redirectMethod=get` +
-    `&display=${iframeData.display}` +
-    `&brandColor=${encodeURIComponent(iframeData.brandColor)}` +
-    `&mode=${iframeData.mode}` +
-    `&metaData=embedded`;  // ← يخبر كاشير إنه شغال داخل iFrame
+  const kashierUrl = buildKashierCheckoutUrl(iframeData);  // ← يخبر كاشير إنه شغال داخل iFrame
 
   // ── إغلاق بـ Escape ──
   useEffect(() => {
