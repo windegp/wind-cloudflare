@@ -78,9 +78,9 @@ export default function CustomersPage() {
     const tabSource = tabKey[1];
 
     if (tabSource === 'wind') {
-      q = query(collection(db, "Customers"), where("data_source", "==", "WIND_Web"), limit(fetchLimit));
+      q = query(collection(db, "Customers"), where("data_source", "==", "WIND_Web"), orderBy("last_active", "desc"), limit(fetchLimit));
     } else if (tabSource === 'shopify') {
-      q = query(collection(db, "Customers"), where("data_source", "==", "Shopify_Import"), limit(fetchLimit));
+      q = query(collection(db, "Customers"), where("data_source", "==", "Shopify_Import"), orderBy("last_active", "desc"), limit(fetchLimit));
     } else {
       q = query(collection(db, "Customers"), orderBy("last_active", "desc"), limit(fetchLimit));
     }
@@ -163,9 +163,9 @@ export default function CustomersPage() {
       let q;
       
       if (activeTab === 'wind') {
-        q = query(collection(db, "Customers"), where("data_source", "==", "WIND_Web"), startAfter(lastVisible), limit(fetchLimit));
+        q = query(collection(db, "Customers"), where("data_source", "==", "WIND_Web"), orderBy("last_active", "desc"), startAfter(lastVisible), limit(fetchLimit));
       } else if (activeTab === 'shopify') {
-        q = query(collection(db, "Customers"), where("data_source", "==", "Shopify_Import"), startAfter(lastVisible), limit(fetchLimit));
+        q = query(collection(db, "Customers"), where("data_source", "==", "Shopify_Import"), orderBy("last_active", "desc"), startAfter(lastVisible), limit(fetchLimit));
       } else {
         q = query(collection(db, "Customers"), orderBy("last_active", "desc"), startAfter(lastVisible), limit(fetchLimit));
       }
