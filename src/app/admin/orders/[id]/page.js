@@ -5,7 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { getDb } from "@/lib/firebase";
 import { doc, getDoc, collection, query, where, getDocs, updateDoc } from "firebase/firestore/lite";
-import { FULFILLMENT_OPTIONS, PAYMENT_OPTIONS, canEditPayment, paymentPatchForFulfillment, normalizeFulfillment } from "@/lib/fulfillmentStatus";
+import { FULFILLMENT_OPTIONS, PAYMENT_OPTIONS, paymentOptionLabel, canEditPayment, paymentPatchForFulfillment, normalizeFulfillment } from "@/lib/fulfillmentStatus";
 import { getCairoTimestamp } from "@/lib/analytics-helpers";
 import { ArrowRight, Package, User, MapPin, Printer, Phone } from '@/components/icons-extra';
 
@@ -121,12 +121,12 @@ const formatDate = (value) => {
   }
 };
 
-const getPaymentStatus = (status) => {
+const getPaymentStatus = (status, method) => {
   const value = String(status || '').toLowerCase();
 
   const statuses = {
     paid: ['مدفوع', 'bg-green-100 text-green-700 border-green-200'],
-    pending: ['بانتظار الدفع', 'bg-orange-100 text-orange-700 border-orange-200'],
+    pending: [({ instapay: 'بانتظار تأكيد التحويل', cod: 'الدفع عند الاستلام' })[String(method || '').toLowerCase()] || 'بانتظار الدفع', 'bg-orange-100 text-orange-700 border-orange-200'],
     pending_payment: ['بانتظار الدفع الإلكتروني', 'bg-blue-100 text-blue-700 border-blue-200'],
     abandoned: ['سلة متروكة', 'bg-gray-100 text-gray-600 border-gray-200'],
     refunded: ['تم رد المبلغ', 'bg-red-100 text-red-700 border-red-200'],
@@ -350,7 +350,7 @@ export default function OrderDetailsPage() {
   const isWind = order.data_source === 'WIND_Web';
   const isAbandoned = String(order['Financial Status'] || '').toLowerCase() === 'abandoned';
 
-  const paymentStatus = getPaymentStatus(order['Financial Status']);
+  const paymentStatus = getPaymentStatus(order['Financial Status'], order['Payment Method']);
 
   const fulfillmentRaw =
     order['Fulfillment Status'] ||
@@ -487,34 +487,6 @@ export default function OrderDetailsPage() {
                   {fulfillmentStatus[0]}
                 </span>
 
-                {!isAbandoned && (
-                  <select
-                    value={fulfillmentValue}
-                    onChange={(e) => changeFulfillment(e.target.value)}
-                    disabled={savingStatus}
-                    aria-label="تغيير حالة الطلب"
-                    className="text-xs font-bold border border-gray-300 rounded-md px-2 py-1 bg-white disabled:opacity-50"
-                  >
-                    {FULFILLMENT_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                )}
-
-                {!isAbandoned && canEditPayment(order) && (
-                  <select
-                    value={String(order['Financial Status'] || '').toLowerCase()}
-                    onChange={(e) => changePayment(e.target.value)}
-                    disabled={savingStatus}
-                    aria-label="تغيير حالة الدفع"
-                    className="text-xs font-bold border border-gray-300 rounded-md px-2 py-1 bg-white disabled:opacity-50"
-                  >
-                    {PAYMENT_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>{`الدفع: ${o.label}`}</option>
-                    ))}
-                  </select>
-                )}
-
                 {isWind && (
                   <span className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-gray-100 text-gray-600 border border-gray-200">
                     WIND Web
@@ -538,6 +510,48 @@ export default function OrderDetailsPage() {
             </button>
           </div>
         </div>
+
+        {/* تغيير الحالة: بطاقة واضحة فوق التفاصيل */}
+        {!isAbandoned && (
+          <div className="bg-white border border-gray-200 rounded-xl p-4 mb-5 grid grid-cols-1 sm:grid-cols-2 gap-4 print:hidden">
+            <label className="flex flex-col gap-1.5">
+              <span className="text-xs font-bold text-gray-500">حالة التجهيز</span>
+              <select
+                value={fulfillmentValue}
+                onChange={(e) => changeFulfillment(e.target.value)}
+                disabled={savingStatus}
+                aria-label="تغيير حالة الطلب"
+                className="text-sm font-bold border border-gray-300 rounded-lg px-3 py-2.5 bg-white disabled:opacity-50"
+              >
+                {FULFILLMENT_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </label>
+            {canEditPayment(order) ? (
+              <label className="flex flex-col gap-1.5">
+                <span className="text-xs font-bold text-gray-500">حالة الدفع</span>
+                <select
+                  value={String(order['Financial Status'] || '').toLowerCase()}
+                  onChange={(e) => changePayment(e.target.value)}
+                  disabled={savingStatus}
+                  aria-label="تغيير حالة الدفع"
+                  className="text-sm font-bold border border-gray-300 rounded-lg px-3 py-2.5 bg-white disabled:opacity-50"
+                >
+                  {PAYMENT_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{paymentOptionLabel(o.value, order['Payment Method'])}</option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs font-bold text-gray-500">حالة الدفع</span>
+                <span className={`self-start text-sm font-bold px-3 py-2 rounded-lg border ${paymentStatus[1]}`}>{paymentStatus[0]}</span>
+                <span className="text-[11px] text-gray-400">طلبات الكارت بتتحدث من كاشير تلقائياً</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* تنبيه السلة المتروكة */}
         {isAbandoned && (
