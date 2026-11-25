@@ -24,3 +24,13 @@ describe("manual payment status", () => {
     expect(matchesStatusFilter({ "Financial Status": "refunded", "Fulfillment Status": "shipped" }, "unpaid")).toBe(false);
   });
 });
+
+import { paymentOptionLabel } from "@/lib/fulfillmentStatus";
+describe("payment labels", () => {
+  it("pending reads per method", () => {
+    expect(paymentBadge("pending", "instapay").label).toBe("بانتظار تأكيد التحويل");
+    expect(paymentOptionLabel("pending", "instapay")).toBe("بانتظار تأكيد التحويل");
+    expect(paymentOptionLabel("pending", "cod")).toBe("الدفع عند الاستلام");
+    expect(paymentOptionLabel("paid", "cod")).toBe("مدفوع");
+  });
+});

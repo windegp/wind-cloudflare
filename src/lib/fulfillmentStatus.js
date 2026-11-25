@@ -27,7 +27,7 @@ export function paymentBadge(financialStatus, paymentMethod) {
   const fin = String(financialStatus || "").toLowerCase();
   const method = String(paymentMethod || "").toLowerCase();
   if (fin === "paid") return { label: "مدفوع", tone: "gray" };
-  if (fin === "pending") return { label: method === "instapay" ? "بانتظار تأكيد إنستا باي" : "الدفع عند الاستلام", tone: "orange" };
+  if (fin === "pending") return { label: method === "instapay" ? "بانتظار تأكيد التحويل" : method === "cod" ? "الدفع عند الاستلام" : "بانتظار الدفع", tone: "orange" };
   if (fin === "refunded") return { label: "تم رد المبلغ", tone: "red" };
   if (fin === "partially_paid") return { label: "مدفوع جزئياً", tone: "orange" };
   if (fin === "voided") return { label: "ملغي مالياً", tone: "red" };
@@ -67,4 +67,11 @@ export function paymentPatchForFulfillment(order, value) {
   const fin = String(order?.["Financial Status"] || "").toLowerCase();
   if (value === "delivered" && method === "cod" && fin === "pending") return { "Financial Status": "paid" };
   return {};
+}
+
+// Option label for the manual payment dropdown. "pending" reads differently for COD and InstaPay.
+export function paymentOptionLabel(value, paymentMethod) {
+  const method = String(paymentMethod || "").toLowerCase();
+  if (value === "pending") return method === "instapay" ? "بانتظار تأكيد التحويل" : method === "cod" ? "الدفع عند الاستلام" : "بانتظار الدفع";
+  return PAYMENT_OPTIONS.find((o) => o.value === value)?.label || value;
 }

@@ -4,7 +4,7 @@ import { orderDisplayLabel } from "@/lib/orderDisplayNumber";
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getDb } from "@/lib/firebase";
 import { collection, query, where, getDocs, doc, writeBatch, orderBy, limit, startAfter, increment, updateDoc } from "firebase/firestore/lite";
-import { FULFILLMENT_OPTIONS, PAYMENT_OPTIONS, canEditPayment, paymentPatchForFulfillment, normalizeFulfillment, paymentBadge, matchesStatusFilter } from "@/lib/fulfillmentStatus";
+import { FULFILLMENT_OPTIONS, PAYMENT_OPTIONS, paymentOptionLabel, canEditPayment, paymentPatchForFulfillment, normalizeFulfillment, paymentBadge, matchesStatusFilter } from "@/lib/fulfillmentStatus";
 import { getCairoTimestamp } from "@/lib/analytics-helpers";
 import { useRouter } from 'next/navigation';
 import { ShoppingBag, Search, Filter, Monitor, Archive, Layers, ChevronLeft, ChevronRight, Trash2, AlertTriangle, X, Download } from '@/components/icons-extra';
@@ -565,7 +565,7 @@ export default function OrdersListPage() {
                     className={`text-[11px] font-bold rounded-full px-2.5 py-1 border-0 cursor-pointer disabled:opacity-50 ${PAYMENT_TONE[r.pay.tone]}`}
                   >
                     {PAYMENT_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>{o.value === 'pending' && String(r.order['Payment Method'] || '').toLowerCase() === 'instapay' ? 'بانتظار تأكيد إنستا باي' : o.value === 'pending' ? 'الدفع عند الاستلام' : o.label}</option>
+                      <option key={o.value} value={o.value}>{paymentOptionLabel(o.value, r.order['Payment Method'])}</option>
                     ))}
                   </select>
                 ) : (
@@ -676,9 +676,9 @@ export default function OrdersListPage() {
                               </div>
                               <ChevronLeft size={16} className="text-[#8a8a8a] shrink-0" />
                             </div>
-                            <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
-                              <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${PAYMENT_TONE[r.pay.tone]}`}>{r.pay.label}</span>
-                              <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${FULFILLMENT_BADGE[r.fulfillment]}`}>{r.fulOpt?.label}</span>
+                            <div className="flex flex-wrap items-center gap-1.5 mt-2.5" onClick={(e) => e.stopPropagation()}>
+                              {paySelect(r)}
+                              {statusSelect(r)}
                             </div>
                           </div>
                         </div>
