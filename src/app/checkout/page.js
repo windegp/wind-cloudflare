@@ -1,6 +1,7 @@
 "use client";
 
 import { buildKashierCheckoutUrl } from "@/lib/kashierCheckoutUrl";
+import { getKashierMessageName, isKashierCloseMessage } from "@/lib/kashierModalMessage";
 import { durableCheckoutEnabled, getBrowserCheckoutAttempt } from "@/lib/checkoutAttemptBrowser";
 import React, { useState, useEffect, useRef } from 'react';
 import { useCart } from "../../context/CartContext";
@@ -73,13 +74,20 @@ function KashierIframeModal({ iframeData, onClose }) {
   // ── بناء رابط كاشير iFrame ──
   const kashierUrl = buildKashierCheckoutUrl(iframeData);  // ← يخبر كاشير إنه شغال داخل iFrame
 
-  // ── إغلاق بـ Escape ──
+  // ── إغلاق بـ Escape + رسالة الإغلاق من كاشير (X بتاع كاشير) ──
   useEffect(() => {
     const handleEsc = (e) => { if (e.key === 'Escape') onClose(); };
+    const handleMessage = (e) => {
+      const name = getKashierMessageName(e);
+      if (name !== null) console.log('[kashier-modal] message from Kashier:', name);
+      if (isKashierCloseMessage(e)) onClose();
+    };
     window.addEventListener('keydown', handleEsc);
+    window.addEventListener('message', handleMessage);
     document.body.style.overflow = 'hidden'; // منع scroll الصفحة
     return () => {
       window.removeEventListener('keydown', handleEsc);
+      window.removeEventListener('message', handleMessage);
       document.body.style.overflow = '';
     };
   }, [onClose]);
@@ -87,40 +95,20 @@ function KashierIframeModal({ iframeData, onClose }) {
   return (
     // ── Overlay ──
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4"
       style={{ backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      {/* ── Modal Container ── */}
-      <div className="relative w-full max-w-[480px] bg-white rounded-2xl overflow-hidden shadow-2xl"
-           style={{ maxHeight: '90vh' }}>
-
-        {/* ── Modal Header ── */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-white">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 bg-gray-100 rounded-full flex items-center justify-center">
-              <Lock size={14} className="text-gray-700" />
-            </div>
-            <div>
-              <p className="font-bold text-gray-900 text-sm">بوابة الدفع الآمنة</p>
-              <p className="text-[10px] text-gray-400">مشفّر بـ SSL — كاشير</p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="rounded-focus w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
-          >
-            <X size={16} className="text-gray-600" />
-          </button>
-        </div>
-
+      {/* ── Modal Container: يبدأ من شريط كاشير الأزرق، والإغلاق بـ X كاشير ── */}
+      <div className="relative w-full max-w-[560px] bg-white rounded-2xl overflow-hidden shadow-2xl"
+           style={{ height: 'min(760px, calc(100dvh - 16px))' }}>
         {/* ── iFrame ── */}
         <iframe
           ref={iframeRef}
           src={kashierUrl}
           title="Kashier Payment"
           width="100%"
-          style={{ height: '520px', border: 'none', display: 'block' }}
+          style={{ height: '100%', border: 'none', display: 'block' }}
           allow="payment"
           sandbox="allow-forms allow-scripts allow-same-origin allow-popups allow-top-navigation"
         />
