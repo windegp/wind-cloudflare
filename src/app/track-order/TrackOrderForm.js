@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 
-const STEPS = ["تم استلام الطلب", "جاري التجهيز", "تم الشحن"];
+const STEPS = ["تم استلام الطلب", "جاري التجهيز", "تم الشحن", "تم التسليم"];
 
 export default function TrackOrderForm() {
   const [orderNumber, setOrderNumber] = useState("");
@@ -106,12 +106,14 @@ export default function TrackOrderForm() {
           <p className="font-black text-lg mb-5" dir="ltr" style={{ textAlign: "right" }}>{order.orderNumber}</p>
 
           <p className="text-sm text-gray-500 mb-1">حالة الطلب</p>
-          <p className="font-black text-xl mb-5" style={{ color: order.stage === 0 ? "#b91c1c" : "#1A1A1A" }}>
-            {order.stage === 0 ? "ملغي" : STEPS[Math.max(0, order.stage - 1)] || STEPS[0]}
+          <p className="font-black text-xl mb-5" style={{ color: order.stage === 0 ? "#b91c1c" : order.stage === -1 ? "#c2410c" : "#1A1A1A" }}>
+            {order.stage === 0 ? "ملغي" : order.stage === -1 ? "مرتجع" : STEPS[Math.max(0, order.stage - 1)] || STEPS[0]}
           </p>
 
           {order.stage === 0 ? (
             <p className="font-bold text-red-700 mb-5">الطلب ده اتلغى.</p>
+          ) : order.stage === -1 ? (
+            <p className="font-bold text-orange-700 mb-5">الطلب ده اترجع.</p>
           ) : (
             <ol className="flex items-start mb-6">
               {STEPS.map((label, i) => {
