@@ -3,11 +3,29 @@ import { orderDisplayLabel } from "@/lib/orderDisplayNumber";
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getDb } from "@/lib/firebase";
-import { collection, query, where, getDocs, doc, writeBatch, orderBy, limit, startAfter, increment } from "firebase/firestore/lite";
+import { collection, query, where, getDocs, doc, writeBatch, orderBy, limit, startAfter, increment, updateDoc } from "firebase/firestore/lite";
+import { FULFILLMENT_OPTIONS, normalizeFulfillment, paymentBadge, matchesStatusFilter } from "@/lib/fulfillmentStatus";
+import { getCairoTimestamp } from "@/lib/analytics-helpers";
 import { useRouter } from 'next/navigation';
 import { ShoppingBag, Search, Filter, Monitor, Archive, Layers, ChevronLeft, ChevronRight, Trash2, AlertTriangle, X, Download } from '@/components/icons-extra';
 
 export const dynamic = 'force-dynamic';
+
+// Shopify-like badge colors. Class names live here because Tailwind only scans src/app and src/components.
+const FULFILLMENT_BADGE = {
+  unfulfilled: 'bg-[#ffeb78] text-[#4f4700]',
+  prepared: 'bg-[#a4e8f2] text-[#00424e]',
+  shipped: 'bg-[#e3e3e3] text-[#303030]',
+  delivered: 'bg-[#cdfee1] text-[#0c5132]',
+  returned: 'bg-[#ffd6a4] text-[#5e4200]',
+  cancelled: 'bg-[#fed1d7] text-[#8e0b21]',
+};
+const PAYMENT_TONE = {
+  gray: 'bg-[#e3e3e3] text-[#303030]',
+  orange: 'bg-[#ffd6a4] text-[#5e4200]',
+  red: 'bg-[#fed1d7] text-[#8e0b21]',
+  blue: 'bg-[#a4e8f2] text-[#00424e]',
+};
 
 export default function OrdersListPage() {
   // 🔥 مصدر الحقيقة (الداتا الخام)
@@ -16,6 +34,8 @@ export default function OrdersListPage() {
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState('wind'); 
   const [currentPage, setCurrentPage] = useState(1);
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [savingId, setSavingId] = useState(null);
   
   const fetchLimit = 20; 
   const itemsPerPage = 20;
@@ -145,6 +165,7 @@ export default function OrdersListPage() {
       result = result.filter(isAbandonedDraft);
     } else {
       result = result.filter(o => !isAbandonedDraft(o));
+      result = result.filter(o => matchesStatusFilter(o, statusFilter));
       if (activeTab === 'shopify') {
         result = result.filter(o => o.data_source === 'Shopify_Import' || !o.data_source);
       } else if (activeTab === 'wind') {
@@ -169,7 +190,30 @@ export default function OrdersListPage() {
 
     setFilteredOrders(result);
     setCurrentPage(1); 
-  }, [search, activeTab, allRawOrders, isArchiveVisible]);
+  }, [search, activeTab, allRawOrders, isArchiveVisible, statusFilter]);
+
+  // تغيير سريع لحالة التجهيز من القائمة (نفس الحقل المستخدم في صفحة التفاصيل والتتبع)
+  const changeFulfillment = async (order, value) => {
+    if (savingId) return;
+    const label = FULFILLMENT_OPTIONS.find((o) => o.value === value)?.label || value;
+    if ((value === 'cancelled' || value === 'returned') &&
+        !window.confirm(`تأكيد تغيير حالة الطلب إلى "${label}"؟ لن يتم تعديل المخزون ولا الإحصائيات.`)) return;
+    setSavingId(order.id);
+    try {
+      await updateDoc(doc(getDb(), "Orders", order.id), {
+        "Fulfillment Status": value,
+        "Status Updated At": getCairoTimestamp(),
+      });
+      const patch = (list) => (list || []).map((o) => (o.id === order.id ? { ...o, "Fulfillment Status": value } : o));
+      setAllRawOrders(patch);
+      Object.keys(tabCacheRef.current).forEach((k) => { tabCacheRef.current[k] = patch(tabCacheRef.current[k]); });
+    } catch (e) {
+      console.error("Failed to update fulfillment status:", e);
+      alert("تعذر حفظ الحالة. حاول تاني.");
+    } finally {
+      setSavingId(null);
+    }
+  };
 
   // ==========================================
   // دوال الحذف والتصدير الأصلية بتاعتك
@@ -393,6 +437,21 @@ export default function OrdersListPage() {
           </button>
         </div>
 
+        {activeTab !== 'abandoned' && (
+          <div className="flex gap-2 mb-4 overflow-x-auto scrollbar-hide" role="tablist" aria-label="فلتر الحالة">
+            {[['all', 'الكل'], ['unfulfilled', 'لم يتم التجهيز'], ['unpaid', 'غير مدفوع'], ['open', 'مفتوح'], ['archived', 'مؤرشف']].map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setStatusFilter(key)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${statusFilter === key ? 'bg-[#303030] text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="bg-white rounded-3xl border border-gray-200 shadow-sm overflow-hidden">
           {((activeTab === 'shopify' || activeTab === 'all') && !isArchiveVisible) ? (
             <div className="p-24 text-center bg-gray-50/20 animate-in fade-in zoom-in duration-500">
@@ -439,277 +498,136 @@ export default function OrdersListPage() {
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-right border-collapse min-w-[900px]">
-                  <thead>
-                    <tr className="bg-white border-b border-gray-100 text-[11px] font-bold text-gray-400 uppercase tracking-widest">
-                      <th className="px-6 py-5 w-12 text-center">
-                        <input 
-                          type="checkbox" 
-                          className="w-4 h-4 accent-[#008060] rounded cursor-pointer"
-                          checked={currentOrders.length > 0 && selectedOrders.length === currentOrders.length}
-                          onChange={(e) => {
-                            if(e.target.checked) setSelectedOrders(currentOrders.map(o => o.id));
-                            else setSelectedOrders([]);
-                          }}
-                        />
-                      </th>
-                      <th className="px-6 py-5">الطلب والتاريخ</th>
-                      <th className="px-6 py-5">العميل</th>
-                     <th className="px-6 py-5">المنتجات والقطع</th>
-                      <th className="px-6 py-5 text-center">حالة الدفع</th>
-                      <th className="px-6 py-5">الإجمالي</th>
-                      <th className="px-6 py-5 text-center">تفاصيل</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50 font-sans">
-                    {isLoading && currentOrders.length === 0 ? (
-                      <tr>
-                        <td colSpan="7" className="text-center py-20 text-[#008060] font-black animate-pulse">جاري سحب الداتا...</td>
-                      </tr>
-                    ) : currentOrders.length === 0 ? (
-                      <tr>
-                        <td colSpan="7" className="text-center py-24 text-gray-400">
-                          <Archive size={40} className="mx-auto mb-3 opacity-20"/>
-                          <p className="font-bold">لا توجد طلبات في هذا القسم</p>
-                        </td>
-                      </tr>
-                    ) : (
-                      currentOrders.map((order) => {
-                        const isWind = order.data_source === 'WIND_Web';
-const orderLink = isWind ? order.Name : order.Name.replace('#', '');
-
-// بيانات المنتجات الموجودة داخل الطلب بالفعل — دون أي قراءة جديدة
-const orderItems = Array.isArray(order.lineItems) ? order.lineItems : [];
-
-const firstProductName =
-  orderItems[0]?.productTitle ||
-  orderItems[0]?.title ||
-  orderItems[0]?.name ||
-  order['Lineitem name'] ||
-  'تفاصيل المنتجات داخل الطلب';
-
-// إجمالي القطع
-const totalPieces = orderItems.length
-  ? orderItems.reduce((sum, item) => {
-      const qty = Number(item.quantity ?? item.qty);
-      return sum + (Number.isFinite(qty) && qty > 0 ? qty : 1);
-    }, 0)
-  : (Number(order['Lineitem quantity']) || 1);
-
-// عدد المنتجات المختلفة، وليس عدد سطور الطلب
-const uniqueProductKeys = orderItems.map(item => (
-  item.productHandle ||
-  item.handle ||
-  item.productId ||
-  item.product_id ||
-  item.productTitle ||
-  item.title ||
-  item.name
-)).filter(Boolean);
-
-const uniqueProductsCount =
-  new Set(
-    uniqueProductKeys.map(key =>
-      String(key).trim().toLowerCase()
-    )
-  ).size ||
-  (!orderItems.length && order['Lineitem name'] ? 1 : 0);
-
-// ربط كل لون باسم المنتج الذي يخصه
-const productColorSummary = [
-  ...new Set(
-    orderItems
-      .map(item => {
-        const color = String(
-          item.selectedColor || item.color || ''
-        ).trim();
-
-        if (!color) return '';
-
-        const productName =
-          item.productTitle ||
-          item.title ||
-          item.name ||
-          'منتج';
-
-        return `${productName}: ${color}`;
-      })
-      .filter(Boolean)
-  )
-];
-
-// قراءة المبالغ بأمان
-const toOrderAmount = (value) => {
-  const parsed = Number(
-    String(value ?? 0)
-      .replace(/,/g, '')
-      .replace(/[^\d.-]/g, '')
-  );
-
-  return Number.isFinite(parsed) ? parsed : 0;
-};
-
-const orderSubtotalValue = toOrderAmount(order.Subtotal);
-const orderShippingValue = toOrderAmount(order.Shipping);
-const orderTotalValue = toOrderAmount(order.Total);
-
-const originalSubtotalValue = toOrderAmount(order['Original Subtotal']);
-const productDiscountTotalValue = toOrderAmount(order['Product Discount Total']);
-
-// حساب فرق المبالغ للطلبات القديمة فقط عند عدم وجود خصم محفوظ
-const canDeriveDiscount =
-  order.Subtotal != null &&
-  order.Shipping != null &&
-  order.Total != null;
-
-const derivedDiscount = canDeriveDiscount
-  ? Math.max(
-      0,
-      orderSubtotalValue + orderShippingValue - orderTotalValue
-    )
-  : 0;
-
-const hasSavedDiscount =
-  order['Discount Amount'] !== undefined &&
-  order['Discount Amount'] !== null &&
-  order['Discount Amount'] !== '';
-
-const orderDiscountValue = hasSavedDiscount
-  ? Math.max(0, toOrderAmount(order['Discount Amount']))
-  : derivedDiscount;
-
-const orderDiscountLabel =
-  order['Discount Label'] ||
-  (
-    hasSavedDiscount
-      ? order['Discount Code']
-        ? `كود الخصم ${order['Discount Code']}`
-        : order['Discount Type'] === 'first_order'
-          ? 'خصم الطلب الأول'
-          : 'الخصم'
-      : 'فرق حسابي تقديري'
-  );
-
-return (
-                          <tr key={order.id} className="hover:bg-gray-50/80 transition-all cursor-pointer group" onClick={() => router.push(`/admin/orders/${encodeURIComponent(orderLink)}`)}>
-                            <td className="px-6 py-4 text-center" onClick={(e) => e.stopPropagation()}>
-                              <input 
-                                type="checkbox" 
-                                className="w-4 h-4 accent-[#008060] rounded cursor-pointer"
-                                checked={selectedOrders.includes(order.id)}
+              {(() => {
+                const rows = currentOrders.map((order) => {
+                  const isWind = order.data_source === 'WIND_Web';
+                  const rawName = String(order.Name || order.id || '');
+                  const orderLink = isWind ? rawName : rawName.replace('#', '');
+                  const items = Array.isArray(order.lineItems) ? order.lineItems : [];
+                  const pieces = items.length
+                    ? items.reduce((sum, item) => {
+                        const qty = Number(item.quantity ?? item.qty);
+                        return sum + (Number.isFinite(qty) && qty > 0 ? qty : 1);
+                      }, 0)
+                    : (Number(order['Lineitem quantity']) || 1);
+                  const total = Number(String(order.Total ?? 0).replace(/,/g, '').replace(/[^\d.-]/g, '')) || 0;
+                  const created = String(order['Created at'] || '');
+                  const fulfillment = normalizeFulfillment(order['Fulfillment Status'] || order.fulfillment_status || order.Fulfillment) || 'unfulfilled';
+                  const pay = paymentBadge(order['Financial Status'], order['Payment Method']);
+                  const fulOpt = FULFILLMENT_OPTIONS.find((o) => o.value === fulfillment);
+                  return { order, orderLink, pieces, total, created, fulfillment, pay, fulOpt, isWind };
+                });
+                const statusSelect = (r) => (
+                  <select
+                    value={r.fulfillment}
+                    onChange={(e) => changeFulfillment(r.order, e.target.value)}
+                    disabled={savingId === r.order.id}
+                    aria-label="تغيير حالة الطلب"
+                    onClick={(e) => e.stopPropagation()}
+                    className={`text-[11px] font-bold rounded-full px-2.5 py-1 border-0 cursor-pointer disabled:opacity-50 ${FULFILLMENT_BADGE[r.fulfillment]}`}
+                  >
+                    {FULFILLMENT_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                );
+                const open = (r) => router.push(`/admin/orders/${encodeURIComponent(r.orderLink)}`);
+                const toggle = (id, checked) => setSelectedOrders((prev) => (checked ? [...prev, id] : prev.filter((x) => x !== id)));
+                if (isLoading && currentOrders.length === 0) {
+                  return <div className="text-center py-20 text-[#008060] font-black animate-pulse">جاري سحب الداتا...</div>;
+                }
+                if (currentOrders.length === 0) {
+                  return (
+                    <div className="text-center py-24 text-gray-400">
+                      <Archive size={40} className="mx-auto mb-3 opacity-20"/>
+                      <p className="font-bold">لا توجد طلبات في هذا القسم</p>
+                    </div>
+                  );
+                }
+                return (
+                  <>
+                    {/* سطح المكتب: جدول بنمط شوبيفاي */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <table className="w-full text-right border-collapse min-w-[900px]">
+                        <thead>
+                          <tr className="bg-[#f7f7f7] border-b border-gray-200 text-xs font-semibold text-[#616161]">
+                            <th className="px-4 py-3 w-10 text-center">
+                              <input
+                                type="checkbox"
+                                className="w-4 h-4 accent-[#303030] rounded cursor-pointer"
+                                checked={currentOrders.length > 0 && selectedOrders.length === currentOrders.length}
                                 onChange={(e) => {
-                                  if(e.target.checked) setSelectedOrders(prev => [...prev, order.id]);
-                                  else setSelectedOrders(prev => prev.filter(id => id !== order.id));
+                                  if (e.target.checked) setSelectedOrders(currentOrders.map((o) => o.id));
+                                  else setSelectedOrders([]);
                                 }}
                               />
-                            </td>
-                            <td className="px-6 py-4">
-                              <p className="text-sm font-black text-[#005bd3] group-hover:underline">{orderDisplayLabel(order)}</p>
-                              <p className="text-[10px] text-gray-400 font-bold mt-1">{order['Created at']?.split(' ')[0]}</p>
-                            </td>
-                            <td className="px-6 py-4">
-                              <p className="text-sm font-bold text-gray-900">{order['Billing Name'] || 'عميل مجهول'}</p>
-                              <p className="text-[10px] text-gray-500 font-mono mt-0.5" dir="ltr">{order.Phone || order['Shipping Phone'] || order.Email}</p>
-                            </td>
-                            <td className="px-6 py-4">
-  <div className="max-w-[220px]">
-    <p className="text-xs font-bold text-gray-800 line-clamp-1">
-      {firstProductName}
-    </p>
-
-    <p className="text-[10px] text-gray-500 font-bold mt-1">
-      {totalPieces} قطعة
-      {uniqueProductsCount > 0 && (
-        <span>
-          {' · '}
-          {uniqueProductsCount === 1
-            ? 'منتج واحد'
-            : `${uniqueProductsCount} منتجات`}
-        </span>
-      )}
-    </p>
-
-        {productColorSummary.length > 0 && (
-      <p className="text-[10px] text-gray-500 mt-1 line-clamp-2">
-        ألوان المنتجات: {productColorSummary.join(' • ')}
-      </p>
-    )}
-  </div>
-</td>
-                            <td className="px-6 py-4 text-center">
-                              <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${getStatusColor(order['Financial Status'])}`}>
-                                {order['Financial Status']}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4">
-  <div className="space-y-1">
-
-    <p className="text-sm font-black text-gray-900">
-      {orderTotalValue.toLocaleString('en-EG')} EGP
-    </p>
-
-    {originalSubtotalValue > orderSubtotalValue && (
-      <p className="text-[10px] text-gray-500">
-        قبل تخفيض المنتجات:
-        {' '}
-        {originalSubtotalValue.toLocaleString('en-EG')} EGP
-      </p>
-    )}
-
-    {order.Subtotal != null && (
-      <p className="text-[10px] text-gray-500">
-        المنتجات:
-        {' '}
-        {orderSubtotalValue.toLocaleString('en-EG')} EGP
-      </p>
-    )}
-
-    {productDiscountTotalValue > 0 && (
-      <p className="text-[10px] text-emerald-600 font-bold">
-        تخفيض المنتجات:
-        {' -'}
-        {productDiscountTotalValue.toLocaleString('en-EG')} EGP
-      </p>
-    )}
-
-    {orderDiscountValue > 0 && (
-      <p className="text-[10px] text-red-600 font-bold">
-        {orderDiscountLabel}:
-        {' -'}
-        {orderDiscountValue.toLocaleString('en-EG')} EGP
-      </p>
-    )}
-
-    {order['Discount Code'] && (
-      <p className="text-[10px] text-gray-500">
-        كود الخصم: {order['Discount Code']}
-      </p>
-    )}
-
-    {order.Shipping != null && (
-      <p className="text-[10px] text-gray-500">
-        الشحن:
-        {' '}
-        {orderShippingValue.toLocaleString('en-EG')} EGP
-        {orderShippingValue === 0 && ' (مجاني)'}
-      </p>
-    )}
-
-  </div>
-</td>
-                            <td className="px-6 py-4 text-center">
-                              <div className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center mx-auto group-hover:border-[#008060] group-hover:bg-green-50 transition-colors">
-                                <ChevronLeft size={16} className="text-gray-400 group-hover:text-[#008060]" />
-                              </div>
-                            </td>
+                            </th>
+                            <th className="px-3 py-3">الطلب</th>
+                            <th className="px-3 py-3">التاريخ</th>
+                            <th className="px-3 py-3">العميل</th>
+                            <th className="px-3 py-3">القناة</th>
+                            <th className="px-3 py-3">الإجمالي</th>
+                            <th className="px-3 py-3">حالة الدفع</th>
+                            <th className="px-3 py-3">حالة التجهيز</th>
+                            <th className="px-3 py-3">العناصر</th>
                           </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {rows.map((r) => (
+                            <tr key={r.order.id} className="hover:bg-[#fafafa] cursor-pointer" onClick={() => open(r)}>
+                              <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  type="checkbox"
+                                  className="w-4 h-4 accent-[#303030] rounded cursor-pointer"
+                                  checked={selectedOrders.includes(r.order.id)}
+                                  onChange={(e) => toggle(r.order.id, e.target.checked)}
+                                />
+                              </td>
+                              <td className="px-3 py-3 text-sm font-bold text-[#303030]">{orderDisplayLabel(r.order)}</td>
+                              <td className="px-3 py-3 text-xs text-[#616161]" dir="ltr" style={{ textAlign: 'right' }}>{r.created.slice(0, 16)}</td>
+                              <td className="px-3 py-3 text-sm text-[#303030]">{r.order['Billing Name'] || 'عميل مجهول'}</td>
+                              <td className="px-3 py-3 text-xs text-[#616161]">{r.isWind ? 'متجر WIND' : 'شوبيفاي'}</td>
+                              <td className="px-3 py-3 text-sm font-semibold text-[#303030]">{r.total.toLocaleString('en-EG')} EGP</td>
+                              <td className="px-3 py-3"><span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${PAYMENT_TONE[r.pay.tone]}`}>{r.pay.label}</span></td>
+                              <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>{statusSelect(r)}</td>
+                              <td className="px-3 py-3 text-xs text-[#616161]">{r.pieces} عنصر</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* الموبايل: كروت */}
+                    <div className="md:hidden divide-y divide-gray-100">
+                      {rows.map((r) => (
+                        <div key={r.order.id} className="p-4 space-y-2 active:bg-gray-50" onClick={() => open(r)}>
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                className="w-4 h-4 accent-[#303030] rounded cursor-pointer"
+                                checked={selectedOrders.includes(r.order.id)}
+                                onChange={(e) => toggle(r.order.id, e.target.checked)}
+                              />
+                              <span className="text-sm font-bold text-[#303030]">{orderDisplayLabel(r.order)}</span>
+                            </div>
+                            <span className="text-sm font-semibold text-[#303030]">{r.total.toLocaleString('en-EG')} EGP</span>
+                          </div>
+                          <div className="flex items-center justify-between text-xs text-[#616161]">
+                            <span>{r.order['Billing Name'] || 'عميل مجهول'}</span>
+                            <span dir="ltr">{r.created.slice(0, 16)}</span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                            <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${PAYMENT_TONE[r.pay.tone]}`}>{r.pay.label}</span>
+                            {statusSelect(r)}
+                            <span className="text-xs text-[#616161]">{r.pieces} عنصر</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                );
+              })()}
 
               {filteredOrders.length > 0 && (
                 <div className="p-4 sm:p-6 bg-white border-t border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-4">

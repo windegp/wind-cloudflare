@@ -11,6 +11,16 @@ import { ArrowRight, Package, User, MapPin, Printer, Phone } from '@/components/
 
 export const dynamic = 'force-dynamic';
 
+// Class names live here (not in src/lib) because Tailwind only scans src/app and src/components.
+const FULFILLMENT_COLORS = {
+  unfulfilled: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+  prepared: 'bg-blue-100 text-blue-700 border-blue-200',
+  shipped: 'bg-indigo-100 text-indigo-700 border-indigo-200',
+  delivered: 'bg-green-100 text-green-700 border-green-200',
+  returned: 'bg-orange-100 text-orange-700 border-orange-200',
+  cancelled: 'bg-red-100 text-red-700 border-red-200',
+};
+
 const toAmount = (value) => {
   const parsed = Number(
     String(value ?? 0)
@@ -331,7 +341,7 @@ export default function OrderDetailsPage() {
   const fulfillmentOption = FULFILLMENT_OPTIONS.find((o) => o.value === fulfillmentValue);
   if (fulfillmentOption) {
     fulfillmentStatus[0] = fulfillmentOption.label;
-    fulfillmentStatus[1] = fulfillmentOption.color;
+    fulfillmentStatus[1] = FULFILLMENT_COLORS[fulfillmentOption.value];
   }
 
   const itemsSubtotal = order.Subtotal != null
