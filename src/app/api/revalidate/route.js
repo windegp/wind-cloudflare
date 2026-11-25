@@ -1,4 +1,4 @@
-import { getKV, kvDeleteMany } from '@/lib/kv-cache';
+import { getKV, kvDeleteManyReport } from '@/lib/kv-cache';
 import { revalidatePath } from 'next/cache';
 import { verifyAdminIdToken } from '@/lib/verifyAdminIdToken';
 import { isSameOrigin, enforceRateLimit } from '@/lib/apiGuards';
@@ -131,6 +131,13 @@ export async function POST(request) {
     });
   }
 
-  await kvDeleteMany(keysToDelete);
+  const result = await kvDeleteManyReport(keysToDelete);
+  if (result && result.ok === false) {
+    console.error('[revalidate] cache clear incomplete, failed keys:', (result.failed || []).join(', '));
+    return Response.json(
+      { revalidated: false, error: 'Cache clear incomplete', failedKeys: result.failed || [], keys: keysToDelete, timestamp: Date.now() },
+      { status: 502 }
+    );
+  }
   return Response.json({ revalidated: true, keys: keysToDelete, timestamp: Date.now() });
 }
