@@ -42,11 +42,13 @@ export async function POST(request) {
         requestCounts.set(ip, { count: 1, startTime: now });
     }
 
+    let failedOrderId = null;
     try {
         const body = await request.json();
         const { data, event } = body;
         const kashierSignature = request.headers.get('x-kashier-signature');
         const orderId = data?.merchantOrderId;
+        failedOrderId = orderId || null;
 
         // 🛡️ 2. منع الهجوم المكرر (Replay Attack) لنفس الأوردر في نفس اللحظة
         if (orderId && processedOrders.has(orderId)) {
@@ -57,7 +59,7 @@ export async function POST(request) {
         const isValid = await verifyWebhookSignature(data, kashierSignature);
 
         if (!isValid) {
-            console.error("Invalid Webhook Signature!");
+            console.error(JSON.stringify({ event: "kashier_webhook_rejected", reason: "INVALID_SIGNATURE", orderId: orderId || null, kashierEvent: event || null, status: data?.status || null }));
             const response = unauthorizedError('Invalid webhook signature');
             return NextResponse.json(response.body, { status: response.status });
         }
@@ -66,6 +68,11 @@ export async function POST(request) {
         if (orderId) {
             processedOrders.add(orderId);
             setTimeout(() => processedOrders.delete(orderId), 300000); 
+        }
+
+        if (!(event === 'pay' && data.status === 'SUCCESS')) {
+            // Not a successful payment event: acknowledged without changes. Logged so it is visible.
+            console.log(JSON.stringify({ event: "kashier_webhook_ignored", reason: "NOT_SUCCESSFUL_PAY_EVENT", orderId: orderId || null, kashierEvent: event || null, status: data?.status || null }));
         }
 
         // 🔥 معالجة نجاح الدفع
@@ -108,6 +115,7 @@ export async function POST(request) {
                     receivedCurrency !== expectedCurrency ||
                     (signedQuote && Math.abs(Number(signedQuote.total) - expectedAmount) > 0.01)
                 ) {
+                    if (orderId) processedOrders.delete(orderId);
                     console.error("[Kashier webhook] Payment amount/currency mismatch; order remains unpaid.", {
                         orderId,
                         expectedAmount,
@@ -134,11 +142,16 @@ export async function POST(request) {
                     // create-order/route.js لـ COD/InstaPay. هنا كانت الفيزا
                     // قبل كده من غير أي إشعار خالص (إيميل ولا صوت).
                     const billingName = (orderData['Billing Name'] || '').split(' ');
-                    await sendNewOrderNotification({
-                        title: `طلب جديد من WIND`,
-                        body: `${billingName[0] || 'عميل'} • فيزا • ${orderData.Total || 0} ${orderData.Currency || 'EGP'} • #${orderId}`,
-                        orderId,
-                    });
+                    // A failed push must not stop the customer/counter updates below.
+                    try {
+                        await sendNewOrderNotification({
+                            title: `طلب جديد من WIND`,
+                            body: `${billingName[0] || 'عميل'} • فيزا • ${orderData.Total || 0} ${orderData.Currency || 'EGP'} • #${orderId}`,
+                            orderId,
+                        });
+                    } catch (notifyError) {
+                        console.error("[Kashier webhook] Admin notification failed:", notifyError);
+                    }
 
                     // 2. تحديث ملف العميل (يدعم العملاء الجدد وقدامى)
                     const cleanPhone = orderData.Phone?.replace(/[^0-9]/g, '') || "";
@@ -168,6 +181,7 @@ export async function POST(request) {
                                 "Total Orders": currentOrders + 1,
                                 "Total Spent": currentSpent + Number(orderData.Total || 0),
                                 Last_Order_Status: "Paid",
+                                hasAbandoned: false,
                                 segments: [newSegment],
                                 last_active: getCairoTimestamp()
                             }, { merge: true });
@@ -221,12 +235,18 @@ export async function POST(request) {
                 } else {
                     console.log(`Order ${orderId} is already marked as paid. Skipping counters.`);
                 }
+            } else {
+                // Signature was valid but no order doc has this merchantOrderId.
+                if (orderId) processedOrders.delete(orderId);
+                console.error(JSON.stringify({ event: "kashier_webhook_ignored", reason: "ORDER_NOT_FOUND", orderId: orderId || null }));
             }
         }
 
         return NextResponse.json({ success: true }, { status: 200 });
         
     } catch (error) {
+        // Allow Kashier's retry to be processed instead of being dropped as "already processing".
+        if (failedOrderId) processedOrders.delete(failedOrderId);
         console.error("Webhook Error:", error);
         const response = errorResponse('Webhook processing failed', 'WEBHOOK_ERROR', 500);
         return NextResponse.json(response.body, { status: response.status });

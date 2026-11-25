@@ -1106,6 +1106,7 @@ export default function CheckoutPage() {
                 Phone: formData.phone,
                 "Default Address City": formData.city || "",
                 "Default Address Province": formData.governorate || "",
+                hasAbandoned: false,
                 segments: [newSegment],
                 status: newSegment,
                 last_active: getCairoTimestamp()
