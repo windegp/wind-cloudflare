@@ -4,7 +4,7 @@ const st = vi.hoisted(() => ({ kv: new Map(), deleted: [], sets: [], docs: {}, q
 vi.mock("@/lib/kv-cache", () => ({
   kvGet: vi.fn(async (k) => st.kv.get(k) ?? null),
   kvSet: vi.fn(async (k, v, ttl) => { st.sets.push([k, ttl]); st.kv.set(k, v); return true; }),
-  kvDeleteMany: vi.fn(async (keys) => { st.deleted.push(...keys); keys.forEach((k) => st.kv.delete(k)); return true; }),
+  kvDeleteManyReport: vi.fn(async (keys) => { st.deleted.push(...keys); keys.forEach((k) => st.kv.delete(k)); return { ok: true, failed: [] }; }),
   getKV: vi.fn(async () => null),
 }));
 vi.mock("@/lib/firebase", () => ({ getDb: () => ({}) }));

@@ -1,6 +1,6 @@
 import { getDb } from "@/lib/firebase";
 import { collection, query, where, orderBy, limit, getDocs, documentId } from "firebase/firestore/lite";
-import { kvGet, kvSet } from '@/lib/kv-cache';
+import { kvGet, kvSet, KV_TTL } from '@/lib/kv-cache';
 
 export const dynamic = 'force-dynamic';
 const CACHE_KEY = 'homepage_reviews_v1';
@@ -52,7 +52,8 @@ export async function GET() {
     const result = { reviews: validReviews, products: productsMap };
 
     // 3. خزّن في KV
-    await kvSet(CACHE_KEY, result);
+    // 1h backstop: if a cache clear ever fails, the stale list fixes itself within an hour.
+    await kvSet(CACHE_KEY, result, KV_TTL.REVIEWS);
 
     return Response.json(result, { headers: { 'X-Cache': 'MISS' } });
 

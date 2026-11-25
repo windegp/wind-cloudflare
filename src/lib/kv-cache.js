@@ -98,7 +98,7 @@ function classifyKey(key) {
   }
   
   // Cached listings: cleared on every admin product change, with a TTL as a backstop
-  if (key.startsWith('catpage_') || key.startsWith('relcol_')) {
+  if (key.startsWith('catpage_') || key.startsWith('relcol_') || key === 'homepage_reviews_v1') {
     return 'operational';
   }
 
@@ -127,19 +127,32 @@ export async function kvDelete(key) {
   }
 }
 
-// ✅ جديد - لحذف أكتر من key دفعة واحدة
-export async function kvDeleteMany(keys = []) {
+// Delete many keys. Each key is retried (3 attempts in total) so one failed delete does not leave
+// a stale cache entry behind. Returns { ok, failed } with the keys that could not be deleted.
+export async function kvDeleteManyReport(keys = []) {
   try {
     const kv = await getKV();
     if (!kv) {
       console.warn(`[KV] Failed to delete ${keys.length} keys: KV binding unavailable`);
-      return false;
+      return { ok: false, failed: [...keys] };
     }
-    if (keys.length === 0) return true; // Nothing to delete is success
-    await Promise.all(keys.map(k => kv.delete(k)));
-    return true;
+    let pending = [...keys];
+    for (let attempt = 1; attempt <= 3 && pending.length > 0; attempt++) {
+      if (attempt > 1) await new Promise((r) => setTimeout(r, 150 * (attempt - 1)));
+      const results = await Promise.allSettled(pending.map((k) => kv.delete(k)));
+      pending = pending.filter((_, i) => results[i].status === 'rejected');
+    }
+    if (pending.length > 0) {
+      console.error(`[KV] Delete failed for ${pending.length} of ${keys.length} keys: ${pending.join(', ')}`);
+    }
+    return { ok: pending.length === 0, failed: pending };
   } catch (err) {
     console.error(`[KV] Batch delete failed for ${keys.length} keys:`, err.message || err);
-    return false;
+    return { ok: false, failed: [...keys] };
   }
+}
+
+// لحذف أكتر من key دفعة واحدة (true لو الكل اتمسح)
+export async function kvDeleteMany(keys = []) {
+  return (await kvDeleteManyReport(keys)).ok;
 }

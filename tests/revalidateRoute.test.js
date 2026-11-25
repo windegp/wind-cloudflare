@@ -2,12 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   verifyAdminIdToken: vi.fn(),
-  kvDeleteMany: vi.fn(async () => {}),
+  kvDeleteMany: vi.fn(async () => ({ ok: true, failed: [] })),
   enforceRateLimit: vi.fn(async () => null),
 }));
 
 vi.mock("@/lib/verifyAdminIdToken", () => ({ verifyAdminIdToken: mocks.verifyAdminIdToken }));
-vi.mock("@/lib/kv-cache", () => ({ getKV: vi.fn(async () => null), kvDeleteMany: mocks.kvDeleteMany }));
+vi.mock("@/lib/kv-cache", () => ({ getKV: vi.fn(async () => null), kvDeleteManyReport: mocks.kvDeleteMany }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/apiGuards", async (importOriginal) => ({
   ...(await importOriginal()),
@@ -63,5 +63,15 @@ describe("POST /api/revalidate", () => {
     expect(ok.status).toBe(200);
     const bad = await call({ keys: ["ratelimit_AUTH_1.2.3.4_blocked"] }, { authorization: "Bearer t" });
     expect(bad.status).toBe(400);
+  });
+
+  it("reports failed keys instead of claiming success", async () => {
+    mocks.verifyAdminIdToken.mockResolvedValue({ ok: true });
+    mocks.kvDeleteMany.mockResolvedValueOnce({ ok: false, failed: ["homepage_reviews_v1"] });
+    const res = await call({ type: "product_stats", handle: "p" }, { origin: "https://windeg.com" });
+    expect(res.status).toBe(502);
+    const body = await res.json();
+    expect(body.revalidated).toBe(false);
+    expect(body.failedKeys).toEqual(["homepage_reviews_v1"]);
   });
 });
