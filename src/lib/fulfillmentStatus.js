@@ -47,3 +47,24 @@ export function matchesStatusFilter(order, filter) {
   if (filter === "archived") return closed;
   return true;
 }
+
+// Manual payment status for non-card orders (COD, InstaPay). Card orders are set by the Kashier webhook only.
+export const PAYMENT_OPTIONS = [
+  { value: "pending", label: "معلّق" },
+  { value: "paid", label: "مدفوع" },
+  { value: "refunded", label: "مسترد" },
+];
+
+export function canEditPayment(order) {
+  const method = String(order?.["Payment Method"] || "").toLowerCase();
+  const fin = String(order?.["Financial Status"] || "").toLowerCase();
+  return (method === "cod" || method === "instapay") && PAYMENT_OPTIONS.some((o) => o.value === fin);
+}
+
+// COD shortcut: marking delivered turns a pending COD order into paid. Never reverts, never touches other states.
+export function paymentPatchForFulfillment(order, value) {
+  const method = String(order?.["Payment Method"] || "").toLowerCase();
+  const fin = String(order?.["Financial Status"] || "").toLowerCase();
+  if (value === "delivered" && method === "cod" && fin === "pending") return { "Financial Status": "paid" };
+  return {};
+}

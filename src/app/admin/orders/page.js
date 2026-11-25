@@ -4,7 +4,7 @@ import { orderDisplayLabel } from "@/lib/orderDisplayNumber";
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getDb } from "@/lib/firebase";
 import { collection, query, where, getDocs, doc, writeBatch, orderBy, limit, startAfter, increment, updateDoc } from "firebase/firestore/lite";
-import { FULFILLMENT_OPTIONS, normalizeFulfillment, paymentBadge, matchesStatusFilter } from "@/lib/fulfillmentStatus";
+import { FULFILLMENT_OPTIONS, PAYMENT_OPTIONS, canEditPayment, paymentPatchForFulfillment, normalizeFulfillment, paymentBadge, matchesStatusFilter } from "@/lib/fulfillmentStatus";
 import { getCairoTimestamp } from "@/lib/analytics-helpers";
 import { useRouter } from 'next/navigation';
 import { ShoppingBag, Search, Filter, Monitor, Archive, Layers, ChevronLeft, ChevronRight, Trash2, AlertTriangle, X, Download } from '@/components/icons-extra';
@@ -200,16 +200,40 @@ export default function OrdersListPage() {
         !window.confirm(`تأكيد تغيير حالة الطلب إلى "${label}"؟ لن يتم تعديل المخزون ولا الإحصائيات.`)) return;
     setSavingId(order.id);
     try {
+      const payPatch = paymentPatchForFulfillment(order, value);
       await updateDoc(doc(getDb(), "Orders", order.id), {
         "Fulfillment Status": value,
+        ...payPatch,
         "Status Updated At": getCairoTimestamp(),
       });
-      const patch = (list) => (list || []).map((o) => (o.id === order.id ? { ...o, "Fulfillment Status": value } : o));
+      const patch = (list) => (list || []).map((o) => (o.id === order.id ? { ...o, "Fulfillment Status": value, ...payPatch } : o));
       setAllRawOrders(patch);
       Object.keys(tabCacheRef.current).forEach((k) => { tabCacheRef.current[k] = patch(tabCacheRef.current[k]); });
     } catch (e) {
       console.error("Failed to update fulfillment status:", e);
       alert("تعذر حفظ الحالة. حاول تاني.");
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  // حالة الدفع يدوياً لطلبات الكاش والإنستا باي فقط (الكارت من الويب هوك)
+  const changePayment = async (order, value) => {
+    if (savingId || !canEditPayment(order)) return;
+    const label = PAYMENT_OPTIONS.find((o) => o.value === value)?.label || value;
+    if (value === 'refunded' && !window.confirm(`تأكيد تغيير حالة الدفع إلى "${label}"؟ لن يتم تعديل الإحصائيات.`)) return;
+    setSavingId(order.id);
+    try {
+      await updateDoc(doc(getDb(), "Orders", order.id), {
+        "Financial Status": value,
+        "Status Updated At": getCairoTimestamp(),
+      });
+      const patch = (list) => (list || []).map((o) => (o.id === order.id ? { ...o, "Financial Status": value } : o));
+      setAllRawOrders(patch);
+      Object.keys(tabCacheRef.current).forEach((k) => { tabCacheRef.current[k] = patch(tabCacheRef.current[k]); });
+    } catch (e) {
+      console.error("Failed to update payment status:", e);
+      alert("تعذر حفظ حالة الدفع. حاول تاني.");
     } finally {
       setSavingId(null);
     }
@@ -531,6 +555,22 @@ export default function OrdersListPage() {
                     ))}
                   </select>
                 );
+                const paySelect = (r) => canEditPayment(r.order) ? (
+                  <select
+                    value={String(r.order['Financial Status'] || '').toLowerCase()}
+                    onChange={(e) => changePayment(r.order, e.target.value)}
+                    disabled={savingId === r.order.id}
+                    aria-label="تغيير حالة الدفع"
+                    onClick={(e) => e.stopPropagation()}
+                    className={`text-[11px] font-bold rounded-full px-2.5 py-1 border-0 cursor-pointer disabled:opacity-50 ${PAYMENT_TONE[r.pay.tone]}`}
+                  >
+                    {PAYMENT_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{o.value === 'pending' && String(r.order['Payment Method'] || '').toLowerCase() === 'instapay' ? 'بانتظار تأكيد إنستا باي' : o.value === 'pending' ? 'الدفع عند الاستلام' : o.label}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${PAYMENT_TONE[r.pay.tone]}`}>{r.pay.label}</span>
+                );
                 const open = (r) => router.push(`/admin/orders/${encodeURIComponent(r.orderLink)}`);
                 const toggle = (id, checked) => setSelectedOrders((prev) => (checked ? [...prev, id] : prev.filter((x) => x !== id)));
                 if (isLoading && currentOrders.length === 0) {
@@ -588,7 +628,7 @@ export default function OrdersListPage() {
                               <td className="px-3 py-3 text-sm text-[#303030]">{r.order['Billing Name'] || 'عميل مجهول'}</td>
                               <td className="px-3 py-3 text-xs text-[#616161]">{r.isWind ? 'متجر WIND' : 'شوبيفاي'}</td>
                               <td className="px-3 py-3 text-sm font-semibold text-[#303030]">{r.total.toLocaleString('en-EG')} EGP</td>
-                              <td className="px-3 py-3"><span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${PAYMENT_TONE[r.pay.tone]}`}>{r.pay.label}</span></td>
+                              <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>{paySelect(r)}</td>
                               <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>{statusSelect(r)}</td>
                               <td className="px-3 py-3 text-xs text-[#616161]">{r.pieces} عنصر</td>
                             </tr>
@@ -618,7 +658,7 @@ export default function OrdersListPage() {
                             <span dir="ltr">{r.created.slice(0, 16)}</span>
                           </div>
                           <div className="flex flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                            <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${PAYMENT_TONE[r.pay.tone]}`}>{r.pay.label}</span>
+                            {paySelect(r)}
                             {statusSelect(r)}
                             <span className="text-xs text-[#616161]">{r.pieces} عنصر</span>
                           </div>

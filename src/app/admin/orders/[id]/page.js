@@ -5,7 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { getDb } from "@/lib/firebase";
 import { doc, getDoc, collection, query, where, getDocs, updateDoc } from "firebase/firestore/lite";
-import { FULFILLMENT_OPTIONS, normalizeFulfillment } from "@/lib/fulfillmentStatus";
+import { FULFILLMENT_OPTIONS, PAYMENT_OPTIONS, canEditPayment, paymentPatchForFulfillment, normalizeFulfillment } from "@/lib/fulfillmentStatus";
 import { getCairoTimestamp } from "@/lib/analytics-helpers";
 import { ArrowRight, Package, User, MapPin, Printer, Phone } from '@/components/icons-extra';
 
@@ -184,14 +184,35 @@ export default function OrderDetailsPage() {
         !window.confirm(`تأكيد تغيير حالة الطلب إلى "${label}"؟ لن يتم تعديل المخزون ولا الإحصائيات.`)) return;
     setSavingStatus(true);
     try {
+      const payPatch = paymentPatchForFulfillment(order, value);
       await updateDoc(doc(getDb(), "Orders", orderDocId), {
         "Fulfillment Status": value,
+        ...payPatch,
         "Status Updated At": getCairoTimestamp(),
       });
-      setOrder((prev) => ({ ...prev, "Fulfillment Status": value }));
+      setOrder((prev) => ({ ...prev, "Fulfillment Status": value, ...payPatch }));
     } catch (e) {
       console.error("Failed to update fulfillment status:", e);
       alert("تعذر حفظ الحالة. حاول تاني.");
+    } finally {
+      setSavingStatus(false);
+    }
+  };
+
+  const changePayment = async (value) => {
+    if (!orderDocId || savingStatus || !canEditPayment(order)) return;
+    const label = PAYMENT_OPTIONS.find((o) => o.value === value)?.label || value;
+    if (value === 'refunded' && !window.confirm(`تأكيد تغيير حالة الدفع إلى "${label}"؟ لن يتم تعديل الإحصائيات.`)) return;
+    setSavingStatus(true);
+    try {
+      await updateDoc(doc(getDb(), "Orders", orderDocId), {
+        "Financial Status": value,
+        "Status Updated At": getCairoTimestamp(),
+      });
+      setOrder((prev) => ({ ...prev, "Financial Status": value }));
+    } catch (e) {
+      console.error("Failed to update payment status:", e);
+      alert("تعذر حفظ حالة الدفع. حاول تاني.");
     } finally {
       setSavingStatus(false);
     }
@@ -476,6 +497,20 @@ export default function OrderDetailsPage() {
                   >
                     {FULFILLMENT_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                )}
+
+                {!isAbandoned && canEditPayment(order) && (
+                  <select
+                    value={String(order['Financial Status'] || '').toLowerCase()}
+                    onChange={(e) => changePayment(e.target.value)}
+                    disabled={savingStatus}
+                    aria-label="تغيير حالة الدفع"
+                    className="text-xs font-bold border border-gray-300 rounded-md px-2 py-1 bg-white disabled:opacity-50"
+                  >
+                    {PAYMENT_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{`الدفع: ${o.label}`}</option>
                     ))}
                   </select>
                 )}
