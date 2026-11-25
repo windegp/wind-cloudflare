@@ -4,7 +4,9 @@ import { orderDisplayLabel } from "@/lib/orderDisplayNumber";
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { getDb } from "@/lib/firebase";
-import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore/lite";
+import { doc, getDoc, collection, query, where, getDocs, updateDoc } from "firebase/firestore/lite";
+import { FULFILLMENT_OPTIONS, normalizeFulfillment } from "@/lib/fulfillmentStatus";
+import { getCairoTimestamp } from "@/lib/analytics-helpers";
 import { ArrowRight, Package, User, MapPin, Printer, Phone } from '@/components/icons-extra';
 
 export const dynamic = 'force-dynamic';
@@ -162,6 +164,28 @@ export default function OrderDetailsPage() {
   const [order, setOrder] = useState(null);
   const [productsList, setProductsList] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [orderDocId, setOrderDocId] = useState(null);
+  const [savingStatus, setSavingStatus] = useState(false);
+
+  const changeFulfillment = async (value) => {
+    if (!orderDocId || savingStatus) return;
+    const label = FULFILLMENT_OPTIONS.find((o) => o.value === value)?.label || value;
+    if ((value === 'cancelled' || value === 'returned') &&
+        !window.confirm(`تأكيد تغيير حالة الطلب إلى "${label}"؟ لن يتم تعديل المخزون ولا الإحصائيات.`)) return;
+    setSavingStatus(true);
+    try {
+      await updateDoc(doc(getDb(), "Orders", orderDocId), {
+        "Fulfillment Status": value,
+        "Status Updated At": getCairoTimestamp(),
+      });
+      setOrder((prev) => ({ ...prev, "Fulfillment Status": value }));
+    } catch (e) {
+      console.error("Failed to update fulfillment status:", e);
+      alert("تعذر حفظ الحالة. حاول تاني.");
+    } finally {
+      setSavingStatus(false);
+    }
+  };
 
   useEffect(() => {
     if (id) fetchOrderDetails();
@@ -196,6 +220,7 @@ export default function OrderDetailsPage() {
 
       const orderData = docSnap.data();
       setOrder(orderData);
+      setOrderDocId(orderIdToFetch);
 
       const isWind = orderData.data_source === 'WIND_Web';
       const items = Array.isArray(orderData.lineItems)
@@ -301,7 +326,13 @@ export default function OrderDetailsPage() {
     order.fulfillment_status ||
     order['Fulfillment'];
 
+  const fulfillmentValue = normalizeFulfillment(fulfillmentRaw) || 'unfulfilled';
   const fulfillmentStatus = getFulfillmentStatus(fulfillmentRaw);
+  const fulfillmentOption = FULFILLMENT_OPTIONS.find((o) => o.value === fulfillmentValue);
+  if (fulfillmentOption) {
+    fulfillmentStatus[0] = fulfillmentOption.label;
+    fulfillmentStatus[1] = fulfillmentOption.color;
+  }
 
   const itemsSubtotal = order.Subtotal != null
     ? toAmount(order.Subtotal)
@@ -424,6 +455,20 @@ export default function OrderDetailsPage() {
                 <span className={`text-[10px] font-bold px-2.5 py-1 rounded-md border ${fulfillmentStatus[1]}`}>
                   {fulfillmentStatus[0]}
                 </span>
+
+                {!isAbandoned && (
+                  <select
+                    value={fulfillmentValue}
+                    onChange={(e) => changeFulfillment(e.target.value)}
+                    disabled={savingStatus}
+                    aria-label="تغيير حالة الطلب"
+                    className="text-xs font-bold border border-gray-300 rounded-md px-2 py-1 bg-white disabled:opacity-50"
+                  >
+                    {FULFILLMENT_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                )}
 
                 {isWind && (
                   <span className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-gray-100 text-gray-600 border border-gray-200">

@@ -54,13 +54,20 @@ export function isTrackableOrder(order) {
   return fin !== "abandoned" && fin !== "";
 }
 
-/** Customer-facing stage: 1 received, 2 preparing, 3 shipped. 0 = cancelled. */
+/**
+ * Customer-facing stage: 1 received, 2 preparing/ready, 3 shipped, 4 delivered.
+ * 0 = cancelled, -1 = returned. The admin-set fulfillment status wins over payment.
+ */
 export function orderStage(order) {
   const fin = String(order["Financial Status"] || "").toLowerCase();
   if (fin === "voided") return 0;
-  const ful = String(order["Fulfillment Status"] || order.fulfillment_status || order.Fulfillment || "").toLowerCase();
-  if (ful === "fulfilled") return 3;
-  if (ful === "partial" || ful === "partially_fulfilled") return 2;
+  const raw = String(order["Fulfillment Status"] || order.fulfillment_status || order.Fulfillment || "").toLowerCase();
+  const ful = { fulfilled: "shipped", partial: "prepared", partially_fulfilled: "prepared", canceled: "cancelled" }[raw] || raw;
+  if (ful === "cancelled") return 0;
+  if (ful === "returned") return -1;
+  if (ful === "delivered") return 4;
+  if (ful === "shipped") return 3;
+  if (ful === "prepared") return 2;
   return fin === "paid" || fin === "pending" ? 2 : 1;
 }
 
