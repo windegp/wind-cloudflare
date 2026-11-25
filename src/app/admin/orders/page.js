@@ -640,27 +640,46 @@ export default function OrdersListPage() {
                     {/* الموبايل: كروت */}
                     <div className="md:hidden divide-y divide-gray-100">
                       {rows.map((r) => (
-                        <div key={r.order.id} className="p-4 space-y-2 active:bg-gray-50" onClick={() => open(r)}>
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
-                              <input
-                                type="checkbox"
-                                className="w-4 h-4 accent-[#303030] rounded cursor-pointer"
-                                checked={selectedOrders.includes(r.order.id)}
-                                onChange={(e) => toggle(r.order.id, e.target.checked)}
-                              />
-                              <span className="text-sm font-bold text-[#303030]">{orderDisplayLabel(r.order)}</span>
+                        <div
+                          key={r.order.id}
+                          role="link"
+                          tabIndex={0}
+                          onClick={() => open(r)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') open(r); }}
+                          className="flex items-stretch gap-3 px-4 py-4 bg-white active:bg-[#f1f1f1] cursor-pointer"
+                        >
+                          <div
+                            className="shrink-0 -mx-2 px-2 flex items-start pt-1"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <input
+                              type="checkbox"
+                              aria-label="تحديد الطلب"
+                              className="w-5 h-5 accent-[#303030] rounded cursor-pointer"
+                              checked={selectedOrders.includes(r.order.id)}
+                              onChange={(e) => toggle(r.order.id, e.target.checked)}
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="text-[15px] font-bold text-[#303030] leading-tight">{orderDisplayLabel(r.order)}</div>
+                                <div className="text-[13px] text-[#303030] mt-1 truncate">{r.order['Billing Name'] || 'عميل مجهول'}</div>
+                              </div>
+                              <div className="text-[15px] font-semibold text-[#303030] whitespace-nowrap leading-tight" dir="ltr">{r.total.toLocaleString('en-EG')} EGP</div>
                             </div>
-                            <span className="text-sm font-semibold text-[#303030]">{r.total.toLocaleString('en-EG')} EGP</span>
-                          </div>
-                          <div className="flex items-center justify-between text-xs text-[#616161]">
-                            <span>{r.order['Billing Name'] || 'عميل مجهول'}</span>
-                            <span dir="ltr">{r.created.slice(0, 16)}</span>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                            {paySelect(r)}
-                            {statusSelect(r)}
-                            <span className="text-xs text-[#616161]">{r.pieces} عنصر</span>
+                            <div className="flex items-center justify-between gap-3 mt-1.5">
+                              <div className="text-xs text-[#616161]">
+                                <span dir="ltr">{r.created.slice(0, 10)}</span>
+                                <span className="mx-1.5">·</span>
+                                <span>{r.pieces} عنصر</span>
+                              </div>
+                              <ChevronLeft size={16} className="text-[#8a8a8a] shrink-0" />
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
+                              <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${PAYMENT_TONE[r.pay.tone]}`}>{r.pay.label}</span>
+                              <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${FULFILLMENT_BADGE[r.fulfillment]}`}>{r.fulOpt?.label}</span>
+                            </div>
                           </div>
                         </div>
                       ))}
