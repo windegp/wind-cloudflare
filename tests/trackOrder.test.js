@@ -1,10 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const getDocMock = vi.fn();
 const serverGetMock = vi.hoisted(() => vi.fn());
-vi.mock("@/lib/serverOrderStore", () => ({ serverOrderStore: { get: serverGetMock }, OrderStoreError: class extends Error {} }));
-vi.mock("firebase/firestore/lite", () => ({ doc: vi.fn((_d, c, id) => ({ c, id })), getDoc: (...a) => getDocMock(...a) }));
-vi.mock("@/lib/firebase", () => ({ getDb: () => ({}) }));
+vi.mock("@/lib/serverOrderStore", () => ({
+  OrderStoreError: class extends Error {},
+  serverOrderStore: {
+    get: (...a) => serverGetMock(...a),
+    getData: async (...a) => {
+      const record = await serverGetMock(...a);
+      return record ? record.data : null;
+    },
+  },
+}));
 vi.mock("@/lib/apiGuards", async (orig) => ({ ...(await orig()), enforceRateLimit: vi.fn(async () => null) }));
 
 import { POST } from "@/app/api/track-order/route";
@@ -28,7 +34,9 @@ const order = {
 const call = (body, headers = { origin: "https://windeg.com" }) =>
   POST(new Request("https://windeg.com/api/track-order", { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body) }));
 
-beforeEach(() => { getDocMock.mockReset(); serverGetMock.mockReset(); });
+const ordersReads = () => serverGetMock.mock.calls.filter(([collection]) => collection === "Orders");
+
+beforeEach(() => { serverGetMock.mockReset(); });
 
 describe("track-order", () => {
   it("normalizes input", () => {
@@ -51,31 +59,31 @@ describe("track-order", () => {
     "WIND-D-a1b2c3d4-1234-4123-8123-123456789abg", `${durableId}/x`])("rejects invalid long IDs without reading Firestore: %s", async id => {
     expect(normalizeOrderNumber(id)).toBe("");
     expect((await call({ orderNumber: id, phone: "01012345678" })).status).toBe(404);
-    expect(getDocMock).not.toHaveBeenCalled();
+    expect(serverGetMock).not.toHaveBeenCalled();
   });
   it("looks up the actual case-sensitive durable document and still hides personal data", async () => {
-    getDocMock.mockResolvedValue({ exists: () => true, data: () => ({ ...order, Name: durableId }) });
+    serverGetMock.mockResolvedValue({ data: { ...order, Name: durableId } });
     const response = await call({ orderNumber: durableId.toUpperCase(), phone: "01012345678" });
     expect(response.status).toBe(200);
-    expect(getDocMock).toHaveBeenCalledWith({ c: "Orders", id: durableId });
+    expect(serverGetMock).toHaveBeenCalledWith("Orders", durableId);
     const body = await response.json();
     expect(body.order.orderNumber).toBe(durableId);
     expect(JSON.stringify(body)).not.toContain("secret@example.com");
     expect(JSON.stringify(body)).not.toContain("Secret street");
   });
   it("does not loosen phone verification for a durable order", async () => {
-    getDocMock.mockResolvedValue({ exists: () => true, data: () => ({ ...order, Name: durableId }) });
+    serverGetMock.mockResolvedValue({ data: { ...order, Name: durableId } });
     expect((await call({ orderNumber: durableId, phone: "01099999999" })).status).toBe(404);
   });
 
   it("rejects requests without a same-origin header", async () => {
     const res = await call({ orderNumber: "WIND-12345-AB", phone: "01012345678" }, {});
     expect(res.status).toBe(403);
-    expect(getDocMock).not.toHaveBeenCalled();
+    expect(serverGetMock).not.toHaveBeenCalled();
   });
 
   it("returns status and items for a matching pair, without personal data", async () => {
-    getDocMock.mockResolvedValue({ exists: () => true, data: () => order });
+    serverGetMock.mockResolvedValue({ data: order });
     const res = await call({ orderNumber: "wind-12345-ab", phone: "+201012345678" });
     expect(res.status).toBe(200);
     const text = JSON.stringify(await res.json());
@@ -86,9 +94,9 @@ describe("track-order", () => {
   });
 
   it("gives the same 404 for a wrong phone and for a missing order", async () => {
-    getDocMock.mockResolvedValue({ exists: () => true, data: () => order });
+    serverGetMock.mockResolvedValue({ data: order });
     const wrong = await call({ orderNumber: "WIND-12345-AB", phone: "01099999999" });
-    getDocMock.mockResolvedValue({ exists: () => false, data: () => undefined });
+    serverGetMock.mockResolvedValue(null);
     const missing = await call({ orderNumber: "WIND-00000-ZZ", phone: "01012345678" });
     expect(wrong.status).toBe(404);
     expect(missing.status).toBe(404);
@@ -96,11 +104,17 @@ describe("track-order", () => {
   });
 
   it("treats abandoned drafts as not found and never queries on a bad id", async () => {
-    getDocMock.mockResolvedValue({ exists: () => true, data: () => ({ ...order, "Financial Status": "abandoned" }) });
+    serverGetMock.mockResolvedValue({ data: { ...order, "Financial Status": "abandoned" } });
     expect((await call({ orderNumber: "WIND-12345-AB", phone: "01012345678" })).status).toBe(404);
-    getDocMock.mockClear();
+    serverGetMock.mockClear();
     expect((await call({ orderNumber: "a/b", phone: "01012345678" })).status).toBe(404);
-    expect(getDocMock).not.toHaveBeenCalled();
+    expect(serverGetMock).not.toHaveBeenCalled();
+  });
+
+  it("treats a record the store cannot return as a missing order", async () => {
+    // serverOrderStore.getData maps an unreadable/invalid id to null, same as absent.
+    serverGetMock.mockResolvedValue(null);
+    expect((await call({ orderNumber: "WIND-12345-AB", phone: "01012345678" })).status).toBe(404);
   });
 });
 
@@ -113,13 +127,20 @@ describe("track-order", () => {
     key === "order_number_1001" ? { data: { orderNumber: 1001, orderId: id } } :
     collection === "WindCheckoutAttempts" ? { data: canonical } : null);
   it.each(["1001", "#1001", "#١٠٠١"])("resolves %s privately with matching canonical phone", async number => {
-    seedLookup(); getDocMock.mockResolvedValue({ exists: () => true, data: () => ({ "Fulfillment Status": "shipped" }) });
+    seedLookup();
     const response = await call({ orderNumber: number, phone: "01012345678" });
     expect(response.status).toBe(200);
     const data = await response.json(); expect(data.order.orderNumber).toBe("#1001");
     expect(JSON.stringify(data)).not.toContain("private@example.com");
     expect(JSON.stringify(data)).not.toContain("01012345678");
     expect(serverGetMock).toHaveBeenCalledWith("WindCheckoutEffects", "order_number_1001");
+  });
+  it("adds the dashboard fulfilment status when the projection exists", async () => {
+    seedLookup();
+    const response = await call({ orderNumber: "#1001", phone: "01012345678" });
+    expect(response.status).toBe(200);
+    // The projection read goes through the same private store (no public read).
+    expect(serverGetMock).toHaveBeenCalledWith("Orders", id);
   });
   it("gives a uniform not-found for absent number and wrong canonical phone", async () => {
     seedLookup();
@@ -128,12 +149,12 @@ describe("track-order", () => {
     const absent = await call({ orderNumber: "#1001", phone: "01012345678" });
     expect(wrong.status).toBe(404); expect(absent.status).toBe(404);
     expect(await wrong.json()).toEqual(await absent.json());
-    expect(getDocMock).not.toHaveBeenCalled();
+    expect(ordersReads()).toEqual([]);
   });
   it("never trusts a projection phone for sequential authorization", async () => {
-    seedLookup(); getDocMock.mockResolvedValue({ exists: () => true, data: () => ({ ...order, Phone: "01099999999" }) });
+    seedLookup();
     expect((await call({ orderNumber: "#1001", phone: "01099999999" })).status).toBe(404);
-    expect(getDocMock).not.toHaveBeenCalled();
+    expect(ordersReads()).toEqual([]);
   });
   it("rejects a corrupt number mapping", async () => {
     serverGetMock.mockResolvedValue({ data: { orderNumber: 1002, orderId: id } });
@@ -148,6 +169,6 @@ it("does no private lookup for a cross-origin sequential request", async () => {
 it("does not expose sequential lookup data when canonical record is missing", async () => {
   serverGetMock.mockResolvedValueOnce({ data: { orderNumber: 1001, orderId: "WIND-D-a1b2c3d4-1234-4123-8123-123456789abc" } }).mockResolvedValueOnce(null);
   const response = await call({ orderNumber: "#1001", phone: "01012345678" });
-  expect(response.status).toBe(404); expect(getDocMock).not.toHaveBeenCalled();
+  expect(response.status).toBe(404); expect(ordersReads()).toEqual([]);
   expect(JSON.stringify(await response.json())).not.toContain("WIND-D-");
 });

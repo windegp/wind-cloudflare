@@ -10,6 +10,13 @@ vi.mock("firebase/firestore/lite", () => ({
   increment: (n) => n,
 }));
 vi.mock("@/lib/firebase", () => ({ getDb: () => ({}) }));
+// Reads moved to the service-account store; serve them from the same test store.
+vi.mock("@/lib/serverOrderStore", () => ({
+  OrderStoreError: class extends Error {},
+  serverOrderStore: {
+    getData: async (collection, id) => store[`${collection}/${id}`] ?? null,
+  },
+}));
 vi.mock("@/lib/durablePaymentWebhook", () => ({ durablePaymentWebhook: vi.fn(async () => null) }));
 vi.mock("@/lib/kashier", () => ({ verifyWebhookSignature: vi.fn(async (d, sig) => sig === "ok") }));
 vi.mock("@/lib/checkoutQuoteToken", () => ({ verifyCheckoutQuote: vi.fn(async () => null) }));

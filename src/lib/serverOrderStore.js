@@ -84,11 +84,53 @@ async function request(path, { method = "GET", body } = {}) {
   } finally { clearTimeout(timeout); }
 }
 
+const QUERY_OPS = new Set(["EQUAL", "LESS_THAN", "LESS_THAN_OR_EQUAL", "GREATER_THAN", "GREATER_THAN_OR_EQUAL"]);
+
 export const serverOrderStore = {
   async get(collection, id) {
     assertOrderStoreConfiguration();
     const result = await request(documentName(collection, id));
     return result ? { data: decodeOrderFields(result.fields || {}), version: result.updateTime } : null;
+  },
+  // Mirror of client-SDK getDoc().data(): document fields, or null when the
+  // document does not exist. An id the client SDK would simply report as
+  // missing is null here too.
+  async getData(collection, id) {
+    try {
+      const record = await this.get(collection, id);
+      return record ? record.data : null;
+    } catch (error) {
+      if (error instanceof OrderStoreError && error.code === "INVALID_ORDER_DOCUMENT_ID") return null;
+      throw error;
+    }
+  },
+  // Small generic structured-query read for server code that used to rely on
+  // the public-read security rule through the client SDK. ANDs field filters.
+  async query(collection, { filters, limit } = {}) {
+    assertOrderStoreConfiguration();
+    documentName(collection, "validate");
+    if (!Array.isArray(filters) || !filters.length || filters.length > 4 ||
+        !filters.every(f => f && typeof f.field === "string" && /^[A-Za-z][A-Za-z0-9_ ]{0,49}$/.test(f.field) &&
+          QUERY_OPS.has(f.op) && ["string", "number", "boolean"].includes(typeof f.value)) ||
+        (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > 1000))) {
+      throw new OrderStoreError("INVALID_ORDER_QUERY", 400);
+    }
+    const fieldFilters = filters.map(f => ({ fieldFilter: {
+      field: { fieldPath: f.field }, op: f.op, value: encodeOrderValue(f.value),
+    } }));
+    const structuredQuery = {
+      from: [{ collectionId: collection }],
+      where: fieldFilters.length === 1
+        ? fieldFilters[0]
+        : { compositeFilter: { op: "AND", filters: fieldFilters } },
+      ...(limit !== undefined ? { limit } : {}),
+    };
+    const result = await request(`projects/${process.env.FIREBASE_PROJECT_ID}/databases/(default)/documents:runQuery`, {
+      method: "POST", body: { structuredQuery },
+    });
+    return result.filter(row => row.document).map(row => ({
+      id: row.document.name.split("/").pop(), data: decodeOrderFields(row.document.fields || {}), version: row.document.updateTime,
+    }));
   },
   async listDue(collection, { states, before, limit = 20 } = {}) {
     assertOrderStoreConfiguration();
