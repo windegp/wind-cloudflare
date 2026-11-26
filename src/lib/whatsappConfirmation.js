@@ -88,6 +88,7 @@ export function buildOrderConfirmationMessage({
   address,
   arrivalText,
   trackUrl,
+  paid = false,
 }) {
   const firstName = String(name ?? '').trim().split(/\s+/)[0] || '';
   const pieceCount = items.reduce(
@@ -104,8 +105,12 @@ export function buildOrderConfirmationMessage({
   ];
 
   if (arrivalText) lines.push(`📅 التاريخ المتوقع للوصول: ${arrivalText}`);
+  // الطلبات المدفوعة يوضح فيها سطر الإجمالي إن الدفع تم (طلب صاحب المتجر، Telegram 21528712).
+  const totalLine = paid
+    ? `💰 الإجمالي: ${total} ج.م شامل الشحن (تم الدفع)`
+    : `💰 الإجمالي: ${total} ج.م شامل الشحن`;
   lines.push(
-    `💰 الإجمالي: ${total} ج.م شامل الشحن`,
+    totalLine,
     `💻 رقم الطلب: ${orderLabel}`,
     `🧮 عدد القطع: ${pieceCount}`
   );

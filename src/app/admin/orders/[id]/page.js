@@ -365,6 +365,7 @@ export default function OrderDetailsPage() {
     ].filter(Boolean).join('، '),
     arrivalText,
     trackUrl: buildTrackOrderUrl(orderDisplayLabel(order, id), customerPhone),
+    paid: String(order['Financial Status'] || '').toLowerCase() === 'paid',
   });
   const whatsappUrl = buildWhatsAppUrl(customerPhone, whatsappMessage);
 

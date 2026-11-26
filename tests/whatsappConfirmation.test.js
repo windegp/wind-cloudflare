@@ -184,3 +184,27 @@ describe('buildWhatsAppUrl', () => {
     expect(buildWhatsAppUrl('abc', 'hi')).toBeNull();
   });
 });
+
+describe('buildOrderConfirmationMessage paid marker', () => {
+  const base = {
+    name: 'ياسمين علي',
+    orderLabel: '#1042',
+    items: [{ name: 'بلوفر', quantity: 1 }],
+    total: '826',
+    address: 'القاهرة',
+    arrivalText: null,
+    trackUrl: 'https://windeg.com/track-order?order=1042#p=01012345678',
+  };
+
+  it('shows the paid marker in the total line for paid orders', () => {
+    const message = buildOrderConfirmationMessage({ ...base, paid: true });
+    expect(message).toContain('💰 الإجمالي: 826 ج.م شامل الشحن (تم الدفع)');
+    expect(message).not.toContain('💰 الإجمالي: 826 ج.م شامل الشحن\n');
+  });
+
+  it('keeps the plain total wording for unpaid/COD orders (default)', () => {
+    const message = buildOrderConfirmationMessage(base);
+    expect(message).toContain('💰 الإجمالي: 826 ج.م شامل الشحن');
+    expect(message).not.toContain('(تم الدفع)');
+  });
+});
