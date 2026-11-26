@@ -41,4 +41,35 @@ describe("private server order REST store", () => {
     await expect(serverOrderStore.get("Jobs", "../secret")).rejects.toMatchObject({ code: "INVALID_ORDER_DOCUMENT_ID" });
     expect(() => encodeOrderFields({ amount: Infinity })).toThrow();
   });
+  it("getData returns decoded fields or null for missing and invalid ids", async () => {
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify({ fields: { Total: { integerValue: "42" } }, updateTime: "v1" })));
+    expect(await serverOrderStore.getData("Orders", "A1")).toEqual({ Total: 42 });
+    fetch.mockResolvedValueOnce(new Response("not found", { status: 404 }));
+    expect(await serverOrderStore.getData("Orders", "missing")).toBeNull();
+    // An id the client SDK would report as simply absent is null here too.
+    expect(await serverOrderStore.getData("Orders", "../secret")).toBeNull();
+  });
+  it("query ANDs field filters and decodes matching documents", async () => {
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify([
+      { document: { name: "projects/wind-reviews/databases/(default)/documents/Customers/a%40b.com", fields: { Phone: { stringValue: "0100" }, "Total Orders": { integerValue: "3" } }, updateTime: "v1" } },
+      {},
+    ])));
+    const rows = await serverOrderStore.query("Customers", { filters: [
+      { field: "Phone", op: "EQUAL", value: "0100" },
+      { field: "last_active", op: "GREATER_THAN_OR_EQUAL", value: "2026-01-01 00:00:00" },
+    ], limit: 5 });
+    expect(rows).toEqual([{ id: "a%40b.com", data: { Phone: "0100", "Total Orders": 3 }, version: "v1" }]);
+    const body = JSON.parse(fetch.mock.calls[0][1].body);
+    expect(body.structuredQuery.where.compositeFilter.op).toBe("AND");
+    expect(body.structuredQuery.where.compositeFilter.filters).toHaveLength(2);
+    expect(body.structuredQuery.limit).toBe(5);
+  });
+  it("query validates collection, fields, ops and limit before any network call", async () => {
+    await expect(serverOrderStore.query("Bad Collection!", { filters: [{ field: "a", op: "EQUAL", value: "x" }] })).rejects.toMatchObject({ code: "INVALID_ORDER_DOCUMENT_ID" });
+    await expect(serverOrderStore.query("Customers", { filters: [{ field: "drop; table", op: "EQUAL", value: "x" }] })).rejects.toMatchObject({ code: "INVALID_ORDER_QUERY" });
+    await expect(serverOrderStore.query("Customers", { filters: [{ field: "a", op: "NOT_EQUAL", value: "x" }] })).rejects.toMatchObject({ code: "INVALID_ORDER_QUERY" });
+    await expect(serverOrderStore.query("Customers", { filters: [{ field: "a", op: "EQUAL", value: { nested: true } }] })).rejects.toMatchObject({ code: "INVALID_ORDER_QUERY" });
+    await expect(serverOrderStore.query("Customers", { filters: [{ field: "a", op: "EQUAL", value: "x" }], limit: 0 })).rejects.toMatchObject({ code: "INVALID_ORDER_QUERY" });
+    expect(fetch).not.toHaveBeenCalled();
+  });
 });

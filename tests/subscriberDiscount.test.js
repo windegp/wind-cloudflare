@@ -8,6 +8,25 @@ const m = vi.hoisted(() => ({
 
 vi.mock("@/lib/firebase", () => ({ getDb: () => ({}) }));
 vi.mock("@/lib/firestoreAdmin", () => ({ firestoreAdminGet: (...a) => m.adminGet(...a) }));
+// Reads that moved to the service-account store (Customers, promoCodes) are
+// served from the same in-memory docs as the client-SDK mocks.
+vi.mock("@/lib/serverOrderStore", () => ({
+  OrderStoreError: class extends Error {},
+  serverOrderStore: {
+    getData: async (c, id) => m.docs.get(`${c}/${id}`) ?? null,
+    query: async (c, { filters = [] } = {}) =>
+      [...m.docs.entries()]
+        .filter(([k]) => k.startsWith(`${c}/`))
+        .map(([k, data]) => ({ id: k.slice(c.length + 1), data, version: "v1" }))
+        .filter((row) => filters.every((f) => {
+          const value = row.data[f.field];
+          if (f.op === "EQUAL") return value === f.value;
+          if (f.op === "GREATER_THAN_OR_EQUAL") return value >= f.value;
+          if (f.op === "LESS_THAN_OR_EQUAL") return value <= f.value;
+          return false;
+        })),
+  },
+}));
 vi.mock("firebase/firestore/lite", () => ({
   collection: (_d, c) => ({ kind: "collection", collection: c }),
   doc: (_d, c, id) => ({ kind: "document", collection: c, id: String(id) }),

@@ -5,7 +5,8 @@ import { verifyWebhookSignature } from '@/lib/kashier';
 import { verifyCheckoutQuote } from '@/lib/checkoutQuoteToken';
 import { successResponse, errorResponse, unauthorizedError } from '@/lib/apiResponse';
 import { getDb } from "@/lib/firebase";
-import { doc, getDoc, setDoc, updateDoc, increment } from "firebase/firestore/lite";
+import { doc, setDoc, updateDoc, increment } from "firebase/firestore/lite";
+import { serverOrderStore } from "@/lib/serverOrderStore";
 import { sendNewOrderNotification } from '@/lib/fcmAdmin';
 
 // Helper: Cairo-local ISO timestamp matching dashboard query format "YYYY-MM-DD HH:MM:SS"
@@ -81,10 +82,11 @@ export async function POST(request) {
             
             const db = getDb();
             const orderRef = doc(db, "Orders", orderId);
-            const orderSnap = await getDoc(orderRef);
+            // Read via the service account, not the public client SDK. Same document,
+            // same fields; an unreadable/absent id is treated as "no order doc".
+            const orderData = await serverOrderStore.getData("Orders", orderId);
 
-            if (orderSnap.exists()) {
-                const orderData = orderSnap.data();
+            if (orderData) {
 
                 // Kashier signature validity alone is not enough: the paid amount
                 // and currency must also match the server-quoted order snapshot.
@@ -159,11 +161,11 @@ export async function POST(request) {
 
                     if (customerId) {
                         const customerRef = doc(db, "Customers", customerId);
-                        const customerSnap = await getDoc(customerRef);
+                        // Service-account read (public read is being closed); writes below stay as-is.
+                        const existingData = await serverOrderStore.getData("Customers", customerId);
 
-                        if (customerSnap.exists()) {
+                        if (existingData) {
                             // عميل موجود — نحدّث بياناته
-                            const existingData = customerSnap.data();
                             const currentOrders = Number(existingData['Total Orders'] || 0);
                             const currentSpent = Number(existingData['Total Spent'] || 0);
                             const newSegment = currentOrders >= 1 ? "VIP_Customer" : "Purchased_Once";

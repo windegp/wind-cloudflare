@@ -45,6 +45,27 @@ vi.mock("firebase/firestore/lite", () => ({
   query: firestoreMocks.query,
   where: firestoreMocks.where,
 }));
+
+// Reads that moved to the service-account store (Customers, promoCodes) are
+// served from the same in-memory docs as the client-SDK mocks.
+vi.mock("@/lib/serverOrderStore", () => ({
+  OrderStoreError: class extends Error {},
+  serverOrderStore: {
+    getData: async (collectionName, id) => firestoreMocks.state.docs.get(`${collectionName}/${id}`) ?? null,
+    query: async (collectionName, { filters = [] } = {}) =>
+      [...firestoreMocks.state.docs.entries()]
+        .filter(([key]) => key.startsWith(`${collectionName}/`))
+        .map(([key, data]) => ({ id: key.slice(collectionName.length + 1), data, version: "v1" }))
+        .filter((row) => filters.every((f) => {
+          const value = row.data[f.field];
+          if (f.op === "EQUAL") return value === f.value;
+          if (f.op === "GREATER_THAN_OR_EQUAL") return value >= f.value;
+          if (f.op === "LESS_THAN_OR_EQUAL") return value <= f.value;
+          return false;
+        })),
+  },
+}));
+
 vi.mock("@/lib/cartRecoveryStore", () => ({
   getCartRecovery: recoveryStoreMocks.getCartRecovery,
 }));

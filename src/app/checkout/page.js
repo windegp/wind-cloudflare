@@ -17,7 +17,7 @@ import Link from "next/link";
 // يستورد firebase/firestore/lite فقط بدون storage/auth/database
 // لتجنب مشاكل Edge Runtime في Cloudflare
 import { getDb } from "@/lib/firebase-checkout";
-import { doc, setDoc, getDoc, deleteDoc, updateDoc, increment, collection, query, where, getDocs, limit } from "firebase/firestore/lite";
+import { doc, setDoc, getDoc, deleteDoc, updateDoc, increment } from "firebase/firestore/lite";
 import { ChevronDown, Info, CheckCircle2, Phone, ShoppingBag, Shield, Tag, ChevronLeft, Truck, CreditCard, Banknote, Smartphone, X, Lock } from '@/components/icons-extra';
 import { SHIPPING_COST } from '@/lib/constants';
 import { fbTrack } from "@/lib/fbTrack";
@@ -652,67 +652,18 @@ export default function CheckoutPage() {
   // ============================================================
   // 🚀 رادار السلة المتروكة المطور (استراتيجية المستند الواحد)
   // ============================================================
-    const firstOrderCacheRef = useRef(new Map());
     const lastSavedDraftRef = useRef("");
   const recoveryTokenRef = useRef("");
   const lastSavedCustomerRef = useRef(""); 
 
-  // ── تحقق تلقائي من أول طلب عند إدخال الإيميل أو التليفون ──
+  // ── أول طلب: النتيجة تأتي جاهزة من السيرفر (live quote) بدل قراءة Customers من المتصفح ──
+  // السيرفر يتحقق أصلاً بنفس المنطق (إيميل + تليفون) ويرجّع isFirstOrder في الـ quote.
+  // القراءة المباشرة من المتصفح اتشالت لأن قراءة Customers العامة بتتقفل.
   useEffect(() => {
-    if (!shippingSettings?.firstOrderEnabled) {
-      setIsFirstOrder(false);
-      return;
-    }
-    const isValidEmail = formData.email && formData.email.includes('@') && formData.email.includes('.');
-    const isValidPhone = formData.phone && formData.phone.replace(/\D/g,'').length >= 11;
-    // لازم الإيميل والتليفون معاً — منع الخصم بإيميل وهمي بدون تليفون حقيقي
-    if (!isValidEmail || !isValidPhone) { setIsFirstOrder(false); return; }
-
-    const emailId = formData.email.toLowerCase().trim();
-    const phoneId = formData.phone.replace(/\D/g,'');
-
-    // نفس الإيميل + التليفون اتفحصوا قبل كده في الجلسة؟ استخدم النتيجة بدل قراءات Firestore جديدة
-    const cacheKey = `${emailId}|${phoneId}`;
-    if (firstOrderCacheRef.current.has(cacheKey)) {
-      setIsFirstOrder(firstOrderCacheRef.current.get(cacheKey));
-      return;
-    }
-
-    const checkFirstOrder = async () => {
-      try {
-        const db = getDb();
-
-        // 1. تحقق من الإيميل كـ document ID (الطريقة الأساسية للتخزين)
-        const emailSnap = await getDoc(doc(db, "Customers", emailId));
-        const emailOrders = emailSnap.exists() ? Number(emailSnap.data()['Total Orders'] || 0) : 0;
-        if (emailOrders > 0) { firstOrderCacheRef.current.set(cacheKey, false); setIsFirstOrder(false); return; }
-
-        // 2. تحقق من التليفون كـ document ID (لو العميل اشترى بتليفون بدون إيميل)
-        const phoneDocSnap = await getDoc(doc(db, "Customers", phoneId));
-        const phoneDocOrders = phoneDocSnap.exists() ? Number(phoneDocSnap.data()['Total Orders'] || 0) : 0;
-        if (phoneDocOrders > 0) { firstOrderCacheRef.current.set(cacheKey, false); setIsFirstOrder(false); return; }
-
-        // 3. تحقق من التليفون كـ field في أي document (عميل اشترى بإيميل مختلف)
-        const phoneQuery = query(
-          collection(db, "Customers"),
-          where("Phone", "==", formData.phone.trim()),
-          limit(1)
-        );
-        const phoneQuerySnap = await getDocs(phoneQuery);
-        if (!phoneQuerySnap.empty) {
-          const existingOrders = Number(phoneQuerySnap.docs[0].data()['Total Orders'] || 0);
-          if (existingOrders > 0) { firstOrderCacheRef.current.set(cacheKey, false); setIsFirstOrder(false); return; }
-        }
-
-        // الإيميل والتليفون كلاهم جديدان تماماً
-        firstOrderCacheRef.current.set(cacheKey, true);
-        setIsFirstOrder(true);
-      } catch { setIsFirstOrder(false); }
-    };
-
-    const timer = setTimeout(checkFirstOrder, 600); // debounce
-    return () => clearTimeout(timer);
-  }, [formData.email, formData.phone, shippingSettings?.firstOrderEnabled, setIsFirstOrder]);
+    if (!shippingSettings?.firstOrderEnabled) { setIsFirstOrder(false); return; }
+    if (!liveEligibleInput) { setIsFirstOrder(false); return; }
+    if (currentLiveQuote) setIsFirstOrder(Boolean(currentLiveQuote.isFirstOrder));
+  }, [currentLiveQuote, liveEligibleInput, shippingSettings?.firstOrderEnabled, setIsFirstOrder]);
 
   useEffect(() => {
     // Legacy abandoned-cart writes target Orders and Customers. They must never

@@ -2,8 +2,6 @@ import { serverOrderStore } from "@/lib/serverOrderStore";
 import { parseDisplayNumber } from "@/lib/orderDisplayNumber";
 import { CHECKOUT_ATTEMPTS, ORDER_NUMBER_COLLECTION, orderNumberIndexId } from "@/lib/durableCheckout";
 import { NextResponse } from "next/server";
-import { doc, getDoc } from "firebase/firestore/lite";
-import { getDb } from "@/lib/firebase";
 import { isSameOrigin, enforceRateLimit } from "@/lib/apiGuards";
 import {
   isTrackableOrder,
@@ -62,12 +60,13 @@ export async function POST(request) {
       };
       if (!isTrackableOrder(safeOrder) || !phoneMatchesOrder(phone, safeOrder)) return NextResponse.json(NOT_FOUND, { status: 404, headers: HEADERS });
       // Fulfilment stays in the dashboard projection; use only allowlisted status.
-      const projection = await getDoc(doc(getDb(), "Orders", resolved));
-      if (projection.exists()) safeOrder["Fulfillment Status"] = projection.data()?.["Fulfillment Status"];
+      // Service-account read (public read is being closed), same document as before.
+      const projection = await serverOrderStore.getData("Orders", resolved);
+      if (projection) safeOrder["Fulfillment Status"] = projection["Fulfillment Status"];
       return NextResponse.json({ found: true, order: toPublicOrder(safeOrder, resolved) }, { headers: HEADERS });
     }
-    const snap = await getDoc(doc(getDb(), "Orders", orderNumber));
-    const order = snap.exists() ? snap.data() : null;
+    // Service-account read (public read is being closed), same document as before.
+    const order = await serverOrderStore.getData("Orders", orderNumber);
     if (!isTrackableOrder(order) || !phoneMatchesOrder(phone, order)) {
       return NextResponse.json(NOT_FOUND, { status: 404, headers: HEADERS });
     }

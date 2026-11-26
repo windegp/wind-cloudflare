@@ -1,5 +1,4 @@
-import { getDb } from "@/lib/firebase";
-import { collection, query, where, getDocs, getDoc, doc } from "firebase/firestore/lite";
+import { serverOrderStore } from "@/lib/serverOrderStore";
 import { parseDateToMs, isRealCustomer, getCairoDateStr } from '@/lib/analytics-helpers';
 
 export const dynamic = 'force-dynamic';
@@ -35,19 +34,18 @@ export const dynamic = 'force-dynamic';
  * This is the SAME source as analytics-daily.
  * Do NOT use Customers.last_active for visitors — that only captures purchasers.
  */
-async function queryVisitorsFromEvents(db, startDateOnly, endDateOnly) {
+async function queryVisitorsFromEvents(startDateOnly, endDateOnly) {
   try {
     // visitor_events.date is stored as "YYYY-MM-DD" string — perfect for range queries
-    // Firestore string comparison on YYYY-MM-DD sorts correctly lexicographically
-    const snap = await getDocs(query(
-      collection(db, "visitor_events"),
-      where("date", ">=", startDateOnly),
-      where("date", "<=", endDateOnly)
-    ));
-    
+    // Firestore string comparison on YYYY-MM-DD sorts correctly lexicographically.
+    // Service-account read (public read on these collections is being closed).
+    const rows = await serverOrderStore.query("visitor_events", { filters: [
+      { field: "date", op: "GREATER_THAN_OR_EQUAL", value: startDateOnly },
+      { field: "date", op: "LESS_THAN_OR_EQUAL", value: endDateOnly },
+    ] });
+
     const uniqueSessions = new Set();
-    snap.docs.forEach(d => {
-      const ev = d.data();
+    rows.forEach(({ data: ev }) => {
       if (ev.sessionId) uniqueSessions.add(ev.sessionId);
     });
     return uniqueSessions.size;
@@ -61,21 +59,20 @@ async function queryVisitorsFromEvents(db, startDateOnly, endDateOnly) {
  * Query Customers for a date range — returns real customer count only.
  * Used ONLY for the "totalCustomers" metric, NOT for visitors.
  */
-async function queryRealCustomersForRange(db, startDateStr, endDateStr, filterStartMs, filterEndMs) {
+async function queryRealCustomersForRange(startDateStr, endDateStr, filterStartMs, filterEndMs) {
   const result = { realCustomers: 0 };
-  
+
   try {
-    const snap = await getDocs(query(
-      collection(db, "Customers"),
-      where("last_active", ">=", startDateStr),
-      where("last_active", "<=", endDateStr)
-    ));
-    
+    const rows = await serverOrderStore.query("Customers", { filters: [
+      { field: "last_active", op: "GREATER_THAN_OR_EQUAL", value: startDateStr },
+      { field: "last_active", op: "LESS_THAN_OR_EQUAL", value: endDateStr },
+    ] });
+
     const realCustomers = new Map();
-    
-    for (const d of snap.docs) {
+
+    for (const d of rows) {
       try {
-        const c = d.data();
+        const c = d.data;
         if (!c) continue;
         
         const custDateMs = parseDateToMs(c.last_active);
@@ -107,23 +104,22 @@ async function queryRealCustomersForRange(db, startDateStr, endDateStr, filterSt
 /**
  * Query Orders for a date range — returns order count + revenue sum
  */
-async function queryOrdersForRange(db, startDateStr, endDateStr, filterStartMs, filterEndMs) {
+async function queryOrdersForRange(startDateStr, endDateStr, filterStartMs, filterEndMs) {
   const result = { orders: 0, sales: 0, completed: 0 };
-  
+
   try {
     // IMPORTANT:
 // We intentionally use a single bounded query here instead of full collection scans.
 // Final end-date filtering happens in-memory via parseDateToMs().
 // This avoids Cloudflare Worker CPU explosions from analytics rebuild-style scans.
-const snap = await getDocs(query(
-  collection(db, "Orders"),
-  where("Created at", ">=", startDateStr),
-  where("Created at", "<=", endDateStr)
-));
-    
-    for (const d of snap.docs) {
+const rows = await serverOrderStore.query("Orders", { filters: [
+  { field: "Created at", op: "GREATER_THAN_OR_EQUAL", value: startDateStr },
+  { field: "Created at", op: "LESS_THAN_OR_EQUAL", value: endDateStr },
+] });
+
+    for (const d of rows) {
       try {
-        const o = d.data();
+        const o = d.data;
         if (!o) continue;
         
         const orderDateMs = parseDateToMs(o['Created at']);
@@ -165,14 +161,12 @@ export async function GET(request) {
   const period = searchParams.get('period') || 'today';
 
   try {
-    const db = getDb();
-
     // ==========================================
     // 1. Read counters from settings/siteSettings
     //    (Used for 'all' period, not for filtered time periods)
     // ==========================================
-    const settingsSnap = await getDoc(doc(db, "settings", "siteSettings"));
-    const counters = settingsSnap.exists() ? (settingsSnap.data().counters || {}) : {};
+    const settingsData = await serverOrderStore.getData("settings", "siteSettings");
+    const counters = settingsData ? (settingsData.counters || {}) : {};
     
     const totalVisitors = Number(counters.visitors) || 0;
     const todayVisitors = Number(counters.todayVisitors) || 0;
@@ -303,7 +297,7 @@ export async function GET(request) {
       if (dateFilterStart && filterStartMs && filterEndMs) {
         const startDateOnly = dateFilterStart.split(' ')[0];
         const endDateOnly = dateFilterEnd.split(' ')[0];
-        orderStats = await queryOrdersForRange(db, dateFilterStart, dateFilterEnd, filterStartMs, filterEndMs);
+        orderStats = await queryOrdersForRange(dateFilterStart, dateFilterEnd, filterStartMs, filterEndMs);
         // Skip customers query for today polling — not needed for real-time display
         customersForPeriod = 0;
       }
@@ -329,14 +323,14 @@ export async function GET(request) {
         const endDateOnly = dateFilterEnd.split(' ')[0];
 
         // Visitors from visitor_events (accurate for all time filters)
-        visitorsForPeriod = await queryVisitorsFromEvents(db, startDateOnly, endDateOnly);
+        visitorsForPeriod = await queryVisitorsFromEvents(startDateOnly, endDateOnly);
 
         // Customers
-        const custResult = await queryRealCustomersForRange(db, dateFilterStart, dateFilterEnd, filterStartMs, filterEndMs);
+        const custResult = await queryRealCustomersForRange(dateFilterStart, dateFilterEnd, filterStartMs, filterEndMs);
         customersForPeriod = custResult.realCustomers;
 
         // Orders & revenue
-        orderStats = await queryOrdersForRange(db, dateFilterStart, dateFilterEnd, filterStartMs, filterEndMs);
+        orderStats = await queryOrdersForRange(dateFilterStart, dateFilterEnd, filterStartMs, filterEndMs);
       }
     }
 

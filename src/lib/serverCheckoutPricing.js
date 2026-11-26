@@ -17,6 +17,7 @@ import {
 } from "@/lib/customerChoiceGiftPricing";
 import { FREE_SHIPPING_THRESHOLD, SHIPPING_COST } from "@/lib/constants";
 import { firestoreAdminGet } from "@/lib/firestoreAdmin";
+import { serverOrderStore } from "@/lib/serverOrderStore";
 import { computeSubscriberDiscountAmount, normalizeSubscriberSettings } from "@/lib/subscriberDiscount";
 import { isFreeShippingThresholdMet } from "@/lib/shippingCalculations";
 import { getCartRecovery } from "@/lib/cartRecoveryStore";
@@ -320,23 +321,26 @@ async function resolveCustomerChoiceGiftSelections(db, purchaseItems, selections
   return resolved;
 }
 
-export async function checkFirstOrder(db, email, phone) {
+// Reads go through the service account (serverOrderStore), not the public client
+// SDK, so closing public read on Customers cannot break first-order detection.
+export async function checkFirstOrder(email, phone) {
   const normalizedEmail = String(email || "").trim().toLowerCase();
   const normalizedPhone = normalizePhone(phone);
   if (!normalizedEmail || !normalizedEmail.includes("@") || normalizedPhone.length < 11) return false;
 
-  const [emailSnap, phoneDocSnap] = await Promise.all([
-    getDoc(doc(db, "Customers", normalizedEmail)),
-    getDoc(doc(db, "Customers", normalizedPhone)),
+  const [emailData, phoneDocData] = await Promise.all([
+    serverOrderStore.getData("Customers", normalizedEmail),
+    serverOrderStore.getData("Customers", normalizedPhone),
   ]);
 
-  if (emailSnap.exists() && Number(emailSnap.data()["Total Orders"] || 0) > 0) return false;
-  if (phoneDocSnap.exists() && Number(phoneDocSnap.data()["Total Orders"] || 0) > 0) return false;
+  if (emailData && Number(emailData["Total Orders"] || 0) > 0) return false;
+  if (phoneDocData && Number(phoneDocData["Total Orders"] || 0) > 0) return false;
 
-  const phoneQuery = await getDocs(
-    query(collection(db, "Customers"), where("Phone", "==", String(phone).trim()), limit(1))
-  );
-  if (!phoneQuery.empty && Number(phoneQuery.docs[0].data()["Total Orders"] || 0) > 0) return false;
+  const phoneHits = await serverOrderStore.query("Customers", {
+    filters: [{ field: "Phone", op: "EQUAL", value: String(phone).trim() }],
+    limit: 1,
+  });
+  if (phoneHits.length && Number(phoneHits[0].data["Total Orders"] || 0) > 0) return false;
 
   return true;
 }
@@ -388,9 +392,9 @@ async function validatePromo(db, code, customer, cartItems, isFirstOrder, now, o
     };
   }
 
-  const snap = await getDoc(doc(db, "promoCodes", normalizedCode));
-  if (!snap.exists()) throw new CheckoutQuoteError("كود الخصم غير صالح.");
-  const promo = snap.data();
+  // Service-account read: promoCodes carry usedBy emails, so public read is being closed.
+  const promo = await serverOrderStore.getData("promoCodes", normalizedCode);
+  if (!promo) throw new CheckoutQuoteError("كود الخصم غير صالح.");
 
   if (promo.active !== true) throw new CheckoutQuoteError("كود الخصم غير مفعّل حالياً.");
 
@@ -585,7 +589,7 @@ export async function createServerCheckoutQuote(input = {}) {
     (subscriberSettings.enabled && subscriberSettings.firstOrderOnly);
   const isFirstOrder =
     needsFirstOrderCheck
-      ? await checkFirstOrder(db, customer.email, customer.phone)
+      ? await checkFirstOrder(customer.email, customer.phone)
       : false;
 
   const promo = await validatePromo(
