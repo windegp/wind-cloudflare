@@ -616,6 +616,7 @@ export default function CheckoutPage() {
   // ============================================================
     const firstOrderCacheRef = useRef(new Map());
     const lastSavedDraftRef = useRef("");
+  const recoveryTokenRef = useRef("");
   const lastSavedCustomerRef = useRef(""); 
 
   // ── تحقق تلقائي من أول طلب عند إدخال الإيميل أو التليفون ──
@@ -756,7 +757,8 @@ export default function CheckoutPage() {
             "Created at": getCairoTimestamp(),
             data_source: "WIND_Web",
             AnonymousBrowserId: anonymousBrowserId,
-                        ...orderFinancialSnapshot,
+                        ...(recoveryTokenRef.current ? { recoveryToken: recoveryTokenRef.current } : {}),
+            ...orderFinancialSnapshot,
             lineItems: orderLineItems
           };
 
@@ -833,6 +835,9 @@ export default function CheckoutPage() {
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok && data?.token) {
+          recoveryTokenRef.current = data.token;
+          // المسار الأساسي: التوكن بينضاف لمسودة السلة المتروكة نفسها. الكتابة
+          // المنفصلة دي احتياطية لو المسودة اتحفظت قبل ما التوكن يوصل.
           await setDoc(doc(getDb(), "Orders", activeOrderId), { recoveryToken: data.token }, { merge: true });
         }
       } catch (_) {

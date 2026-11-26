@@ -47,9 +47,31 @@ describe("saveCartRecovery", () => {
     expect(byToken.data.anchor).toBe("2026-11-26T10:00:00.000Z");
   });
 
+  // commit في serverOrderStore يرفض أي كتابة بدون create أو version
+  // (ORDER_PRECONDITION_REQUIRED). ده السبب الحقيقي لفشل الحفظ في الإنتاج.
+  it("always sends a create or version precondition with every write", async () => {
+    storeMocks.get.mockResolvedValue(null);
+    await saveCartRecovery({ orderId: "WIND-12345-AB", quote: QUOTE });
+    for (const write of storeMocks.commit.mock.calls[0][0]) {
+      expect(Boolean(write.create) || Boolean(write.version)).toBe(true);
+    }
+
+    storeMocks.commit.mockClear();
+    storeMocks.get
+      .mockResolvedValueOnce({ data: { token: "123e4567-e89b-42d3-a456-426614174000" }, version: "v1" })
+      .mockResolvedValueOnce({ data: { orderId: "WIND-12345-AB", quote: QUOTE }, version: "v2" });
+    await saveCartRecovery({ orderId: "WIND-12345-AB", quote: QUOTE });
+    const writes = storeMocks.commit.mock.calls[0][0];
+    expect(writes[0].version).toBe("v1");
+    expect(writes[1].version).toBe("v2");
+    expect(writes.every((write) => !write.create)).toBe(true);
+  });
+
   it("reuses the existing token for the same order so sent links stay valid", async () => {
     const existingToken = "123e4567-e89b-42d3-a456-426614174000";
-    storeMocks.get.mockResolvedValue({ data: { token: existingToken } });
+    storeMocks.get
+      .mockResolvedValueOnce({ data: { token: existingToken }, version: "v1" })
+      .mockResolvedValueOnce({ data: { orderId: "WIND-12345-AB", quote: QUOTE }, version: "v2" });
 
     const token = await saveCartRecovery({ orderId: "WIND-12345-AB", quote: QUOTE });
 
