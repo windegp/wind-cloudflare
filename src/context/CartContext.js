@@ -108,6 +108,7 @@ const [customerChoiceGiftSelections, setCustomerChoiceGiftSelections] = useState
     localStorage.removeItem('wind_cart');
     localStorage.removeItem('wind_customer_choice_gifts');
     localStorage.removeItem('wind_offer_gift_variants');
+    localStorage.removeItem('wind_cart_recovery');
   }, []);
 
   const addCustomerChoiceGift = useCallback((product) => {
@@ -573,6 +574,16 @@ const [customerChoiceGiftSelections, setCustomerChoiceGiftSelections] = useState
     } finally {
       setCustomerChoiceGiftSelectionsLoaded(true);
     }
+  }, []);
+
+  // فتح السلة تلقائياً مرة واحدة بعد استرجاعها من لينك واتساب (علامة من CartRestore)
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem('wind_open_cart_once') === '1') {
+        sessionStorage.removeItem('wind_open_cart_once');
+        setIsCartOpen(true);
+      }
+    } catch {}
   }, []);
 
   useEffect(() => {

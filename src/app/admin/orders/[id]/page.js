@@ -7,7 +7,7 @@ import { getDb } from "@/lib/firebase";
 import { doc, getDoc, collection, query, where, getDocs, updateDoc } from "firebase/firestore/lite";
 import { getCairoTimestamp } from "@/lib/analytics-helpers";
 import { buildOrderConfirmationMessage, buildTrackOrderUrl, buildWhatsAppBusinessIntentUrl, buildWhatsAppUrl, formatArrivalWindow } from "@/lib/whatsappConfirmation";
-import { buildAbandonedCartMessage, buildCartRestoreUrl } from "@/lib/abandonedCartMessage";
+import { buildAbandonedCartMessage, buildCartRestoreTokenUrl, buildCartRestoreUrl } from "@/lib/abandonedCartMessage";
 import { ArrowRight, Package, User, MapPin, Printer, Phone, MessageCircle } from '@/components/icons-extra';
 
 export const dynamic = 'force-dynamic';
@@ -370,7 +370,11 @@ export default function OrderDetailsPage() {
 
   // رسالة استرجاع السلة المتروكة ولينك يرجّع العميل لسلته
   const recoverySentAt = order['WhatsApp Recovery Sent At'] || null;
-  const cartRestoreUrl = isAbandoned ? buildCartRestoreUrl(productsList) : null;
+  // لو للسلة لقطة سيرفر بتوكن سري نستخدم لينك التوكن (أسعار وعروض متكرّمة ٧٢
+  // ساعة)، وإلا نرجع للينك المضمّن القديم.
+  const cartRestoreUrl = isAbandoned
+    ? buildCartRestoreTokenUrl(order.recoveryToken) || buildCartRestoreUrl(productsList)
+    : null;
   const recoveryMessage = isAbandoned
     ? buildAbandonedCartMessage({
         name: customerName,

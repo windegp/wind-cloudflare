@@ -2,6 +2,7 @@
 // بدون أي أسماء كلاسات هنا: Tailwind يفحص src/app و src/components فقط.
 
 import { SITE_DOMAIN } from "@/lib/constants";
+import { isValidRecoveryToken } from "@/lib/cartRecovery";
 
 const MAX_RESTORE_ITEMS = 20;
 
@@ -28,6 +29,15 @@ export function buildCartRestoreUrl(items) {
     .filter(Boolean);
   if (!compact.length) return null;
   return `https://${SITE_DOMAIN}/?cart=${encodeURIComponent(JSON.stringify(compact))}`;
+}
+
+// لينك استرجاع بتوكن سري: اللينك يحمل التوكن بس، والمنتجات والأسعار بتتقرأ
+// من لقطة محفوظة على السيرفر. أسعار وعروض اللقطة متكرّمة ٧٢ ساعة من آخر
+// نشاط على السلة، وبعدها بيتحسب السعر الحالي. يرجع null لو التوكن مش صالح.
+export function buildCartRestoreTokenUrl(token) {
+  const value = String(token || '').trim();
+  if (!isValidRecoveryToken(value)) return null;
+  return `https://${SITE_DOMAIN}/?cart-token=${value}`;
 }
 
 // يقرأ قيمة ?cart= ويرجع قائمة منتجات صالحة (أو []) — يستخدمها مكوّن الاسترجاع في المتجر.

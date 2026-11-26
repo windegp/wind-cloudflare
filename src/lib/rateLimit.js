@@ -80,6 +80,13 @@ const RATE_LIMITS = {
     blockDuration: 900
   },
 
+  // Abandoned-cart recovery links (secret-token lookups and snapshot saves)
+  CART_RECOVERY: {
+    requests: 10,
+    window: 300,
+    blockDuration: 900
+  },
+
   // Public contact form (sends an email to the store owner)
   CONTACT: {
     requests: 5,
@@ -132,7 +139,7 @@ function getRateLimitKey(ip, endpointType = 'DEFAULT') {
 // Endpoints that protect against guessing, spam or abuse. If KV errors out (for example the
 // daily write quota is used up) these keep a per-isolate counter instead of switching protection
 // off. Tracking relays are NOT listed: they stay open so no conversion event is ever dropped.
-const MEMORY_FALLBACK_TYPES = new Set(['TRACK_ORDER', 'CONTACT', 'CREATE_ORDER']);
+const MEMORY_FALLBACK_TYPES = new Set(['TRACK_ORDER', 'CONTACT', 'CREATE_ORDER', 'CART_RECOVERY']);
 const memoryCounters = new Map();
 const MEMORY_MAX_ENTRIES = 5000;
 
