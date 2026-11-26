@@ -1,7 +1,7 @@
 "use client";
 import { orderDisplayLabel } from "@/lib/orderDisplayNumber";
 
-import { resolveThankYouState } from "@/lib/checkoutThankYouState";
+import { resolveThankYouState, resolveThankYouOrderId } from "@/lib/checkoutThankYouState";
 import { finishBrowserCheckoutAttempt } from "@/lib/checkoutAttemptBrowser";
 import { useEffect, Suspense, useState } from 'react';
 import { usePathname } from 'next/navigation';
@@ -31,7 +31,12 @@ function SuccessContent() {
   const { signalPageReady } = usePageReady();
   const { isVisible: loaderActive } = useGlobalLoader();
   const searchParams = useSearchParams();
-  const orderId = searchParams.get('orderId');
+  // كاشير بيرجّع بعد الدفع بالمحفظة والـ orderId في اللينك هو UUID بتاع كاشير،
+  // ورقم أوردرنا الحقيقي بيجي في merchantOrderId. لو اللينك مفيهوش رقم من
+  // أرقامنا بنسيبه null فتعرض الصفحة الإيصال المخزّن محلياً (نفس سلوك لما
+  // اللينك يخلص من المعاملات أصلاً). تغيير عرض فقط — لا يمس إنشاء الأوردر
+  // ولا الدفع ولا الويب هوك.
+  const orderId = resolveThankYouOrderId(searchParams.get('orderId'), searchParams.get('merchantOrderId'));
   const [orderData, setOrderData] = useState(null);
   const [verification, setVerification] = useState(orderId?.startsWith("WIND-D-") ? "جاري التحقق من بيانات الطلب." : null);
   const [statusRefresh, setStatusRefresh] = useState(0);
