@@ -516,6 +516,27 @@ export default function CheckoutPage() {
     } catch { /* تخزين تالف: نتجاهل */ }
   }, []);
 
+  // ── تعبئة الفورم ببيانات التواصل من لينك استرجاع السلة ─────────────
+  // CartRestore خزّن البيانات اللي العميل كتبها وقت التخلي. بنعبّي الخانات
+  // الفاضية بس (ومحافظة العميل لو اتخزّنت)، وبنمسح النسخة بعد الاستخدام.
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem("wind_cart_recovery_contact");
+      if (!raw) return;
+      window.localStorage.removeItem("wind_cart_recovery_contact");
+      const contact = JSON.parse(raw);
+      if (!contact || typeof contact !== "object") return;
+      setFormData((prev) => {
+        const next = { ...prev };
+        for (const [field, value] of Object.entries(contact)) {
+          if (typeof value !== "string" || !value || !(field in next)) continue;
+          if (field === "governorate" || !next[field]) next[field] = value;
+        }
+        return next;
+      });
+    } catch { /* تخزين تالف: نتجاهل */ }
+  }, []);
+
   // العلامة صالحة بس لو السلة الحالية مطابقة للقطة والعميل ماكتبش كود مختلف.
   // أي اختلاف بيمسح العلامة ويرجّع التسعير الحالي تلقائياً.
   const activeRecovery = (() => {
@@ -817,21 +838,48 @@ export default function CheckoutPage() {
   // بتحمل تسعير السيرفر مش أي بيانات من المتصفح. التوكن بيتخزن في مستند
   // الطلب عشان صفحة الأدمن تبني بيه لينك الاسترجاع.
   const lastRecoverySavedTokenRef = useRef("");
+  // بيانات التواصل بتتبعت مع الحفظ عشان لينك الاسترجاع يفتح الشيك آوت معبّي.
+  // مش بتدخل في التسعير: التسعير مصدره توكن الـ quote الموقّع بس.
+  const recoveryContactKey = JSON.stringify([
+    formData.firstName, formData.lastName, formData.email, formData.phone,
+    formData.altPhone, formData.address, formData.landmark, formData.city,
+    formData.governorate, formData.postalCode,
+  ]);
   useEffect(() => {
     if (durableCheckout) return; // نفس نطاق التقاط السلة المتروكة الحالي
     if (activeRecovery) return; // جلسة مسترجعة: اللقطة الأصلية هي المرجع
     if (!liveEligibleInput || cartItems.length === 0) return;
     if (isOrderSubmittedRef.current) return;
     if (!currentLiveQuote || !liveQuote?.quoteToken) return;
-    if (lastRecoverySavedTokenRef.current === liveQuote.quoteToken) return;
-    lastRecoverySavedTokenRef.current = liveQuote.quoteToken;
+    // إعادة الحفظ لو التسعير أو بيانات التواصل اتغيّرت (العنوان مثلاً
+    // بيتكتب بعد الإيميل والموبايل، فلازم يتلحق في اللقطة). الحفظ متأخّر
+    // 1.5 ثانية بعد آخر تغيير عشان الكتابة المتتالية ماتعملش حفظ لكل حرف.
+    const saveKey = `${liveQuote.quoteToken}|${recoveryContactKey}`;
+    if (lastRecoverySavedTokenRef.current === saveKey) return;
 
-    (async () => {
+    const timer = setTimeout(async () => {
+      if (lastRecoverySavedTokenRef.current === saveKey) return;
+      lastRecoverySavedTokenRef.current = saveKey;
       try {
         const res = await fetch("/api/cart-recovery-save", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ orderId: activeOrderId, quoteToken: liveQuote.quoteToken }),
+          body: JSON.stringify({
+            orderId: activeOrderId,
+            quoteToken: liveQuote.quoteToken,
+            contact: {
+              firstName: formData.firstName,
+              lastName: formData.lastName,
+              email: formData.email,
+              phone: formData.phone,
+              altPhone: formData.altPhone,
+              address: formData.address,
+              landmark: formData.landmark,
+              city: formData.city,
+              governorate: formData.governorate,
+              postalCode: formData.postalCode,
+            },
+          }),
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok && data?.token) {
@@ -843,9 +891,10 @@ export default function CheckoutPage() {
       } catch (_) {
         // فشل صامت: الاسترجاع ميزة إضافية ومش لازم يأثر على الشيك آوت.
       }
-    })();
+    }, 1500);
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentLiveQuote, liveEligibleInput, cartItems.length, durableCheckout, activeOrderId, activeRecovery]);
+  }, [currentLiveQuote, liveEligibleInput, cartItems.length, durableCheckout, activeOrderId, activeRecovery, recoveryContactKey]);
 
   const validate = () => {
     let tempErrors = {};

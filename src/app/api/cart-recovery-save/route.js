@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyCheckoutQuote } from "@/lib/checkoutQuoteToken";
 import { saveCartRecovery } from "@/lib/cartRecoveryStore";
+import { sanitizeRecoveryContact } from "@/lib/cartRecovery";
 import { isSameOrigin, enforceRateLimit } from "@/lib/apiGuards";
 import { OrderStoreError } from "@/lib/serverOrderStore";
 
@@ -9,9 +10,11 @@ export const dynamic = "force-dynamic";
 const HEADERS = { "Cache-Control": "no-store, private" };
 
 /**
- * يحفظ لقطة سلة متروكة على السيرفر. المدخل الوحيد هو توكن تسعير موقّع من
+ * يحفظ لقطة سلة متروكة على السيرفر. تسعير اللقطة مصدره الوحيد توكن موقّع من
  * /api/checkout-quote، فيتحقق التوقيع هنا قبل التخزين: الأسعار المحفوظة هي
- * اللي السيرفر حسبها بنفسه، مش أي حاجة جاية من المتصفح.
+ * اللي السيرفر حسبها بنفسه، مش أي حاجة جاية من المتصفح. بيانات التواصل
+ * (contact) جاية من المتصفح وبتتخزن بعد تعقيمها لتعبئة الشيك آوت فقط،
+ * ومش بتأثر على أي تسعير أو طلب.
  */
 export async function POST(request) {
   if (!isSameOrigin(request)) {
@@ -43,7 +46,11 @@ export async function POST(request) {
   }
 
   try {
-    const token = await saveCartRecovery({ orderId, quote });
+    const token = await saveCartRecovery({
+      orderId,
+      quote,
+      contact: sanitizeRecoveryContact(body?.contact),
+    });
     return NextResponse.json({ success: true, token }, { headers: HEADERS });
   } catch (error) {
     const status = error instanceof OrderStoreError ? error.status : 503;

@@ -67,6 +67,32 @@ export function giftSelectionsMatch(inputSelections, snapshotSelections) {
   return currentKeys.every((key, index) => key === snapshotKeys[index]);
 }
 
+// بيانات التواصل اللي العميل كتبها في فورم الشيك آوت وقت التخلي. بتتخزن
+// ورا التوكن السري عشان اللينك يفتح الشيك آوت معبّي. دي بيانات متصفح غير
+// موثوقة: بتتستخدم للتعبئة فقط، ومش بتدخل في أي حساب سعر أو طلب.
+export const RECOVERY_CONTACT_LIMITS = {
+  firstName: 80,
+  lastName: 80,
+  email: 160,
+  phone: 20,
+  altPhone: 20,
+  address: 200,
+  landmark: 120,
+  city: 80,
+  governorate: 60,
+  postalCode: 12,
+};
+
+export function sanitizeRecoveryContact(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const contact = {};
+  for (const [field, max] of Object.entries(RECOVERY_CONTACT_LIMITS)) {
+    const value = String(raw[field] || "").trim().slice(0, max);
+    if (value) contact[field] = value;
+  }
+  return Object.keys(contact).length ? contact : null;
+}
+
 // اللقطة لسه في شباك الـ ٧٢ ساعة؟
 export function isRecoveryActive(recovery, now = Date.now()) {
   return (
@@ -85,7 +111,9 @@ export function isRecoveryLinkAlive(recovery, now = Date.now()) {
   );
 }
 
-// نسخة عامة من اللقطة ترجع للعميل: منتجات وملخص فقط، بدون أي بيانات عميل.
+// نسخة عامة من اللقطة ترجع للعميل: منتجات وملخص، بالإضافة لبيانات التواصل
+// اللي العميل نفسه كتبها (لتعبئة الشيك آوت). مفيش أي بيانات دفع هنا،
+// والوصول لكل ده محمي بالتوكن السري غير القابل للتخمين.
 export function toPublicRecoveryCart(recovery, now = Date.now()) {
   const quote = recovery?.quote || {};
   const items = (Array.isArray(quote.cartItems) ? quote.cartItems : [])
@@ -134,6 +162,7 @@ export function toPublicRecoveryCart(recovery, now = Date.now()) {
   return {
     items,
     giftSelections,
+    contact: sanitizeRecoveryContact(recovery?.contact),
     honored: isRecoveryActive(recovery, now),
     expiresAt: Number.isFinite(recovery?.expiresAtMs)
       ? new Date(recovery.expiresAtMs).toISOString()
