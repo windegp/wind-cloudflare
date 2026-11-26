@@ -7,6 +7,7 @@ vi.mock("@/lib/apiGuards", async (importOriginal) => ({
 vi.mock("@/lib/fcmAdmin", () => ({ sendNewOrderNotification: vi.fn(async () => {}) }));
 
 import { POST } from "@/app/api/create-order/route";
+import { sendNewOrderNotification } from "@/lib/fcmAdmin";
 import { signCheckoutQuote } from "@/lib/checkoutQuoteToken";
 
 const quote = {
@@ -46,6 +47,7 @@ const call = (body) =>
   );
 
 beforeEach(() => {
+  vi.clearAllMocks();
   process.env.CHECKOUT_QUOTE_SECRET = "test-checkout-quote-secret-0123456789abcdef";
   process.env.RESEND_API_KEY = "re_test";
   vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ id: "m1" }), { status: 200 })));
@@ -85,5 +87,37 @@ describe("POST /api/create-order", () => {
       expect(html).not.toContain("javascript:");
       expect(html).toContain("&lt;b&gt;Ali&lt;/b&gt;");
     }
+  });
+
+  it("card_success sends both emails but skips the admin push (webhook already pushed)", async () => {
+    const quoteToken = await signCheckoutQuote(quote, "WND-2");
+    const res = await call({
+      paymentMethod: "card_success",
+      orderId: "WND-2",
+      quoteToken,
+      subtotal: 500,
+      shipping: 50,
+      total: 550,
+      formData,
+    });
+    expect(res.status).toBe(200);
+    const emails = fetch.mock.calls.filter(([url]) => String(url).includes("resend.com"));
+    expect(emails.length).toBe(2);
+    expect(sendNewOrderNotification).not.toHaveBeenCalled();
+  });
+
+  it("cod still sends the admin push exactly once", async () => {
+    const quoteToken = await signCheckoutQuote(quote, "WND-3");
+    const res = await call({
+      paymentMethod: "cod",
+      orderId: "WND-3",
+      quoteToken,
+      subtotal: 500,
+      shipping: 50,
+      total: 550,
+      formData,
+    });
+    expect(res.status).toBe(200);
+    expect(sendNewOrderNotification).toHaveBeenCalledTimes(1);
   });
 });

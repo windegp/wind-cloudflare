@@ -230,11 +230,16 @@ export async function POST(req) {
     // ⚠️ لازم await هنا: على Cloudflare، أي Promise من غير await ممكن
     // يتقفل قبل ما يخلص لو الـ Response رجع قبله — ده اللي يخلي الإشعار
     // يجي بالصدفة مرة ويختفي مرة، نفس مشكلة عدم الاستقرار القديمة.
-    await sendNewOrderNotification({
-      title: `طلب جديد من WIND`,
-      body: `${formData.firstName} • ${displayPaymentMethod} • ${trustedTotal} ${CURRENCY} • #${orderNumber}`,
-      orderId: orderNumber,
-    });
+    // card_success: الويب هوك بيبعت إشعار "اتدفع" لنفس الأوردر عند تأكيد
+    // الدفع — نتخطى الإشعار هنا عشان الأدمن ما يجيلوش إشعارين للأوردر الواحد.
+    // الإيميلات (أدمن + عميل) بتتبعت عادي في الحالتين.
+    if (paymentMethod !== 'card_success') {
+      await sendNewOrderNotification({
+        title: `طلب جديد من WIND`,
+        body: `${formData.firstName} • ${displayPaymentMethod} • ${trustedTotal} ${CURRENCY} • #${orderNumber}`,
+        orderId: orderNumber,
+      });
+    }
 
     const recipientEmail = customerEmail || formData.email;
     if (typeof recipientEmail === 'string' && /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/.test(recipientEmail)) {
