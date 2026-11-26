@@ -1,0 +1,122 @@
+// منطق رسالة تأكيد الطلب عبر واتساب (يدوي من صفحة الأدمن).
+// بدون أي أسماء كلاسات هنا: Tailwind يفحص src/app و src/components فقط.
+
+const WEEKDAYS_AR = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+const MONTHS_AR = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+
+const FRIDAY = 5;
+
+// يقرأ تاريخ الطلب من "YYYY-MM-DD HH:MM:SS" (توقيت القاهرة) أو صيغة يفهمها Date.
+// يرجع Date عند الظهر بالتوقيت المحلي لتفادي مشاكل المناطق الزمنية، أو null.
+export function parseOrderDate(value) {
+  if (!value) return null;
+  if (value?.toDate) value = value.toDate();
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime())
+      ? null
+      : new Date(value.getFullYear(), value.getMonth(), value.getDate(), 12, 0, 0);
+  }
+
+  const match = String(value).match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+
+  return new Date(year, month - 1, day, 12, 0, 0);
+}
+
+// يضيف n يوم مع تجاهل يوم الجمعة (لا يُحسب ضمن المدة).
+export function addDaysSkippingFridays(date, days) {
+  const result = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0);
+  let added = 0;
+  while (added < days) {
+    result.setDate(result.getDate() + 1);
+    if (result.getDay() !== FRIDAY) added += 1;
+  }
+  return result;
+}
+
+// نطاق الوصول المتوقع: من 3 إلى 5 أيام من تاريخ الطلب، بدون أيام الجمعة.
+// يرجع { from, to } أو null لو التاريخ غير مقروء.
+export function arrivalWindow(createdAt) {
+  const date = parseOrderDate(createdAt);
+  if (!date) return null;
+  return {
+    from: addDaysSkippingFridays(date, 3),
+    to: addDaysSkippingFridays(date, 5),
+  };
+}
+
+// "الإثنين 30 نوفمبر"
+export function formatArDate(date) {
+  return `${WEEKDAYS_AR[date.getDay()]} ${date.getDate()} ${MONTHS_AR[date.getMonth()]}`;
+}
+
+// "من الإثنين 30 نوفمبر إلى الأربعاء 2 ديسمبر" أو null
+export function formatArrivalWindow(createdAt) {
+  const window = arrivalWindow(createdAt);
+  if (!window) return null;
+  return `من ${formatArDate(window.from)} إلى ${formatArDate(window.to)}`;
+}
+
+// يحول رقم مصري لصيغة wa.me الدولية بالأرقام فقط: "2010xxxxxxxx". يرجع null لو الرقم غير صالح.
+export function normalizeWhatsAppPhone(phone) {
+  let digits = String(phone ?? '').replace(/\D/g, '');
+  if (!digits) return null;
+
+  if (digits.startsWith('00')) digits = digits.slice(2);
+  if (digits.startsWith('0')) digits = `20${digits.slice(1)}`;
+  if (!digits.startsWith('20') && digits.length === 10) digits = `20${digits}`;
+
+  return /^201[0-9]{9}$/.test(digits) ? digits : null;
+}
+
+// نص رسالة التأكيد (المسودة المتفق عليها مع صاحب المتجر).
+export function buildOrderConfirmationMessage({
+  name,
+  orderLabel,
+  items = [],
+  total,
+  address,
+  arrivalText,
+}) {
+  const lines = [
+    `أهلًا ${name} 🤍`,
+    'شكرًا لطلبك من WIND.',
+    `رقم الأوردر: ${orderLabel}`,
+  ];
+
+  for (const item of items) {
+    const itemName = String(item?.name || item?.title || '').trim();
+    if (!itemName) continue;
+    const qty = Number(item?.quantity ?? item?.qty) || 1;
+    const gift = item?.isFree === true ? ' (هدية)' : '';
+    lines.push(`- ${itemName} × ${qty}${gift}`);
+  }
+
+  lines.push(`الإجمالي: ${total} جنيه شامل الشحن`);
+
+  if (address) lines.push(`العنوان: ${address}`);
+  if (arrivalText) lines.push(`الوصول المتوقع: ${arrivalText}`);
+
+  lines.push(
+    '',
+    'برجاء تأكيد الطلب عشان نجهزه لك.',
+    'رد بـ 1 للتأكيد',
+    'رد بـ 2 للإلغاء',
+    'رد بـ 3 لتغيير الموعد'
+  );
+
+  return lines.join('\n');
+}
+
+// رابط wa.me جاهز للفتح، أو null لو الرقم غير صالح.
+export function buildWhatsAppUrl(phone, message) {
+  const digits = normalizeWhatsAppPhone(phone);
+  if (!digits) return null;
+  return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
+}

@@ -7,7 +7,8 @@ import { getDb } from "@/lib/firebase";
 import { doc, getDoc, collection, query, where, getDocs, updateDoc } from "firebase/firestore/lite";
 import { FULFILLMENT_OPTIONS, PAYMENT_OPTIONS, paymentOptionLabel, canEditPayment, paymentPatchForFulfillment, normalizeFulfillment } from "@/lib/fulfillmentStatus";
 import { getCairoTimestamp } from "@/lib/analytics-helpers";
-import { ArrowRight, Package, User, MapPin, Printer, Phone } from '@/components/icons-extra';
+import { buildOrderConfirmationMessage, buildWhatsAppUrl, formatArrivalWindow } from "@/lib/whatsappConfirmation";
+import { ArrowRight, Package, User, MapPin, Printer, Phone, MessageCircle } from '@/components/icons-extra';
 
 export const dynamic = 'force-dynamic';
 
@@ -451,6 +452,42 @@ export default function OrderDetailsPage() {
   const customerPhone = order.Phone || order['Shipping Phone'] || '';
   const alternatePhone = order['Alternate Phone'] || '';
 
+  const arrivalText = formatArrivalWindow(order['Created at']);
+  const whatsappConfirmedAt = order['WhatsApp Confirmation Sent At'] || null;
+
+  const whatsappMessage = buildOrderConfirmationMessage({
+    name: customerName,
+    orderLabel: orderDisplayLabel(order, id),
+    items: productsList,
+    total: totalAmount.toLocaleString('en-EG'),
+    address: [
+      order['Shipping Address1'],
+      order['Shipping City'],
+      order['Shipping Province']
+    ].filter(Boolean).join('، '),
+    arrivalText,
+  });
+  const whatsappUrl = buildWhatsAppUrl(customerPhone, whatsappMessage);
+
+  const sendWhatsAppConfirmation = async () => {
+    if (!whatsappUrl) {
+      alert('رقم هاتف العميل غير صالح لواتساب. تأكد من الرقم الأول.');
+      return;
+    }
+    window.open(whatsappUrl, '_blank', 'noopener');
+    if (!orderDocId) return;
+    try {
+      const sentAt = getCairoTimestamp();
+      await updateDoc(doc(getDb(), "Orders", orderDocId), {
+        "WhatsApp Confirmation Sent At": sentAt,
+      });
+      setOrder((prev) => ({ ...prev, "WhatsApp Confirmation Sent At": sentAt }));
+    } catch (e) {
+      console.error("Failed to save WhatsApp confirmation time:", e);
+      alert("واتساب اتفتح، بس تعذر تسجيل وقت الإرسال في الطلب.");
+    }
+  };
+
   const shippingAddress = [
     order['Shipping Address1'],
     order['Shipping City'],
@@ -497,6 +534,11 @@ export default function OrderDetailsPage() {
               <p className="text-xs text-gray-500 mt-1">
                 تاريخ الطلب: {formatDate(order['Created at'])}
               </p>
+              {arrivalText && (
+                <p className="text-xs text-gray-500 mt-1">
+                  الوصول المتوقع: {arrivalText} (3-5 أيام بدون الجمعة)
+                </p>
+              )}
             </div>
           </div>
 
@@ -893,6 +935,37 @@ export default function OrderDetailsPage() {
                       <CopyButton value={alternatePhone} label="الهاتف البديل" />
                     </div>
                   </div>
+                )}
+              </div>
+
+              {/* تأكيد الطلب عبر واتساب */}
+              <div className="mt-4 pt-3 border-t border-gray-100">
+                {whatsappConfirmedAt ? (
+                  <div>
+                    <p className="text-xs font-bold text-green-700 flex items-center gap-1.5">
+                      <MessageCircle size={14} />
+                      تم التأكيد برسالة واتساب
+                    </p>
+                    <p className="text-[11px] text-gray-400 mt-1">
+                      {formatDate(whatsappConfirmedAt)}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={sendWhatsAppConfirmation}
+                      className="mt-2 text-[11px] font-bold text-blue-700 hover:underline"
+                    >
+                      إرسال مرة أخرى
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={sendWhatsAppConfirmation}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-bold transition-colors"
+                  >
+                    <MessageCircle size={16} />
+                    تأكيد الطلب عبر واتساب
+                  </button>
                 )}
               </div>
             </section>
