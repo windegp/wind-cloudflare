@@ -124,6 +124,9 @@ export function buildOrderConfirmationMessage({
     lines.push('📄 المنتجات:', ...itemLines);
   }
 
+  // سطر ثابت بطلب صاحب المتجر (Telegram 20013927).
+  lines.push('🔓 إمكانية فتح الطلب: نعم');
+
   if (address) lines.push(`🏡 العنوان: ${address}`);
 
   if (trackUrl) {
