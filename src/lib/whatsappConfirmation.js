@@ -78,6 +78,8 @@ export function normalizeWhatsAppPhone(phone) {
 }
 
 // نص رسالة التأكيد (المسودة المتفق عليها مع صاحب المتجر).
+// نص رسالة التأكيد: شكل رسائل الشحن اللي صاحب المتجر اختاره (Telegram 20005710).
+// مفيش عندنا رقم تتبع شركة شحن ولا خيار فتح الشحنة، فبنستخدم رقم الطلب ونستغنى عن سطر فتح الشحنة.
 export function buildOrderConfirmationMessage({
   name,
   orderLabel,
@@ -87,24 +89,49 @@ export function buildOrderConfirmationMessage({
   arrivalText,
   trackUrl,
 }) {
+  const firstName = String(name ?? '').trim().split(/\s+/)[0] || '';
+  const pieceCount = items.reduce(
+    (sum, item) => sum + (Number(item?.quantity ?? item?.qty) || 1),
+    0
+  );
+
   const lines = [
-    `أهلًا ${name} 🤍`,
-    'شكرًا لطلبك من WIND.',
-    `رقم الأوردر: ${orderLabel}`,
+    `أهلاً ${firstName} 👋`,
+    'استلمنا طلبك من WIND Shopping بنجاح. يرجى التأكيد في آخر الرسالة',
+    '',
+    'تفاصيل الطلب 📦',
+    '',
   ];
 
+  if (arrivalText) lines.push(`📅 التاريخ المتوقع للوصول: ${arrivalText}`);
+  lines.push(
+    `💰 الإجمالي: ${total} ج.م شامل الشحن`,
+    `💻 رقم الطلب: ${orderLabel}`,
+    `🧮 عدد القطع: ${pieceCount}`
+  );
+
+  const itemLines = [];
   for (const item of items) {
     const itemName = String(item?.name || item?.title || '').trim();
     if (!itemName) continue;
     const qty = Number(item?.quantity ?? item?.qty) || 1;
     const gift = item?.isFree === true ? ' (هدية)' : '';
-    lines.push(`- ${itemName} × ${qty}${gift}`);
+    const color = String(item?.selectedColor || item?.color || '').trim();
+    const colorPart = color && !itemName.includes(color) ? ` - اللون: ${color}` : '';
+    itemLines.push(`${itemName}${colorPart} x ${qty}${gift}`);
+  }
+  if (itemLines.length > 0) {
+    lines.push('📄 المنتجات:', ...itemLines);
   }
 
-  lines.push(`الإجمالي: ${total} جنيه شامل الشحن`);
+  // سطر ثابت بطلب صاحب المتجر (Telegram 20013927).
+  lines.push('🔓 إمكانية فتح الشحنة: نعم');
 
-  if (address) lines.push(`العنوان: ${address}`);
-  if (arrivalText) lines.push(`الوصول المتوقع: ${arrivalText}`);
+  if (address) lines.push(`🏡 العنوان: ${address}`);
+
+  if (trackUrl) {
+    lines.push('', `تقدر تزور ${trackUrl} علشان تتابع طلبك`);
+  }
 
   lines.push(
     '',
@@ -113,10 +140,6 @@ export function buildOrderConfirmationMessage({
     'رد بـ 2 للإلغاء',
     'رد بـ 3 لتغيير الموعد'
   );
-
-  if (trackUrl) {
-    lines.push('', 'تقدر تتابع طلبك من هنا:', trackUrl);
-  }
 
   return lines.join('\n');
 }

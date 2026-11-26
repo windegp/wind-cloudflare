@@ -97,37 +97,46 @@ describe('normalizeWhatsAppPhone', () => {
 
 describe('buildOrderConfirmationMessage', () => {
   const message = buildOrderConfirmationMessage({
-    name: 'منة',
+    name: 'ياسمين أحمد',
     orderLabel: '#1042',
     items: [
-      { name: 'بلوفر أوفر سايز - black / One Size', quantity: 2 },
+      { name: 'بلوفر نسائي بياقة عالية - Brown / [ 55 : 95kg ]', quantity: 1, selectedColor: 'Brown' },
+      { name: 'بلوفر نسائي بياقة عالية', quantity: 1, selectedColor: 'Jeans Blue' },
       { name: 'هدية صغيرة', quantity: 1, isFree: true },
     ],
-    total: '1,050',
-    address: '15 شارع التحرير، الدقي، الجيزة',
-    arrivalText: 'من الإثنين 30 نوفمبر إلى الأربعاء 2 ديسمبر',
+    total: '826',
+    address: 'المقطم منطقة جنوب س عمارة 8592، القاهرة',
+    arrivalText: 'من السبت 10 يناير إلى الإثنين 12 يناير',
     trackUrl: 'https://windeg.com/track-order?order=1042#p=01012345678',
   });
 
-  it('includes name, order number, items, total, address and arrival', () => {
-    expect(message).toContain('أهلًا منة');
-    expect(message).toContain('رقم الأوردر: #1042');
-    expect(message).toContain('- بلوفر أوفر سايز - black / One Size × 2');
-    expect(message).toContain('(هدية)');
-    expect(message).toContain('الإجمالي: 1,050 جنيه شامل الشحن');
-    expect(message).toContain('العنوان: 15 شارع التحرير، الدقي، الجيزة');
-    expect(message).toContain('الوصول المتوقع: من الإثنين 30 نوفمبر إلى الأربعاء 2 ديسمبر');
+  it('greets with the first name and the chosen intro', () => {
+    expect(message).toContain('أهلاً ياسمين 👋');
+    expect(message).toContain('استلمنا طلبك من WIND Shopping بنجاح. يرجى التأكيد في آخر الرسالة');
+    expect(message).toContain('تفاصيل الطلب 📦');
   });
 
-  it('includes the numbered reply instructions', () => {
+  it('lists arrival, total, order number, piece count and items', () => {
+    expect(message).toContain('📅 التاريخ المتوقع للوصول: من السبت 10 يناير إلى الإثنين 12 يناير');
+    expect(message).toContain('💰 الإجمالي: 826 ج.م شامل الشحن');
+    expect(message).toContain('💻 رقم الطلب: #1042');
+    expect(message).toContain('🧮 عدد القطع: 3');
+    expect(message).toContain('📄 المنتجات:');
+    expect(message).toContain('بلوفر نسائي بياقة عالية - Brown / [ 55 : 95kg ] x 1');
+    expect(message).toContain('بلوفر نسائي بياقة عالية - اللون: Jeans Blue x 1');
+    expect(message).toContain('(هدية)');
+    expect(message).toContain('🔓 إمكانية فتح الشحنة: نعم');
+    expect(message).toContain('🏡 العنوان: المقطم منطقة جنوب س عمارة 8592، القاهرة');
+  });
+
+  it('ends with the visit-to-track line and the numbered confirm replies', () => {
+    expect(message).toContain('تقدر تزور https://windeg.com/track-order?order=1042#p=01012345678 علشان تتابع طلبك');
+    expect(message).not.toContain('ادفع اونلاين');
     expect(message).toContain('رد بـ 1 للتأكيد');
     expect(message).toContain('رد بـ 2 للإلغاء');
     expect(message).toContain('رد بـ 3 لتغيير الموعد');
-  });
-
-  it('includes the tracking link and a trailing note', () => {
-    expect(message).toContain('تقدر تتابع طلبك من هنا:');
-    expect(message).toContain('https://windeg.com/track-order?order=1042#p=01012345678');
+    // التأكيد في آخر الرسالة فعلاً
+    expect(message.trimEnd().endsWith('رد بـ 3 لتغيير الموعد')).toBe(true);
   });
 });
 
