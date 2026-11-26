@@ -7,6 +7,7 @@ import {
   formatArrivalWindow,
   normalizeWhatsAppPhone,
   buildOrderConfirmationMessage,
+  buildTrackOrderUrl,
   buildWhatsAppUrl,
 } from '@/lib/whatsappConfirmation';
 
@@ -104,6 +105,7 @@ describe('buildOrderConfirmationMessage', () => {
     total: '1,050',
     address: '15 شارع التحرير، الدقي، الجيزة',
     arrivalText: 'من الإثنين 30 نوفمبر إلى الأربعاء 2 ديسمبر',
+    trackUrl: 'https://windeg.com/track-order?order=1042#p=01012345678',
   });
 
   it('includes name, order number, items, total, address and arrival', () => {
@@ -120,6 +122,29 @@ describe('buildOrderConfirmationMessage', () => {
     expect(message).toContain('رد بـ 1 للتأكيد');
     expect(message).toContain('رد بـ 2 للإلغاء');
     expect(message).toContain('رد بـ 3 لتغيير الموعد');
+  });
+
+  it('includes the tracking link and a trailing note', () => {
+    expect(message).toContain('تقدر تتابع طلبك من هنا:');
+    expect(message).toContain('https://windeg.com/track-order?order=1042#p=01012345678');
+  });
+});
+
+describe('buildTrackOrderUrl', () => {
+  it('builds the same URL shape as the order email, phone in the fragment', () => {
+    expect(buildTrackOrderUrl('#1042', '0101 234 5678')).toBe(
+      'https://windeg.com/track-order?order=1042#p=01012345678'
+    );
+  });
+
+  it('keeps legacy WIND ids and omits an empty phone fragment', () => {
+    expect(buildTrackOrderUrl('WIND-D-123e4567-e89b-42d3-a456-426614174000', '')).toBe(
+      'https://windeg.com/track-order?order=WIND-D-123e4567-e89b-42d3-a456-426614174000'
+    );
+  });
+
+  it('returns null without an order number', () => {
+    expect(buildTrackOrderUrl('', '01012345678')).toBeNull();
   });
 });
 

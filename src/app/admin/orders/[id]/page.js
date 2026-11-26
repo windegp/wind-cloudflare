@@ -5,23 +5,13 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { getDb } from "@/lib/firebase";
 import { doc, getDoc, collection, query, where, getDocs, updateDoc } from "firebase/firestore/lite";
-import { FULFILLMENT_OPTIONS, PAYMENT_OPTIONS, paymentOptionLabel, canEditPayment, paymentPatchForFulfillment, normalizeFulfillment } from "@/lib/fulfillmentStatus";
 import { getCairoTimestamp } from "@/lib/analytics-helpers";
-import { buildOrderConfirmationMessage, buildWhatsAppUrl, formatArrivalWindow } from "@/lib/whatsappConfirmation";
+import { buildOrderConfirmationMessage, buildTrackOrderUrl, buildWhatsAppUrl, formatArrivalWindow } from "@/lib/whatsappConfirmation";
 import { ArrowRight, Package, User, MapPin, Printer, Phone, MessageCircle } from '@/components/icons-extra';
 
 export const dynamic = 'force-dynamic';
 
 // Class names live here (not in src/lib) because Tailwind only scans src/app and src/components.
-const FULFILLMENT_COLORS = {
-  unfulfilled: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-  prepared: 'bg-blue-100 text-blue-700 border-blue-200',
-  shipped: 'bg-indigo-100 text-indigo-700 border-indigo-200',
-  delivered: 'bg-green-100 text-green-700 border-green-200',
-  returned: 'bg-orange-100 text-orange-700 border-orange-200',
-  cancelled: 'bg-red-100 text-red-700 border-red-200',
-};
-
 const toAmount = (value) => {
   const parsed = Number(
     String(value ?? 0)
@@ -122,42 +112,6 @@ const formatDate = (value) => {
   }
 };
 
-const getPaymentStatus = (status, method) => {
-  const value = String(status || '').toLowerCase();
-
-  const statuses = {
-    paid: ['مدفوع', 'bg-green-100 text-green-700 border-green-200'],
-    pending: [({ instapay: 'بانتظار تأكيد التحويل', cod: 'الدفع عند الاستلام' })[String(method || '').toLowerCase()] || 'بانتظار الدفع', 'bg-orange-100 text-orange-700 border-orange-200'],
-    pending_payment: ['بانتظار الدفع الإلكتروني', 'bg-blue-100 text-blue-700 border-blue-200'],
-    abandoned: ['سلة متروكة', 'bg-gray-100 text-gray-600 border-gray-200'],
-    refunded: ['تم رد المبلغ', 'bg-red-100 text-red-700 border-red-200'],
-    partially_paid: ['مدفوع جزئياً', 'bg-blue-100 text-blue-700 border-blue-200'],
-    voided: ['ملغي مالياً', 'bg-red-100 text-red-700 border-red-200'],
-    authorized: ['تم اعتماد الدفع', 'bg-blue-100 text-blue-700 border-blue-200']
-  };
-
-  return statuses[value] || [
-    status || 'غير مسجل',
-    'bg-gray-100 text-gray-600 border-gray-200'
-  ];
-};
-
-const getFulfillmentStatus = (status) => {
-  const value = String(status || '').toLowerCase();
-
-  const statuses = {
-    fulfilled: ['تم التجهيز والشحن', 'bg-green-100 text-green-700 border-green-200'],
-    unfulfilled: ['لم يتم التجهيز', 'bg-yellow-100 text-yellow-700 border-yellow-200'],
-    partial: ['تجهيز جزئي', 'bg-blue-100 text-blue-700 border-blue-200'],
-    partially_fulfilled: ['تجهيز جزئي', 'bg-blue-100 text-blue-700 border-blue-200']
-  };
-
-  return statuses[value] || [
-    'حالة التجهيز غير مسجلة',
-    'bg-gray-100 text-gray-600 border-gray-200'
-  ];
-};
-
 const paymentMethodLabel = (method) => {
   const methods = {
     card: 'بطاقة ائتمان',
@@ -176,48 +130,6 @@ export default function OrderDetailsPage() {
   const [productsList, setProductsList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [orderDocId, setOrderDocId] = useState(null);
-  const [savingStatus, setSavingStatus] = useState(false);
-
-  const changeFulfillment = async (value) => {
-    if (!orderDocId || savingStatus) return;
-    const label = FULFILLMENT_OPTIONS.find((o) => o.value === value)?.label || value;
-    if ((value === 'cancelled' || value === 'returned') &&
-        !window.confirm(`تأكيد تغيير حالة الطلب إلى "${label}"؟ لن يتم تعديل المخزون ولا الإحصائيات.`)) return;
-    setSavingStatus(true);
-    try {
-      const payPatch = paymentPatchForFulfillment(order, value);
-      await updateDoc(doc(getDb(), "Orders", orderDocId), {
-        "Fulfillment Status": value,
-        ...payPatch,
-        "Status Updated At": getCairoTimestamp(),
-      });
-      setOrder((prev) => ({ ...prev, "Fulfillment Status": value, ...payPatch }));
-    } catch (e) {
-      console.error("Failed to update fulfillment status:", e);
-      alert("تعذر حفظ الحالة. حاول تاني.");
-    } finally {
-      setSavingStatus(false);
-    }
-  };
-
-  const changePayment = async (value) => {
-    if (!orderDocId || savingStatus || !canEditPayment(order)) return;
-    const label = PAYMENT_OPTIONS.find((o) => o.value === value)?.label || value;
-    if (value === 'refunded' && !window.confirm(`تأكيد تغيير حالة الدفع إلى "${label}"؟ لن يتم تعديل الإحصائيات.`)) return;
-    setSavingStatus(true);
-    try {
-      await updateDoc(doc(getDb(), "Orders", orderDocId), {
-        "Financial Status": value,
-        "Status Updated At": getCairoTimestamp(),
-      });
-      setOrder((prev) => ({ ...prev, "Financial Status": value }));
-    } catch (e) {
-      console.error("Failed to update payment status:", e);
-      alert("تعذر حفظ حالة الدفع. حاول تاني.");
-    } finally {
-      setSavingStatus(false);
-    }
-  };
 
   useEffect(() => {
     if (id) fetchOrderDetails();
@@ -351,21 +263,6 @@ export default function OrderDetailsPage() {
   const isWind = order.data_source === 'WIND_Web';
   const isAbandoned = String(order['Financial Status'] || '').toLowerCase() === 'abandoned';
 
-  const paymentStatus = getPaymentStatus(order['Financial Status'], order['Payment Method']);
-
-  const fulfillmentRaw =
-    order['Fulfillment Status'] ||
-    order.fulfillment_status ||
-    order['Fulfillment'];
-
-  const fulfillmentValue = normalizeFulfillment(fulfillmentRaw) || 'unfulfilled';
-  const fulfillmentStatus = getFulfillmentStatus(fulfillmentRaw);
-  const fulfillmentOption = FULFILLMENT_OPTIONS.find((o) => o.value === fulfillmentValue);
-  if (fulfillmentOption) {
-    fulfillmentStatus[0] = fulfillmentOption.label;
-    fulfillmentStatus[1] = FULFILLMENT_COLORS[fulfillmentOption.value];
-  }
-
   const itemsSubtotal = order.Subtotal != null
     ? toAmount(order.Subtotal)
     : productsList.reduce(
@@ -466,6 +363,7 @@ export default function OrderDetailsPage() {
       order['Shipping Province']
     ].filter(Boolean).join('، '),
     arrivalText,
+    trackUrl: buildTrackOrderUrl(orderDisplayLabel(order, id), customerPhone),
   });
   const whatsappUrl = buildWhatsAppUrl(customerPhone, whatsappMessage);
 
@@ -516,14 +414,6 @@ export default function OrderDetailsPage() {
                   {orderDisplayLabel(order, id)}
                 </h1>
 
-                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-md border ${paymentStatus[1]}`}>
-                  {paymentStatus[0]}
-                </span>
-
-                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-md border ${fulfillmentStatus[1]}`}>
-                  {fulfillmentStatus[0]}
-                </span>
-
                 {isWind && (
                   <span className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-gray-100 text-gray-600 border border-gray-200">
                     WIND Web
@@ -534,15 +424,35 @@ export default function OrderDetailsPage() {
               <p className="text-xs text-gray-500 mt-1">
                 تاريخ الطلب: {formatDate(order['Created at'])}
               </p>
-              {arrivalText && (
-                <p className="text-xs text-gray-500 mt-1">
-                  الوصول المتوقع: {arrivalText} (3-5 أيام بدون الجمعة)
-                </p>
-              )}
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {whatsappConfirmedAt ? (
+              <div className="flex items-center gap-2 px-4 py-2.5 bg-green-50 border border-green-200 rounded-lg">
+                <MessageCircle size={16} className="text-green-700" />
+                <div>
+                  <p className="text-xs font-bold text-green-700">تم التأكيد برسالة واتساب</p>
+                  <p className="text-[10px] text-green-600">{formatDate(whatsappConfirmedAt)}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={sendWhatsAppConfirmation}
+                  className="text-[11px] font-bold text-blue-700 hover:underline mr-1"
+                >
+                  إرسال مرة أخرى
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={sendWhatsAppConfirmation}
+                className="flex items-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-bold transition-colors"
+              >
+                <MessageCircle size={16} />
+                تأكيد عبر واتساب
+              </button>
+            )}
             <button
               onClick={() => window.print()}
               className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-300 rounded-lg text-sm font-bold text-gray-700 hover:bg-gray-50"
@@ -552,48 +462,6 @@ export default function OrderDetailsPage() {
             </button>
           </div>
         </div>
-
-        {/* تغيير الحالة: بطاقة واضحة فوق التفاصيل */}
-        {!isAbandoned && (
-          <div className="bg-white border border-gray-200 rounded-xl p-4 mb-5 grid grid-cols-1 sm:grid-cols-2 gap-4 print:hidden">
-            <label className="flex flex-col gap-1.5">
-              <span className="text-xs font-bold text-gray-500">حالة التجهيز</span>
-              <select
-                value={fulfillmentValue}
-                onChange={(e) => changeFulfillment(e.target.value)}
-                disabled={savingStatus}
-                aria-label="تغيير حالة الطلب"
-                className="text-sm font-bold border border-gray-300 rounded-lg px-3 py-2.5 bg-white disabled:opacity-50"
-              >
-                {FULFILLMENT_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-            </label>
-            {canEditPayment(order) ? (
-              <label className="flex flex-col gap-1.5">
-                <span className="text-xs font-bold text-gray-500">حالة الدفع</span>
-                <select
-                  value={String(order['Financial Status'] || '').toLowerCase()}
-                  onChange={(e) => changePayment(e.target.value)}
-                  disabled={savingStatus}
-                  aria-label="تغيير حالة الدفع"
-                  className="text-sm font-bold border border-gray-300 rounded-lg px-3 py-2.5 bg-white disabled:opacity-50"
-                >
-                  {PAYMENT_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>{paymentOptionLabel(o.value, order['Payment Method'])}</option>
-                  ))}
-                </select>
-              </label>
-            ) : (
-              <div className="flex flex-col gap-1.5">
-                <span className="text-xs font-bold text-gray-500">حالة الدفع</span>
-                <span className={`self-start text-sm font-bold px-3 py-2 rounded-lg border ${paymentStatus[1]}`}>{paymentStatus[0]}</span>
-                <span className="text-[11px] text-gray-400">طلبات الكارت بتتحدث من كاشير تلقائياً</span>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* تنبيه السلة المتروكة */}
         {isAbandoned && (
@@ -623,10 +491,6 @@ export default function OrderDetailsPage() {
                     المنتجات والكميات والأصناف المختارة
                   </p>
                 </div>
-
-                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-md border ${fulfillmentStatus[1]}`}>
-                  {fulfillmentStatus[0]}
-                </span>
               </div>
 
               <div className="p-4 sm:p-5">
@@ -771,13 +635,6 @@ export default function OrderDetailsPage() {
                 <div className="border-t border-gray-200 pt-4 mt-2 flex justify-between items-center gap-4">
                   <span className="text-base font-black text-gray-900">الإجمالي</span>
                   <span className="text-xl font-black text-gray-900">{money(totalAmount)}</span>
-                </div>
-
-                <div className="border-t border-gray-100 pt-3 flex flex-wrap justify-between gap-3 text-xs">
-                  <span className="text-gray-500">حالة الدفع</span>
-                  <span className={`font-bold px-2.5 py-1 rounded-md border ${paymentStatus[1]}`}>
-                    {paymentStatus[0]}
-                  </span>
                 </div>
 
                 <div className="flex justify-between gap-4 text-xs">
@@ -935,37 +792,6 @@ export default function OrderDetailsPage() {
                       <CopyButton value={alternatePhone} label="الهاتف البديل" />
                     </div>
                   </div>
-                )}
-              </div>
-
-              {/* تأكيد الطلب عبر واتساب */}
-              <div className="mt-4 pt-3 border-t border-gray-100">
-                {whatsappConfirmedAt ? (
-                  <div>
-                    <p className="text-xs font-bold text-green-700 flex items-center gap-1.5">
-                      <MessageCircle size={14} />
-                      تم التأكيد برسالة واتساب
-                    </p>
-                    <p className="text-[11px] text-gray-400 mt-1">
-                      {formatDate(whatsappConfirmedAt)}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={sendWhatsAppConfirmation}
-                      className="mt-2 text-[11px] font-bold text-blue-700 hover:underline"
-                    >
-                      إرسال مرة أخرى
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={sendWhatsAppConfirmation}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-bold transition-colors"
-                  >
-                    <MessageCircle size={16} />
-                    تأكيد الطلب عبر واتساب
-                  </button>
                 )}
               </div>
             </section>
