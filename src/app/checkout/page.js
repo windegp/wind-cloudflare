@@ -7,6 +7,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useCart } from "../../context/CartContext";
 import { usePathname } from 'next/navigation';
 import { resolveLiveSubscriberDisplay } from "@/lib/subscriberDiscount";
+import { cartMatchesRecoveryItems } from "@/lib/cartRecovery";
 import { usePageReady, useGlobalLoader } from "../../context/GlobalLoaderContext";
 import { useRouter } from 'next/navigation';
 import Link from "next/link";
@@ -498,6 +499,40 @@ export default function CheckoutPage() {
   }
   const activeOrderId = activeOrderIdRef.current;
 
+  // ── استرجاع سلة متروكة بتوكن سري (لينك واتساب) ─────────────────────
+  // العلامة بتتخزن في localStorage بواسطة CartRestore. التكريم الفعلي
+  // للأسعار بيتم على السيرفر؛ هنا بنمرّر التوكن بس مع طلبات التسعير.
+  const [cartRecovery, setCartRecovery] = useState(null);
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem("wind_cart_recovery");
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (parsed?.token && Array.isArray(parsed?.items) && Date.parse(parsed.expiresAt || "") > Date.now()) {
+        setCartRecovery(parsed);
+      } else {
+        window.localStorage.removeItem("wind_cart_recovery");
+      }
+    } catch { /* تخزين تالف: نتجاهل */ }
+  }, []);
+
+  // العلامة صالحة بس لو السلة الحالية مطابقة للقطة والعميل ماكتبش كود مختلف.
+  // أي اختلاف بيمسح العلامة ويرجّع التسعير الحالي تلقائياً.
+  const activeRecovery = (() => {
+    if (!cartRecovery) return null;
+    if (!cartMatchesRecoveryItems(cartItems, cartRecovery.items)) return null;
+    const typedCode = String(appliedPromo?.code || "").trim().toUpperCase();
+    if (typedCode && typedCode !== String(cartRecovery.promoCode || "").trim().toUpperCase()) return null;
+    return cartRecovery;
+  })();
+
+  useEffect(() => {
+    if (cartRecovery && !activeRecovery) {
+      setCartRecovery(null);
+      try { window.localStorage.removeItem("wind_cart_recovery"); } catch { /* ignore */ }
+    }
+  }, [cartRecovery, activeRecovery]);
+
   // ── عرض خصم المشتركين قبل تأكيد الطلب ─────────────────────────
   // للعرض فقط: السيرفر بيحسب الخصم الحقيقي عند التأكيد، وده اللي بيتعتمد دايماً.
   const [subscriptionRevision, setSubscriptionRevision] = useState(0);
@@ -512,7 +547,7 @@ export default function CheckoutPage() {
   const livePhoneDigits = String(formData.phone || '').replace(/\D/g, '');
   const liveEligibleInput = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(liveEmail) && livePhoneDigits.length >= 11;
 
-  const quoteInputKey = JSON.stringify([liveEmail, formData.phone, formData.governorate, cartItems, customerChoiceGiftSelections, offerGiftSelections, appliedPromo?.code, pathname, subscriptionRevision]);
+  const quoteInputKey = JSON.stringify([liveEmail, formData.phone, formData.governorate, cartItems, customerChoiceGiftSelections, offerGiftSelections, appliedPromo?.code, pathname, subscriptionRevision, activeRecovery?.token || ""]);
   const currentLiveQuote = liveQuote?.inputKey === quoteInputKey ? liveQuote.quote : null;
   useEffect(() => {
     const seq = ++liveQuoteSeq.current;
@@ -541,12 +576,13 @@ export default function CheckoutPage() {
             customerEmail: liveEmail,
             customerPhone: formData.phone,
             governorate: formData.governorate,
+            recoveryToken: activeRecovery?.token || "",
           }),
         }, 10000, "");
         const data = await res.json();
         if (seq !== liveQuoteSeq.current) return; // نتيجة قديمة
         if (res.ok && data?.success && data.quote) {
-          setLiveQuote({ inputKey: quoteInputKey, quote: data.quote });
+          setLiveQuote({ inputKey: quoteInputKey, quote: data.quote, quoteToken: data.quoteToken || "" });
         }
       } catch (_) {
         // فشل صامت: العميل مايشوفش خطأ، والخصم هيتحسب عند التأكيد.
@@ -774,6 +810,38 @@ export default function CheckoutPage() {
     }
         }, [formData, cartItems, finalTotal, subtotal, discount, shipping, appliedPromo, isFirstOrder, shippingSettings, activeOrderId]);
 
+  // ── حفظ لقطة السلة على السيرفر (لينك الاسترجاع بتوكن سري) ──────────
+  // بنبعت توكن التسعير الموقّع اللي السيرفر نفسه أصدره، فاللقطة المحفوظة
+  // بتحمل تسعير السيرفر مش أي بيانات من المتصفح. التوكن بيتخزن في مستند
+  // الطلب عشان صفحة الأدمن تبني بيه لينك الاسترجاع.
+  const lastRecoverySavedTokenRef = useRef("");
+  useEffect(() => {
+    if (durableCheckout) return; // نفس نطاق التقاط السلة المتروكة الحالي
+    if (activeRecovery) return; // جلسة مسترجعة: اللقطة الأصلية هي المرجع
+    if (!liveEligibleInput || cartItems.length === 0) return;
+    if (isOrderSubmittedRef.current) return;
+    if (!currentLiveQuote || !liveQuote?.quoteToken) return;
+    if (lastRecoverySavedTokenRef.current === liveQuote.quoteToken) return;
+    lastRecoverySavedTokenRef.current = liveQuote.quoteToken;
+
+    (async () => {
+      try {
+        const res = await fetch("/api/cart-recovery-save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderId: activeOrderId, quoteToken: liveQuote.quoteToken }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data?.token) {
+          await setDoc(doc(getDb(), "Orders", activeOrderId), { recoveryToken: data.token }, { merge: true });
+        }
+      } catch (_) {
+        // فشل صامت: الاسترجاع ميزة إضافية ومش لازم يأثر على الشيك آوت.
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentLiveQuote, liveEligibleInput, cartItems.length, durableCheckout, activeOrderId, activeRecovery]);
+
   const validate = () => {
     let tempErrors = {};
     if (!formData.email) tempErrors.email = true;
@@ -866,6 +934,7 @@ export default function CheckoutPage() {
           customerEmail: formData.email,
           customerPhone: formData.phone,
           governorate: formData.governorate,
+          recoveryToken: activeRecovery?.token || "",
         }),
       }, 20000, "تأكيد الأسعار أخد وقت أطول من المعتاد. تأكد من الإنترنت وحاول تاني. سلتك محفوظة.");
       const quoteData = await quoteResponse.json();

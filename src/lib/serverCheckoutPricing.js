@@ -19,6 +19,8 @@ import { FREE_SHIPPING_THRESHOLD, SHIPPING_COST } from "@/lib/constants";
 import { firestoreAdminGet } from "@/lib/firestoreAdmin";
 import { computeSubscriberDiscountAmount, normalizeSubscriberSettings } from "@/lib/subscriberDiscount";
 import { isFreeShippingThresholdMet } from "@/lib/shippingCalculations";
+import { getCartRecovery } from "@/lib/cartRecoveryStore";
+import { cartMatchesRecoveryItems, giftSelectionsMatch, isRecoveryActive } from "@/lib/cartRecovery";
 
 const MAX_CART_LINES = 50;
 const MAX_QTY_PER_LINE = 100;
@@ -499,9 +501,53 @@ export async function getSubscriberDiscountOffer({ promotions, email, phone, isF
  * Calculates checkout prices exclusively from current Firestore product,
  * offer, promo-code and site-settings data. Client-supplied prices are ignored.
  */
+/**
+ * استرجاع سلة متروكة بتوكن سري: لو اللقطة المحفوظة على السيرفر لسه في شباك
+ * الـ ٧٢ ساعة والسلة الحالية مطابقة ليها والمنتجات لسه موجودة، نرجّع نفس
+ * التسعير الموقّع وقت التخلي (أسعار + عرض + كود + شحن) بدل الأسعار الحالية.
+ * أي اختلاف أو مشكلة بيرجّع null فيكمل التسعير العادي بالأسعار الحالية.
+ */
+async function resolveRecoveredCartQuote(db, input) {
+  if (typeof input.recoveryToken !== "string" || !input.recoveryToken.trim()) return null;
+
+  let recovery = null;
+  try {
+    recovery = await getCartRecovery(input.recoveryToken);
+  } catch {
+    // التخزين مش متاح: نسعّر عادي بدل ما نعطّل الشيك آوت.
+    return null;
+  }
+  if (!recovery || !isRecoveryActive(recovery)) return null;
+
+  const snapshotQuote = recovery.quote;
+
+  // كود مكتوب دلوقتي مختلف عن كود اللقطة: التسعير الحالي يتطبق بالكود الجديد.
+  const inputCode = String(input.promoCode || "").trim().toUpperCase();
+  const snapshotCode = String(snapshotQuote.appliedPromo?.code || "").trim().toUpperCase();
+  if (inputCode && inputCode !== snapshotCode) return null;
+
+  if (!cartMatchesRecoveryItems(input.cartItems, snapshotQuote.cartItems)) return null;
+  if (!giftSelectionsMatch(input.customerChoiceGiftSelections, snapshotQuote.customerChoiceGiftSelections)) return null;
+
+  // لازم كل منتج في اللقطة يكون لسه موجود وبنفس المقاس/اللون المتاح.
+  try {
+    for (const item of (snapshotQuote.cartItems || []).slice(0, MAX_CART_LINES)) {
+      const product = await getProductByIdentifier(db, item);
+      if (!matchesVariant(product, item)) return null;
+    }
+  } catch {
+    return null;
+  }
+
+  return { ...snapshotQuote, recoveredFromCart: true };
+}
+
 export async function createServerCheckoutQuote(input = {}) {
   const db = getDb();
   const now = new Date();
+
+  const recoveredQuote = await resolveRecoveredCartQuote(db, input);
+  if (recoveredQuote) return recoveredQuote;
   const customer = {
     email: String(input.customerEmail || "").trim().toLowerCase(),
     phone: String(input.customerPhone || "").trim(),
