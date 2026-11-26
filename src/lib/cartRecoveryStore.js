@@ -19,19 +19,28 @@ function generateToken() {
 export async function saveCartRecovery({ orderId, quote, now = () => new Date() }) {
   const existing = await serverOrderStore.get(CART_RECOVERY_ORDER_COLLECTION, orderId);
   const existingToken = existing?.data?.token;
-  const token = isValidRecoveryToken(existingToken) ? existingToken.trim() : generateToken();
+  const hasValidToken = isValidRecoveryToken(existingToken);
+  const token = hasValidToken ? existingToken.trim() : generateToken();
   const timestamp = now().toISOString();
+
+  // commit يرفض أي كتابة بدون precondition: create لمستند جديد أو version
+  // لمستند موجود (ORDER_PRECONDITION_REQUIRED).
+  const existingRecovery = hasValidToken
+    ? await serverOrderStore.get(CART_RECOVERY_COLLECTION, token)
+    : null;
 
   await serverOrderStore.commit([
     {
       collection: CART_RECOVERY_ORDER_COLLECTION,
       id: orderId,
       data: { token, updatedAt: timestamp },
+      ...(existing ? { version: existing.version } : { create: true }),
     },
     {
       collection: CART_RECOVERY_COLLECTION,
       id: token,
       data: { orderId, quote, anchor: timestamp, updatedAt: timestamp },
+      ...(existingRecovery ? { version: existingRecovery.version } : { create: true }),
     },
   ]);
 
