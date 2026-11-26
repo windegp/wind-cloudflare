@@ -81,6 +81,21 @@ describe("saveCartRecovery", () => {
     expect(byToken.id).toBe(existingToken);
   });
 
+  it("stores the sanitized prefill contact with the snapshot", async () => {
+    storeMocks.get.mockResolvedValue(null);
+
+    await saveCartRecovery({
+      orderId: "WIND-12345-AB",
+      quote: QUOTE,
+      contact: { firstName: "  إسلام ", phone: "01000000001", cardNumber: "4111" },
+    });
+
+    const byToken = storeMocks.commit.mock.calls[0][0].find(
+      (write) => write.collection === "WindCartRecovery"
+    );
+    expect(byToken.data.contact).toEqual({ firstName: "إسلام", phone: "01000000001" });
+  });
+
   it("replaces a malformed stored token", async () => {
     storeMocks.get.mockResolvedValue({ data: { token: "not-a-token" } });
     const token = await saveCartRecovery({ orderId: "WIND-12345-AB", quote: QUOTE });
@@ -108,6 +123,20 @@ describe("getCartRecovery", () => {
     expect(recovery.orderId).toBe("WIND-12345-AB");
     expect(recovery.anchorMs).toBe(Date.parse("2026-11-26T10:00:00.000Z"));
     expect(recovery.expiresAtMs).toBe(Date.parse("2026-11-26T10:00:00.000Z") + RECOVERY_WINDOW_MS);
+  });
+
+  it("returns the stored contact for prefill, sanitized", async () => {
+    storeMocks.get.mockResolvedValue({
+      data: {
+        orderId: "WIND-12345-AB",
+        quote: QUOTE,
+        anchor: "2026-11-26T10:00:00.000Z",
+        contact: { firstName: "إسلام", phone: "01000000001", unknown: "drop" },
+      },
+    });
+
+    const recovery = await getCartRecovery("123e4567-e89b-42d3-a456-426614174000");
+    expect(recovery.contact).toEqual({ firstName: "إسلام", phone: "01000000001" });
   });
 
   it("returns null for missing or incomplete records", async () => {

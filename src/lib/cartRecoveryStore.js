@@ -8,6 +8,7 @@ import {
   CART_RECOVERY_ORDER_COLLECTION,
   RECOVERY_WINDOW_MS,
   isValidRecoveryToken,
+  sanitizeRecoveryContact,
 } from "@/lib/cartRecovery";
 
 function generateToken() {
@@ -16,7 +17,7 @@ function generateToken() {
 
 // يحفظ (أو يحدّث) لقطة السلة لنفس رقم الطلب ويرجّع التوكن الثابت ليها.
 // كل حفظ بيحدّث اللقطة والتوقيت، فشباك الـ ٧٢ ساعة يبدأ من آخر نشاط للعميل.
-export async function saveCartRecovery({ orderId, quote, now = () => new Date() }) {
+export async function saveCartRecovery({ orderId, quote, contact, now = () => new Date() }) {
   const existing = await serverOrderStore.get(CART_RECOVERY_ORDER_COLLECTION, orderId);
   const existingToken = existing?.data?.token;
   const hasValidToken = isValidRecoveryToken(existingToken);
@@ -39,7 +40,14 @@ export async function saveCartRecovery({ orderId, quote, now = () => new Date() 
     {
       collection: CART_RECOVERY_COLLECTION,
       id: token,
-      data: { orderId, quote, anchor: timestamp, updatedAt: timestamp },
+      data: {
+        orderId,
+        quote,
+        // بيانات تواصل كتبها العميل بنفسه للتعبئة فقط (غير موثوقة للتسعير).
+        contact: sanitizeRecoveryContact(contact),
+        anchor: timestamp,
+        updatedAt: timestamp,
+      },
       ...(existingRecovery ? { version: existingRecovery.version } : { create: true }),
     },
   ]);
@@ -58,6 +66,7 @@ export async function getCartRecovery(token) {
   return {
     orderId: typeof record.data.orderId === "string" ? record.data.orderId : "",
     quote,
+    contact: sanitizeRecoveryContact(record.data.contact),
     anchorMs,
     expiresAtMs: anchorMs + RECOVERY_WINDOW_MS,
   };

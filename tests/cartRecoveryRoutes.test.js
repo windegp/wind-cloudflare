@@ -66,7 +66,50 @@ describe("POST /api/cart-recovery-save", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ success: true, token: TOKEN });
     expect(tokenMocks.verifyCheckoutQuote).toHaveBeenCalledWith("signed", "WIND-12345-AB");
-    expect(storeMocks.saveCartRecovery).toHaveBeenCalledWith({ orderId: "WIND-12345-AB", quote: QUOTE });
+    expect(storeMocks.saveCartRecovery).toHaveBeenCalledWith({ orderId: "WIND-12345-AB", quote: QUOTE, contact: null });
+  });
+
+  it("sanitizes browser-supplied contact data and stores it for prefill only", async () => {
+    tokenMocks.verifyCheckoutQuote.mockResolvedValue(QUOTE);
+    storeMocks.saveCartRecovery.mockResolvedValue(TOKEN);
+
+    const response = await savePOST(
+      makeRequest(
+        {
+          orderId: "WIND-12345-AB",
+          quoteToken: "signed",
+          contact: {
+            firstName: "  إسلام  ",
+            phone: "01000000001",
+            address: "ع".repeat(500),
+            cardNumber: "4111111111111111", // حقل غير معروف يتشال
+          },
+        },
+        "https://windeg.com/api/cart-recovery-save"
+      )
+    );
+
+    expect(response.status).toBe(200);
+    const saved = storeMocks.saveCartRecovery.mock.calls[0][0];
+    expect(saved.contact).toEqual({
+      firstName: "إسلام",
+      phone: "01000000001",
+      address: "ع".repeat(200),
+    });
+  });
+
+  it("stores nothing when contact has no usable fields", async () => {
+    tokenMocks.verifyCheckoutQuote.mockResolvedValue(QUOTE);
+    storeMocks.saveCartRecovery.mockResolvedValue(TOKEN);
+
+    await savePOST(
+      makeRequest(
+        { orderId: "WIND-12345-AB", quoteToken: "signed", contact: { unknown: "x", firstName: "   " } },
+        "https://windeg.com/api/cart-recovery-save"
+      )
+    );
+
+    expect(storeMocks.saveCartRecovery).toHaveBeenCalledWith({ orderId: "WIND-12345-AB", quote: QUOTE, contact: null });
   });
 
   it("rejects a quote token that does not verify", async () => {

@@ -7,6 +7,7 @@ import {
   isRecoveryActive,
   isRecoveryLinkAlive,
   isValidRecoveryToken,
+  sanitizeRecoveryContact,
   toPublicRecoveryCart,
 } from "@/lib/cartRecovery";
 
@@ -94,8 +95,36 @@ describe("recovery windows", () => {
   });
 });
 
+describe("sanitizeRecoveryContact", () => {
+  it("keeps only known fields, trimmed and capped", () => {
+    const contact = sanitizeRecoveryContact({
+      firstName: "  إسلام  ",
+      lastName: "",
+      email: "a@b.com",
+      phone: "01000000001",
+      address: "ع".repeat(500),
+      password: "secret", // حقل غير معروف يتشال
+      cardNumber: "4111111111111111",
+    });
+    expect(contact).toEqual({
+      firstName: "إسلام",
+      email: "a@b.com",
+      phone: "01000000001",
+      address: "ع".repeat(200),
+    });
+    expect(JSON.stringify(contact)).not.toContain("4111111111111111");
+    expect(JSON.stringify(contact)).not.toContain("secret");
+  });
+
+  it("returns null for empty or invalid input", () => {
+    expect(sanitizeRecoveryContact(null)).toBeNull();
+    expect(sanitizeRecoveryContact("x")).toBeNull();
+    expect(sanitizeRecoveryContact({ firstName: "   ", hacker: "y" })).toBeNull();
+  });
+});
+
 describe("toPublicRecoveryCart", () => {
-  it("returns items and summary only, never customer data", () => {
+  it("returns items, summary and sanitized prefill contact, never quote-internal identity", () => {
     const now = Date.now();
     const recovery = {
       anchorMs: now - 1000,
@@ -137,6 +166,21 @@ describe("toPublicRecoveryCart", () => {
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain("x@example.com");
     expect(serialized).not.toContain("01000000000");
+    expect(result.contact).toBeNull();
+  });
+
+  it("exposes the stored contact for checkout prefill (behind the secret token)", () => {
+    const now = Date.now();
+    const recovery = {
+      anchorMs: now - 1000,
+      expiresAtMs: now + RECOVERY_WINDOW_MS,
+      quote: { total: 100, cartItems: [{ id: "P1", qty: 1, price: 100 }] },
+      contact: { firstName: "إسلام", phone: "01000000001", address: "١٢ ش التحرير", injected: "drop-me" },
+    };
+
+    const result = toPublicRecoveryCart(recovery, now);
+    expect(result.contact).toEqual({ firstName: "إسلام", phone: "01000000001", address: "١٢ ش التحرير" });
+    expect(JSON.stringify(result)).not.toContain("drop-me");
   });
 
   it("marks the snapshot as not honored after the window", () => {

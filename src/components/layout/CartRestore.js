@@ -15,9 +15,11 @@ function cleanUrl(params) {
 
 // يقرأ لينك استرجاع السلة من رسالة واتساب:
 // - ?cart-token= : لقطة محفوظة على السيرفر. يستبدل السلة بمنتجات اللقطة ويخزّن
-//   علامة الاسترجاع، والشيك آوت بيكرّم أسعار وعروض اللقطة لو لسه في شباك الـ
-//   ٧٢ ساعة (السيرفر هو اللي بيفصل في ده). استبدال مش دمج عشان العميل يلاقي
-//   سلته زي ما سابها بالظبط، وأي تعديل بعدها بيمسح العلامة ويرجع السعر الحالي.
+//   علامة الاسترجاع وبيانات التواصل المحفوظة، ويحوّل مباشرة على صفحة الشيك آوت
+//   اللي بتتعبّي ببيانات العميل، والشيك آوت بيكرّم أسعار وعروض اللقطة لو لسه
+//   في شباك الـ ٧٢ ساعة (السيرفر هو اللي بيفصل في ده). استبدال مش دمج عشان
+//   العميل يلاقي سلته زي ما سابها بالظبط، وأي تعديل بعدها بيمسح العلامة
+//   ويرجع السعر الحالي.
 // - ?cart= : اللينك المضمّن القديم، بيدمج المنتجات في السلة زي ما هو.
 // في الحالتين بنعيد التحميل برابط نظيف عشان CartContext يقرأ النسخة الجديدة.
 export default function CartRestore() {
@@ -58,7 +60,17 @@ export default function CartRestore() {
             } else {
               localStorage.removeItem(RECOVERY_STORAGE_KEY);
             }
-            try { sessionStorage.setItem("wind_open_cart_once", "1"); } catch { /* ignore */ }
+            // بيانات التواصل اللي العميل كتبها وقت التخلي: الشيك آوت يعبّي
+            // بيها الفورم ويمسحها بعد الاستخدام. بتتخزن حتى لو شباك التكريم
+            // خلص، عشان التعبئة تفضل شغالة.
+            if (data.contact && typeof data.contact === "object") {
+              localStorage.setItem(
+                "wind_cart_recovery_contact",
+                JSON.stringify(data.contact)
+              );
+            } else {
+              localStorage.removeItem("wind_cart_recovery_contact");
+            }
             restored = true;
           }
         } catch {
@@ -68,7 +80,10 @@ export default function CartRestore() {
         params.delete("cart-token");
         const clean = cleanUrl(params);
         if (restored) {
-          window.location.replace(clean);
+          // لينك التوكن بيفتح صفحة الشيك آوت على طول (السلة والبيانات
+          // اتحفظت في localStorage فوق)، مش الصفحة الرئيسية.
+          const target = clean.startsWith("/checkout") ? clean : "/checkout";
+          window.location.replace(target);
         } else {
           window.history.replaceState(null, "", clean);
         }
