@@ -11,6 +11,7 @@ import ScrollToTop from "./ScrollToTop";
 import { fbTrack } from "@/lib/fbTrack";
 import { ttTrack } from "@/lib/ttTrack";
 import WhatsAppWidget from "@/components/WhatsAppWidget";
+import CartRestore from "./CartRestore";
 export default function StoreLayout({ children }) {
   const pathname = usePathname();
   const isAdmin = pathname?.startsWith('/admin');
@@ -103,6 +104,7 @@ export default function StoreLayout({ children }) {
   return (
     <>
       {/* لو مش في الأدمن، اعرض الهيدر وسلة المشتريات */}
+      {!isAdmin && <CartRestore />}
       {!isAdmin && !isCheckout && <Navbar />}
       {!isAdmin && !isCheckout && <CartDrawer />}
 
