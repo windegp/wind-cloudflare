@@ -7,7 +7,7 @@ import { getDb } from "@/lib/firebase";
 import { doc, getDoc, collection, query, where, getDocs, updateDoc } from "firebase/firestore/lite";
 import { FULFILLMENT_OPTIONS, PAYMENT_OPTIONS, paymentOptionLabel, canEditPayment, paymentPatchForFulfillment, normalizeFulfillment } from "@/lib/fulfillmentStatus";
 import { getCairoTimestamp } from "@/lib/analytics-helpers";
-import { buildOrderConfirmationMessage, buildWhatsAppUrl, formatArrivalWindow } from "@/lib/whatsappConfirmation";
+import { buildOrderConfirmationMessage, buildTrackOrderUrl, buildWhatsAppUrl, formatArrivalWindow } from "@/lib/whatsappConfirmation";
 import { ArrowRight, Package, User, MapPin, Printer, Phone, MessageCircle } from '@/components/icons-extra';
 
 export const dynamic = 'force-dynamic';
@@ -466,6 +466,7 @@ export default function OrderDetailsPage() {
       order['Shipping Province']
     ].filter(Boolean).join('، '),
     arrivalText,
+    trackUrl: buildTrackOrderUrl(orderDisplayLabel(order, id), customerPhone),
   });
   const whatsappUrl = buildWhatsAppUrl(customerPhone, whatsappMessage);
 

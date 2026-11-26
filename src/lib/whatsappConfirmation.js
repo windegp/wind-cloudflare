@@ -1,6 +1,8 @@
 // منطق رسالة تأكيد الطلب عبر واتساب (يدوي من صفحة الأدمن).
 // بدون أي أسماء كلاسات هنا: Tailwind يفحص src/app و src/components فقط.
 
+import { SITE_DOMAIN } from "@/lib/constants";
+
 const WEEKDAYS_AR = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 const MONTHS_AR = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 
@@ -83,6 +85,7 @@ export function buildOrderConfirmationMessage({
   total,
   address,
   arrivalText,
+  trackUrl,
 }) {
   const lines = [
     `أهلًا ${name} 🤍`,
@@ -111,7 +114,21 @@ export function buildOrderConfirmationMessage({
     'رد بـ 3 لتغيير الموعد'
   );
 
+  if (trackUrl) {
+    lines.push('', 'تقدر تتابع طلبك من هنا:', trackUrl);
+  }
+
   return lines.join('\n');
+}
+
+// رابط تتبع الطلب: نفس صيغة رابط الإيميل، رقم الموبايل في الـ fragment فلا يصل للسيرفر.
+// صفحة التتبع تقرأ الرقمين وتعرض حالة الطلب مباشرة.
+export function buildTrackOrderUrl(orderLabel, phone) {
+  const order = String(orderLabel ?? '').trim().replace(/^#/, '');
+  if (!order) return null;
+  const trackPhone = String(phone ?? '').replace(/[^0-9+]/g, '').slice(0, 20);
+  const fragment = trackPhone ? `#p=${encodeURIComponent(trackPhone)}` : '';
+  return `https://${SITE_DOMAIN}/track-order?order=${encodeURIComponent(order)}${fragment}`;
 }
 
 // رابط wa.me جاهز للفتح، أو null لو الرقم غير صالح.
