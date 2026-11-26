@@ -9,6 +9,7 @@ import { usePathname } from 'next/navigation';
 import { resolveLiveSubscriberDisplay } from "@/lib/subscriberDiscount";
 import { cartMatchesRecoveryItems } from "@/lib/cartRecovery";
 import { countCheckoutDisplayPieces } from "@/lib/cartCalculations";
+import { consumeCompletedOrderExit } from "@/lib/completedOrderExit";
 import { usePageReady, useGlobalLoader } from "../../context/GlobalLoaderContext";
 import { useRouter } from 'next/navigation';
 import Link from "next/link";
@@ -149,6 +150,7 @@ export default function CheckoutPage() {
     offerBenefits,
     offerGiftSelections,
     customerChoiceGiftSelections,
+    cartItemsLoaded,
   } = useCart();
   
   const { signalPageReady } = usePageReady();
@@ -519,6 +521,17 @@ export default function CheckoutPage() {
       }
     } catch { /* تخزين تالف: نتجاهل */ }
   }, []);
+
+  // ── رجوع من صفحة الشكر بعد طلب مكتمل → الرئيسية ─────────────────────
+  // صفحة الشكر بتزرع علامة مرة واحدة. لو العميل رجع Back لشيك آوت فاضي
+  // بعد طلب مكتمل، نحوّله للرئيسية بدل صفحة فاضية مربكة. العلامة بتتستهلك
+  // مع أول تحميل للشيك آوت في كل الأحوال، والتحويل بيحصل بس لو السلة
+  // فاضية — لو فيها منتجات (زي لينك استرجاع السلة) بنكمل عادي.
+  useEffect(() => {
+    if (!cartItemsLoaded) return;
+    const completed = consumeCompletedOrderExit(window.sessionStorage);
+    if (completed && cartItems.length === 0) router.replace("/");
+  }, [cartItemsLoaded, cartItems.length, router]);
 
   // ── تعبئة الفورم ببيانات التواصل من لينك استرجاع السلة ─────────────
   // CartRestore خزّن البيانات اللي العميل كتبها وقت التخلي. بنعبّي الخانات

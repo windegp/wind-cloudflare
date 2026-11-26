@@ -16,6 +16,7 @@ import { getCatalogId } from "@/lib/catalogId";
 import { gaPurchase } from "@/lib/gaTrack";
 import { buildCheckoutMetaUserData } from "@/lib/metaEventData";
 import { DISPLAY_RECORD_KEY, knownPaymentMethod, parseDisplayRecord, mergeDisplayOrder, formatMoney } from "@/lib/thankYouDisplay";
+import { markCompletedOrderExit } from "@/lib/completedOrderExit";
 
 const PAYMENT_LABELS = {
   card:         { label: 'كارت / محفظة إلكترونية', icon: <CreditCard size={14} className="text-[#737373]" /> },
@@ -39,6 +40,12 @@ function SuccessContent() {
   const [displayRecord, setDisplayRecord] = useState(null);
   useEffect(() => {
     try { setDisplayRecord(parseDisplayRecord(sessionStorage.getItem(DISPLAY_RECORD_KEY), orderId)); } catch (_) {}
+  }, [orderId]);
+
+  // زرار الرجوع من هنا بعد طلب مكتمل يودّي للرئيسية، مش لشيك آوت فاضي:
+  // بنزرع علامة وصفحة الشيك آوت بتحوّل للرئيسية لو لقتها وسلة فاضية.
+  useEffect(() => {
+    if (orderId) markCompletedOrderExit(window.sessionStorage, orderId);
   }, [orderId]);
 
  useEffect(() => {

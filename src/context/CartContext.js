@@ -653,6 +653,7 @@ useEffect(() => {
 
   const contextValue = useMemo(() => ({
     cartItems,
+    cartItemsLoaded,
     offerGiftSelections,
     customerChoiceGiftSelections,
     addCustomerChoiceGift, removeCustomerChoiceGift, updateCustomerChoiceGiftVariant,
@@ -667,7 +668,7 @@ useEffect(() => {
     isFirstOrder, setIsFirstOrder,
     setSelectedGovernorate,
   }), [
-    cartItems, offerGiftSelections, customerChoiceGiftSelections,
+    cartItems, cartItemsLoaded, offerGiftSelections, customerChoiceGiftSelections,
     addCustomerChoiceGift, removeCustomerChoiceGift, updateCustomerChoiceGiftVariant,
     addToCart, removeFromCart, updateQty, updateCartItemVariant, clearCart,
     isCartOpen, toggleCart, openCart, closeCart,
