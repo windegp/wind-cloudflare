@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { getDb } from "@/lib/firebase";
 import { doc, getDoc, collection, query, where, getDocs, updateDoc } from "firebase/firestore/lite";
 import { getCairoTimestamp } from "@/lib/analytics-helpers";
-import { buildOrderConfirmationMessage, buildTrackOrderUrl, buildWhatsAppUrl, formatArrivalWindow } from "@/lib/whatsappConfirmation";
+import { buildOrderConfirmationMessage, buildTrackOrderUrl, buildWhatsAppBusinessIntentUrl, buildWhatsAppUrl, formatArrivalWindow } from "@/lib/whatsappConfirmation";
 import { ArrowRight, Package, User, MapPin, Printer, Phone, MessageCircle } from '@/components/icons-extra';
 
 export const dynamic = 'force-dynamic';
@@ -372,7 +372,16 @@ export default function OrderDetailsPage() {
       alert('رقم هاتف العميل غير صالح لواتساب. تأكد من الرقم الأول.');
       return;
     }
-    window.open(whatsappUrl, '_blank', 'noopener');
+    // على أندرويد: نفرض فتح واتساب بيزنس بالاسم حتى لو العادي هو الافتراضي.
+    const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '');
+    const businessIntentUrl = isAndroid
+      ? buildWhatsAppBusinessIntentUrl(customerPhone, whatsappMessage)
+      : null;
+    if (businessIntentUrl) {
+      window.location.href = businessIntentUrl;
+    } else {
+      window.open(whatsappUrl, '_blank', 'noopener');
+    }
     if (!orderDocId) return;
     try {
       const sentAt = getCairoTimestamp();
@@ -428,17 +437,23 @@ export default function OrderDetailsPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => window.print()}
+              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-300 rounded-lg text-sm font-bold text-gray-700 hover:bg-gray-50"
+            >
+              <Printer size={16} />
+              طباعة
+            </button>
             {whatsappConfirmedAt ? (
-              <div className="flex items-center gap-2 px-4 py-2.5 bg-green-50 border border-green-200 rounded-lg">
-                <MessageCircle size={16} className="text-green-700" />
-                <div>
-                  <p className="text-xs font-bold text-green-700">تم التأكيد برسالة واتساب</p>
-                  <p className="text-[10px] text-green-600">{formatDate(whatsappConfirmedAt)}</p>
-                </div>
+              <div className="flex items-center gap-1.5 px-3 py-2.5 bg-green-50 border border-green-200 rounded-lg text-xs font-bold text-green-700 whitespace-nowrap">
+                <MessageCircle size={15} className="shrink-0" />
+                <span>تم التأكيد برسالة واتساب</span>
+                <span className="font-medium text-green-600">{formatDate(whatsappConfirmedAt)}</span>
+                <span className="text-green-300">|</span>
                 <button
                   type="button"
                   onClick={sendWhatsAppConfirmation}
-                  className="text-[11px] font-bold text-blue-700 hover:underline mr-1"
+                  className="text-blue-700 hover:underline font-bold"
                 >
                   إرسال مرة أخرى
                 </button>
@@ -453,13 +468,6 @@ export default function OrderDetailsPage() {
                 تأكيد عبر واتساب
               </button>
             )}
-            <button
-              onClick={() => window.print()}
-              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-300 rounded-lg text-sm font-bold text-gray-700 hover:bg-gray-50"
-            >
-              <Printer size={16} />
-              طباعة
-            </button>
           </div>
         </div>
 

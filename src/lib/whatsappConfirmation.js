@@ -131,6 +131,17 @@ export function buildTrackOrderUrl(orderLabel, phone) {
   return `https://${SITE_DOMAIN}/track-order?order=${encodeURIComponent(order)}${fragment}`;
 }
 
+// رابط intent لأندرويد يفتح واتساب بيزنس (com.whatsapp.w4b) بالاسم، حتى لو واتساب العادي هو الافتراضي.
+// لو بيزنس مش متسطب على الجهاز، المتصفح يرجع تلقائيًا للينك wa.me العادي.
+// آيفون لا يدعم روابط intent: يفضل wa.me ولا يمكن إجبار التطبيق من الكود.
+export function buildWhatsAppBusinessIntentUrl(phone, message) {
+  const digits = normalizeWhatsAppPhone(phone);
+  if (!digits) return null;
+  const fallback = buildWhatsAppUrl(phone, message);
+  const text = encodeURIComponent(message);
+  return `intent://send?phone=${digits}&text=${text}#Intent;scheme=whatsapp;package=com.whatsapp.w4b;S.browser_fallback_url=${encodeURIComponent(fallback)};end`;
+}
+
 // رابط wa.me جاهز للفتح، أو null لو الرقم غير صالح.
 export function buildWhatsAppUrl(phone, message) {
   const digits = normalizeWhatsAppPhone(phone);
