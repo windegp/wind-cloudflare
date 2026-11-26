@@ -8,9 +8,9 @@ import { getGoogleAccessToken } from "./googleServiceAccount";
 // "Admin" حقيقية بتتخطى القواعد دي بالكامل — وده اللي REST API بتاع
 // Firestore بيوفره لما نستخدم access token من Service Account.
 //
-// ⚠️ القراءة (getDocs) مش محتاجة الـ helper ده، لأن قاعدة الأمان عندنا
-// فيها "allow read: if true" عامة لكل المستندات — القراءة شغالة عادي
-// بالـ Client SDK. المشكلة كانت في الكتابة/الحذف بس.
+// ⚠️ القراءة بالـ Client SDK كانت شغالة بفضل قاعدة "allow read: if true"
+// العامة. بعد إغلاق القراءة العامة، أي قراءة سيرفر لكولكشن مقفل (زي
+// adminTokens) لازم تمر من هنا بصلاحيات الـ Service Account.
 
 const FIRESTORE_SCOPE = "https://www.googleapis.com/auth/datastore";
 
@@ -96,4 +96,24 @@ export async function firestoreAdminGet(collectionPath, docId) {
     throw new Error(`Firestore admin read failed (${res.status}): ${errBody}`);
   }
   return res.json();
+}
+
+// قراءة كل مستندات كولكشن بصلاحيات Admin (تتخطى القواعد).
+// بترجع مصفوفة مستندات بصيغة REST الخام ({ name, fields, ... }).
+export async function firestoreAdminList(collectionPath) {
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  if (!projectId) throw new Error("FIREBASE_PROJECT_ID env var missing");
+
+  const accessToken = await getGoogleAccessToken(FIRESTORE_SCOPE);
+  const res = await fetch(
+    `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${collectionPath}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => "");
+    throw new Error(`Firestore admin list failed (${res.status}): ${errBody}`);
+  }
+  const body = await res.json();
+  return body.documents || [];
 }
