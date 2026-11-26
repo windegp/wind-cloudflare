@@ -31,7 +31,7 @@ export const dynamic = 'force-dynamic';
 /**
  * Query visitor_events for a date range — returns unique session count (real visitors)
  * Uses the date field (YYYY-MM-DD) which is indexed in visitor_events.
- * This is the SAME source as analytics-daily.
+ * Analytics source for the admin dashboard.
  * Do NOT use Customers.last_active for visitors — that only captures purchasers.
  */
 async function queryVisitorsFromEvents(startDateOnly, endDateOnly) {
