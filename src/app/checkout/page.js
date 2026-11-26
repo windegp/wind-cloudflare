@@ -8,6 +8,7 @@ import { useCart } from "../../context/CartContext";
 import { usePathname } from 'next/navigation';
 import { resolveLiveSubscriberDisplay } from "@/lib/subscriberDiscount";
 import { cartMatchesRecoveryItems } from "@/lib/cartRecovery";
+import { countCheckoutDisplayPieces } from "@/lib/cartCalculations";
 import { usePageReady, useGlobalLoader } from "../../context/GlobalLoaderContext";
 import { useRouter } from 'next/navigation';
 import Link from "next/link";
@@ -208,6 +209,9 @@ export default function CheckoutPage() {
         })
       : [];
   const checkoutDisplayRows = [...paidCheckoutDisplayRows, ...customerChoiceGiftCheckoutRows];
+  // عدد القطع في الملخص المقفول: من أسطر العرض نفسها عشان يعدّ القطع
+  // المجانية الإضافية (٣+١) وهدايا اختيار العميل ويطابق القايمة المفتوحة.
+  const checkoutPieceCount = countCheckoutDisplayPieces(checkoutDisplayRows);
 
   // اسم سطر الخصم في ملخص الطلب
   const discountLabel = discountSource === 'offer'
@@ -1936,13 +1940,13 @@ router.push(`/thank-you?orderId=${orderId}`);
                     className="w-full h-full object-cover rounded-lg"
                   />
                   <span className="absolute -top-2 -right-2 bg-gray-900 text-white text-[10px] min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-sm font-black shadow">
-                    {cartItems.reduce((s, it) => s + it.qty, 0)}
+                    {checkoutPieceCount}
                   </span>
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-gray-700 text-sm leading-tight">الإجمالي</p>
                   <p className="text-sm text-gray-400 mt-0.5 font-normal">
-                    {cartItems.reduce((s, it) => s + it.qty, 0)} {cartItems.reduce((s, it) => s + it.qty, 0) === 1 ? 'منتج' : 'منتجات'}
+                    {checkoutPieceCount} {checkoutPieceCount === 1 ? 'منتج' : 'منتجات'}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">

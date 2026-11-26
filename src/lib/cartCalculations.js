@@ -227,3 +227,12 @@ export function calculateAllTotals(cartItems, promoResult = null, shippingSettin
 export function formatCurrency(amount, currency = CURRENCY) {
   return `${parseFloat(amount).toFixed(2)} ${currency}`;
 }
+
+// عدد القطع المعروضة في ملخص الشيك آوت: مجموع كميات أسطر العرض. أسطر
+// العرض بتشمل القطع المجانية الإضافية من العروض (٣+١) وهدايا اختيار
+// العميل، فالعدد ده بيطابق بالظبط القايمة اللي العميل بيفتحها. عرض فقط،
+// مالهوش أي علاقة بحساب الأسعار.
+export function countCheckoutDisplayPieces(displayRows) {
+  if (!Array.isArray(displayRows)) return 0;
+  return displayRows.reduce((sum, row) => sum + (Number(row?.qty) || 0), 0);
+}
