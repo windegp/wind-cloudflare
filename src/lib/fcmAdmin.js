@@ -1,7 +1,5 @@
-import { collection, getDocs } from "firebase/firestore/lite";
-import { getDb } from "./firebase";
 import { getGoogleAccessToken } from "./googleServiceAccount";
-import { firestoreAdminDelete } from "./firestoreAdmin";
+import { firestoreAdminDelete, firestoreAdminList } from "./firestoreAdmin";
 
 // 🔥 إرسال إشعارات الأوردرات الجديدة للأدمن عن طريق FCM HTTP v1 API.
 //
@@ -17,12 +15,15 @@ const FCM_SCOPE = "https://www.googleapis.com/auth/firebase.messaging";
 // 1. جلب كل أجهزة الأدمن المسجلة من Firestore
 // ============================================
 async function getAdminDeviceTokens() {
-  const snapshot = await getDocs(collection(getDb(), "adminTokens"));
-  // doc id = token نفسه. بنرجّع الـ platform كمان عشان نقدر نبعت
-  // android.notification.sound مخصص بس لتوكنات التطبيق النيتيف.
-  return snapshot.docs.map((d) => ({
-    token: d.id,
-    platform: d.data()?.platform || "unknown",
+  // قراءة adminTokens بصلاحيات Service Account (REST) مش بالـ Client SDK:
+  // بعد إغلاق القراءة العامة في قواعد Firestore، قراءة السيرفر بالـ SDK
+  // كانت هتترفض (permission-denied) والإشعارات كانت هتقف بصمت.
+  const docs = await firestoreAdminList("adminTokens");
+  // doc id = token نفسه (آخر جزء من name). بنرجّع الـ platform كمان عشان
+  // نقدر نبعت android.notification.sound مخصص بس لتوكنات التطبيق النيتيف.
+  return docs.map((d) => ({
+    token: d.name.split("/").pop(),
+    platform: d.fields?.platform?.stringValue || "unknown",
   }));
 }
 
