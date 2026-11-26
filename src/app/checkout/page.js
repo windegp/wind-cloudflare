@@ -17,7 +17,7 @@ import Link from "next/link";
 // يستورد firebase/firestore/lite فقط بدون storage/auth/database
 // لتجنب مشاكل Edge Runtime في Cloudflare
 import { getDb } from "@/lib/firebase-checkout";
-import { doc, setDoc, getDoc, deleteDoc, updateDoc, increment } from "firebase/firestore/lite";
+import { doc, setDoc, deleteDoc, updateDoc, increment } from "firebase/firestore/lite";
 import { ChevronDown, Info, CheckCircle2, Phone, ShoppingBag, Shield, Tag, ChevronLeft, Truck, CreditCard, Banknote, Smartphone, X, Lock } from '@/components/icons-extra';
 import { SHIPPING_COST } from '@/lib/constants';
 import { fbTrack } from "@/lib/fbTrack";
@@ -27,6 +27,7 @@ import { gaBeginCheckout, gaPurchase } from "@/lib/gaTrack";
 import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
 import { buildCheckoutMetaUserData } from "@/lib/metaEventData";
 import { getCairoTimestamp } from '@/lib/analytics-helpers';
+import { applyCodCustomerProfileUpdate } from '@/lib/checkoutCustomerProfile';
 
 // Helper function to handle Firebase errors
 async function hashSHA256(text) {
@@ -1145,75 +1146,12 @@ export default function CheckoutPage() {
       if (paymentMethod !== 'card') {
         const cleanPhone = formData.phone.replace(/[^0-9]/g, '');
         const customerId = formData.email ? formData.email.toLowerCase().trim() : cleanPhone;
-        
-        if (customerId) {
-          const customerRef = doc(getDb(), "Customers", customerId);
-          const customerSnap = await getDoc(customerRef);
-
-          if (customerSnap.exists()) {
-            const existingData = customerSnap.data();
-            const currentOrders = Number(existingData['Total Orders'] || 0);
-            const currentSpent = Number(existingData['Total Spent'] || 0);
-            const newSegment = currentOrders >= 1 ? "VIP_Customer" : "Purchased_Once";
-
-            try {
-              if (currentOrders === 0) {
-                const sRef = doc(getDb(), "settings", "siteSettings");
-                await updateDoc(sRef, {
-                  "counters.customers": increment(1)
-                });
-              }
-
-              await setDoc(customerRef, {
-                "Total Orders": currentOrders + 1,
-                "Total Spent": currentSpent + Number(quote.total),
-                Last_Order_Status: "New",
-                data_source: "WIND_Web",
-                Phone: formData.phone,
-                "Default Address City": formData.city || "",
-                "Default Address Province": formData.governorate || "",
-                hasAbandoned: false,
-                segments: [newSegment],
-                status: newSegment,
-                last_active: getCairoTimestamp()
-              }, { merge: true });
-            } catch (error) {
-              console.error('Error updating customer:', error);
-            }
-          } else {
-            try {
-              const customerCountKey = `cust_counted_${customerId}`;
-              const isCustCounted = sessionStorage.getItem(customerCountKey);
-
-              if (!isCustCounted) {
-                const sRefCust = doc(getDb(), "settings", "siteSettings");
-                await updateDoc(sRefCust, {
-                  "counters.customers": increment(1)
-                });
-                sessionStorage.setItem(customerCountKey, "true");
-              }
-
-              await setDoc(customerRef, {
-                "First Name": formData.firstName || "",
-                "Last Name": formData.lastName || "",
-                Email: formData.email ? formData.email.toLowerCase().trim() : "",
-                Phone: formData.phone || "",
-                "Default Address City": formData.city || "",
-                "Default Address Province": formData.governorate || "",
-                "Default Address Address1": formData.address || "",
-                "Total Orders": 1,
-                "Total Spent": Number(quote.total),
-                Last_Order_Status: "New",
-                data_source: "WIND_Web",
-                segments: ["Purchased_Once"],
-                status: "Purchased_Once",
-                last_active: getCairoTimestamp()
-              });
-            } catch (error) {
-              console.error('Error creating customer:', error);
-            }
-          }
-        }
+        // تحديث ملف العميل بدون قراءة (قراءة Customers مقفولة بالقواعد).
+        // فشل التحديث لا يوقف الطلب — الأوردر اتحفظ بالفعل فوق.
+        await applyCodCustomerProfileUpdate(
+          { customerId, phone: formData.phone, city: formData.city, governorate: formData.governorate, total: quote.total },
+          { db: getDb(), doc, setDoc, increment, now: getCairoTimestamp }
+        );
       }
 
       if (paymentMethod === 'card') {
