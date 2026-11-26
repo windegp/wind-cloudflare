@@ -7,6 +7,7 @@ import { getDb } from "@/lib/firebase";
 import { doc, getDoc, collection, query, where, getDocs, updateDoc } from "firebase/firestore/lite";
 import { getCairoTimestamp } from "@/lib/analytics-helpers";
 import { buildOrderConfirmationMessage, buildTrackOrderUrl, buildWhatsAppBusinessIntentUrl, buildWhatsAppUrl, formatArrivalWindow } from "@/lib/whatsappConfirmation";
+import { buildAbandonedCartMessage, buildCartRestoreUrl } from "@/lib/abandonedCartMessage";
 import { ArrowRight, Package, User, MapPin, Printer, Phone, MessageCircle } from '@/components/icons-extra';
 
 export const dynamic = 'force-dynamic';
@@ -367,21 +368,59 @@ export default function OrderDetailsPage() {
   });
   const whatsappUrl = buildWhatsAppUrl(customerPhone, whatsappMessage);
 
+  // رسالة استرجاع السلة المتروكة ولينك يرجّع العميل لسلته
+  const recoverySentAt = order['WhatsApp Recovery Sent At'] || null;
+  const cartRestoreUrl = isAbandoned ? buildCartRestoreUrl(productsList) : null;
+  const recoveryMessage = isAbandoned
+    ? buildAbandonedCartMessage({
+        name: customerName,
+        items: productsList,
+        total: totalAmount.toLocaleString('en-EG'),
+        cartUrl: cartRestoreUrl,
+      })
+    : null;
+  const recoveryWhatsappUrl = recoveryMessage
+    ? buildWhatsAppUrl(customerPhone, recoveryMessage)
+    : null;
+
+  const openWhatsApp = (url, message) => {
+    // على أندرويد: نفرض فتح واتساب بيزنس بالاسم حتى لو العادي هو الافتراضي.
+    const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '');
+    const businessIntentUrl = isAndroid
+      ? buildWhatsAppBusinessIntentUrl(customerPhone, message)
+      : null;
+    if (businessIntentUrl) {
+      window.location.href = businessIntentUrl;
+    } else {
+      window.open(url, '_blank', 'noopener');
+    }
+  };
+
+  const sendWhatsAppRecovery = async () => {
+    if (!recoveryWhatsappUrl) {
+      alert('رقم هاتف العميل غير صالح لواتساب. تأكد من الرقم الأول.');
+      return;
+    }
+    openWhatsApp(recoveryWhatsappUrl, recoveryMessage);
+    if (!orderDocId) return;
+    try {
+      const sentAt = getCairoTimestamp();
+      await updateDoc(doc(getDb(), "Orders", orderDocId), {
+        "WhatsApp Recovery Sent At": sentAt,
+      });
+      setOrder((prev) => ({ ...prev, "WhatsApp Recovery Sent At": sentAt }));
+    } catch (e) {
+      console.error("Failed to save WhatsApp recovery time:", e);
+      alert("واتساب اتفتح، بس تعذر تسجيل وقت الإرسال في الطلب.");
+    }
+  };
+
   const sendWhatsAppConfirmation = async () => {
     if (!whatsappUrl) {
       alert('رقم هاتف العميل غير صالح لواتساب. تأكد من الرقم الأول.');
       return;
     }
-    // على أندرويد: نفرض فتح واتساب بيزنس بالاسم حتى لو العادي هو الافتراضي.
-    const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '');
-    const businessIntentUrl = isAndroid
-      ? buildWhatsAppBusinessIntentUrl(customerPhone, whatsappMessage)
-      : null;
-    if (businessIntentUrl) {
-      window.location.href = businessIntentUrl;
-    } else {
-      window.open(whatsappUrl, '_blank', 'noopener');
-    }
+    openWhatsApp(whatsappUrl, whatsappMessage);
     if (!orderDocId) return;
     try {
       const sentAt = getCairoTimestamp();
@@ -444,7 +483,7 @@ export default function OrderDetailsPage() {
               <Printer size={16} />
               طباعة
             </button>
-            {whatsappConfirmedAt ? (
+            {!isAbandoned && (whatsappConfirmedAt ? (
               <div className="flex items-center gap-1.5 px-3 py-2.5 bg-green-50 border border-green-200 rounded-lg text-xs font-bold text-green-700 whitespace-nowrap">
                 <MessageCircle size={15} className="shrink-0" />
                 <span>تم التأكيد برسالة واتساب</span>
@@ -467,7 +506,7 @@ export default function OrderDetailsPage() {
                 <MessageCircle size={16} />
                 تأكيد عبر واتساب
               </button>
-            )}
+            ))}
           </div>
         </div>
 
@@ -478,7 +517,30 @@ export default function OrderDetailsPage() {
               هذا الطلب سلة متروكة
             </div>
             <div className="p-4 text-sm text-amber-900">
-              لم يتم تأكيد الطلب كعملية شراء مكتملة حتى الآن.
+              <p className="mb-3">لم يتم تأكيد الطلب كعملية شراء مكتملة حتى الآن.</p>
+              {recoverySentAt ? (
+                <p className="text-xs font-bold text-green-700 flex flex-wrap items-center gap-1.5">
+                  <MessageCircle size={14} />
+                  تم إرسال رسالة استرجاع السلة
+                  <span className="font-medium text-green-600">{formatDate(recoverySentAt)}</span>
+                  <button
+                    type="button"
+                    onClick={sendWhatsAppRecovery}
+                    className="text-blue-700 hover:underline"
+                  >
+                    إرسال مرة أخرى
+                  </button>
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={sendWhatsAppRecovery}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-bold transition-colors"
+                >
+                  <MessageCircle size={16} />
+                  رسالة استرجاع عبر واتساب
+                </button>
+              )}
             </div>
           </div>
         )}
