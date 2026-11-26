@@ -8,6 +8,7 @@ import {
   normalizeWhatsAppPhone,
   buildOrderConfirmationMessage,
   buildTrackOrderUrl,
+  buildWhatsAppBusinessIntentUrl,
   buildWhatsAppUrl,
 } from '@/lib/whatsappConfirmation';
 
@@ -145,6 +146,21 @@ describe('buildTrackOrderUrl', () => {
 
   it('returns null without an order number', () => {
     expect(buildTrackOrderUrl('', '01012345678')).toBeNull();
+  });
+});
+
+describe('buildWhatsAppBusinessIntentUrl', () => {
+  it('targets the WhatsApp Business package with a wa.me fallback', () => {
+    const url = buildWhatsAppBusinessIntentUrl('01012345678', 'مرحبا');
+    expect(url.startsWith('intent://send?phone=201012345678&text=')).toBe(true);
+    expect(url).toContain('scheme=whatsapp');
+    expect(url).toContain('package=com.whatsapp.w4b');
+    expect(url).toContain('S.browser_fallback_url=');
+    expect(decodeURIComponent(url)).toContain('https://wa.me/201012345678');
+  });
+
+  it('returns null for an invalid phone', () => {
+    expect(buildWhatsAppBusinessIntentUrl('abc', 'hi')).toBeNull();
   });
 });
 
