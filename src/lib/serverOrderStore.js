@@ -86,6 +86,14 @@ async function request(path, { method = "GET", body } = {}) {
 
 const QUERY_OPS = new Set(["EQUAL", "LESS_THAN", "LESS_THAN_OR_EQUAL", "GREATER_THAN", "GREATER_THAN_OR_EQUAL"]);
 
+// REST field paths with anything beyond a simple identifier (e.g. "Created at")
+// must be backtick-quoted; the client SDK did this escaping internally.
+function fieldPathForApi(field) {
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(field)
+    ? field
+    : `\`${field.replace(/\\/g, "\\\\").replace(/`/g, "\\`")}\``;
+}
+
 export const serverOrderStore = {
   async get(collection, id) {
     assertOrderStoreConfiguration();
@@ -116,7 +124,7 @@ export const serverOrderStore = {
       throw new OrderStoreError("INVALID_ORDER_QUERY", 400);
     }
     const fieldFilters = filters.map(f => ({ fieldFilter: {
-      field: { fieldPath: f.field }, op: f.op, value: encodeOrderValue(f.value),
+      field: { fieldPath: fieldPathForApi(f.field) }, op: f.op, value: encodeOrderValue(f.value),
     } }));
     const structuredQuery = {
       from: [{ collectionId: collection }],

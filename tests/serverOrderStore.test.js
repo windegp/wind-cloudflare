@@ -64,6 +64,20 @@ describe("private server order REST store", () => {
     expect(body.structuredQuery.where.compositeFilter.filters).toHaveLength(2);
     expect(body.structuredQuery.limit).toBe(5);
   });
+  it("backtick-quotes field paths with spaces (e.g. \"Created at\") for the REST API", async () => {
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify([])));
+    await serverOrderStore.query("Orders", { filters: [
+      { field: "Created at", op: "GREATER_THAN_OR_EQUAL", value: "2026-11-01 00:00:00" },
+    ] });
+    const body = JSON.parse(fetch.mock.calls[0][1].body);
+    expect(body.structuredQuery.where.fieldFilter.field.fieldPath).toBe("`Created at`");
+  });
+  it("leaves simple field paths unquoted", async () => {
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify([])));
+    await serverOrderStore.query("Customers", { filters: [{ field: "Phone", op: "EQUAL", value: "0100" }] });
+    const body = JSON.parse(fetch.mock.calls[0][1].body);
+    expect(body.structuredQuery.where.fieldFilter.field.fieldPath).toBe("Phone");
+  });
   it("query validates collection, fields, ops and limit before any network call", async () => {
     await expect(serverOrderStore.query("Bad Collection!", { filters: [{ field: "a", op: "EQUAL", value: "x" }] })).rejects.toMatchObject({ code: "INVALID_ORDER_DOCUMENT_ID" });
     await expect(serverOrderStore.query("Customers", { filters: [{ field: "drop; table", op: "EQUAL", value: "x" }] })).rejects.toMatchObject({ code: "INVALID_ORDER_QUERY" });
