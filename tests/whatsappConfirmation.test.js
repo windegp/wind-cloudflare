@@ -125,7 +125,7 @@ describe('buildOrderConfirmationMessage', () => {
     expect(message).toContain('بلوفر نسائي بياقة عالية - Brown / [ 55 : 95kg ] x 1');
     expect(message).toContain('بلوفر نسائي بياقة عالية - اللون: Jeans Blue x 1');
     expect(message).toContain('(هدية)');
-    expect(message).toContain('🔓 إمكانية فتح الطلب: نعم');
+    expect(message).toContain('🔓 إمكانية فتح الشحنة: نعم');
     expect(message).toContain('🏡 العنوان: المقطم منطقة جنوب س عمارة 8592، القاهرة');
   });
 

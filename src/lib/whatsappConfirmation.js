@@ -125,7 +125,7 @@ export function buildOrderConfirmationMessage({
   }
 
   // سطر ثابت بطلب صاحب المتجر (Telegram 20013927).
-  lines.push('🔓 إمكانية فتح الطلب: نعم');
+  lines.push('🔓 إمكانية فتح الشحنة: نعم');
 
   if (address) lines.push(`🏡 العنوان: ${address}`);
 
