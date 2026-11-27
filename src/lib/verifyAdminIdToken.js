@@ -1,5 +1,11 @@
 import { ADMIN_UID } from "@/lib/constants";
 import { firestoreAdminGet, parseFirestoreDoc } from "@/lib/firestoreAdmin";
+import { getClientIP } from "@/lib/rateLimit";
+import {
+  allowStaffLookup,
+  cacheStaffResolution,
+  getCachedStaffResolution,
+} from "@/lib/adminLookupGuard";
 import {
   ROLES,
   hasAnyPermission,
@@ -12,10 +18,25 @@ import {
 // المالك يُحلّ محليًا دون أي قراءة — حتى لو فشلت قراءة Firestore
 // (env ناقص، Rules، انقطاع)، يبقى دخول المالك شغالًا.
 // لغير المالك: أي فشل في الحلّ = رفض (fail closed).
-async function resolveStaffRole(uid) {
+async function resolveStaffRole(uid, request) {
   if (isOwnerUid(uid)) {
     return { ok: true, role: ROLES.OWNER };
   }
+  // كاش 60 ثانية + حدّ قراءات لكل IP (الذاكرة فقط، بدون كتابة KV).
+  const cached = getCachedStaffResolution(uid);
+  if (cached) return cached;
+  if (!allowStaffLookup(getClientIP(request))) {
+    return { ok: false, reason: "admin_lookup_rate_limited", status: 429 };
+  }
+  const resolved = await lookupStaffRole(uid);
+  // لا نكاش "غير متاح" (خطأ اتصال/env) — يُعاد المحاولة.
+  if (resolved.ok || resolved.reason !== "admin_role_lookup_unavailable") {
+    cacheStaffResolution(uid, resolved);
+  }
+  return resolved;
+}
+
+async function lookupStaffRole(uid) {
   let restDoc;
   try {
     restDoc = await firestoreAdminGet("admins", uid);
@@ -84,9 +105,9 @@ export async function verifyAdminIdToken(request) {
 
     if (user.localId !== ADMIN_UID) {
       // ليس المالك: يجب أن يكون موظفًا فعّالًا في كولكشن admins.
-      const resolved = await resolveStaffRole(user.localId);
+      const resolved = await resolveStaffRole(user.localId, request);
       if (!resolved.ok) {
-        return { ok: false, reason: resolved.reason, status: 403 };
+        return { ok: false, reason: resolved.reason, status: resolved.status || 403 };
       }
       if (user.disabled === true) {
         return { ok: false, reason: "admin_account_disabled", status: 403 };
