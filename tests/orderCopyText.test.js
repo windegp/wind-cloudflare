@@ -23,44 +23,59 @@ const cod = {
 };
 
 describe("buildOrderCopyText", () => {
-  it("builds the full COD text", () => {
+  it("builds the compact COD text with discount and gift", () => {
     const t = buildOrderCopyText(cod);
-    expect(t).toContain("*طلب WIND*\nرقم الطلب:\n#1001\nالتاريخ:\n27/11/2026 3:42 PM");
-    expect(t).toContain("الهاتف:\n01012345678\nهاتف بديل:\n01098765432");
-    expect(t).toContain("العنوان: شارع كذا، المعادي\nالمحافظة: القاهرة");
-    expect(t).toContain("1) قميص كتان\nاللون: أسود\nالمقاس: L\nالكمية: 2\nالسعر:\n450 EGP\nالإجمالي:\n900 EGP");
-    expect(t).toContain("2) حزام جلد (هدية)\nالكمية: 1\nالسعر:\n0 EGP");
-    expect(t).toContain("خصم المنتجات:\n-100 EGP");
-    expect(t).toContain("كود الخصم WELCOME10:\n-50 EGP");
-    expect(t).toContain("الشحن:\n50 EGP");
-    expect(t).toContain("*الإجمالي:*\n1,250 EGP");
-    expect(t).toContain("الحالة: لم يُدفع بعد");
-    expect(t).toContain("*ملاحظات*\nاتصل قبل الوصول");
+    expect(t).toBe([
+      "*طلب WIND #1001*",
+      "27/11/2026 3:42 PM",
+      "",
+      "*العميل*",
+      "أحمد محمد - 01012345678 - 01098765432",
+      "شارع كذا، المعادي، القاهرة",
+      "",
+      "*المنتجات*",
+      "1) قميص كتان | أسود | L | x2 | 450 EGP",
+      "2) حزام جلد (هدية) | x1",
+      "",
+      "*الحساب*",
+      "المنتجات: 1,350 EGP",
+      "خصم المنتجات: -100 EGP",
+      "كود الخصم WELCOME10: -50 EGP",
+      "الشحن: 50 EGP",
+      "*الإجمالي: 1,250 EGP*",
+      "",
+      "*الدفع*",
+      "الدفع عند الاستلام - لم يُدفع بعد",
+      "",
+      "*ملاحظات*",
+      "اتصل قبل الوصول",
+    ].join("\n"));
     expect(t).not.toMatch(/\p{Extended_Pictographic}/u);
     expect(t).not.toContain("@");
   });
 
-  it("builds a paid card order with reference, free shipping, no discounts or notes", () => {
+  it("builds a paid card order: no subtotal line when no discount/shipping, reference shown", () => {
     const t = buildOrderCopyText({
       ...base,
+      orderLabel: "#1002",
       paymentMethodText: "بطاقة ائتمان",
       totals: { itemsSubtotal: 900, productDiscount: 0, discountAmount: 0, shippingAmount: 0, totalAmount: 900 },
       order: { "Billing Name": "منى", "Shipping Phone": "01155555555", "Financial Status": "paid", "Payment Method": "card", "Payment Reference": "ABC123" },
-      items: [{ title: "فستان", quantity: 1, price: 900 }],
+      items: [{ title: "فستان", selectedColor: "أحمر", quantity: 1, price: 900 }],
     });
-    expect(t).toContain("الهاتف:\n01155555555");
-    expect(t).not.toContain("هاتف بديل");
+    expect(t).toContain("منى - 01155555555");
+    expect(t).toContain("1) فستان | أحمر | x1 | 900 EGP");
+    expect(t).not.toContain("المنتجات: ");
     expect(t).not.toContain("خصم");
     expect(t).not.toContain("ملاحظات");
-    expect(t).toContain("الشحن:\nمجاني");
-    expect(t).toContain("الطريقة: بطاقة ائتمان\nالحالة: تم الدفع\nمرجع الدفع:\nABC123");
-    expect(t).not.toContain("الإجمالي:\n900");
+    expect(t).toContain("الشحن: مجاني\n*الإجمالي: 900 EGP*");
+    expect(t).toContain("بطاقة ائتمان - تم الدفع\nمرجع: ABC123");
   });
 
   it("omits empty fields and handles no items", () => {
     const t = buildOrderCopyText({ order: {}, items: [], totals: {} });
+    expect(t.startsWith("*طلب WIND*")).toBe(true);
     expect(t).toContain("لا توجد تفاصيل منتجات محفوظة");
-    expect(t).not.toContain("الهاتف");
     expect(t).not.toContain("undefined");
     expect(t).not.toContain("NaN");
   });
