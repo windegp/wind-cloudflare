@@ -196,6 +196,24 @@ describe("POST /api/register-admin-token — rate limit", () => {
     expect(spoofed.status).toBe(429);
   });
 
+  it("falls back to the in-memory counter when KV throws, and still enforces the limit", async () => {
+    mocks.kv.mode = "throws"; // getKV resolves, but every get/put throws
+    const ip = "192.0.2.50";
+
+    for (let i = 0; i < 10; i++) {
+      const res = await call({ ip });
+      expect(res.status, `request ${i + 1} inside the limit`).toBe(200);
+    }
+    expect(mocks.firestoreAdminSet).toHaveBeenCalledTimes(10);
+
+    const blocked = await call({ ip });
+    expect(blocked.status).toBe(429); // the memory fallback still rejects the 11th
+    expect(mocks.firestoreAdminSet).toHaveBeenCalledTimes(10);
+
+    // A different IP in the same isolate keeps its own counter.
+    expect((await call({ ip: "192.0.2.51" })).status).toBe(200);
+  });
+
   it("buckets requests with no cf-connecting-ip together instead of trusting other headers", async () => {
     for (let i = 0; i < 10; i++) {
       expect((await call({ ip: null, headers: { "x-forwarded-for": `10.0.0.${i}` } })).status).toBe(200);
