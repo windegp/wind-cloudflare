@@ -36,19 +36,22 @@ const CORS_HEADERS = {
 // الحد الأدنى والأقصى لطول التوكن. توكنات FCM طولها في الواقع حوالي 163 حرف
 // (ويب: base64url، أندرويد نيتيف: "<id>:APA91b...")، فالمدى ده واسع جداً
 // والتوكن الحقيقي بيمر منه دايماً.
+// السقف 1500 = حد Firestore لطول الـ document id (وبايتات)، لأن التوكن نفسه
+// هو الـ doc id. أي طول أكبر منه كان هيمر من الفحص ويفشل في الكتابة.
 const MIN_TOKEN_LENGTH = 64;
-const MAX_TOKEN_LENGTH = 4096;
+const MAX_TOKEN_LENGTH = 1500;
 const MAX_PLATFORM_LENGTH = 40;
 
 // فحص شكل التوكن: مش بنفترض صيغة واحدة ثابتة لأن صيغة توكنات FCM مش موثقة
 // كـ contract وممكن تتغير. بنرفض بس اللي مستحيل يبقى توكن صالح أو آمن
-// كـ Firestore document id: مش نص، طول مستحيل، مسافات/محارف تحكم، أو "/"
+// كـ Firestore document id: مش نص، طول مستحيل، أي حاجة مش ASCII مطبوع
+// (0x21-0x7E: يعني مفيش مسافات ولا محارف تحكم ولا Unicode)، أو "/"
 // (لأن doc id = التوكن، وأي "/" بتغيّر مسار المستند).
 function isValidTokenShape(token) {
   if (typeof token !== 'string') return false;
   if (token.length < MIN_TOKEN_LENGTH || token.length > MAX_TOKEN_LENGTH) return false;
-  if (token.includes('/')) return false;
-  return !/[\s\u0000-\u001f\u007f]/.test(token);
+  if (!/^[!-~]+$/.test(token)) return false; // printable ASCII only
+  return !token.includes('/');
 }
 
 // عنوان الـ IP للحماية: cf-connecting-ip هو الوحيد اللي Cloudflare بتحطه على

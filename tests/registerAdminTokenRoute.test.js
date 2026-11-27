@@ -99,6 +99,14 @@ describe("POST /api/register-admin-token — normal registration still works", (
     expect(mocks.firestoreAdminSet.mock.calls[3][2].platform).toBe("android-native");
   });
 
+  it("accepts a token exactly at the 1500-char ceiling", async () => {
+    const maxToken = "a".repeat(1500);
+    const res = await call({ token: maxToken, ip: "203.0.113.31" });
+    expect(res.status).toBe(200);
+    expect(mocks.firestoreAdminSet).toHaveBeenCalledTimes(1);
+    expect(mocks.firestoreAdminSet.mock.calls[0][1]).toBe(maxToken);
+  });
+
   it("does not block normal use when KV is unavailable (registration keeps working)", async () => {
     mocks.kv.mode = "missing";
     const res = await call({ ip: "203.0.113.21" });
@@ -120,7 +128,9 @@ describe("POST /api/register-admin-token — token shape", () => {
       { token: `${TOKEN}/extra` }, // '/' would break the Firestore doc path
       { token: `${TOKEN.slice(0, 80)} with space` },
       { token: `${TOKEN.slice(0, 80)}\nrest` },
-      { token: "a".repeat(4097) }, // over the ceiling
+      { token: `${TOKEN.slice(0, 80)}توكن` }, // non-ASCII (Arabic)
+      { token: `${TOKEN.slice(0, 80)}🔥` }, // non-ASCII (emoji)
+      { token: "a".repeat(1501) }, // one char over the ceiling
     ];
 
     let i = 0;
