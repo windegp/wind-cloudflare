@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { checkRateLimit, getClientIP } from "@/lib/rateLimit";
 import { sniffImageType, MAX_STORE_IMAGE_BYTES } from "@/lib/media-utils";
-import { verifyAdminIdToken } from "@/lib/verifyAdminIdToken";
+import { verifyAdminPermission } from "@/lib/verifyAdminIdToken";
 
 export const dynamic = "force-dynamic";
 
@@ -31,12 +31,14 @@ export async function POST(request) {
     }
 
     if (purpose === "product") {
-      const authResult = await verifyAdminIdToken(request);
+      // رفع صور المنتجات يتطلب products.edit — رفع صور التقييمات
+      // (review) يبقى كما هو دون تغيير.
+      const authResult = await verifyAdminPermission(request, "products.edit");
 
       if (!authResult.ok) {
         return NextResponse.json(
-          { error: "unauthorized" },
-          { status: 401 },
+          { error: authResult.status === 403 ? "forbidden" : "unauthorized" },
+          { status: authResult.status || 401 },
         );
       }
     }

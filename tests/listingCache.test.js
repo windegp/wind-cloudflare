@@ -8,7 +8,7 @@ vi.mock("@/lib/kv-cache", () => ({
   getKV: vi.fn(async () => null),
 }));
 vi.mock("@/lib/firebase", () => ({ getDb: () => ({}) }));
-vi.mock("@/lib/verifyAdminIdToken", () => ({ verifyAdminIdToken: vi.fn(async () => ({ ok: true })) }));
+vi.mock("@/lib/verifyAdminIdToken", () => ({ verifyAdminPermission: vi.fn(async () => ({ ok: true })) }));
 vi.mock("@/lib/apiGuards", () => ({ isSameOrigin: () => true, enforceRateLimit: vi.fn(async () => null) }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("firebase/firestore/lite", () => ({

@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  verifyAdminIdToken: vi.fn(),
+  verifyAdminPermission: vi.fn(),
   kvDeleteMany: vi.fn(async () => ({ ok: true, failed: [] })),
   enforceRateLimit: vi.fn(async () => null),
 }));
 
-vi.mock("@/lib/verifyAdminIdToken", () => ({ verifyAdminIdToken: mocks.verifyAdminIdToken }));
+vi.mock("@/lib/verifyAdminIdToken", () => ({ verifyAdminPermission: mocks.verifyAdminPermission }));
 vi.mock("@/lib/kv-cache", () => ({ getKV: vi.fn(async () => null), kvDeleteManyReport: mocks.kvDeleteMany }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/apiGuards", async (importOriginal) => ({
@@ -27,8 +27,8 @@ const call = (body, headers = {}) =>
 
 describe("POST /api/revalidate", () => {
   beforeEach(() => {
-    mocks.verifyAdminIdToken.mockReset();
-    mocks.verifyAdminIdToken.mockResolvedValue({ ok: false, reason: "missing_bearer_token" });
+    mocks.verifyAdminPermission.mockReset();
+    mocks.verifyAdminPermission.mockResolvedValue({ ok: false, reason: "missing_bearer_token" });
     mocks.kvDeleteMany.mockClear();
     mocks.enforceRateLimit.mockClear();
   });
@@ -58,7 +58,7 @@ describe("POST /api/revalidate", () => {
   });
 
   it("lets an admin delete whitelisted keys only", async () => {
-    mocks.verifyAdminIdToken.mockResolvedValue({ ok: true });
+    mocks.verifyAdminPermission.mockResolvedValue({ ok: true });
     const ok = await call({ keys: ["homepage_data_v1"] }, { authorization: "Bearer t" });
     expect(ok.status).toBe(200);
     const bad = await call({ keys: ["ratelimit_AUTH_1.2.3.4_blocked"] }, { authorization: "Bearer t" });
@@ -66,7 +66,7 @@ describe("POST /api/revalidate", () => {
   });
 
   it("reports failed keys instead of claiming success", async () => {
-    mocks.verifyAdminIdToken.mockResolvedValue({ ok: true });
+    mocks.verifyAdminPermission.mockResolvedValue({ ok: true });
     mocks.kvDeleteMany.mockResolvedValueOnce({ ok: false, failed: ["homepage_reviews_v1"] });
     const res = await call({ type: "product_stats", handle: "p" }, { origin: "https://windeg.com" });
     expect(res.status).toBe(502);

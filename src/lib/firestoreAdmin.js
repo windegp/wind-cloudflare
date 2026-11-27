@@ -117,3 +117,25 @@ export async function firestoreAdminList(collectionPath) {
   const body = await res.json();
   return body.documents || [];
 }
+
+// تحويل مستند Firestore بصيغة REST الخام إلى كائن عادي.
+// { name, fields: { role: { stringValue }, active: { booleanValue } } }
+// -> { role: "...", active: true }. معرّف المستند يُستخرج من name.
+export function parseFirestoreDoc(restDoc) {
+  if (!restDoc || typeof restDoc !== "object") return null;
+  const fields = restDoc.fields || {};
+  const out = {};
+  for (const [key, value] of Object.entries(fields)) {
+    if (value == null || typeof value !== "object") continue;
+    if (typeof value.stringValue === "string") out[key] = value.stringValue;
+    else if (typeof value.booleanValue === "boolean") out[key] = value.booleanValue;
+    else if (typeof value.integerValue === "string") out[key] = Number(value.integerValue);
+    else if (typeof value.doubleValue === "number") out[key] = value.doubleValue;
+    else if (value.nullValue !== undefined) out[key] = null;
+  }
+  if (typeof restDoc.name === "string") {
+    const parts = restDoc.name.split("/");
+    out._id = parts[parts.length - 1];
+  }
+  return out;
+}

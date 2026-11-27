@@ -1,5 +1,6 @@
 import { kvGet, kvSet, kvDelete } from '@/lib/kv-cache';
-import { verifyAdminIdToken } from '@/lib/verifyAdminIdToken';
+import { verifyAdminPermission } from '@/lib/verifyAdminIdToken';
+import { WRITE_PERMISSIONS } from '@/lib/rbac';
 
 /**
  * Unified API route for write operations (idempotency + write guard)
@@ -10,9 +11,13 @@ const SAFE_KEY = /^[A-Za-z0-9_:.\-]{1,120}$/;
 
 export async function POST(request) {
   // No page in the storefront calls this route; only admin tooling may.
-  const auth = await verifyAdminIdToken(request);
+  // أي موظف بصلاحية كتابة؛ أدوار القراءة فقط (viewer) مرفوضة بـ 403.
+  const auth = await verifyAdminPermission(request, WRITE_PERMISSIONS);
   if (!auth.ok) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    return Response.json(
+      { error: auth.status === 403 ? 'Forbidden' : 'Unauthorized' },
+      { status: auth.status || 401 },
+    );
   }
 
   try {
