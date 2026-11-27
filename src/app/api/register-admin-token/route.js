@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { firestoreAdminSet } from '@/lib/firestoreAdmin';
 import { getCairoTimestamp } from '@/lib/analytics-helpers';
 import { ADMIN_UID } from '@/lib/constants';
+import { checkRateLimit } from '@/lib/rateLimit';
 
 // 🔥 Endpoint مخصص لاستقبال توكن FCM الـ Native من تطبيق الموبايل
 // (عبر Capacitor's PushNotifications API)، بعكس توكنات الويب اللي
@@ -32,31 +33,85 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
+// الحد الأدنى والأقصى لطول التوكن. توكنات FCM طولها في الواقع حوالي 163 حرف
+// (ويب: base64url، أندرويد نيتيف: "<id>:APA91b...")، فالمدى ده واسع جداً
+// والتوكن الحقيقي بيمر منه دايماً.
+// السقف 1500 = حد Firestore لطول الـ document id (وبايتات)، لأن التوكن نفسه
+// هو الـ doc id. أي طول أكبر منه كان هيمر من الفحص ويفشل في الكتابة.
+const MIN_TOKEN_LENGTH = 64;
+const MAX_TOKEN_LENGTH = 1500;
+const MAX_PLATFORM_LENGTH = 40;
+
+// فحص شكل التوكن: مش بنفترض صيغة واحدة ثابتة لأن صيغة توكنات FCM مش موثقة
+// كـ contract وممكن تتغير. بنرفض بس اللي مستحيل يبقى توكن صالح أو آمن
+// كـ Firestore document id: مش نص، طول مستحيل، أي حاجة مش ASCII مطبوع
+// (0x21-0x7E: يعني مفيش مسافات ولا محارف تحكم ولا Unicode)، أو "/"
+// (لأن doc id = التوكن، وأي "/" بتغيّر مسار المستند).
+function isValidTokenShape(token) {
+  if (typeof token !== 'string') return false;
+  if (token.length < MIN_TOKEN_LENGTH || token.length > MAX_TOKEN_LENGTH) return false;
+  if (!/^[!-~]+$/.test(token)) return false; // printable ASCII only
+  return !token.includes('/');
+}
+
+// عنوان الـ IP للحماية: cf-connecting-ip هو الوحيد اللي Cloudflare بتحطه على
+// الحافة ومستحيل العميل يزوّره. مش بنستخدم x-forwarded-for / x-real-ip هنا
+// لأنهم قابلين للتزوير لو الطلب مش عدّي على Cloudflare، وساعتها العميل يقدر
+// يغيّر الـ bucket بتاعه بنفسه. بره Cloudflare (تطوير محلي) كل الطلبات بتقع
+// في bucket واحد اسمه "unknown".
+function getRateLimitIp(req) {
+  return req.headers.get('cf-connecting-ip') || 'unknown';
+}
+
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
 }
 
 export async function POST(req) {
   try {
+    // 🔥 rate limit قبل أي شغل تاني: 10 طلبات / 10 دقايق لكل IP (حظر 15 دقيقة).
+    // التطبيق بيسجل مرة كل ما يتفتح، فالحد ده واسع للاستخدام الحقيقي.
+    const limit = await checkRateLimit(getRateLimitIp(req), 'ADMIN_TOKEN_REGISTER');
+
+    if (!limit.allowed) {
+      const retryAfter = Math.max(0, (limit.resetTime || 0) - Math.floor(Date.now() / 1000));
+      return NextResponse.json(
+        { success: false, error: 'Too many requests' },
+        {
+          status: 429,
+          // نفس CORS headers ضرورية عشان التطبيق يقرا الرد بدل ما يشوفه
+          // كفشل شبكة (الـ preflight بيعتمد عليها).
+          headers: { ...CORS_HEADERS, 'Retry-After': String(retryAfter) },
+        }
+      );
+    }
+
     const body = await req.json();
     const { token, platform } = body;
 
-    if (!token || typeof token !== 'string') {
+    if (!isValidTokenShape(token)) {
       return NextResponse.json(
         { success: false, error: 'Missing or invalid token' },
         { status: 400, headers: CORS_HEADERS }
       );
     }
 
+    const safePlatform =
+      typeof platform === 'string' &&
+      platform.length > 0 &&
+      platform.length <= MAX_PLATFORM_LENGTH
+        ? platform
+        : 'unknown'; // مثال: "android-native"
+
     await firestoreAdminSet('adminTokens', token, {
       token,
       uid: ADMIN_UID,
-      platform: platform || 'unknown', // مثال: "android-native"
+      platform: safePlatform,
       createdAt: getCairoTimestamp(),
       lastSeenAt: getCairoTimestamp(),
     });
 
-    console.log(`✅ Native admin token registered (${platform || 'unknown'}): ${token.slice(0, 12)}...`);
+    console.log(`✅ Native admin token registered (${safePlatform}): ${token.slice(0, 12)}...`);
 
     return NextResponse.json({ success: true }, { status: 200, headers: CORS_HEADERS });
   } catch (error) {

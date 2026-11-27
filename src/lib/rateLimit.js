@@ -94,6 +94,15 @@ const RATE_LIMITS = {
     blockDuration: 1800
   },
 
+  // Native admin FCM token registration (the WIND Admin app calls this on every
+  // launch). 10 per 10 minutes per IP is far above real use (one device, one
+  // call per app open) and still stops mass junk registration.
+  ADMIN_TOKEN_REGISTER: {
+    requests: 10,
+    window: 600,
+    blockDuration: 900
+  },
+
   // Relaxed for read-only endpoints
   READ: {
     requests: 100,    // 100 requests
@@ -139,7 +148,7 @@ function getRateLimitKey(ip, endpointType = 'DEFAULT') {
 // Endpoints that protect against guessing, spam or abuse. If KV errors out (for example the
 // daily write quota is used up) these keep a per-isolate counter instead of switching protection
 // off. Tracking relays are NOT listed: they stay open so no conversion event is ever dropped.
-const MEMORY_FALLBACK_TYPES = new Set(['TRACK_ORDER', 'CONTACT', 'CREATE_ORDER', 'CART_RECOVERY']);
+const MEMORY_FALLBACK_TYPES = new Set(['TRACK_ORDER', 'CONTACT', 'CREATE_ORDER', 'CART_RECOVERY', 'ADMIN_TOKEN_REGISTER']);
 const memoryCounters = new Map();
 const MEMORY_MAX_ENTRIES = 5000;
 
