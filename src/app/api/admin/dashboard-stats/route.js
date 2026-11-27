@@ -1,6 +1,7 @@
 import { serverOrderStore } from "@/lib/serverOrderStore";
 import { parseDateToMs, isRealCustomer, getCairoDateStr } from '@/lib/analytics-helpers';
 import { verifyAdminPermission } from "@/lib/verifyAdminIdToken";
+import { PERMISSIONS } from "@/lib/rbac";
 
 export const dynamic = 'force-dynamic';
 
@@ -158,7 +159,7 @@ const rows = await serverOrderStore.query("Orders", { filters: [
 export async function GET(request) {
   // إحصائيات لوحة التحكم للموظفين فقط (أي دور، بما فيه viewer).
   // كانت بلا أي تحقق من قبل — أي زائر كان يستطيع قراءة أرقام المبيعات.
-  const auth = await verifyAdminPermission(request, null);
+  const auth = await verifyAdminPermission(request, PERMISSIONS.DASHBOARD_VIEW);
   if (!auth.ok) {
     return Response.json(
       { success: false, error: auth.status === 403 ? 'Forbidden' : 'Unauthorized' },

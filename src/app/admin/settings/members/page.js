@@ -201,6 +201,14 @@ export default function MembersPage() {
           أضف موظفين للوحة التحكم وحدّد دور كل واحد. المالك فقط يستطيع رؤية هذه الصفحة.
         </p>
 
+        <div className="mb-4 p-3 rounded-xl text-sm bg-amber-50 text-amber-800 border border-amber-100 leading-relaxed">
+          تنبيه: الدور هنا يتحكم في ظهور الأقسام وفي الـ APIs المحمية فقط. صفحات اللوحة
+          بتحفظ في قاعدة البيانات مباشرة من المتصفح، وقواعد Firestore الحالية بتسمح
+          بالكتابة للمالك فقط، فأي موظف هيقدر يشوف ويفتح الأقسام لكن الحفظ/التعديل
+          ممكن يتعطل (permission-denied) لحد ما كتابات اللوحة تتحوّل لمسارات سيرفر.
+          لا تعد موظفًا بصلاحية تعديل قبل ما يتأكد ده.
+        </div>
+
         {toast && (
           <div
             className={`mb-4 p-3 rounded-xl text-sm font-bold ${
