@@ -16,7 +16,7 @@ vi.mock("@/lib/rateLimit", () => ({
   checkRateLimit: vi.fn(async () => ({ allowed: true })),
   getClientIP: vi.fn(() => "203.0.113.8"),
 }));
-vi.mock("@/lib/verifyAdminIdToken", () => ({ verifyAdminIdToken: verifyAdminMock }));
+vi.mock("@/lib/verifyAdminIdToken", () => ({ verifyAdminPermission: verifyAdminMock }));
 vi.mock("@/lib/mediaReferences", () => ({ findMediaReferences: findReferencesMock }));
 
 import { POST as upload } from "../src/app/api/media/route.js";

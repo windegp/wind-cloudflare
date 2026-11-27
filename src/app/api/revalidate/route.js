@@ -1,6 +1,7 @@
 import { getKV, kvDeleteManyReport } from '@/lib/kv-cache';
 import { revalidatePath } from 'next/cache';
-import { verifyAdminIdToken } from '@/lib/verifyAdminIdToken';
+import { verifyAdminPermission } from '@/lib/verifyAdminIdToken';
+import { PERMISSIONS } from '@/lib/rbac';
 import { isSameOrigin, enforceRateLimit } from '@/lib/apiGuards';
 import { getDb } from '@/lib/firebase';
 import { kvGet } from '@/lib/kv-cache';
@@ -42,9 +43,17 @@ export async function POST(request) {
     const limited = await enforceRateLimit(request, 'REVALIDATE_PUBLIC');
     if (limited) return limited;
   } else {
-    const auth = await verifyAdminIdToken(request);
+    // الطلبات غير العامة (إبطال الكاش بعد تعديل محتوى أو منتج)
+    // تتطلب content.edit أو products.edit.
+    const auth = await verifyAdminPermission(request, [
+      PERMISSIONS.CONTENT_EDIT,
+      PERMISSIONS.PRODUCTS_EDIT,
+    ]);
     if (!auth.ok) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+      return Response.json(
+        { error: auth.status === 403 ? 'Forbidden' : 'Unauthorized' },
+        { status: auth.status || 401 },
+      );
     }
   }
   

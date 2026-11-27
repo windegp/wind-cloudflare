@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { STORE_MEDIA_ORIGIN, classifyManagedMediaKey } from "@/lib/media-utils";
 import { findMediaReferences } from "@/lib/mediaReferences";
-import { verifyAdminIdToken } from "@/lib/verifyAdminIdToken";
+import { verifyAdminPermission } from "@/lib/verifyAdminIdToken";
 
 export const dynamic = "force-dynamic";
 
@@ -38,9 +38,12 @@ export async function POST(request) {
       return NextResponse.json({ success: true, skipped: true, reason: classification.reason });
     }
 
-    const auth = await verifyAdminIdToken(request);
+    const auth = await verifyAdminPermission(request, "products.edit");
     if (!auth?.ok) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+      return NextResponse.json(
+        { error: auth?.status === 403 ? "forbidden" : "unauthorized" },
+        { status: auth?.status || 401 },
+      );
     }
 
     // Never delete an image that another document still uses, and never delete when that cannot be checked.

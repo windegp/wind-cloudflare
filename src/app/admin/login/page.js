@@ -3,30 +3,45 @@ import { getAuthInstance } from "@/lib/firebase";
 import { GoogleAuthProvider, signInWithPopup, signOut } from "firebase/auth";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ADMIN_UID } from "@/lib/constants";
+import { getAdminProfile } from "@/lib/adminAccess";
+import { ROLE_LABELS_AR } from "@/lib/rbac";
 
 export const dynamic = 'force-dynamic';
 
 export default function AdminLogin() {
   const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
   const router = useRouter();
   const auth = getAuthInstance();
 
   useEffect(() => {
-    // مراقبة حالة المستخدم
-    const unsubscribe = auth.onAuthStateChanged((u) => {
-      // Check if user is the hardcoded admin UID
-      if (u && u.uid === ADMIN_UID) {
+    // مراقبة حالة المستخدم — الدخول للمالك أو لموظف فعّال في كولكشن admins.
+    let cancelled = false;
+    const unsubscribe = auth.onAuthStateChanged(async (u) => {
+      if (!u) {
+        if (!cancelled) {
+          setUser(null);
+          setProfile(null);
+        }
+        return;
+      }
+      const p = await getAdminProfile(u.uid);
+      if (cancelled) return;
+      if (p) {
         setUser(u);
-      } else if (u) {
-        // User is authenticated but not admin - sign them out
-        signOut(auth);
-        setUser(null);
+        setProfile(p);
       } else {
+        // User is authenticated but not staff - sign them out
+        await signOut(auth).catch(() => {});
+        if (cancelled) return;
         setUser(null);
+        setProfile(null);
       }
     });
-    return () => unsubscribe();
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, []);
 
   const loginWithGoogle = async () => {
@@ -34,13 +49,16 @@ export default function AdminLogin() {
     try {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
-      
-      // Check if authenticated user is the hardcoded admin
-      if (user.uid === ADMIN_UID) {
+
+      // Check if authenticated user is staff (owner or active member)
+      const p = await getAdminProfile(user.uid);
+      if (p) {
+        setUser(user);
+        setProfile(p);
         alert("تم تسجيل الدخول بنجاح! يمكنك الآن الإضافة والحذف.");
         router.push("/admin"); // توجيهك للوحة التحكم بعد الدخول
       } else {
-        // User is not admin - sign them out
+        // User is not staff - sign them out
         await signOut(auth);
         alert("غير مصرح لك بالوصول إلى لوحة التحكم.");
       }
@@ -67,6 +85,9 @@ export default function AdminLogin() {
             <div className="p-4 bg-gray-50 border border-gray-100 rounded-xl">
               <p className="text-[#202223] font-medium text-sm">مرحباً، {user.displayName}</p>
               <p className="text-xs text-gray-500 break-all mt-1">{user.uid}</p>
+              {profile && (
+                <p className="text-xs text-gray-500 mt-1">الدور: {ROLE_LABELS_AR[profile.role] || profile.role}</p>
+              )}
             </div>
             
             <button 
@@ -79,7 +100,7 @@ export default function AdminLogin() {
           </div>
         ) : (
           <div className="space-y-6 animate-[fadeIn_0.3s_ease-out]">
-            <p className="text-gray-500 text-sm leading-relaxed">يجب تسجيل الدخول بصفتك المدير لتتمكن من إدارة المتجر وتعديل البيانات.</p>
+            <p className="text-gray-500 text-sm leading-relaxed">يجب تسجيل الدخول بحساب موظف فعّال لتتمكن من إدارة المتجر وتعديل البيانات.</p>
             
             <button 
               onClick={loginWithGoogle}

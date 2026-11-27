@@ -2,7 +2,7 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { getRtdb, getAuthInstance } from "@/lib/firebase";
 import { adminFetch } from "@/lib/adminFetch";
-import { ADMIN_UID } from "@/lib/constants";
+import { getAdminProfile } from "@/lib/adminAccess";
 import { onAuthStateChanged } from "firebase/auth";
 import { useSettings } from "@/context/SettingsContext";
 import { ref, onValue } from "firebase/database"; 
@@ -36,8 +36,8 @@ export default function Dashboard() {
   const [showCustomPicker, setShowCustomPicker] = useState(false);
   const menuRef = useRef(null);
 
-  // جاهزية Firebase Auth: لا طلب للـ API قبل ما يتأكد إن المسجل هو الأدمن
-  // (الـ API بقى بيرفض أي طلب بلا توكن أدمن — 401).
+  // جاهزية Firebase Auth: لا طلب للـ API قبل ما يتأكد إن المسجل موظف
+  // (أي دور، بما فيه viewer) — الـ API بقى بيرفض أي طلب بلا توكن — 401.
   const [authReady, setAuthReady] = useState(false);
 
   const [dashboardData, setDashboardData] = useState(null);
@@ -62,8 +62,13 @@ export default function Dashboard() {
   // ==========================================
   useEffect(() => {
     const auth = getAuthInstance();
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setAuthReady(Boolean(u && u.uid === ADMIN_UID));
+    const unsubscribe = onAuthStateChanged(auth, async (u) => {
+      if (!u) {
+        setAuthReady(false);
+        return;
+      }
+      const profile = await getAdminProfile(u.uid);
+      setAuthReady(!!profile);
     });
     return () => unsubscribe();
   }, []);
@@ -79,6 +84,8 @@ export default function Dashboard() {
         url += `&startDate=${startDate}&endDate=${endDate}`;
       }
       
+      // dashboard-stats محمي الآن بأي دور موظف — يُرسل توكن Firebase
+      // عبر adminFetch، وإلا رجع 401.
       const res = await adminFetch(url, { cache: 'no-store' });
       const result = await res.json();
       

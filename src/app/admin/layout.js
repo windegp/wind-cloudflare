@@ -3,8 +3,10 @@ import { SWRConfig } from 'swr';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { getAuthInstance } from "@/lib/firebase"; 
-import { ADMIN_UID } from "@/lib/constants";
+import { getAuthInstance } from "@/lib/firebase";
+import { signOut } from "firebase/auth";
+import { getAdminProfile } from "@/lib/adminAccess";
+import { PERMISSIONS, ROLE_LABELS_AR, hasPermission, permissionForAdminPath } from "@/lib/rbac";
 import OrderNotifications from "@/components/OrderNotifications";
 
 // 👇 دمجنا كل الأيقونات في استدعاء واحد فقط عشان نمنع أي خطأ
@@ -15,42 +17,66 @@ export default function AdminLayout({ children }) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(true);
   const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const auth = getAuthInstance();
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((u) => {
-      // Check if user is the hardcoded admin UID
-      if (u && u.uid === ADMIN_UID) {
+    let cancelled = false;
+    const unsubscribe = auth.onAuthStateChanged(async (u) => {
+      // حلّ ملف الموظف (الدور والصلاحيات) من كولكشن admins.
+      // غير الموظفين والحسابات غير الفعّالة يُسجَّل خروجهم فورًا.
+      // ملاحظة: signOut كان يُستدعى هنا دون استيراده — تم إصلاح ذلك.
+      if (!u) {
+        if (!cancelled) {
+          setUser(null);
+          setProfile(null);
+          setLoading(false);
+        }
+        return;
+      }
+      const p = await getAdminProfile(u.uid);
+      if (cancelled) return;
+      if (p) {
         setUser(u);
-      } else if (u) {
-        // User is authenticated but not admin - sign them out
-        signOut(auth);
-        setUser(null);
+        setProfile(p);
       } else {
+        await signOut(auth).catch(() => {});
+        if (cancelled) return;
         setUser(null);
+        setProfile(null);
       }
       setLoading(false);
     });
-    return () => unsubscribe();
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, []);
 
+  // كل عنصر قائمة مرتبط بصلاحية — العناصر التي لا يملكها المستخدم
+  // تُخفى من القائمة، والقسم نفسه يُحجب أيضًا (انظر requiredPermission بالأسفل).
   const menu = [
-    { name: 'الرئيسية', path: '/admin', icon: <LayoutDashboard size={20}/> },
-    { name: 'الطلبات', path: '/admin/orders', icon: <Package size={20}/> },
-    { name: 'العملاء', path: '/admin/customers', icon: <Users size={20}/> },
-    { name: 'المنتجات', path: '/admin/products', icon: <ShoppingBag size={20}/> },
-    { name: 'إضافة منتج', path: '/admin/products/create', icon: <PlusCircle size={20}/> },
-    { name: 'التقييمات', path: '/admin/reviews', icon: <Star size={20}/> }, // ← قسم التقييمات الجديد
-    { name: 'الأقسام', path: '/admin/collections', icon: <FolderTree size={20}/> },
-    { name: 'إدارة الواجهة', path: '/admin/home-manager', icon: <Palette size={20}/> },
-    { name: 'المنيو', path: '/admin/menu', icon: <Menu size={20}/> },
-    { name: 'الصفحات', path: '/admin/pages', icon: <FileText size={20}/> },
-    { name: 'الإعدادات', path: '/admin/settings', icon: <Settings size={20}/> },
-    { name: 'أكواد الخصم والشحن', path: '/admin/promotions', icon: <Tag size={20}/> },
-    { name: 'العروض والقسائم', path: '/admin/offers', icon: <Tag size={20}/> },
-    { name: 'المخزون', path: '/admin/inventory', icon: <Package size={20}/> },
+    { name: 'الرئيسية', path: '/admin', icon: <LayoutDashboard size={20}/>, permission: PERMISSIONS.DASHBOARD_VIEW },
+    { name: 'الطلبات', path: '/admin/orders', icon: <Package size={20}/>, permission: PERMISSIONS.ORDERS_VIEW },
+    { name: 'العملاء', path: '/admin/customers', icon: <Users size={20}/>, permission: PERMISSIONS.CUSTOMERS_VIEW },
+    { name: 'المنتجات', path: '/admin/products', icon: <ShoppingBag size={20}/>, permission: PERMISSIONS.PRODUCTS_VIEW },
+    { name: 'إضافة منتج', path: '/admin/products/create', icon: <PlusCircle size={20}/>, permission: PERMISSIONS.PRODUCTS_EDIT },
+    { name: 'التقييمات', path: '/admin/reviews', icon: <Star size={20}/>, permission: PERMISSIONS.REVIEWS_VIEW }, // ← قسم التقييمات الجديد
+    { name: 'الأقسام', path: '/admin/collections', icon: <FolderTree size={20}/>, permission: PERMISSIONS.COLLECTIONS_EDIT },
+    { name: 'إدارة الواجهة', path: '/admin/home-manager', icon: <Palette size={20}/>, permission: PERMISSIONS.CONTENT_EDIT },
+    { name: 'المنيو', path: '/admin/menu', icon: <Menu size={20}/>, permission: PERMISSIONS.CONTENT_EDIT },
+    { name: 'الصفحات', path: '/admin/pages', icon: <FileText size={20}/>, permission: PERMISSIONS.CONTENT_EDIT },
+    { name: 'الإعدادات', path: '/admin/settings', icon: <Settings size={20}/>, permission: PERMISSIONS.CONTENT_EDIT },
+    { name: 'أكواد الخصم والشحن', path: '/admin/promotions', icon: <Tag size={20}/>, permission: PERMISSIONS.PROMOTIONS_EDIT },
+    { name: 'العروض والقسائم', path: '/admin/offers', icon: <Tag size={20}/>, permission: PERMISSIONS.OFFERS_EDIT },
+    { name: 'المخزون', path: '/admin/inventory', icon: <Package size={20}/>, permission: PERMISSIONS.INVENTORY_VIEW },
+    { name: 'إدارة الأعضاء', path: '/admin/settings/members', icon: <User size={20}/>, permission: PERMISSIONS.MEMBERS_MANAGE },
   ];
+
+  const visibleMenu = profile
+    ? menu.filter((item) => hasPermission(profile.role, item.permission))
+    : [];
 
   if (loading) {
     return (
@@ -64,7 +90,7 @@ export default function AdminLayout({ children }) {
     return <>{children}</>;
   }
 
-  if (!user || user.uid !== ADMIN_UID) {
+  if (!user || !profile) {
     return (
       <div className="min-h-screen bg-[#f4f6f8] flex flex-col items-center justify-center p-4 text-center" dir="rtl">
         <div className="bg-white p-8 rounded-2xl border border-gray-200 max-w-sm w-full shadow-sm">
@@ -72,7 +98,7 @@ export default function AdminLayout({ children }) {
             <Lock className="text-[#202223]" size={32} />
           </div>
           <h2 className="text-xl font-bold text-[#202223] mb-2">منطقة محظورة</h2>
-          <p className="text-gray-500 mb-8 text-sm">عذراً، يجب تسجيل الدخول بحساب المدير لتتمكن من إدارة الموقع.</p>
+          <p className="text-gray-500 mb-8 text-sm">عذراً، يجب تسجيل الدخول بحساب موظف فعّال لتتمكن من إدارة الموقع.</p>
           
           <Link 
             href="/admin/login"
@@ -80,6 +106,31 @@ export default function AdminLayout({ children }) {
             className="w-full py-3 bg-[#1a1a1a] text-white font-bold rounded-xl hover:bg-black transition-all block text-center shadow-sm"
           >
             تسجيل الدخول كمدير
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // حجب القسم كاملًا لو كان الدور لا يملك صلاحيته — إخفاء القائمة وحده
+  // لا يكفي، لأن الرابط المباشر كان سيفتح الصفحة.
+  const requiredPermission = permissionForAdminPath(pathname);
+  if (requiredPermission && !hasPermission(profile.role, requiredPermission)) {
+    return (
+      <div className="min-h-screen bg-[#f4f6f8] flex flex-col items-center justify-center p-4 text-center" dir="rtl">
+        <div className="bg-white p-8 rounded-2xl border border-gray-200 max-w-sm w-full shadow-sm">
+          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Lock className="text-[#202223]" size={32} />
+          </div>
+          <h2 className="text-xl font-bold text-[#202223] mb-2">لا تملك صلاحية الوصول لهذا القسم</h2>
+          <p className="text-gray-500 mb-2 text-sm">دورك الحالي: {ROLE_LABELS_AR[profile.role] || profile.role}</p>
+          <p className="text-gray-500 mb-8 text-sm">اطلب من مالك المتجر منحك الصلاحية المطلوبة.</p>
+          <Link
+            href="/admin"
+            prefetch={false}
+            className="w-full py-3 bg-[#1a1a1a] text-white font-bold rounded-xl hover:bg-black transition-all block text-center shadow-sm"
+          >
+            العودة للرئيسية
           </Link>
         </div>
       </div>
@@ -118,7 +169,7 @@ export default function AdminLayout({ children }) {
         </div>
         
         <nav className="p-3 space-y-1 mt-2 flex-1 overflow-y-auto scrollbar-hide">
-          {menu.map((item) => {
+          {visibleMenu.map((item) => {
             const active = pathname === item.path || (item.path !== '/admin' && pathname.startsWith(item.path));
             return (
               // 🔥 تم استبدال Link بـ div مع onClick لقتل الـ Hover Prefetch تماماً
@@ -144,6 +195,11 @@ export default function AdminLayout({ children }) {
         </nav>
 
         <div className="p-3 border-t border-gray-300 space-y-2">
+          {isOpen && profile && (
+            <div className="px-3 pb-1 text-xs text-gray-500 truncate">
+              {profile.name || profile.email} • {ROLE_LABELS_AR[profile.role] || profile.role}
+            </div>
+          )}
           {/* 🔥 OrderNotifications لازم يفضل mounted دايمًا، حتى لو الـ sidebar
               مقفول — لأنه هو المسؤول عن الاستماع للإشعارات اللحظية
               (listenForegroundMessages) وتجديد التوكن. لو اتقفل من هنا،

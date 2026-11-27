@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  verifyAdminIdToken: vi.fn(),
+  verifyAdminPermission: vi.fn(),
   storeGetData: vi.fn(async () => null),
   storeQuery: vi.fn(async () => []),
 }));
 
-vi.mock("@/lib/verifyAdminIdToken", () => ({ verifyAdminIdToken: mocks.verifyAdminIdToken }));
+vi.mock("@/lib/verifyAdminIdToken", () => ({ verifyAdminPermission: mocks.verifyAdminPermission }));
 vi.mock("@/lib/serverOrderStore", () => ({
   serverOrderStore: { getData: mocks.storeGetData, query: mocks.storeQuery },
 }));
@@ -18,13 +18,13 @@ const call = (headers = {}) =>
 
 describe("GET /api/admin/dashboard-stats", () => {
   beforeEach(() => {
-    mocks.verifyAdminIdToken.mockReset();
+    mocks.verifyAdminPermission.mockReset();
     mocks.storeGetData.mockClear();
     mocks.storeQuery.mockClear();
   });
 
   it("rejects requests with no token (401, no data read)", async () => {
-    mocks.verifyAdminIdToken.mockResolvedValue({ ok: false, reason: "missing_bearer_token" });
+    mocks.verifyAdminPermission.mockResolvedValue({ ok: false, reason: "missing_bearer_token", status: 401 });
     const res = await call();
     expect(res.status).toBe(401);
     const body = await res.json();
@@ -34,21 +34,21 @@ describe("GET /api/admin/dashboard-stats", () => {
   });
 
   it("rejects an invalid token (401, no data read)", async () => {
-    mocks.verifyAdminIdToken.mockResolvedValue({ ok: false, reason: "firebase_lookup_failed_400_INVALID_ID_TOKEN" });
+    mocks.verifyAdminPermission.mockResolvedValue({ ok: false, reason: "firebase_lookup_failed_400_INVALID_ID_TOKEN", status: 401 });
     const res = await call({ authorization: "Bearer garbage" });
     expect(res.status).toBe(401);
     expect(mocks.storeGetData).not.toHaveBeenCalled();
   });
 
-  it("rejects a signed-in user who is not the admin (401, no data read)", async () => {
-    mocks.verifyAdminIdToken.mockResolvedValue({ ok: false, reason: "admin_uid_mismatch" });
+  it("rejects a signed-in user who is not staff (403, no data read)", async () => {
+    mocks.verifyAdminPermission.mockResolvedValue({ ok: false, reason: "not_staff", status: 403 });
     const res = await call({ authorization: "Bearer some-user-token" });
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(403);
     expect(mocks.storeGetData).not.toHaveBeenCalled();
   });
 
   it("serves stats to the real admin (200)", async () => {
-    mocks.verifyAdminIdToken.mockResolvedValue({ ok: true });
+    mocks.verifyAdminPermission.mockResolvedValue({ ok: true, role: "owner", status: 200 });
     const res = await call({ authorization: "Bearer admin-token" });
     expect(res.status).toBe(200);
     const body = await res.json();
