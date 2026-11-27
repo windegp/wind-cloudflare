@@ -1,5 +1,6 @@
 "use client";
 import { orderDisplayLabel } from "@/lib/orderDisplayNumber";
+import { buildOrderCopyText, COPY_ORDER_LABEL } from "@/lib/orderCopyText";
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -128,6 +129,7 @@ export default function OrderDetailsPage() {
   const router = useRouter();
 
   const [order, setOrder] = useState(null);
+  const [orderCopied, setOrderCopied] = useState(false);
   const [productsList, setProductsList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [orderDocId, setOrderDocId] = useState(null);
@@ -388,6 +390,39 @@ export default function OrderDetailsPage() {
     ? buildWhatsAppUrl(customerPhone, recoveryMessage)
     : null;
 
+  // نسخ نص الطلب كامل للحافظة فقط (للواتساب). لا قراءة ولا كتابة في Firestore.
+  const handleCopyOrder = async () => {
+    const text = buildOrderCopyText({
+      order,
+      items: productsList,
+      orderLabel: orderDisplayLabel(order, id),
+      createdAtText: formatDate(order['Created at']),
+      paymentMethodText: paymentMethodLabel(order['Payment Method']),
+      totals: { itemsSubtotal, productDiscount, discountAmount, discountLabel, shippingAmount, totalAmount },
+      notes,
+    });
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        const success = document.execCommand('copy');
+        document.body.removeChild(textarea);
+        if (!success) throw new Error('Copy failed');
+      }
+      setOrderCopied(true);
+      window.setTimeout(() => setOrderCopied(false), 1500);
+    } catch (error) {
+      console.error('Unable to copy order text:', error);
+      alert('تعذر النسخ، حاول مرة أخرى.');
+    }
+  };
+
   const openWhatsApp = (url, message) => {
     // على أندرويد: نفرض فتح واتساب بيزنس بالاسم حتى لو العادي هو الافتراضي.
     const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '');
@@ -487,6 +522,13 @@ export default function OrderDetailsPage() {
             >
               <Printer size={16} />
               طباعة
+            </button>
+            <button
+              type="button"
+              onClick={handleCopyOrder}
+              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-300 rounded-lg text-sm font-bold text-gray-700 hover:bg-gray-50"
+            >
+              {orderCopied ? 'تم النسخ' : COPY_ORDER_LABEL}
             </button>
             {!isAbandoned && (whatsappConfirmedAt ? (
               <div className="flex items-center gap-1.5 px-3 py-2.5 bg-green-50 border border-green-200 rounded-lg text-xs font-bold text-green-700 whitespace-nowrap">
