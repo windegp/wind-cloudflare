@@ -1,6 +1,9 @@
 "use client";
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { getRtdb } from "@/lib/firebase"; 
+import { getRtdb, getAuthInstance } from "@/lib/firebase";
+import { adminFetch } from "@/lib/adminFetch";
+import { ADMIN_UID } from "@/lib/constants";
+import { onAuthStateChanged } from "firebase/auth";
 import { useSettings } from "@/context/SettingsContext";
 import { ref, onValue } from "firebase/database"; 
 import { Package, TrendingUp, ShoppingCart, Users, Activity, Calendar, ChevronDown, Eye, ArrowLeft, Loader2, X } from '@/components/icons-extra';
@@ -33,6 +36,10 @@ export default function Dashboard() {
   const [showCustomPicker, setShowCustomPicker] = useState(false);
   const menuRef = useRef(null);
 
+  // جاهزية Firebase Auth: لا طلب للـ API قبل ما يتأكد إن المسجل هو الأدمن
+  // (الـ API بقى بيرفض أي طلب بلا توكن أدمن — 401).
+  const [authReady, setAuthReady] = useState(false);
+
   const [dashboardData, setDashboardData] = useState(null);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
   const [statsError, setStatsError] = useState(null);
@@ -53,7 +60,16 @@ export default function Dashboard() {
   // ==========================================
   // جلب الإحصائيات
   // ==========================================
+  useEffect(() => {
+    const auth = getAuthInstance();
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setAuthReady(Boolean(u && u.uid === ADMIN_UID));
+    });
+    return () => unsubscribe();
+  }, []);
+
   const fetchDashboardStats = useCallback(async (period, startDate, endDate) => {
+    if (!authReady) return;
     setIsLoadingStats(true);
     setStatsError(null);
     
@@ -63,7 +79,7 @@ export default function Dashboard() {
         url += `&startDate=${startDate}&endDate=${endDate}`;
       }
       
-      const res = await fetch(url, { cache: 'no-store' });
+      const res = await adminFetch(url, { cache: 'no-store' });
       const result = await res.json();
       
       if (result.success) {
@@ -78,7 +94,7 @@ export default function Dashboard() {
     } finally {
       setIsLoadingStats(false);
     }
-  }, []);
+  }, [authReady]);
 
   // ==========================================
   // تحديث عند تغيير الفترة
@@ -92,7 +108,7 @@ export default function Dashboard() {
       return;
     }
     fetchDashboardStats(activePeriod, customStartDate, customEndDate);
-  }, [activePeriod, fetchDashboardStats]);
+  }, [activePeriod, authReady, fetchDashboardStats]);
   // ملاحظة: customStartDate/customEndDate مش متضمنين — بنستخدمهم يدوي
 
   // تحديث دوري كل 60 ثانية — لـ "اليوم" فقط (البيانات التاريخية لا تتغير)
