@@ -3,6 +3,7 @@ import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { getRtdb, getAuthInstance } from "@/lib/firebase";
 import { adminFetch } from "@/lib/adminFetch";
 import { ADMIN_UID } from "@/lib/constants";
+import { onAuthStateChanged } from "firebase/auth";
 import { useSettings } from "@/context/SettingsContext";
 import { ref, onValue } from "firebase/database"; 
 import { Package, TrendingUp, ShoppingCart, Users, Activity, Calendar, ChevronDown, Eye, ArrowLeft, Loader2, X } from '@/components/icons-extra';
@@ -61,7 +62,7 @@ export default function Dashboard() {
   // ==========================================
   useEffect(() => {
     const auth = getAuthInstance();
-    const unsubscribe = auth.onAuthStateChanged((u) => {
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
       setAuthReady(Boolean(u && u.uid === ADMIN_UID));
     });
     return () => unsubscribe();
