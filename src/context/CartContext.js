@@ -2,6 +2,7 @@
 // ============================================
 // 🛒 CART CONTEXT
 // ============================================
+import { sanitizeGiftSelection, sanitizeGiftSelections, freezeGiftSelections } from "@/lib/offerGiftVariant";
 import { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { calculateSubtotal, calculateShipping, calculateDiscount, calculateTotal, calculateAllTotals } from '@/lib/cartCalculations';
 import { useSettings } from '@/context/SettingsContext';
@@ -185,11 +186,11 @@ const [customerChoiceGiftSelections, setCustomerChoiceGiftSelections] = useState
       const giftKey = String(originalItem.__autoOfferGiftKey);
       setOfferGiftSelections((prev) => ({
         ...prev,
-        [giftKey]: {
-          selectedSize: selection.selectedSize || "",
-          selectedColor: selection.selectedColor || "",
-          image: selection.image || originalItem.image || "",
-        },
+        [giftKey]: sanitizeGiftSelection({
+          selectedSize: selection.selectedSize,
+          selectedColor: selection.selectedColor,
+          image: selection.image || originalItem.image,
+        }),
       }));
       return;
     }
@@ -383,6 +384,14 @@ const [customerChoiceGiftSelections, setCustomerChoiceGiftSelections] = useState
     [cartItems, appliedPromo, shippingSettings, isFirstOrder, offers, freeShippingRule, customerChoiceGiftSelections]
   );
 
+  // Freeze the free gift's color the first time it is shown, so it never moves
+  // when paid lines are edited later. A color the customer chose is kept as is.
+  useEffect(() => {
+    if (!cartItemsLoaded || !offerGiftSelectionsLoaded) return;
+    const frozen = freezeGiftSelections(offerBenefits, cartItems, offerGiftSelections);
+    if (frozen) setOfferGiftSelections(frozen);
+  }, [offerBenefits, cartItems, offerGiftSelections, cartItemsLoaded, offerGiftSelectionsLoaded]);
+
   // لو عرض تلقائي كسب على كود الخصم: نوضح للعميل إن الكود ما اتطبقش
   // (الحساب نفسه بيستخدم appliedPromo الأصلي — ده للعرض فقط)
   const appliedPromoView = useMemo(() => {
@@ -536,7 +545,7 @@ const [customerChoiceGiftSelections, setCustomerChoiceGiftSelections] = useState
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-          setOfferGiftSelections(parsed);
+          setOfferGiftSelections(sanitizeGiftSelections(parsed));
         }
       }
     } catch {
