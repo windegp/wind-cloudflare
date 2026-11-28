@@ -14,8 +14,9 @@
 
 import { PERMISSIONS, hasPermission } from "./rbac";
 
-// من يستلم إشعار طلب جديد؟ المالك + الأدمن + موظف الطلبات فقط
-// (قرار المالك 2026-11-28). المشاهدة فقط والمنتجات والمحتوى مستبعدون.
+// من يستلم إشعار طلب جديد؟ المالك + الأدمن + موظف الطلبات + المشاهدة
+// فقط (قرار المالك 2026-11-28، عُدّل في نفس اليوم ليشمل المشاهدة
+// فقط). المنتجات والمحتوى مستبعدون.
 export function isNotificationRecipient(role) {
   return hasPermission(role, PERMISSIONS.NOTIFICATIONS_RECEIVE);
 }

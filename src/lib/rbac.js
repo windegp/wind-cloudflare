@@ -40,8 +40,9 @@ export const PERMISSIONS = {
   MEDIA_UPLOAD: "media.upload",
   MEMBERS_MANAGE: "members.manage",
   // استلام إشعار طلب جديد (push + تنبيه لحظي داخل الأدمن).
-  // تُمنح للمالك والأدمن وموظف الطلبات فقط (قرار المالك 2026-11-28) —
-  // المشاهدة فقط والمنتجات والمحتوى مستبعدون. انظر docs/admin-notifications-by-role.md.
+  // تُمنح للمالك والأدمن وموظف الطلبات والمشاهدة فقط (قرار المالك
+  // 2026-11-28، عُدّل في نفس اليوم ليشمل المشاهدة فقط) — المنتجات
+  // والمحتوى مستبعدون. انظر docs/admin-notifications-by-role.md.
   NOTIFICATIONS_RECEIVE: "notifications.receive",
 };
 
@@ -91,7 +92,7 @@ export const ROLE_DESCRIPTIONS_AR = {
   [ROLES.ORDERS]: "لوحة التحكم، عرض وتعديل الطلبات، وعرض العملاء، واستلام إشعارات الطلبات الجديدة.",
   [ROLES.PRODUCTS]: "لوحة التحكم، عرض وتعديل المنتجات والأقسام والمخزون، ورفع صور المنتجات.",
   [ROLES.CONTENT]: "لوحة التحكم، إدارة الواجهة والمنيو والصفحات، والتقييمات والعروض وأكواد الخصم.",
-  [ROLES.VIEWER]: "عرض فقط: لوحة التحكم والطلبات والمنتجات والعملاء والمخزون — بدون أي تعديل.",
+  [ROLES.VIEWER]: "عرض فقط: لوحة التحكم والطلبات والمنتجات والعملاء والمخزون — بدون أي تعديل، مع استلام إشعارات الطلبات الجديدة.",
 };
 
 // --------------------------------------------
@@ -131,6 +132,7 @@ export const ROLE_PERMISSIONS = {
     PERMISSIONS.PRODUCTS_VIEW,
     PERMISSIONS.CUSTOMERS_VIEW,
     PERMISSIONS.INVENTORY_VIEW,
+    PERMISSIONS.NOTIFICATIONS_RECEIVE,
   ],
 };
 

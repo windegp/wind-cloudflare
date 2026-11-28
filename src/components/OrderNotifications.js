@@ -13,8 +13,9 @@ import {
 } from "@/lib/firebaseMessaging";
 import { Bell, BellRing, BellOff } from "@/components/icons-extra";
 
-// 🔥 إشعارات الأوردرات الجديدة بالصوت — للمالك والأدمن وموظف الطلبات فقط
-// (قرار المالك 2026-11-28). بيتركّب مرة واحدة في admin/layout.js فيشتغل
+// 🔥 إشعارات الأوردرات الجديدة بالصوت — للمالك والأدمن وموظف الطلبات
+// والمشاهدة فقط (قرار المالك 2026-11-28، عُدّل في نفس اليوم ليشمل
+// المشاهدة فقط). بيتركّب مرة واحدة في admin/layout.js فيشتغل
 // في كل صفحات الأدمن. الـ layout بيمرّر ملف الموظف (profile) — جاهز
 // هناك — فلا قراءة إضافية من Firestore في العادة.
 export default function OrderNotifications({ isOpen = true, profile = null } = {}) {
@@ -45,7 +46,7 @@ export default function OrderNotifications({ isOpen = true, profile = null } = {
       console.warn("Skipping FCM token save: no staff profile");
       return;
     }
-    // الأدوار التي لا تستلم إشعارات الطلبات (مشاهدة فقط، منتجات، محتوى)
+    // الأدوار التي لا تستلم إشعارات الطلبات (منتجات، محتوى)
     // لا تسجّل توكنًا أصلًا — فلا يصلها شيء حتى لو تغيّر الإرسال.
     if (!isNotificationRecipient(staffProfile.role)) return;
     try {

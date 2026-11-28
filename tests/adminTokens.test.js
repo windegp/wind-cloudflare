@@ -2,14 +2,15 @@ import { describe, expect, it } from "vitest";
 import { buildAdminTokenDoc, isNotificationRecipient } from "@/lib/adminTokens";
 import { ROLES } from "@/lib/rbac";
 
-// Policy decided by the owner (2026-11-28): new-order notifications go to
-// owner + admin + orders staff only. Viewer / products / content excluded.
+// Policy decided by the owner (2026-11-28, amended the same day to include
+// viewer): new-order notifications go to owner + admin + orders + viewer.
+// Products / content excluded.
 describe("isNotificationRecipient — new-order notification policy", () => {
   it.each([
     [ROLES.OWNER, true],
     [ROLES.ADMIN, true],
     [ROLES.ORDERS, true],
-    [ROLES.VIEWER, false],
+    [ROLES.VIEWER, true],
     [ROLES.PRODUCTS, false],
     [ROLES.CONTENT, false],
   ])("role %s receives: %s", (role, expected) => {

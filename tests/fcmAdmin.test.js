@@ -78,7 +78,7 @@ it("strict provider failure throws for outbox retry", async () => {
   await expect(sendNewOrderNotification({ ...input, strict: true })).rejects.toThrow("FCM_DISPATCH_FAILED");
 });
 
-describe("sendNewOrderNotification — role filtering (owner + admin + orders only)", () => {
+describe("sendNewOrderNotification — role filtering (owner + admin + orders + viewer)", () => {
   it("sends to an orders-role staff token (current role resolved from admins doc)", async () => {
     mocks.firestoreAdminList.mockResolvedValue([
       tokenDoc("orders-device-token", { uid: "staff-orders-uid", role: "orders", platform: "web" }),
@@ -100,15 +100,15 @@ describe("sendNewOrderNotification — role filtering (owner + admin + orders on
     expect(console.log).toHaveBeenCalledWith(expect.stringContaining('"accepted":1'));
   });
 
-  it("skips a viewer token and never sends to it", async () => {
+  it("sends to a viewer-role staff token", async () => {
     mocks.firestoreAdminList.mockResolvedValue([
       tokenDoc("viewer-device-token", { uid: "staff-viewer-uid", role: "viewer", platform: "web" }),
     ]);
     mocks.firestoreAdminGet.mockResolvedValue(staffDoc("staff-viewer-uid", "viewer"));
     await sendNewOrderNotification(input);
-    expect(fetch).not.toHaveBeenCalled();
-    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('"accepted":0'));
-    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('"skipped":1'));
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('"accepted":1'));
+    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('"skipped":0'));
   });
 
   it("skips products/content tokens the same way", async () => {
@@ -127,9 +127,9 @@ describe("sendNewOrderNotification — role filtering (owner + admin + orders on
   it("sends to recipients and skips non-recipients in the same batch", async () => {
     mocks.firestoreAdminList.mockResolvedValue([
       tokenDoc("owner-token", { uid: ADMIN_UID, role: "owner" }),
-      tokenDoc("viewer-token", { uid: "staff-viewer-uid", role: "viewer", platform: "web" }),
+      tokenDoc("products-token", { uid: "staff-products-uid", role: "products", platform: "web" }),
     ]);
-    mocks.firestoreAdminGet.mockResolvedValue(staffDoc("staff-viewer-uid", "viewer"));
+    mocks.firestoreAdminGet.mockResolvedValue(staffDoc("staff-products-uid", "products"));
     await sendNewOrderNotification(input);
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(console.log).toHaveBeenCalledWith(expect.stringContaining('"accepted":1'));
@@ -157,14 +157,15 @@ describe("sendNewOrderNotification — role filtering (owner + admin + orders on
   });
 
   it("uses the CURRENT role, not the role stored on the token doc", async () => {
-    // Token was stored when the member was orders; the role changed to viewer since.
+    // Token was stored when the member was products; the role changed to viewer since.
     mocks.firestoreAdminList.mockResolvedValue([
-      tokenDoc("stale-role-token", { uid: "staff-changed-uid", role: "orders", platform: "web" }),
+      tokenDoc("stale-role-token", { uid: "staff-changed-uid", role: "products", platform: "web" }),
     ]);
     mocks.firestoreAdminGet.mockResolvedValue(staffDoc("staff-changed-uid", "viewer"));
     await sendNewOrderNotification(input);
-    expect(fetch).not.toHaveBeenCalled();
-    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('"skipped":1'));
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('"accepted":1'));
+    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('"skipped":0'));
   });
 
   it("does not look up the admins doc for the owner UID", async () => {
