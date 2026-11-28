@@ -21,6 +21,8 @@ const ERROR_AR = {
   members_list_failed: "فشل تحميل الأعضاء.",
   members_save_failed: "فشل حفظ العضو.",
   members_deactivate_failed: "فشل إلغاء التفعيل.",
+  invite_failed: "فشل تجهيز حساب الموظف — تحقق من إعدادات Firebase وحاول مجددًا.",
+  cannot_invite_owner: "لا يمكن دعوة بريد المالك.",
   unauthorized: "غير مصرّح — سجّل الدخول من جديد.",
   forbidden_missing_permission: "لا تملك صلاحية إدارة الأعضاء.",
 };
@@ -52,6 +54,13 @@ export default function MembersPage() {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState(ROLES.VIEWER);
+
+  // نموذج الدعوة بالبريد (الطريقة الموصى بها — تجهّز الحساب قبل أول دخول).
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteName, setInviteName] = useState("");
+  const [inviteRole, setInviteRole] = useState(ROLES.VIEWER);
+  const [inviteError, setInviteError] = useState("");
+  const [inviting, setInviting] = useState(false);
 
   // الدور الجاري تعديله لكل عضو (افتراضيًا دوره الحالي).
   const [roleDrafts, setRoleDrafts] = useState({});
@@ -86,6 +95,48 @@ export default function MembersPage() {
     const t = setTimeout(() => setToast(null), 4000);
     return () => clearTimeout(t);
   }, [toast]);
+
+  // تجهيز موظف بالبريد: ينشئ حساب Auth ومستند العضو معًا، فيدخل
+  // الموظف من أول مرة بحساب Google دون شاشة رفض.
+  async function inviteMember(e) {
+    e.preventDefault();
+    setInviteError("");
+    if (!inviteEmail.trim()) {
+      setInviteError("البريد الإلكتروني مطلوب.");
+      return;
+    }
+    setInviting(true);
+    try {
+      const res = await adminFetch("/api/admin/members/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: inviteEmail.trim(),
+          name: inviteName.trim(),
+          role: inviteRole,
+        }),
+      });
+      const result = await res.json();
+      if (result.success) {
+        setToast({
+          type: "success",
+          text: result.authUserCreated
+            ? "تم تجهيز حساب الموظف — يقدر يدخل مباشرة بحساب Google من أول مرة."
+            : "الموظف كان له حساب أصلًا — تم تفعيله بالدور المحدد، ويقدر يدخل مباشرة.",
+        });
+        setInviteEmail("");
+        setInviteName("");
+        setInviteRole(ROLES.VIEWER);
+        loadMembers();
+      } else {
+        setInviteError(ERROR_AR[result.error] || "فشل تجهيز حساب الموظف.");
+      }
+    } catch {
+      setInviteError("فشل تجهيز حساب الموظف.");
+    } finally {
+      setInviting(false);
+    }
+  }
 
   async function saveMember(e) {
     e.preventDefault();
@@ -222,23 +273,79 @@ export default function MembersPage() {
         )}
 
         {/* كيف تضيف موظفًا؟ */}
-        <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 mb-6 text-sm text-amber-900 leading-relaxed">
-          <p className="font-bold mb-1">قبل إضافة أي موظف:</p>
+        <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 mb-6 text-sm text-emerald-900 leading-relaxed">
+          <p className="font-bold mb-1">الطريقة الموصى بها — دعوة بالبريد:</p>
           <p>
-            يجب أن يسجّل الموظف دخوله مرة واحدة بحساب Google على صفحة{" "}
+            اكتب بريد الموظف والدور في النموذج بالأسفل، وسيُجهَّز حسابه
+            قبل أول دخول — فيدخل مباشرة بحساب Google على صفحة{" "}
             <span className="font-mono font-bold" dir="ltr">/admin/login</span>{" "}
-            حتى يُنشأ حساب Firebase الخاص به (سيظهر له "غير مصرح لك" — وهذا متوقَّع).
-            بعدها انسخ الـ UID الخاص به من Firebase Console ← Authentication ←
-            Users، والصقه في الحقل بالأسفل.
+            دون أن يرى "غير مصرح لك". لا يُرسل أي بريد دعوة تلقائيًا بعد؛
+            أبلغ الموظف بنفسك أن يدخل بحساب Google الخاص به.
+          </p>
+          <p className="mt-2">
+            الطريقة القديمة (بالـ UID) ما زالت موجودة بالأسفل للحالات التي
+            يكون فيها للموظف حساب Firebase أصلًا — انسخ الـ UID من Firebase
+            Console ← Authentication ← Users.
           </p>
         </div>
+
+        {/* نموذج الدعوة بالبريد */}
+        <form
+          onSubmit={inviteMember}
+          className="bg-white border border-gray-200 rounded-2xl p-5 mb-6 shadow-sm space-y-4"
+        >
+          <h2 className="font-bold text-[#202223]">دعوة موظف جديد بالبريد</h2>
+          <div className="grid gap-4 md:grid-cols-3">
+            <label className="block">
+              <span className="text-sm font-bold text-gray-600">البريد الإلكتروني *</span>
+              <input
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                dir="ltr"
+                placeholder="name@example.com"
+                className="mt-1 w-full border border-gray-300 rounded-xl px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="block">
+              <span className="text-sm font-bold text-gray-600">الاسم</span>
+              <input
+                value={inviteName}
+                onChange={(e) => setInviteName(e.target.value)}
+                placeholder="اسم الموظف"
+                className="mt-1 w-full border border-gray-300 rounded-xl px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="block">
+              <span className="text-sm font-bold text-gray-600">الدور</span>
+              <select
+                value={inviteRole}
+                onChange={(e) => setInviteRole(e.target.value)}
+                className="mt-1 w-full border border-gray-300 rounded-xl px-3 py-2 text-sm bg-white"
+              >
+                {ASSIGNABLE_ROLES.map((r) => (
+                  <option key={r} value={r}>
+                    {ROLE_LABELS_AR[r]} — {ROLE_DESCRIPTIONS_AR[r]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          {inviteError && <p className="text-red-600 text-sm font-bold">{inviteError}</p>}
+          <button
+            type="submit"
+            disabled={inviting}
+            className="py-3 px-6 bg-[#1a1a1a] text-white font-bold rounded-xl hover:bg-black shadow-sm transition-colors disabled:opacity-50"
+          >
+            {inviting ? "جارٍ التجهيز..." : "تجهيز حساب الموظف"}
+          </button>
+        </form>
 
         {/* نموذج الإضافة */}
         <form
           onSubmit={saveMember}
           className="bg-white border border-gray-200 rounded-2xl p-5 mb-6 shadow-sm space-y-4"
         >
-          <h2 className="font-bold text-[#202223]">إضافة عضو جديد</h2>
+          <h2 className="font-bold text-[#202223]">إضافة عضو موجود بالـ UID (طريقة بديلة)</h2>
           <div className="grid gap-4 md:grid-cols-2">
             <label className="block">
               <span className="text-sm font-bold text-gray-600">Firebase UID *</span>
