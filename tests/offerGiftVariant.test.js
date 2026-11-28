@@ -170,3 +170,35 @@ describe("gift defaults to a color the customer did not pay for", () => {
     expect(freezeGiftSelections(benefits(items), items, {})[KEY]).toMatchObject({ selectedColor: "D", selectedSize: "M" });
   });
 });
+
+describe("works for any buy/get quantities (read from the engine result, nothing hardcoded)", () => {
+  const cfg = (buyQty, getQty) => ({ ...offer, config: { buyQty, getQty } });
+  const run = (buyQty, getQty, colors, paid, size = "M") => {
+    const v = full(colors);
+    const items = paid.map((c) => mk(c, v));
+    const b = computeOfferBenefits(items, cfg(buyQty, getQty), new Date());
+    return { b, saved: freezeGiftSelections(b, items, {}), units: b.lines.flatMap((l) => l.discountedUnits) };
+  };
+  it("buy 2 get 1: paid A,B of A,B,C -> C", () => {
+    const { saved } = run(2, 1, ["A", "B", "C"], ["A", "B"]);
+    expect(saved[KEY]).toMatchObject({ selectedColor: "C", frozen: true });
+  });
+  it("buy 3 get 1: paid A,B,C of 4 colors -> D", () => {
+    expect(run(3, 1, ["A", "B", "C", "D"], ["A", "B", "C"]).saved[KEY].selectedColor).toBe("D");
+  });
+  it("buy 4 get 1: paid A,B,C,D of 5 colors -> E; of 4 colors -> falls back to A", () => {
+    expect(run(4, 1, ["A", "B", "C", "D", "E"], ["A", "B", "C", "D"]).saved[KEY].selectedColor).toBe("E");
+    expect(run(4, 1, ["A", "B", "C", "D"], ["A", "B", "C", "D"]).saved[KEY].selectedColor).toBe("A");
+  });
+  it("buy 3 get 2: two free units, ONE saved color per offer+product, both use it", () => {
+    const { saved, units } = run(3, 2, ["A", "B", "C", "D", "E"], ["A", "B", "C"]);
+    const gifts = units.filter((u) => u.autoAdded);
+    expect(gifts).toHaveLength(2);
+    expect(new Set(gifts.map((u) => u.giftKey)).size).toBe(1); // known limit: one key for both
+    expect(Object.keys(saved)).toEqual([KEY]);
+    expect(saved[KEY].selectedColor).toBe("D"); // both free units show D (not D and E)
+  });
+  it("offer quantities change -> nothing assumes 3 or 4 (buy 5 get 1, 6 colors)", () => {
+    expect(run(5, 1, ["A", "B", "C", "D", "E", "F"], ["A", "B", "C", "D", "E"]).saved[KEY].selectedColor).toBe("F");
+  });
+});
