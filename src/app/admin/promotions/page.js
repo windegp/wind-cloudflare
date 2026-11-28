@@ -4,7 +4,7 @@ import { DEFAULT_NEWSLETTER_SUBTITLE, DEFAULT_NEWSLETTER_TITLE } from "@/lib/sub
 import { adminFetch } from "@/lib/adminFetch";
 import { useState, useEffect, useCallback } from "react";
 import { getDb } from "@/lib/firebase";
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs } from "firebase/firestore/lite";
+import { doc, getDoc, updateDoc } from "firebase/firestore/lite";
 import {
   Tag, Plus, Trash2, Edit2, Save, AlertTriangle, CheckCircle2,
   Truck, RefreshCw, AlertCircle, Calendar, X, Search
@@ -80,7 +80,9 @@ export default function PromotionsPage() {
   const [deleteConfirm,  setDeleteConfirm]  = useState(null);
   const [conflicts,      setConflicts]      = useState([]);
 
-  // ── جلب البيانات مباشرة من Firestore ────────────────────────
+  // ── جلب البيانات: إعدادات الشحن من Firestore مباشرة (قراءتها عامة)،
+  //    والأكواد من API السيرفر — قراءة promoCodes من المتصفح مرفوضة
+  //    للموظفين في قواعد Firestore (للمالك فقط).
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
@@ -104,16 +106,16 @@ export default function PromotionsPage() {
       setNlSubtitle(promo.newsletterSubtitle ?? DEFAULT_NEWSLETTER_SUBTITLE);
       setOrigSettings(promo);
 
-      // الأكواد
-      const codesSnap = await getDocs(collection(db, "promoCodes"));
-      const list = codesSnap.docs.map(d => ({
+      // الأكواد — من API السيرفر (/api/admin/promotions)
+      const codesRes = await adminFetch("/api/admin/promotions");
+      const codesBody = await codesRes.json();
+      if (!codesRes.ok || !codesBody?.success) {
+        throw new Error(codesBody?.error || "promotions_list_failed");
+      }
+      const list = (codesBody.codes || []).map(d => ({
         id: d.id,
-        ...d.data(),
-        expiresAt: d.data().expiresAt
-          ? (d.data().expiresAt.toDate
-              ? d.data().expiresAt.toDate().toISOString().split("T")[0]
-              : d.data().expiresAt)
-          : null,
+        ...d,
+        expiresAt: d.expiresAt ? String(d.expiresAt).slice(0, 10) : null,
       }));
       setCodes(list);
     } catch (err) {
@@ -237,7 +239,7 @@ export default function PromotionsPage() {
     return null;
   };
 
-  // ── حفظ الكود مباشرة في Firestore ───────────────────────────
+  // ── حفظ الكود عبر API السيرفر ───────────────────────────────
   const saveCode = async () => {
     const err = validateForm();
     if (err) return setFormError(err);
@@ -251,18 +253,6 @@ export default function PromotionsPage() {
       : rawScope.split(",").map(s => s.trim()).filter(Boolean);
 
     try {
-      const db = getDb();
-
-      // تحقق من الكود موجود مسبقاً عند الإنشاء
-      if (!editingCode) {
-        const existing = await getDoc(doc(db, "promoCodes", normalizedCode));
-        if (existing.exists()) {
-          setFormError("هذا الكود موجود بالفعل");
-          setSaving(false);
-          return;
-        }
-      }
-
       const promoData = {
         type:           form.type,
         value:          Number(form.value) || 0,
@@ -275,13 +265,21 @@ export default function PromotionsPage() {
         updatedAt:      new Date().toISOString(),
       };
 
-      if (!editingCode) {
-        promoData.usedCount = 0;
-        promoData.usedBy    = [];
-        promoData.createdAt = new Date().toISOString();
-        await setDoc(doc(db, "promoCodes", normalizedCode), promoData);
-      } else {
-        await updateDoc(doc(db, "promoCodes", normalizedCode), promoData);
+      // الكتابة في promoCodes تتم عبر API السيرفر — كتابة المتصفح
+      // المباشرة مرفوضة للموظفين في قواعد Firestore.
+      const res = await adminFetch("/api/admin/promotions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: normalizedCode, data: promoData, create: !editingCode }),
+      });
+      const body = await res.json();
+      if (!res.ok || !body?.success) {
+        if (body?.error === "code_exists") {
+          setFormError("هذا الكود موجود بالفعل");
+          setSaving(false);
+          return;
+        }
+        throw new Error(body?.error || "promotions_save_failed");
       }
 
       showToast(editingCode ? "تم تعديل الكود ✓" : "تم إنشاء الكود ✓");
@@ -294,12 +292,18 @@ export default function PromotionsPage() {
     }
   };
 
-  // ── حذف كود مباشرة من Firestore ─────────────────────────────
+  // ── حذف كود عبر API السيرفر ─────────────────────────────────
   const deleteCode = async (id) => {
     setSaving(true);
     try {
-      const db = getDb();
-      await deleteDoc(doc(db, "promoCodes", id));
+      const res = await adminFetch(
+        `/api/admin/promotions?code=${encodeURIComponent(id)}`,
+        { method: "DELETE" },
+      );
+      const body = await res.json();
+      if (!res.ok || !body?.success) {
+        throw new Error(body?.error || "promotions_delete_failed");
+      }
       showToast("تم حذف الكود ✓");
       setDeleteConfirm(null);
       fetchData();

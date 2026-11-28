@@ -86,4 +86,37 @@ describe("private server order REST store", () => {
     await expect(serverOrderStore.query("Customers", { filters: [{ field: "a", op: "EQUAL", value: "x" }], limit: 0 })).rejects.toMatchObject({ code: "INVALID_ORDER_QUERY" });
     expect(fetch).not.toHaveBeenCalled();
   });
+  it("query supports orderBy and offset for server-side admin paging", async () => {
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify([])));
+    await serverOrderStore.query("Orders", {
+      filters: [{ field: "data_source", op: "EQUAL", value: "WIND_Web" }],
+      orderBy: { field: "Created at", direction: "DESCENDING" },
+      limit: 20,
+      offset: 40,
+    });
+    const body = JSON.parse(fetch.mock.calls[0][1].body);
+    expect(body.structuredQuery.orderBy).toEqual([
+      { field: { fieldPath: "`Created at`" }, direction: "DESCENDING" },
+    ]);
+    expect(body.structuredQuery.offset).toBe(40);
+    expect(body.structuredQuery.limit).toBe(20);
+  });
+  it("query allows listing a whole collection with no filters", async () => {
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify([])));
+    await serverOrderStore.query("promoCodes", { limit: 1000 });
+    const body = JSON.parse(fetch.mock.calls[0][1].body);
+    expect(body.structuredQuery.where).toBeUndefined();
+    expect(body.structuredQuery.limit).toBe(1000);
+  });
+  it("query rejects invalid orderBy and offset before any network call", async () => {
+    await expect(serverOrderStore.query("Orders", {
+      orderBy: { field: "Created at", direction: "SIDEWAYS" },
+    })).rejects.toMatchObject({ code: "INVALID_ORDER_QUERY" });
+    await expect(serverOrderStore.query("Orders", {
+      orderBy: { field: "a; drop", direction: "ASCENDING" },
+    })).rejects.toMatchObject({ code: "INVALID_ORDER_QUERY" });
+    await expect(serverOrderStore.query("Orders", { offset: -1 })).rejects.toMatchObject({ code: "INVALID_ORDER_QUERY" });
+    await expect(serverOrderStore.query("Orders", { offset: 1.5 })).rejects.toMatchObject({ code: "INVALID_ORDER_QUERY" });
+    expect(fetch).not.toHaveBeenCalled();
+  });
 });

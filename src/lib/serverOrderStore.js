@@ -114,23 +114,32 @@ export const serverOrderStore = {
   },
   // Small generic structured-query read for server code that used to rely on
   // the public-read security rule through the client SDK. ANDs field filters.
-  async query(collection, { filters, limit } = {}) {
+  // `filters` may be omitted to list a whole collection (bounded by `limit`).
+  // `orderBy` / `offset` mirror the client SDK's orderBy/startAfter paging:
+  // the admin list pages page with limit+offset instead of document cursors.
+  async query(collection, { filters, limit, orderBy, offset } = {}) {
     assertOrderStoreConfiguration();
     documentName(collection, "validate");
-    if (!Array.isArray(filters) || !filters.length || filters.length > 4 ||
+    if ((filters !== undefined && (!Array.isArray(filters) || !filters.length || filters.length > 4 ||
         !filters.every(f => f && typeof f.field === "string" && /^[A-Za-z][A-Za-z0-9_ ]{0,49}$/.test(f.field) &&
-          QUERY_OPS.has(f.op) && ["string", "number", "boolean"].includes(typeof f.value)) ||
-        (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > 1000))) {
+          QUERY_OPS.has(f.op) && ["string", "number", "boolean"].includes(typeof f.value)))) ||
+        (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > 1000)) ||
+        (orderBy !== undefined && (!orderBy || typeof orderBy.field !== "string" ||
+          !/^[A-Za-z][A-Za-z0-9_ ]{0,49}$/.test(orderBy.field) ||
+          !["ASCENDING", "DESCENDING"].includes(orderBy.direction))) ||
+        (offset !== undefined && (!Number.isInteger(offset) || offset < 0 || offset > 10000))) {
       throw new OrderStoreError("INVALID_ORDER_QUERY", 400);
     }
-    const fieldFilters = filters.map(f => ({ fieldFilter: {
+    const fieldFilters = (filters || []).map(f => ({ fieldFilter: {
       field: { fieldPath: fieldPathForApi(f.field) }, op: f.op, value: encodeOrderValue(f.value),
     } }));
     const structuredQuery = {
       from: [{ collectionId: collection }],
-      where: fieldFilters.length === 1
+      ...(fieldFilters.length ? { where: fieldFilters.length === 1
         ? fieldFilters[0]
-        : { compositeFilter: { op: "AND", filters: fieldFilters } },
+        : { compositeFilter: { op: "AND", filters: fieldFilters } } } : {}),
+      ...(orderBy ? { orderBy: [{ field: { fieldPath: fieldPathForApi(orderBy.field) }, direction: orderBy.direction }] } : {}),
+      ...(offset !== undefined ? { offset } : {}),
       ...(limit !== undefined ? { limit } : {}),
     };
     const result = await request(`projects/${process.env.FIREBASE_PROJECT_ID}/databases/(default)/documents:runQuery`, {
