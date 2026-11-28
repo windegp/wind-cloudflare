@@ -5,14 +5,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { getDb } from "@/lib/firebase";
 import {
   collection,
-  deleteDoc,
   doc,
   getDoc,
   getDocs,
   limit,
   query,
-  setDoc,
-  updateDoc,
 } from "firebase/firestore/lite";
 import {
   Tag,
@@ -396,27 +393,7 @@ export default function AdminOffersPage() {
     setSaving(true);
     setFormError("");
     try {
-      const db = getDb();
       const now = new Date().toISOString();
-      if (form.type === "coupon_fixed") {
-        const normalizedCode = form.couponCode.trim().toUpperCase();
-        const duplicate = offers.some((offer) =>
-          offer.type === "coupon_fixed" &&
-          offer.id !== editingId &&
-          String(offer.couponCode || "").trim().toUpperCase() === normalizedCode
-        );
-        if (duplicate) {
-          setFormError("كود القسيمة مستخدم بالفعل في هذه البيئة.");
-          setSaving(false);
-          return;
-        }
-        const legacyCode = await getDoc(doc(db, "promoCodes", normalizedCode));
-        if (legacyCode.exists()) {
-          setFormError("هذا الكود مستخدم بالفعل في أكواد الخصم القديمة. اختر كودًا آخر.");
-          setSaving(false);
-          return;
-        }
-      }
       const numericConfig = {};
       if (form.type === "buy_x_get_y" || form.type === "buy_x_get_y_select_gift") {
         numericConfig.buyQty = Number(form.config.buyQty);
@@ -459,14 +436,32 @@ export default function AdminOffersPage() {
         updatedAt: now,
       };
 
-      if (editingId) {
-        await updateDoc(doc(db, "offers", editingId), data);
-      } else {
-        const randomId = typeof crypto !== "undefined" && crypto.randomUUID
-          ? crypto.randomUUID()
-          : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-        const id = `offer_${randomId.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
-        await setDoc(doc(db, "offers", id), { ...data, createdAt: now });
+      // الحفظ يتم عبر API السيرفر (/api/admin/offers) — كتابة `offers`
+      // من المتصفح مرفوضة للموظفين في قواعد Firestore (للمالك فقط).
+      // السيرفر يتحقق أيضًا من تكرار كود القسيمة في نفس البيئة
+      // ومن تصادمه مع أكواد الخصم القديمة (promoCodes).
+      const res = await adminFetch("/api/admin/offers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          offer: data,
+          editingId: editingId || null,
+          environment: getCurrentOfferEnvironment(),
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok || !body?.success) {
+        if (body?.error === "coupon_in_use") {
+          setFormError("كود القسيمة مستخدم بالفعل في هذه البيئة.");
+          setSaving(false);
+          return;
+        }
+        if (body?.error === "code_in_legacy_promo_codes") {
+          setFormError("هذا الكود مستخدم بالفعل في أكواد الخصم القديمة. اختر كودًا آخر.");
+          setSaving(false);
+          return;
+        }
+        throw new Error(body?.error || "offers_save_failed");
       }
 
       await revalidateOffers();
@@ -512,7 +507,17 @@ export default function AdminOffersPage() {
         environment: ruleEnvironment,
         updatedAt: new Date().toISOString(),
       };
-      await setDoc(doc(getDb(), "settings", `offerShippingRules_${ruleEnvironment}`), data, { merge: true });
+      // الحفظ يتم عبر API السيرفر — كتابة settings من المتصفح
+      // مرفوضة للموظفين في قواعد Firestore.
+      const res = await adminFetch("/api/admin/offers/shipping-rule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rule: data, environment: ruleEnvironment }),
+      });
+      const body = await res.json();
+      if (!res.ok || !body?.success) {
+        throw new Error(body?.error || "shipping_rule_save_failed");
+      }
       await revalidateOffers();
       notify("تم حفظ إعدادات الشحن المجاني.");
     } catch (error) {
@@ -525,10 +530,17 @@ export default function AdminOffersPage() {
   const toggleActive = async (offer) => {
     setSaving(true);
     try {
-      await updateDoc(doc(getDb(), "offers", offer.id), {
-        active: offer.active !== true,
-        updatedAt: new Date().toISOString(),
+      // التفعيل/الإيقاف يتم عبر API السيرفر — كتابة `offers` من المتصفح
+      // مرفوضة للموظفين في قواعد Firestore.
+      const res = await adminFetch("/api/admin/offers", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: offer.id, active: offer.active !== true }),
       });
+      const body = await res.json();
+      if (!res.ok || !body?.success) {
+        throw new Error(body?.error || "offers_toggle_failed");
+      }
       await revalidateOffers();
       setOffers((current) => current.map((item) =>
         item.id === offer.id ? { ...item, active: offer.active !== true } : item
@@ -546,7 +558,16 @@ export default function AdminOffersPage() {
     if (!confirmed) return;
     setSaving(true);
     try {
-      await deleteDoc(doc(getDb(), "offers", offer.id));
+      // الحذف يتم عبر API السيرفر — حذف `offers` من المتصفح
+      // مرفوض للموظفين في قواعد Firestore.
+      const res = await adminFetch(
+        `/api/admin/offers?id=${encodeURIComponent(offer.id)}`,
+        { method: "DELETE" },
+      );
+      const body = await res.json();
+      if (!res.ok || !body?.success) {
+        throw new Error(body?.error || "offers_delete_failed");
+      }
       await revalidateOffers();
       setOffers((current) => current.filter((item) => item.id !== offer.id));
       notify("تم حذف العرض.");

@@ -3,7 +3,8 @@ import { orderDisplayLabel } from "@/lib/orderDisplayNumber";
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getDb } from "@/lib/firebase";
-import { collection, query, where, getDocs, doc, writeBatch, orderBy, limit, startAfter, increment, updateDoc } from "firebase/firestore/lite";
+import { adminFetch } from "@/lib/adminFetch";
+import { doc, writeBatch, increment, updateDoc } from "firebase/firestore/lite";
 import { FULFILLMENT_OPTIONS, PAYMENT_OPTIONS, paymentOptionLabel, canEditPayment, paymentPatchForFulfillment, normalizeFulfillment, paymentBadge, matchesStatusFilter } from "@/lib/fulfillmentStatus";
 import { getCairoTimestamp } from "@/lib/analytics-helpers";
 import { useRouter } from 'next/navigation';
@@ -40,7 +41,7 @@ export default function OrdersListPage() {
   const fetchLimit = 20; 
   const itemsPerPage = 20;
   
-  const [lastVisible, setLastVisible] = useState(null);
+  // إزاحة الصفحة التالية في الـ API (بدل مؤشر مستند Firestore).
   const [hasMore, setHasMore] = useState(true);
   const [isLoading, setIsLoading] = useState(false); 
   
@@ -53,7 +54,7 @@ export default function OrdersListPage() {
 
   // 🔥 In-memory cache للتابات — بيمنع إعادة الجلب لو رجعت لتاب اتجلب قبل كده
   const tabCacheRef = useRef({});
-  const tabLastVisibleRef = useRef({});
+  const tabNextOffsetRef = useRef({});
 
   const router = useRouter();
 
@@ -69,35 +70,23 @@ export default function OrdersListPage() {
     // ✅ لو مش loadMore وعندنا cache للتاب ده، استخدمه بدون أي read
     if (!loadMore && tabCacheRef.current[activeTab]) {
       setAllRawOrders(tabCacheRef.current[activeTab]);
-      setLastVisible(tabLastVisibleRef.current[activeTab] || null);
       setHasMore(false);
       return;
     }
 
     setIsLoading(true);
     try {
-      const db = getDb();
-      const currentLastVisible = loadMore ? lastVisible : null;
-
-      let constraints = [
-        collection(db, "Orders"),
-        orderBy("Created at", "desc"),
-        limit(fetchLimit)
-      ];
-
-      if (activeTab === 'wind') {
-        constraints.push(where("data_source", "==", "WIND_Web"));
-      } else if (activeTab === 'shopify') {
-        constraints.push(where("data_source", "==", "Shopify_Import"));
+      // القائمة تأتي من API السيرفر (/api/admin/orders) — قراءة المتصفح
+      // المباشرة مرفوضة للموظفين في قواعد Firestore (للمالك فقط).
+      const offset = loadMore ? (tabNextOffsetRef.current[activeTab] ?? 0) : 0;
+      const res = await adminFetch(
+        `/api/admin/orders?tab=${encodeURIComponent(activeTab)}&limit=${fetchLimit}&offset=${offset}`,
+      );
+      const body = await res.json();
+      if (!res.ok || !body?.success) {
+        throw new Error(body?.error || "orders_list_failed");
       }
-
-      if (loadMore && currentLastVisible) {
-        constraints.push(startAfter(currentLastVisible));
-      }
-
-      const q = query(...constraints);
-      const querySnapshot = await getDocs(q);
-      const newDocs = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      const newDocs = Array.isArray(body.orders) ? body.orders : [];
 
       const updatedDocs = loadMore
         ? [...(tabCacheRef.current[activeTab] || []), ...newDocs]
@@ -105,18 +94,17 @@ export default function OrdersListPage() {
 
       // ✅ احفظ في الـ cache
       tabCacheRef.current[activeTab] = updatedDocs;
-      tabLastVisibleRef.current[activeTab] = querySnapshot.docs[querySnapshot.docs.length - 1] || null;
+      tabNextOffsetRef.current[activeTab] = body.nextOffset ?? (offset + newDocs.length);
 
       setAllRawOrders(updatedDocs);
-      setLastVisible(querySnapshot.docs[querySnapshot.docs.length - 1] || null);
-      setHasMore(querySnapshot.docs.length === fetchLimit);
+      setHasMore(body.hasMore === true);
 
     } catch (err) {
       console.error("WIND Error: Fetch failed", err);
     } finally {
       setIsLoading(false);
     }
-  }, [activeTab, lastVisible, isLoading]);
+  }, [activeTab, isLoading]);
 
   // ==========================================
   // 🔥 2. التحكم الآمن في التابات (يمنع الـ Loop)
@@ -133,7 +121,6 @@ export default function OrdersListPage() {
     setSearch("");
     setSelectedOrders([]);
     setAllRawOrders([]); 
-    setLastVisible(null); 
     setHasMore(true); 
     // لا نحتاج لتغيير initialLoadDone هنا لأن length بقت 0 وده كفاية للـ useEffect
     
@@ -296,41 +283,30 @@ export default function OrdersListPage() {
     setIsExporting(true);
 
     try {
-      const db = getDb();
+      // التصدير يسحب القسم الكامل من API السيرفر على دفعات —
+      // قراءة المتصفح المباشرة مرفوضة للموظفين في قواعد Firestore.
       let allExportData = [];
-      let lastDoc = null;
+      let offset = 0;
       let fetchMore = true;
 
-      // 1. 🛡️ بناء الاستعلام الموجه للقسم المختار (لتقليل القراءات)
-      // ملاحظة: لا نسحب أي بيانات إلا بعد ضغط الزرار
       while (fetchMore) {
-        let constraints = [
-          collection(db, "Orders"),
-          orderBy("Created at", "desc"),
-          limit(500) // نسحب دفعات كبيرة (500) لسرعة التنزيل وتقليل عدد الطلبات
-        ];
-
-        // توجيه البحث بناءً على السجمنت المفتوح
-        if (activeTab === 'wind') {
-          constraints.push(where("data_source", "==", "WIND_Web"));
-        } else if (activeTab === 'shopify') {
-          constraints.push(where("data_source", "==", "Shopify_Import"));
+        const res = await adminFetch(
+          `/api/admin/orders?tab=${encodeURIComponent(activeTab)}&limit=500&offset=${offset}`,
+        );
+        const body = await res.json();
+        if (!res.ok || !body?.success) {
+          throw new Error(body?.error || "orders_list_failed");
         }
+        const docsData = Array.isArray(body.orders) ? body.orders : [];
 
-        if (lastDoc) constraints.push(startAfter(lastDoc));
-
-        const q = query(...constraints);
-        const snap = await getDocs(q);
-
-        if (snap.empty) {
+        if (docsData.length === 0) {
           fetchMore = false;
         } else {
-          const docsData = snap.docs.map(doc => doc.data());
           allExportData = [...allExportData, ...docsData];
-          lastDoc = snap.docs[snap.docs.length - 1];
-          
+          offset = body.nextOffset ?? (offset + docsData.length);
+
           // لو الدفعة أقل من 500 يبقى خلصنا كل الداتا اللي في السيرفر للقسم ده
-          if (snap.docs.length < 500) fetchMore = false;
+          if (docsData.length < 500) fetchMore = false;
         }
       }
 

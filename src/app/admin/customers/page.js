@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { getDb } from "@/lib/firebase";
-import { collection, query, where, getDocs, doc, writeBatch, orderBy, limit, startAfter, increment } from "firebase/firestore/lite";
+import { adminFetch } from "@/lib/adminFetch";
+import { collection, getDocs, doc, writeBatch, increment } from "firebase/firestore/lite";
 import { useRouter } from 'next/navigation';
 import { Users, Target, Search, Trash2, AlertTriangle, X, ChevronLeft, ChevronRight, Mail, ShoppingCart, Download, Crown, UserMinus, Monitor, Archive, Layers } from '@/components/icons-extra';
 // 🔥 1. استدعاء SWR
@@ -57,7 +58,8 @@ export default function CustomersPage() {
   
   // 🔥 إدارة حالة "تحميل المزيد" محلياً لأن SWR بيدير السحبة الأولى فقط
   const [additionalCustomers, setAdditionalCustomers] = useState([]);
-  const [lastVisible, setLastVisible] = useState(null);
+  // إزاحة الصفحة التالية في الـ API (بدل مؤشر مستند Firestore).
+  const nextOffsetRef = useRef(0);
   const [hasMore, setHasMore] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   
@@ -71,33 +73,30 @@ export default function CustomersPage() {
   // 🔥 2. دالة الجلب الأساسية لـ SWR
   // ==========================================
   const fetcher = async (tabKey) => {
-    const db = getDb();
-    let q;
-    
     // tabKey سيكون عبارة عن مصفوفة ['customers', 'wind'] مثلاً
     const tabSource = tabKey[1];
 
-    if (tabSource === 'wind') {
-      q = query(collection(db, "Customers"), where("data_source", "==", "WIND_Web"), orderBy("last_active", "desc"), limit(fetchLimit));
-    } else if (tabSource === 'shopify') {
-      q = query(collection(db, "Customers"), where("data_source", "==", "Shopify_Import"), orderBy("last_active", "desc"), limit(fetchLimit));
-    } else {
-      q = query(collection(db, "Customers"), orderBy("last_active", "desc"), limit(fetchLimit));
+    // القائمة تأتي من API السيرفر (/api/admin/customers) — قراءة المتصفح
+    // المباشرة مرفوضة للموظفين في قواعد Firestore (للمالك فقط).
+    const res = await adminFetch(
+      `/api/admin/customers?tab=${encodeURIComponent(tabSource)}&limit=${fetchLimit}&offset=0`,
+    );
+    const body = await res.json();
+    if (!res.ok || !body?.success) {
+      throw new Error(body?.error || "customers_list_failed");
     }
-
-    const customersSnap = await getDocs(q);
+    const customersDocs = Array.isArray(body.customers) ? body.customers : [];
     const customersMap = new Map();
 
-    customersSnap.docs.forEach(doc => {
-      const data = doc.data();
+    customersDocs.forEach(data => {
       const email = (data.Email || data.email || '').toLowerCase().trim();
       const rawPhone = data.Phone || data['Default Address Phone'] || '';
       const cleanPhone = String(rawPhone).replace(/[^0-9]/g, '');
-      const uniqueId = email || cleanPhone || doc.id;
+      const uniqueId = email || cleanPhone || data.id;
 
       customersMap.set(uniqueId, {
         ...data,
-        id: doc.id,
+        id: data.id,
         displayId: uniqueId,
         'Calculated Orders': 0,
         'Calculated Spent': 0,
@@ -131,8 +130,8 @@ export default function CustomersPage() {
     });
 
     // تحديث حالة Pagination
-    setLastVisible(customersSnap.docs[customersSnap.docs.length - 1] || null);
-    setHasMore(customersSnap.docs.length === fetchLimit);
+    nextOffsetRef.current = body.nextOffset ?? customersDocs.length;
+    setHasMore(body.hasMore === true);
     
     return parsedArray;
   };
@@ -155,24 +154,19 @@ export default function CustomersPage() {
   // 🔥 4. تحميل المزيد (دالة يدوية تتخطى SWR)
   // ==========================================
   const loadMoreCustomers = async () => {
-    if (isLoadingMore || !hasMore || !lastVisible) return;
+    if (isLoadingMore || !hasMore) return;
     setIsLoadingMore(true);
     
     try {
-      const db = getDb();
-      let q;
-      
-      if (activeTab === 'wind') {
-        q = query(collection(db, "Customers"), where("data_source", "==", "WIND_Web"), orderBy("last_active", "desc"), startAfter(lastVisible), limit(fetchLimit));
-      } else if (activeTab === 'shopify') {
-        q = query(collection(db, "Customers"), where("data_source", "==", "Shopify_Import"), orderBy("last_active", "desc"), startAfter(lastVisible), limit(fetchLimit));
-      } else {
-        q = query(collection(db, "Customers"), orderBy("last_active", "desc"), startAfter(lastVisible), limit(fetchLimit));
+      const offset = nextOffsetRef.current || 0;
+      const res = await adminFetch(
+        `/api/admin/customers?tab=${encodeURIComponent(activeTab)}&limit=${fetchLimit}&offset=${offset}`,
+      );
+      const body = await res.json();
+      if (!res.ok || !body?.success) {
+        throw new Error(body?.error || "customers_list_failed");
       }
-
-      const customersSnap = await getDocs(q);
-      const newCustomers = customersSnap.docs.map(doc => {
-        const data = doc.data();
+      const newCustomers = (Array.isArray(body.customers) ? body.customers : []).map(data => {
         const totalOrders = Number(data['Total Orders'] || 0);
         const dbSegments = data.segments || [];
 
@@ -192,7 +186,7 @@ export default function CustomersPage() {
 
         return {
           ...data,
-          id: doc.id,
+          id: data.id,
           segments,
           'Total Orders': totalOrders,
           'Total Spent': data['Total Spent'] || 0,
@@ -201,8 +195,8 @@ export default function CustomersPage() {
       });
 
       setAdditionalCustomers(prev => [...prev, ...newCustomers]);
-      setLastVisible(customersSnap.docs[customersSnap.docs.length - 1] || null);
-      setHasMore(customersSnap.docs.length === fetchLimit);
+      nextOffsetRef.current = body.nextOffset ?? (offset + newCustomers.length);
+      setHasMore(body.hasMore === true);
 
     } catch (err) {
       console.error("Error loading more customers:", err);
@@ -217,7 +211,7 @@ export default function CustomersPage() {
     setActiveSegment("all");
     setSelectedCustomers([]);
     setAdditionalCustomers([]); // تصفير الإضافيات عند تغيير التاب
-    setLastVisible(null); 
+    nextOffsetRef.current = 0;
     setHasMore(true); 
     
     if (tab === 'wind') {
@@ -287,27 +281,29 @@ export default function CustomersPage() {
 
           if (cEmail) {
             batch.delete(doc(db, "Orders", `DRAFT-${cEmail}`));
-            const snapEmail = await getDocs(query(collection(db, "Orders"), where("Email", "==", cEmail), limit(1)));
-            snapEmail.docs.forEach(d => {
-              const oData = d.data();
+            // البحث عن طلبات العميل يتم عبر API السيرفر — قراءة المتصفح
+            // المباشرة لكولكشن Orders مرفوضة للموظفين في القواعد.
+            const emailRes = await adminFetch(`/api/admin/orders?email=${encodeURIComponent(cEmail)}`);
+            const emailBody = await emailRes.json();
+            (emailBody?.orders || []).forEach(oData => {
               if (oData['Financial Status'] !== 'abandoned') {
                 ordersToDec++;
                 salesToDec += Number(oData.Total || 0);
               }
-              batch.delete(doc(db, "Orders", d.id));
+              batch.delete(doc(db, "Orders", oData.id));
             });
           }
 
           if (cPhone) {
             batch.delete(doc(db, "Orders", `DRAFT-${cPhone}`));
-            const snapPhone = await getDocs(query(collection(db, "Orders"), where("Phone", "==", cPhone), limit(1)));
-            snapPhone.docs.forEach(d => {
-              const oData = d.data();
+            const phoneRes = await adminFetch(`/api/admin/orders?phone=${encodeURIComponent(cPhone)}`);
+            const phoneBody = await phoneRes.json();
+            (phoneBody?.orders || []).forEach(oData => {
               if (oData['Financial Status'] !== 'abandoned') {
                 ordersToDec++;
                 salesToDec += Number(oData.Total || 0);
               }
-              batch.delete(doc(db, "Orders", d.id));
+              batch.delete(doc(db, "Orders", oData.id));
             });
           }
         }
@@ -347,30 +343,28 @@ export default function CustomersPage() {
     setIsExporting(true);
 
     try {
-      const db = getDb();
+      // التصدير يسحب العملاء من API السيرفر على دفعات —
+      // قراءة المتصفح المباشرة مرفوضة للموظفين في قواعد Firestore.
       let allExportData = [];
-      let lastDoc = null;
+      let offset = 0;
       let fetchMore = true;
 
       while (fetchMore) {
-        let constraints = [limit(500)];
-
-        if (activeTab === 'wind') {
-          constraints.push(where("data_source", "==", "WIND_Web"));
-        } else if (activeTab === 'shopify') {
-          constraints.push(where("data_source", "==", "Shopify_Import"));
+        const res = await adminFetch(
+          `/api/admin/customers?tab=${encodeURIComponent(activeTab)}&limit=500&offset=${offset}`,
+        );
+        const body = await res.json();
+        if (!res.ok || !body?.success) {
+          throw new Error(body?.error || "customers_list_failed");
         }
+        const docsData = Array.isArray(body.customers) ? body.customers : [];
 
-        if (lastDoc) constraints.push(startAfter(lastDoc));
-
-        const snap = await getDocs(query(collection(db, "Customers"), ...constraints));
-
-        if (snap.empty) {
+        if (docsData.length === 0) {
           fetchMore = false;
         } else {
-          allExportData = [...allExportData, ...snap.docs.map(d => ({ ...d.data(), _docRef: d }))];
-          lastDoc = snap.docs[snap.docs.length - 1];
-          if (snap.docs.length < 500) fetchMore = false;
+          allExportData = [...allExportData, ...docsData.map(d => ({ ...d }))];
+          offset = body.nextOffset ?? (offset + docsData.length);
+          if (docsData.length < 500) fetchMore = false;
         }
       }
 
