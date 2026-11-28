@@ -9,10 +9,10 @@
 |---|---|---|
 | `owner` — المالك | كل الصلاحيات، بما فيها `members.manage` | كل الأقسام + إدارة الأعضاء |
 | `admin` — أدمن | كل الصلاحيات ما عدا `members.manage` | كل الأقسام ما عدا إدارة الأعضاء |
-| `orders` — موظف طلبات | `dashboard.view`, `orders.view`, `orders.edit`, `customers.view` | الرئيسية، الطلبات، العملاء |
+| `orders` — موظف طلبات | `dashboard.view`, `orders.view`, `orders.edit`, `customers.view`, `notifications.receive` | الرئيسية، الطلبات، العملاء |
 | `products` — موظف منتجات | `dashboard.view`, `products.view`, `products.edit`, `collections.edit`, `inventory.view`, `inventory.edit`, `media.upload` | الرئيسية، المنتجات، إضافة منتج، الأقسام، المخزون |
 | `content` — موظف محتوى | `dashboard.view`, `content.view`, `content.edit`, `reviews.view`, `reviews.edit`, `offers.edit`, `promotions.edit` | الرئيسية، إدارة الواجهة، المنيو، الصفحات، الإعدادات، التقييمات، العروض، أكواد الخصم |
-| `viewer` — مشاهدة فقط | `dashboard.view`, `orders.view`, `products.view`, `customers.view`, `inventory.view` | الرئيسية، الطلبات، المنتجات، العملاء، المخزون — قراءة فقط |
+| `viewer` — مشاهدة فقط | `dashboard.view`, `orders.view`, `products.view`, `customers.view`, `inventory.view`, `notifications.receive` | الرئيسية، الطلبات، المنتجات، العملاء، المخزون — قراءة فقط، مع إشعارات الطلبات الجديدة |
 
 ### قواعد ثابتة
 

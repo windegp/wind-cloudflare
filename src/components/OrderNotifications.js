@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { doc, setDoc } from "firebase/firestore/lite";
-import { getDb } from "@/lib/firebase";
+import { getAuthInstance, getDb } from "@/lib/firebase";
+import { getAdminProfile } from "@/lib/adminAccess";
+import { buildAdminTokenDoc, isNotificationRecipient } from "@/lib/adminTokens";
 import { getCairoTimestamp } from "@/lib/analytics-helpers";
-import { ADMIN_UID } from "@/lib/constants";
 import {
   isMessagingSupported,
   requestNotificationToken,
@@ -12,37 +13,48 @@ import {
 } from "@/lib/firebaseMessaging";
 import { Bell, BellRing, BellOff } from "@/components/icons-extra";
 
-// 🔥 إشعارات الأوردرات الجديدة بالصوت — مخصص للأدمن بس.
-// بيتركّب مرة واحدة في admin/layout.js فيشتغل في كل صفحات الأدمن.
-//
-// ⚠️ حد طبيعي من المتصفح نفسه (مش قصور في الكود):
-// - التاب مفتوح وفوكَس (foreground) → صوت مخصص (cha-ching) + توست داخلي.
-// - التاب مفتوح بس مش فوكَس / في الخلفية → إشعار نظام بصوت النظام
-//   الافتراضي (مش الصوت المخصص) — ده بيتظبط من public/firebase-messaging-sw.js
-// - التاب/المتصفح مقفول بالكامل → مفيش إشعار خالص.
-
-export default function OrderNotifications({ isOpen = true } = {}) {
+// 🔥 إشعارات الأوردرات الجديدة بالصوت — للمالك والأدمن وموظف الطلبات
+// والمشاهدة فقط (قرار المالك 2026-11-28، عُدّل في نفس اليوم ليشمل
+// المشاهدة فقط). بيتركّب مرة واحدة في admin/layout.js فيشتغل
+// في كل صفحات الأدمن. الـ layout بيمرّر ملف الموظف (profile) — جاهز
+// هناك — فلا قراءة إضافية من Firestore في العادة.
+export default function OrderNotifications({ isOpen = true, profile = null } = {}) {
   const [status, setStatus] = useState("checking"); // checking | unsupported | default | granted | denied
   const [toast, setToast] = useState(null);
   const audioRef = useRef(null);
+  const profileRef = useRef(profile);
 
-  // تجهيز عنصر الصوت مرة واحدة بس
   useEffect(() => {
-    audioRef.current = new Audio("/cha-ching.mp3");    audioRef.current.preload = "auto";
-  }, []);
+    profileRef.current = profile;
+  }, [profile]);
+
+  // حلّ ملف الموظف: الـ prop أولًا، ولو غاب (استخدام مستقل) من المستخدم
+  // المسجّل دخول حاليًا. يرجع null لغير الموظفين.
+  const resolveProfile = async () => {
+    if (profileRef.current) return profileRef.current;
+    const uid = getAuthInstance().currentUser?.uid;
+    if (!uid) return null;
+    const resolved = await getAdminProfile(uid);
+    profileRef.current = resolved;
+    return resolved;
+  };
 
   const saveToken = async (token) => {
     if (!token) return;
+    const staffProfile = await resolveProfile();
+    if (!staffProfile) {
+      console.warn("Skipping FCM token save: no staff profile");
+      return;
+    }
+    // الأدوار التي لا تستلم إشعارات الطلبات (منتجات، محتوى)
+    // لا تسجّل توكنًا أصلًا — فلا يصلها شيء حتى لو تغيّر الإرسال.
+    if (!isNotificationRecipient(staffProfile.role)) return;
     try {
       await setDoc(
         doc(getDb(), "adminTokens", token),
-        {
-          token,
-          uid: ADMIN_UID,
+        buildAdminTokenDoc(staffProfile, token, getCairoTimestamp(), {
           userAgent: navigator.userAgent,
-          createdAt: getCairoTimestamp(),
-          lastSeenAt: getCairoTimestamp(),
-        },
+        }),
         { merge: true }
       );
     } catch (error) {
@@ -64,6 +76,20 @@ export default function OrderNotifications({ isOpen = true } = {}) {
     let unsubscribe = () => {};
 
     (async () => {
+      // ⚠️ حد طبيعي من المتصفح نفسه (مش قصور في الكود):
+      // - التاب مفتوح وفوكَس (foreground) → صوت مخصص (cha-ching) + توست داخلي.
+      // - التاب مفتوح بس مش فوكَس / في الخلفية → إشعار نظام بصوت النظام
+      //   الافتراضي (مش الصوت المخصص) — ده بيتظبط من public/firebase-messaging-sw.js
+      // - التاب/المتصفح مقفول بالكامل → مفيش إشعار خالص.
+      //
+      // بوابة الدور: الأدوار التي لا تستلم إشعارات الطلبات لا تسجّل توكنًا
+      // ولا تستمع للرسائل اللحظية أصلًا — فلا صوت ولا توست لها.
+      const staffProfile = await resolveProfile();
+      if (!staffProfile || !isNotificationRecipient(staffProfile.role)) {
+        setStatus("unsupported");
+        return;
+      }
+
       const supported = await isMessagingSupported();
       if (!supported) {
         setStatus("unsupported");
@@ -94,7 +120,7 @@ export default function OrderNotifications({ isOpen = true } = {}) {
     })();
 
     return () => unsubscribe();
-  }, []);
+  }, [profile]);
 
   return (
     <>

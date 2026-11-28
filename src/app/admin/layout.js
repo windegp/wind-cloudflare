@@ -205,7 +205,7 @@ export default function AdminLayout({ children }) {
               (listenForegroundMessages) وتجديد التوكن. لو اتقفل من هنا،
               الإشعارات بتتوقف لحد ما تفتح الـ sidebar تاني. */}
           <div className="px-1">
-            <OrderNotifications isOpen={isOpen} />
+            <OrderNotifications isOpen={isOpen} profile={profile} />
           </div>
           <button 
             onClick={() => auth.signOut()}
