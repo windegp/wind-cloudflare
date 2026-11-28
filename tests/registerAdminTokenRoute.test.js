@@ -4,10 +4,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // actual checkRateLimit() code instead of a stubbed allow/deny.
 const mocks = vi.hoisted(() => ({
   firestoreAdminSet: vi.fn(async () => ({})),
+  verifyAdminIdToken: vi.fn(),
   kv: { store: new Map(), mode: "ok" },
 }));
 
 vi.mock("@/lib/firestoreAdmin", () => ({ firestoreAdminSet: mocks.firestoreAdminSet }));
+
+vi.mock("@/lib/verifyAdminIdToken", () => ({
+  verifyAdminIdToken: mocks.verifyAdminIdToken,
+}));
 
 vi.mock("@/lib/kv-cache", () => ({
   getKV: vi.fn(async () => {
@@ -36,13 +41,17 @@ vi.mock("@/lib/kv-cache", () => ({
 }));
 
 import { OPTIONS, POST } from "@/app/api/register-admin-token/route";
-import { ADMIN_UID } from "@/lib/constants";
+
+// The native app must sign in with Firebase Auth and send its ID token.
+// Default caller here: an orders-role staff member.
+const STAFF_AUTH = { ok: true, uid: "staff-orders-uid", role: "orders", status: 200 };
 
 // Shaped like a real FCM token: ~190 chars, base64url-ish body plus the ":APA91b" segment.
 const TOKEN = "dGhpcy1pcy1hLXJlYWwtbG9va2luZy1mbWNtLXRva2Vu" + ":APA91b" + "a".repeat(140);
 
-const call = ({ token = TOKEN, platform = "android-native", ip = "203.0.113.7", headers = {}, body } = {}) => {
+const call = ({ token = TOKEN, platform = "android-native", ip = "203.0.113.7", headers = {}, body, auth = "Bearer test-id-token" } = {}) => {
   const h = { "content-type": "application/json", ...headers };
+  if (auth !== null) h.authorization = auth;
   if (ip) h["cf-connecting-ip"] = ip;
   return POST(
     new Request("https://windeg.com/api/register-admin-token", {
@@ -55,6 +64,17 @@ const call = ({ token = TOKEN, platform = "android-native", ip = "203.0.113.7", 
 
 beforeEach(() => {
   mocks.firestoreAdminSet.mockClear();
+  mocks.verifyAdminIdToken.mockReset();
+  // Like the real verifier: no Bearer header → 401; otherwise the
+  // default caller is an orders-role staff member (tests override
+  // this per case with mockResolvedValue).
+  mocks.verifyAdminIdToken.mockImplementation(async (req) => {
+    const header = req?.headers?.get?.("authorization") || "";
+    if (!/^Bearer\s+\S+$/.test(header)) {
+      return { ok: false, reason: "missing_bearer_token", status: 401 };
+    }
+    return { ...STAFF_AUTH };
+  });
   mocks.kv.store.clear();
   mocks.kv.mode = "ok";
   vi.spyOn(console, "log").mockImplementation(() => {});
@@ -78,7 +98,9 @@ describe("POST /api/register-admin-token — normal registration still works", (
       TOKEN,
       expect.objectContaining({
         token: TOKEN,
-        uid: ADMIN_UID,
+        // The caller's real uid + role — never the owner UID stamp.
+        uid: "staff-orders-uid",
+        role: "orders",
         platform: "android-native",
       })
     );
@@ -112,6 +134,72 @@ describe("POST /api/register-admin-token — normal registration still works", (
     const res = await call({ ip: "203.0.113.21" });
     expect(res.status).toBe(200);
     expect(mocks.firestoreAdminSet).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("POST /api/register-admin-token — authentication (fail closed)", () => {
+  it("rejects a request with no Authorization header and writes nothing", async () => {
+    const res = await call({ auth: null });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ success: false, error: "Unauthorized" });
+    expect(mocks.firestoreAdminSet).not.toHaveBeenCalled();
+  });
+
+  it("rejects an invalid ID token and writes nothing", async () => {
+    mocks.verifyAdminIdToken.mockResolvedValue({
+      ok: false,
+      reason: "firebase_lookup_failed_401_INVALID_ID_TOKEN",
+      status: 401,
+    });
+    const res = await call();
+    expect(res.status).toBe(401);
+    expect(mocks.firestoreAdminSet).not.toHaveBeenCalled();
+  });
+
+  it("rejects a signed-in non-staff caller (403) and writes nothing", async () => {
+    mocks.verifyAdminIdToken.mockResolvedValue({
+      ok: false,
+      reason: "not_staff",
+      status: 403,
+    });
+    const res = await call();
+    expect(res.status).toBe(403);
+    expect(mocks.firestoreAdminSet).not.toHaveBeenCalled();
+  });
+
+  it("stores the owner's uid + role when the caller is the owner", async () => {
+    mocks.verifyAdminIdToken.mockResolvedValue({
+      ok: true,
+      uid: "jGb9wBMHZfRIQgR9yfbb3rkvzRw2",
+      role: "owner",
+      status: 200,
+    });
+    const res = await call();
+    expect(res.status).toBe(200);
+    expect(mocks.firestoreAdminSet).toHaveBeenCalledWith(
+      "adminTokens",
+      TOKEN,
+      expect.objectContaining({
+        uid: "jGb9wBMHZfRIQgR9yfbb3rkvzRw2",
+        role: "owner",
+      }),
+    );
+  });
+
+  it("lets any active staff member register (send-time filter decides delivery)", async () => {
+    mocks.verifyAdminIdToken.mockResolvedValue({
+      ok: true,
+      uid: "staff-viewer-uid",
+      role: "viewer",
+      status: 200,
+    });
+    const res = await call();
+    expect(res.status).toBe(200);
+    expect(mocks.firestoreAdminSet).toHaveBeenCalledWith(
+      "adminTokens",
+      TOKEN,
+      expect.objectContaining({ uid: "staff-viewer-uid", role: "viewer" }),
+    );
   });
 });
 
@@ -229,6 +317,7 @@ describe("OPTIONS /api/register-admin-token", () => {
     expect(res.status).toBe(204);
     expect(res.headers.get("access-control-allow-origin")).toBe("*");
     expect(res.headers.get("access-control-allow-methods")).toBe("POST, OPTIONS");
-    expect(res.headers.get("access-control-allow-headers")).toBe("Content-Type");
+    // Authorization must be allowed: the app sends its Firebase ID token.
+    expect(res.headers.get("access-control-allow-headers")).toBe("Content-Type, Authorization");
   });
 });

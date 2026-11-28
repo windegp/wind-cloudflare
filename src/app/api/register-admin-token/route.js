@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { firestoreAdminSet } from '@/lib/firestoreAdmin';
 import { getCairoTimestamp } from '@/lib/analytics-helpers';
-import { ADMIN_UID } from '@/lib/constants';
+import { verifyAdminIdToken } from '@/lib/verifyAdminIdToken';
+import { buildAdminTokenDoc } from '@/lib/adminTokens';
 import { checkRateLimit } from '@/lib/rateLimit';
 
 // 🔥 Endpoint مخصص لاستقبال توكن FCM الـ Native من تطبيق الموبايل
@@ -11,6 +12,17 @@ import { checkRateLimit } from '@/lib/rateLimit';
 // كل التوكنات (ويب + نيتيف) بتتخزن في نفس الكولكشن adminTokens،
 // لأن fcmAdmin.js بيبعت لكل التوكنات الموجودة فيها بنفس الطريقة —
 // FCM v1 API بيتعامل مع توكنات الويب والنيتيف بنفس الـ endpoint.
+//
+// ⚠️ المصادقة (إلزامية منذ هذا التعديل): كان هذا الـ endpoint بلا مصادقة
+// إطلاقًا ويختم uid المالك على كل توكن — فأي جهاز في العالم كان يقدر
+// يسجّل نفسه ويستلم إشعارات الطلبات (اسم العميل وطريقة الدفع والإجمالي).
+// الآن التطبيق لازم يسجّل دخول بحساب Firebase Auth (Google) ويرسل
+// `Authorization: Bearer <Firebase ID token>`؛ بلا توكن صالح يرجع 401،
+// ولو المتصل ليس موظفًا فعّالًا يرجع 403 — ولا يُكتب شيء في الحالتين.
+// أي موظف فعّال يقدر يسجّل (الدور يُخزن مع التوكن)، والفلترة حسب الدور
+// تتم لحظة الإرسال في fcmAdmin.js — فتوكن المشاهدة مثلًا يُخزن ولا
+// يُرسَل له شيء أبدًا. انظر docs/admin-notifications-by-role.md
+// لما يجب تغييره في التطبيق قبل/بعد النشر.
 //
 // ⚠️ CORS: التطبيق المصغر (Capacitor) بيناديني من origin مختلف تمامًا
 // عن windeg.com (الـ WebView بتاعه شغال على https://localhost)، فالـ
@@ -30,7 +42,9 @@ import { checkRateLimit } from '@/lib/rateLimit';
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  // Authorization ضروري هنا: التطبيق بيرسل ID token في الـ Bearer،
+  // والـ preflight بيرفضه لو لم يكن الهيدر مسموحًا.
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
 // الحد الأدنى والأقصى لطول التوكن. توكنات FCM طولها في الواقع حوالي 163 حرف
@@ -89,6 +103,16 @@ export async function POST(req) {
     const body = await req.json();
     const { token, platform } = body;
 
+    // 🔥 مصادقة إلزامية: بلا ID token صالح من موظف فعّال، لا تسجيل.
+    // (fail closed — أي فشل تحقق = رفض، ولا يُكتب شيء.)
+    const auth = await verifyAdminIdToken(req);
+    if (!auth.ok) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: auth.status || 401, headers: CORS_HEADERS }
+      );
+    }
+
     if (!isValidTokenShape(token)) {
       return NextResponse.json(
         { success: false, error: 'Missing or invalid token' },
@@ -103,15 +127,19 @@ export async function POST(req) {
         ? platform
         : 'unknown'; // مثال: "android-native"
 
-    await firestoreAdminSet('adminTokens', token, {
+    // الـ uid والدور الحقيقيان للمتصل — لا ختم لمالك هنا إطلاقًا.
+    await firestoreAdminSet(
+      'adminTokens',
       token,
-      uid: ADMIN_UID,
-      platform: safePlatform,
-      createdAt: getCairoTimestamp(),
-      lastSeenAt: getCairoTimestamp(),
-    });
+      buildAdminTokenDoc(
+        { uid: auth.uid, role: auth.role },
+        token,
+        getCairoTimestamp(),
+        { platform: safePlatform },
+      ),
+    );
 
-    console.log(`✅ Native admin token registered (${safePlatform}): ${token.slice(0, 12)}...`);
+    console.log(`✅ Native admin token registered (${safePlatform}, role ${auth.role}): ${token.slice(0, 12)}...`);
 
     return NextResponse.json({ success: true }, { status: 200, headers: CORS_HEADERS });
   } catch (error) {
